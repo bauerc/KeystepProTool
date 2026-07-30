@@ -8,9 +8,18 @@ name: check
 #     lint/typecheck/test into parallel jobs would cost 3 minutes instead of 1
 #     for identical work.
 
+# Pushes to a branch with an open PR would otherwise trigger `push` and
+# `pull_request` separately, billing two minutes for one commit. Restricting
+# `push` to main means branch work is covered once, via the PR.
 on:
   push:
+    branches: [main]
   pull_request:
+
+# Superseded runs are cancelled rather than left to finish and bill.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
