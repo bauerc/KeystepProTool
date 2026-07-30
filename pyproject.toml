@@ -1,0 +1,65 @@
+[project]
+name = "keysteppro-tool"
+version = "0.1.0"
+description = "Convert between Standard MIDI files and Arturia KeyStep Pro project files"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "mido>=1.3.3",
+]
+
+# Console entry points land with the milestones that implement them:
+#   ksp-dump  -> M1 (ksp_cli.dump:main)
+#   ksp2midi  -> M2 (ksp_cli.export:main)
+#   midi2ksp  -> M5 (ksp_cli.convert:main)
+# Declaring them before the modules exist would install commands that crash
+# on invocation, so they are added alongside the code.
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ksp", "src/ksp_cli"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "mypy>=1.11",
+    "ruff>=0.6",
+    "pre-commit>=3.8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+# Ruff formats Python snippets embedded in Markdown. The documents in
+# `analysis/` record an externally-defined format and their examples are
+# transcriptions, not code we own the style of -- letting the formatter
+# rewrite them would corrupt the spec.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific
+]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+    "hardware: requires a physical KeyStep Pro (deselect with -m 'not hardware')",
+]

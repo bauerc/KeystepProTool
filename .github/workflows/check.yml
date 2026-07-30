@@ -1,0 +1,53 @@
+name: check
+
+# One job on Linux, deliberately:
+#   * Everything through M7 is JSON and MIDI file manipulation with no macOS
+#     dependency. macOS runners bill at a 10x minute multiplier; Linux is 1x.
+#     Only M8 notarisation needs macOS, and that belongs in a release workflow.
+#   * Actions bills each job rounded up to the nearest minute, so splitting
+#     lint/typecheck/test into parallel jobs would cost 3 minutes instead of 1
+#     for identical work.
+
+# Pushes to a branch with an open PR would otherwise trigger `push` and
+# `pull_request` separately, billing two minutes for one commit. Restricting
+# `push` to main means branch work is covered once, via the PR.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Superseded runs are cancelled rather than left to finish and bill.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.0" # pinned: uv is still 0.x
+          enable-cache: true
+
+      # --locked fails if uv.lock is stale rather than quietly resolving
+      # something different from local. This is the reproducibility guarantee
+      # actually being enforced.
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format
+        run: uv run ruff format --check .
+
+      - name: Typecheck
+        run: uv run mypy
+
+      # M4 and M7 need a physical KeyStep Pro, so they are marked `hardware`
+      # and skipped here. A green run does NOT mean verified on device.
+      - name: Test
+        run: uv run pytest -m "not hardware"
