@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# macOS
+.DS_Store
+
+# Claude Code worktrees
+.claude/worktrees/
+
+# NOTE: uv.lock is deliberately NOT ignored. It is committed so that
+# `uv sync --locked` reproduces an identical environment everywhere.

@@ -1,0 +1,35 @@
+# Fast checks only. mypy and pytest are deliberately left to CI -- they are
+# too slow to run on every commit and CI already covers them.
+#
+# Two sets of files are data, not source, and no hook may normalise them:
+#
+#   project_files/     The `.KeyStepPro` exports. Tab-indented, trailing comma
+#                      before the closing brace, and no final newline.
+#                      Reproducing those bytes exactly is what M3 proves.
+#
+#   analysis/*.txt     Hardware-confirmed observations transcribed from the
+#                      KeyStep Pro's own display. They become the M1 regression
+#                      fixtures and cannot be regenerated without the device,
+#                      so they are preserved as written rather than tidied.
+#                      (Verified: without this, trailing-whitespace and
+#                      end-of-file-fixer both rewrite them.)
+exclude: ^(project_files/|analysis/.*\.txt$)
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.1
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
