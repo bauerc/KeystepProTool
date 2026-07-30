@@ -1,0 +1,21 @@
+Test 1 — Gate (drum track)
+
+Track 1, Pattern 2 (pick any pattern you haven't touched)
+
+Place a single Kick hit at beat 1
+Leave Velocity, Time Shift, Randomness, and Step Skip completely untouched (whatever they default to when you place a fresh note)
+Set Gate to 4 (a big jump from whatever the default is, so it's unmistakable in the diff)
+Test 2 — Step Skip (drum track)
+
+Track 1, Pattern 3
+
+Place a single Kick hit at beat 1
+Leave Velocity, Gate, Time Shift, and Randomness untouched at default
+Set Step Skip so it only plays on sequence 32 — just the one number, not two, to keep this as clean as possible
+Test 3 — Gate (melodic track, for comparison)
+
+Track 3, Pattern 2
+
+Place a single note (any pitch, e.g. C3) at beat 1
+Leave Velocity, Time Shift, Randomness, and Step Skip untouched at default
+Set Gate to 4

@@ -1,0 +1,40 @@
+I have created a new project (Project 5) sequence with the following attributes:
+1 Drum Track on Track 1 on Pattern 1
+Kick played on beats 1 and 5
+Beat 1 has Velocity 127, Gate 1, Time Shift -1, Randomness 80 Step skip set up to only run on sequence 16 and 32
+Beat 5 has Velocity 50, Gate 2, Time Shift -1, Randomness 90 Step skip set up to only run on sequence 48 and 64
+
+1 Sequence Track on Track 3 on Pattern 1
+
+For beats 1-4 the note is C2
+Velocity are 60,70,90,100
+Gates are 2, .5, .5, .5
+Time Shift is 1,2,3,4
+Randomness is 10,20,30,40
+Notes are set to play on sequence 16,32,48,64
+
+For beats 5-8 the note is C#2
+Velocity are 60,70,90,100
+Gates are 3, .5, .5, .5
+Time Shift is -1,-2,-3,-4
+Randomness is 100,100,100,100
+Notes 5-6 are set to play on sequence 16,48
+Notes 7-8 are set to play on sequence 32, 64
+
+For beat 9 to 12 the note is D. The note was set on Beat 9 and the Tie function used to beat 12
+Velocity 
+Velocity is 60
+Gates is 4
+Time Shift is 0
+Randomness is 100,
+Notes are set to play on sequence 16,32
+
+For beat 9 to 12 the note is D. The note was set on Beat 9 and the Tie function used to beat 12
+Velocity 
+Velocity is 120
+Gates is 3.5
+Time Shift is 2
+Randomness is 100,
+Notes are set to play on sequence 48,64
+
+All of these values are confirmed via the UI window on the physical Keystep Pro
