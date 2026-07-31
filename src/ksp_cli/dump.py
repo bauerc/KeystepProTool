@@ -1,35 +1,34 @@
 """``ksp-dump`` -- print the contents of a ``.KeyStepPro`` project.
 
-Inspect a project file without opening MIDI Control Center. Everything
-printed here is decoded by :mod:`ksp.reader`; this module only formats.
+Inspect a project without opening MIDI Control Center. Everything printed is
+decoded by :mod:`ksp.reader`; this module only formats.
 """
 
 import argparse
 import json
-import sys
 from collections.abc import Iterator, Sequence
-from pathlib import Path
 
-from ksp.constants import SKIP_SEQUENCES
-from ksp.drum_map import DEFAULT_CHROMATIC_LOW, DrumMap
+from ksp.drum_map import DrumMap
+from ksp.encoding import SKIP_SEQUENCES
 from ksp.model import NoteKind, Pattern, Project, Track
-from ksp.reader import load
+from ksp_cli.common import (
+    CONFIG_PATH,
+    add_drum_map_arg,
+    add_path_arg,
+    add_selection_args,
+    load_project,
+    resolve_drum_map_arg,
+    run,
+    select,
+)
 
-# The --drum-map grammar is shared with ksp2midi so both commands accept the
-# same syntax and the same config file. CONFIG_PATH stays a name in this
-# module so tests can point it somewhere harmless.
-from ksp_cli.drum_map_option import CONFIG_PATH, parse_drum_map, resolve_drum_map
-
-__all__ = ["CONFIG_PATH", "format_project", "main", "parse_drum_map", "resolve_drum_map"]
+PROG = "ksp-dump"
 
 
 def _format_gate(gate: float | None, raw: int) -> str:
-    """Show the displayed gate length, or the raw value when it is unknown.
-
-    Only six gate encodings are hardware-confirmed. Printing an interpolated
-    guess would be worse than printing the raw number, because it would look
-    authoritative. ``?`` marks the ones still to be measured (roadmap M7).
-    """
+    """The displayed gate length, or the raw value where it is unknown."""
+    # Only six encodings are hardware-confirmed. An interpolated guess would
+    # look authoritative; `?` marks the ones still to be measured (M7).
     if gate is None:
         return f"?({raw})"
     return f"{gate:g}".rjust(4)
@@ -46,23 +45,19 @@ def _format_skip(skip: Sequence[int]) -> str:
 def _pattern_lines(pattern: Pattern, drum_map: DrumMap | None) -> Iterator[str]:
     yield f"    Pattern {pattern.number:<2} [{pattern.mode.value}]"
 
-    # A pattern's melodic and drum sets each have their own step count and
-    # swing, so each is printed against the notes it governs rather than as a
-    # single pair of numbers whose owner would be ambiguous.
+    # Each parameter set is printed against the notes it governs: they carry
+    # their own step count and swing, and one pair of numbers would leave the
+    # owner ambiguous.
     for kind in (NoteKind.SEQ, NoteKind.DRUM):
         notes = pattern.notes_of(kind)
         if not notes:
             continue
-        if kind is NoteKind.DRUM:
-            steps, swing = pattern.drum_step_count, pattern.drum_swing_percent
-            if drum_map is not None:
-                # Said next to the notes it governs, and said every time,
-                # because a resolved drum note is an assumption about the
-                # user's device rather than anything read from their file.
-                yield f"      drum map: {drum_map.describe()}"
-        else:
-            steps, swing = pattern.seq_step_count, pattern.seq_swing_percent
-        yield f"      {kind.value}: {steps} steps, swing {swing}%"
+        timing = pattern.timing_for(kind)
+        if kind is NoteKind.DRUM and drum_map is not None:
+            # Said next to the notes it governs, and said every time, because a
+            # resolved drum note is an assumption about the user's device.
+            yield f"      drum map: {drum_map.describe()}"
+        yield f"      {kind.value}: {timing.step_count} steps, swing {timing.swing_percent}%"
         width = 30 if kind is NoteKind.DRUM and drum_map is not None else 10
         for slot in sorted({n.slot for n in notes}):
             yield f"        slot {slot}"
@@ -115,69 +110,39 @@ def format_project(
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="ksp-dump",
+        prog=PROG,
         description="Print the contents of an Arturia KeyStep Pro project file.",
     )
-    parser.add_argument("path", type=Path, help="a .KeyStepPro project file")
+    add_path_arg(parser)
     parser.add_argument(
         "--all",
         action="store_true",
         help="include patterns that hold no notes (all 16 are always present)",
     )
-    parser.add_argument("--track", type=int, choices=range(1, 5), help="show only this track")
-    parser.add_argument(
-        "--pattern",
-        type=int,
-        choices=range(1, 17),
-        metavar="{1..16}",
-        help="show only this pattern",
-    )
+    add_selection_args(parser, "show")
     parser.add_argument(
         "--json",
         action="store_true",
         dest="as_json",
         help="emit the decoded model as JSON instead of a tree",
     )
-    parser.add_argument(
-        "--drum-map",
-        metavar="SPEC",
-        help=(
-            "how drum lanes map to MIDI notes: chromatic:N, custom:a,b,c,... or none. "
-            "The device stores this globally and it is not in the project file, so it is "
-            f"always an assumption (default: chromatic:{DEFAULT_CHROMATIC_LOW})"
-        ),
-    )
+    add_drum_map_arg(parser)
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
-
-    try:
-        drum_map = resolve_drum_map(args.drum_map, CONFIG_PATH)
-    except json.JSONDecodeError as exc:  # a ValueError, so it must come first
-        print(f"ksp-dump: drum map: {CONFIG_PATH}: {exc}", file=sys.stderr)
-        return 1
-    except (OSError, ValueError) as exc:
-        print(f"ksp-dump: drum map: {exc}", file=sys.stderr)
-        return 1
-
-    try:
-        project = load(args.path)
-    except OSError as exc:
-        print(f"ksp-dump: {exc}", file=sys.stderr)
-        return 1
-    except ValueError as exc:
-        print(f"ksp-dump: {args.path}: {exc}", file=sys.stderr)
-        return 1
-
-    project = project.select(track=args.track, pattern=args.pattern)
-
+def _run(args: argparse.Namespace) -> int:
+    drum_map = resolve_drum_map_arg(args.drum_map, CONFIG_PATH)
+    project = select(load_project(args.path), args)
     if args.as_json:
         print(json.dumps(project.to_dict(drum_map), indent=2))
     else:
         print(format_project(project, show_all=args.all, drum_map=drum_map))
     return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+    return run(PROG, lambda: _run(args))
 
 
 if __name__ == "__main__":  # pragma: no cover

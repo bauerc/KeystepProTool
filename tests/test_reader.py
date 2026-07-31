@@ -9,10 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from ksp import constants
-from ksp.keys import key, read_array
+from ksp import constants, encoding
+from ksp.keys import key
 from ksp.model import NoteKind, PatternMode
+from ksp.raw import RawProject
 from ksp.reader import load, read_project, slot_is_initialised
+from ksp.types import ItemId, ParamId
 
 
 class TestEncodings:
@@ -20,7 +22,7 @@ class TestEncodings:
         ("stored", "expected"), [(7, 0.5), (11, 1.0), (19, 2.0), (27, 3.0), (29, 3.5), (31, 4.0)]
     )
     def test_known_gate_values_decode(self, stored: int, expected: float) -> None:
-        assert constants.decode_gate(stored) == expected
+        assert encoding.decode_gate(stored) == expected
 
     @pytest.mark.parametrize("stored", [0, 2, 8, 15, 23, 40, 127])
     def test_unmeasured_gate_values_are_not_guessed(self, stored: int) -> None:
@@ -30,7 +32,7 @@ class TestEncodings:
         so a plausible formula is exactly the trap. Unknown stays unknown
         until the M7 hardware sweep measures it.
         """
-        assert constants.decode_gate(stored) is None
+        assert encoding.decode_gate(stored) is None
 
     @pytest.mark.parametrize(
         ("mask", "expected"),
@@ -46,24 +48,24 @@ class TestEncodings:
         ],
     )
     def test_skip_mask_decodes(self, mask: int, expected: tuple[int, ...]) -> None:
-        assert constants.decode_skip_mask(mask) == expected
+        assert encoding.decode_skip_mask(mask) == expected
 
     @pytest.mark.parametrize(
         ("pitch", "name"), [(48, "C2"), (49, "C#2"), (50, "D2"), (60, "C3"), (72, "C4")]
     )
     def test_note_names_use_the_hardware_octave_convention(self, pitch: int, name: str) -> None:
         """48 displays as C2 and 60 as C3, per the two ground truth documents."""
-        assert constants.note_name(pitch) == name
+        assert encoding.note_name(pitch) == name
 
 
 class TestKeys:
     def test_key_builds_the_grammar(self) -> None:
-        assert key(125, 109, 1, 1, 10) == "125_109_1_1_10"
-        assert key(120, 74) == "120_74"
+        assert key(ItemId(125), ParamId(109), 1, 1, 10) == "125_109_1_1_10"
+        assert key(ItemId(120), ParamId(74)) == "120_74"
 
     def test_read_array_is_zero_based_over_one_based_keys(self) -> None:
-        raw = {"125_50_1_1_1": 0, "125_50_1_1_2": 4}
-        assert read_array(raw, 125, 50, 1, 1, length=3) == [0, 4, None]
+        raw = RawProject({"125_50_1_1_1": 0, "125_50_1_1_2": 4})
+        assert raw.array(ItemId(125), ParamId(50), 1, 1, length=3) == [0, 4, None]
 
 
 class TestSlotInitialisation:

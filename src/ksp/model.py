@@ -1,98 +1,87 @@
 """The decoded object model: project -> tracks -> patterns -> notes.
 
-This is what the flat key/value file becomes once both index spaces have been
-resolved. Everything here is plain data with no reference back to the raw
-dict, so consumers -- the dump CLI now, MIDI export at M2 -- never need to
-know the key grammar.
+What the flat key/value file becomes once both index spaces are resolved
+(spec 4). Plain data with no reference back to the raw dict, so consumers never
+need the key grammar.
 
-The model is intentionally read-only. Mutation belongs to M3+, once there is a
-byte-identical round-trip proving that what we write back is what MCC expects.
+Read-only by design: mutation belongs to M3+, once a byte-identical round-trip
+proves what we write back is what MCC expects.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from enum import StrEnum
 from typing import Any
 
-from ksp.constants import note_name
 from ksp.drum_map import DrumMap
+from ksp.encoding import note_name
+from ksp.types import ItemId, Lane, NoteIndex, NoteKind, PatternMode, Pitch, Step
 
-
-class NoteKind(StrEnum):
-    """Which parameter set a note was decoded from.
-
-    Track 1 carries a melodic and a drum set side by side, and they mean
-    different things: a melodic note's value is a MIDI pitch, a drum note's is
-    a lane index. Tagging each note is what lets a pattern hold both without
-    the two becoming indistinguishable.
-    """
-
-    SEQ = "seq"
-    DRUM = "drum"
-
-
-class PatternMode(StrEnum):
-    """Which parameter set(s) of a pattern hold notes.
-
-    ``BOTH`` is not a hardware mode -- the device plays one or the other. It
-    means the file has notes in both sets and we cannot yet tell which is
-    live, so the reader reports everything rather than guessing.
-    """
-
-    SEQ = "seq"
-    DRUM = "drum"
-    BOTH = "both"
-    EMPTY = "empty"
+__all__ = [
+    "Note",
+    "NoteKind",
+    "Pattern",
+    "PatternMode",
+    "PatternTiming",
+    "Project",
+    "Track",
+]
 
 
 @dataclass(frozen=True)
 class Note:
-    """One entry from a slot's note list.
-
-    ``step`` is 1-based here, matching how the hardware and the project
-    descriptions count beats, though the file stores it 0-based.
-    """
+    """One entry from a slot's note list."""
 
     kind: NoteKind
     slot: int
-    index: int
-    """Ordinal position in the note list, 1-based. This is the file's own note
-    index -- distinct from ``step``, which is where it plays."""
 
-    step: int
-    pitch: int
-    """MIDI pitch for a ``SEQ`` note; 0-based drum lane for a ``DRUM`` note
-    (lane 0 is the kick, confirmed against project_5)."""
+    #: Ordinal in the note list. The file's own note index, distinct from
+    #: ``step`` -- the two index spaces of spec 4.
+    index: NoteIndex
+
+    #: Physical step, 1-based here; the file stores it 0-based.
+    step: Step
+
+    #: MIDI pitch for a SEQ note, drum lane for a DRUM note. Reach it through
+    #: :attr:`as_pitch` / :attr:`as_lane`, which check the kind.
+    pitch: Pitch | Lane
 
     velocity: int
     gate_raw: int
-    gate: float | None
-    """Displayed gate length, or ``None`` where the encoding is not yet
-    measured. See ``constants.GATE_TABLE`` and roadmap M7."""
 
+    #: Displayed gate length, or ``None`` where the encoding is unmeasured (M7).
+    gate: float | None
+
+    #: Signed, already offset from the stored centre.
     time_shift: int
-    """Signed, already offset from the stored centre of 49."""
 
     randomness: int
+
+    #: Which of the 16/32/48/64 sequences this note plays in.
     skip: tuple[int, ...]
-    """Which of the 16/32/48/64 sequences this note plays in."""
 
     @property
-    def label(self) -> str:
-        """Human-readable pitch: a note name, or a bare drum lane number."""
-        return self.labelled(None)
+    def as_pitch(self) -> Pitch:
+        """The MIDI pitch, refusing a drum note whose value is a lane."""
+        if self.kind is NoteKind.DRUM:
+            raise TypeError("a drum note carries a lane, not a pitch")
+        return Pitch(self.pitch)
+
+    @property
+    def as_lane(self) -> Lane:
+        """The drum lane, refusing a melodic note whose value is a pitch."""
+        if self.kind is NoteKind.SEQ:
+            raise TypeError("a melodic note carries a pitch, not a lane")
+        return Lane(self.pitch)
 
     def labelled(self, drum_map: DrumMap | None) -> str:
-        """Like :attr:`label`, but resolving a drum lane through *drum_map*.
-
-        Without a map a drum note can only be reported as ``lane 0``, because
-        which MIDI note that lane transmits is a device setting the file does
-        not contain.
-        """
+        """Human-readable pitch, resolving a drum lane through *drum_map*."""
+        # Without a map a drum note can only be reported as its lane: which
+        # MIDI note that lane sends is a device setting the file lacks.
         if self.kind is NoteKind.DRUM:
             if drum_map is None:
                 return f"lane {self.pitch}"
-            return drum_map.label_for_lane(self.pitch)
-        return f"{note_name(self.pitch)} ({self.pitch})"
+            return drum_map.label_for_lane(self.as_lane)
+        return f"{note_name(self.as_pitch)} ({self.pitch})"
 
     def to_dict(self, drum_map: DrumMap | None = None) -> dict[str, Any]:
         data: dict[str, Any] = {
@@ -108,37 +97,41 @@ class Note:
             "randomness": self.randomness,
             "skip": list(self.skip),
         }
-        if drum_map is not None and self.kind is NoteKind.DRUM and drum_map.has_lane(self.pitch):
-            note = drum_map.note_for_lane(self.pitch)
+        if drum_map is not None and self.kind is NoteKind.DRUM and drum_map.has_lane(self.as_lane):
+            note = drum_map.note_for_lane(self.as_lane)
             data["drum_note"] = note
             data["drum_note_name"] = note_name(note)
         return data
 
 
 @dataclass(frozen=True)
-class Pattern:
-    """One of a track's 16 patterns.
+class PatternTiming:
+    """The step count and swing of one of a pattern's parameter sets."""
 
-    The melodic and drum parameter sets each carry their own step count and
-    swing, so both are reported rather than collapsing them into one pair of
-    numbers that would silently belong to whichever set happened to win.
-    ``drum_*`` is ``None`` on tracks 2-4, which have no drum set at all.
-    """
+    step_count: int
+    swing_percent: int
+
+
+@dataclass(frozen=True)
+class Pattern:
+    """One of a track's 16 patterns."""
 
     number: int
     mode: PatternMode
-    has_data: bool
-    """From parameter 40, the firmware's own "this pattern holds data" flag."""
 
-    seq_step_count: int
-    seq_swing_percent: int
-    drum_step_count: int | None
-    drum_swing_percent: int | None
+    #: From parameter 40, the firmware's own "this pattern holds data" flag.
+    has_data: bool
+
+    #: Per parameter set. The melodic and drum sets each carry their own step
+    #: count and swing, so neither is collapsed into a single pair whose owner
+    #: would be ambiguous. DRUM is absent on tracks 2-4.
+    timing: Mapping[NoteKind, PatternTiming]
+
     notes: tuple[Note, ...]
+
+    #: Inconsistencies found while decoding. Reported, never silently fixed --
+    #: a reader that quietly repairs its input hides the surprises we want.
     warnings: tuple[str, ...] = ()
-    """Inconsistencies found while decoding. Reported, never silently fixed --
-    a reader that quietly repairs its input hides exactly the surprises this
-    milestone exists to find."""
 
     @property
     def is_empty(self) -> bool:
@@ -146,6 +139,29 @@ class Pattern:
 
     def notes_of(self, kind: NoteKind) -> tuple[Note, ...]:
         return tuple(n for n in self.notes if n.kind is kind)
+
+    def timing_for(self, kind: NoteKind) -> PatternTiming:
+        """The timing of *kind*, falling back to the melodic set."""
+        timing = self.timing.get(kind)
+        return self.timing[NoteKind.SEQ] if timing is None else timing
+
+    @property
+    def seq_step_count(self) -> int:
+        return self.timing[NoteKind.SEQ].step_count
+
+    @property
+    def seq_swing_percent(self) -> int:
+        return self.timing[NoteKind.SEQ].swing_percent
+
+    @property
+    def drum_step_count(self) -> int | None:
+        drum = self.timing.get(NoteKind.DRUM)
+        return None if drum is None else drum.step_count
+
+    @property
+    def drum_swing_percent(self) -> int | None:
+        drum = self.timing.get(NoteKind.DRUM)
+        return None if drum is None else drum.swing_percent
 
     def to_dict(self, drum_map: DrumMap | None = None) -> dict[str, Any]:
         return {
@@ -166,22 +182,19 @@ class Track:
     """One of the four sequencer tracks."""
 
     number: int
-    item_id: int
+    item_id: ItemId
     patterns: tuple[Pattern, ...]
-    drum_mode: bool = False
-    """Whether the track's Arp/Drum mode bit (parameter 86, bit 6) is set.
 
-    Only Track 1 has a drum parameter set, and this is what says whether it is
-    the live one. It is track-level rather than per-pattern, matching the
-    device's Drum button. Parameter 100 was expected to carry this and does
-    not -- it reads 26 everywhere."""
+    #: Whether the track's Arp/Drum mode bit (86 bit 6) is set. Only Track 1
+    #: has a drum parameter set, and this says whether it is the live one.
+    drum_mode: bool = False
 
     @property
     def is_empty(self) -> bool:
         return all(p.is_empty for p in self.patterns)
 
     def pattern(self, number: int) -> Pattern:
-        """Return pattern *number*, counting from 1."""
+        """Pattern *number*, counting from 1."""
         return self.patterns[number - 1]
 
     def to_dict(self, drum_map: DrumMap | None = None) -> dict[str, Any]:
@@ -198,8 +211,9 @@ class Project:
     """A decoded ``.KeyStepPro`` project."""
 
     device: str
+
+    #: Absent in the factory Default.KeyStepPro, present in user saves.
     version: str | None
-    """Absent in the factory ``Default.KeyStepPro``, present in user saves."""
 
     tempo_bpm: float
     global_swing_percent: int
@@ -209,15 +223,12 @@ class Project:
     warnings: tuple[str, ...] = field(default=())
 
     def track(self, number: int) -> Track:
-        """Return track *number*, counting from 1."""
+        """Track *number*, counting from 1."""
         return self.tracks[number - 1]
 
     def select(self, *, track: int | None = None, pattern: int | None = None) -> "Project":
-        """Return a copy narrowed to one track and/or one pattern.
-
-        Uses ``replace`` so fields added later (``drum_mode``) survive
-        narrowing without every caller being updated.
-        """
+        """A copy narrowed to one track and/or one pattern."""
+        # replace() so fields added later survive narrowing untouched.
         tracks = tuple(t for t in self.tracks if track is None or t.number == track)
         if pattern is not None:
             tracks = tuple(
@@ -237,9 +248,8 @@ class Project:
             "warnings": list(self.warnings),
         }
         if drum_map is not None:
-            # Named at the top level because every resolved drum note below
-            # depends on it, and it is an assumption about the user's device
-            # rather than anything read from the file.
+            # Named at the top level because every resolved drum note depends
+            # on it, and it is an assumption about the user's device.
             data["drum_map"] = drum_map.to_dict()
         data["tracks"] = [t.to_dict(drum_map) for t in self.tracks]
         return data

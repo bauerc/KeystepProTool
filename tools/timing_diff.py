@@ -21,11 +21,13 @@ from typing import Any
 # Allow running from a source checkout without installing the package.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from ksp import constants, keys, lenient_json, model, reader
+from ksp import constants, encoding, keys, lenient_json, model, reader
+from ksp.raw import RawProject
+from ksp.types import ItemId, ParamId
 
 # Timing parameter -> index depth of its keys.
 # 0 = project-level, 1 = per pattern, 3 = per pattern/slot/note.
-TIMING_PARAMS: dict[int, int] = {
+TIMING_PARAMS: dict[ParamId, int] = {
     constants.P_GLOBAL_SWING: 0,
     constants.P_SEQ_SWING: 1,
     constants.P_DRUM_SWING: 1,
@@ -36,7 +38,7 @@ TIMING_PARAMS: dict[int, int] = {
 }
 
 NEUTRAL_GLOBAL_SWING = 50
-NEUTRAL_PATTERN_SWING = constants.SWING_OFFSET  # 25, i.e. no offset
+NEUTRAL_PATTERN_SWING = encoding.SWING_OFFSET  # 25, i.e. no offset
 
 
 def timing_keys(raw: dict[str, Any]) -> Iterator[str]:
@@ -72,7 +74,7 @@ def summarise(path: Path) -> Iterator[str]:
     project = reader.load(path)
     yield f"{path.name}"
 
-    global_swing = keys.get_int(raw, constants.ITEM_PROJECT, constants.P_GLOBAL_SWING)
+    global_swing = RawProject(raw).get_int(constants.ITEM_PROJECT, constants.P_GLOBAL_SWING)
     flag = "" if global_swing == NEUTRAL_GLOBAL_SWING else "   <-- non-default"
     yield f"  global swing (74) = {global_swing}%{flag}"
 
@@ -87,16 +89,17 @@ def summarise(path: Path) -> Iterator[str]:
         yield "  time shift, notes away from centre:"
         yield from shifts
     else:
-        yield f"  time shift: every note at centre ({constants.TIME_SHIFT_CENTRE})"
+        yield f"  time shift: every note at centre ({encoding.TIME_SHIFT_CENTRE})"
 
 
-def _track_rows(raw: dict[str, Any], item: int) -> Iterator[str]:
+def _track_rows(raw: dict[str, Any], item: ItemId) -> Iterator[str]:
     """One row per pattern whose swing or bitfield is worth showing."""
+    project = RawProject(raw)
     for pattern in range(1, constants.PATTERNS_PER_TRACK + 1):
-        seq_swing = keys.get_int(raw, item, constants.P_SEQ_SWING, pattern)
-        drum_swing = keys.get_int(raw, item, constants.P_DRUM_SWING, pattern)
-        seq_bits = keys.get_int(raw, item, constants.P_SEQ_PATTERN_BITS, pattern)
-        drum_bits = keys.get_int(raw, item, constants.P_DRUM_PATTERN_BITS, pattern)
+        seq_swing = project.get_int(item, constants.P_SEQ_SWING, pattern)
+        drum_swing = project.get_int(item, constants.P_DRUM_SWING, pattern)
+        seq_bits = project.get_int(item, constants.P_SEQ_PATTERN_BITS, pattern)
+        drum_bits = project.get_int(item, constants.P_DRUM_PATTERN_BITS, pattern)
 
         interesting = (seq_swing is not None and seq_swing != NEUTRAL_PATTERN_SWING) or (
             drum_swing is not None and drum_swing != NEUTRAL_PATTERN_SWING
@@ -107,7 +110,7 @@ def _track_rows(raw: dict[str, Any], item: int) -> Iterator[str]:
 
         parts = [f"    pattern {pattern:<2}"]
         if seq_swing is not None:
-            offset = seq_swing - constants.SWING_OFFSET
+            offset = seq_swing - encoding.SWING_OFFSET
             parts.append(f"seq swing {seq_swing:>3} (offset {offset:+d})")
         if drum_swing is not None:
             parts.append(f"drum swing {drum_swing:>3}")
@@ -130,7 +133,7 @@ def _shift_summary(project: model.Project) -> list[str]:
             for note in pattern.notes:
                 if not note.time_shift:
                     continue
-                stored = note.time_shift + constants.TIME_SHIFT_CENTRE
+                stored = note.time_shift + encoding.TIME_SHIFT_CENTRE
                 rows.append(
                     f"    track {track.number} {note.kind.value:<4} "
                     f"pattern {pattern.number:<2} slot {note.slot} note {note.index:<2}  "

@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from ksp import constants
+from ksp import constants, encoding
 from ksp.lenient_json import load_path
 from ksp.reader import load
 
@@ -56,7 +56,7 @@ def test_pattern_swing_is_neutral(project_path: Path) -> None:
                 stored = raw.get(f"{item}_{param}_{pattern}")
                 if stored is None:  # 114 exists on Track 1 only
                     continue
-                assert stored == constants.SWING_OFFSET, f"{item}_{param}_{pattern}"
+                assert stored == encoding.SWING_OFFSET, f"{item}_{param}_{pattern}"
 
 
 def test_only_project_5_has_a_time_shift(project_path: Path) -> None:
@@ -91,9 +91,9 @@ def test_drum_shift_conflict_is_still_asserted(project_files_dir: Path) -> None:
 
 
 def test_unmeasured_constants_refuse_to_guess() -> None:
-    assert constants.TIME_SHIFT_UNIT is None
-    assert constants.TIME_SHIFT_RANGE is None
-    assert constants.time_shift_fraction(4) is None
+    assert encoding.TIME_SHIFT_UNIT is None
+    assert encoding.TIME_SHIFT_RANGE is None
+    assert encoding.time_shift_fraction(4) is None
 
 
 def test_timing_diff_finds_no_change_between_a_file_and_itself(

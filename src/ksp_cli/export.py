@@ -1,23 +1,22 @@
 """``ksp2midi`` -- write a ``.KeyStepPro`` project out as MIDI.
 
 MIDI Control Center can put patterns onto the device but has no way of getting
-them off as a ``.mid``, so this is the direction that is useful on its own.
-All the rendering lives in :mod:`ksp.midi_export`; this module handles
-arguments, paths and what gets printed.
+them off as a ``.mid``, so this is the direction that is useful on its own. All
+the rendering lives in :mod:`ksp.midi_export`; this module handles arguments,
+paths and what gets printed.
 
-Warnings go to stderr and the summary to stdout, so a shell pipeline can take
-the summary while a human still sees everything the export was unsure about --
-and the file is written either way, because a gate length we cannot decode is
-a caveat, not a failure.
+Warnings go to stderr and the summary to stdout, so a pipeline can take the
+summary while a human still sees what the export was unsure about -- and the
+file is written either way, because a gate length we cannot decode is a caveat,
+not a failure.
 """
 
 import argparse
-import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from ksp.constants import DEFAULT_GATE_LENGTH
+from ksp.encoding import DEFAULT_GATE_LENGTH
 from ksp.midi_export import (
     DEFAULT_STEPS_PER_BEAT,
     DEFAULT_TICKS_PER_BEAT,
@@ -28,8 +27,18 @@ from ksp.midi_export import (
     export_split,
 )
 from ksp.model import Project
-from ksp.reader import load
-from ksp_cli.drum_map_option import CONFIG_PATH, DRUM_MAP_HELP, resolve_drum_map
+from ksp_cli.common import (
+    CONFIG_PATH,
+    DataError,
+    UsageError,
+    add_drum_map_arg,
+    add_path_arg,
+    add_selection_args,
+    load_project,
+    resolve_drum_map_arg,
+    run,
+    select,
+)
 
 PROG = "ksp2midi"
 
@@ -44,7 +53,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "(track, pattern) to its own file instead."
         ),
     )
-    parser.add_argument("path", type=Path, help="a .KeyStepPro project file")
+    add_path_arg(parser)
     parser.add_argument(
         "-o",
         "--output",
@@ -62,14 +71,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "<stem>_track{N}_pattern{P}.mid, each starting at its own tick 0"
         ),
     )
-    parser.add_argument("--track", type=int, choices=range(1, 5), help="export only this track")
-    parser.add_argument(
-        "--pattern",
-        type=int,
-        choices=range(1, 17),
-        metavar="{1..16}",
-        help="export only this pattern",
-    )
+    add_selection_args(parser, "export")
     parser.add_argument(
         "--steps-per-beat",
         type=int,
@@ -85,7 +87,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_TICKS_PER_BEAT,
         help="MIDI resolution (default: %(default)s)",
     )
-    parser.add_argument("--drum-map", metavar="SPEC", help=DRUM_MAP_HELP)
+    add_drum_map_arg(parser)
     parser.add_argument(
         "--drum-channel",
         type=int,
@@ -151,7 +153,7 @@ def _plan(
     args: argparse.Namespace, project: Project, options: ExportOptions
 ) -> list[tuple[ExportResult, Path]]:
     """Pair each rendered file with where it goes. Nothing is written yet."""
-    narrowed = project.select(track=args.track, pattern=args.pattern)
+    narrowed = select(project, args)
     if args.split:
         directory = args.output or args.path.parent
         return [
@@ -164,30 +166,16 @@ def _plan(
     return [(result, args.output or args.path.with_suffix(".mid"))]
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
-
-    try:
-        drum_map = resolve_drum_map(args.drum_map, CONFIG_PATH)
-    except json.JSONDecodeError as exc:  # a ValueError, so it must come first
-        print(f"{PROG}: drum map: {CONFIG_PATH}: {exc}", file=sys.stderr)
-        return 2
-    except (OSError, ValueError) as exc:
-        print(f"{PROG}: drum map: {exc}", file=sys.stderr)
-        return 2
-
+def _options(args: argparse.Namespace) -> ExportOptions:
+    drum_map = resolve_drum_map_arg(args.drum_map, CONFIG_PATH)
     if drum_map is None:
         # ksp-dump can print "lane 0" and leave it unresolved; a MIDI file has
         # no way to say that, so there is nothing sensible to write.
-        print(
-            f"{PROG}: --drum-map none cannot be exported: a MIDI file has to name a note "
-            f"for every drum lane",
-            file=sys.stderr,
+        raise UsageError(
+            "--drum-map none cannot be exported: a MIDI file has to name a note for every drum lane"
         )
-        return 2
-
     try:
-        options = ExportOptions(
+        return ExportOptions(
             ticks_per_beat=args.ticks_per_beat,
             steps_per_beat=args.steps_per_beat,
             drum_map=drum_map,
@@ -197,34 +185,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             include_stale=args.include_stale,
         )
     except ValueError as exc:
-        print(f"{PROG}: {exc}", file=sys.stderr)
-        return 2
+        raise UsageError(str(exc)) from exc
 
-    try:
-        project = load(args.path)
-    except OSError as exc:
-        print(f"{PROG}: {exc}", file=sys.stderr)
-        return 1
-    except ValueError as exc:
-        print(f"{PROG}: {args.path}: {exc}", file=sys.stderr)
-        return 1
 
-    planned = _plan(args, project, options)
+def _run(args: argparse.Namespace) -> int:
+    options = _options(args)
+    planned = _plan(args, load_project(args.path), options)
     if not planned:
         # Writing a MIDI file with no notes in it would look like success.
-        print(
-            f"{PROG}: {args.path}: nothing to export (no selected pattern holds notes)",
-            file=sys.stderr,
-        )
-        return 1
+        raise DataError(f"{args.path}: nothing to export (no selected pattern holds notes)")
 
     existing = [str(path) for _, path in planned if path.exists()]
     if existing and not args.force:
-        print(
-            f"{PROG}: {', '.join(existing)} already exists (use --force to overwrite)",
-            file=sys.stderr,
-        )
-        return 1
+        raise DataError(f"{', '.join(existing)} already exists (use --force to overwrite)")
 
     if not args.dry_run:
         try:
@@ -233,8 +206,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             for result, path in planned:
                 result.midi.save(path)
         except OSError as exc:
-            print(f"{PROG}: {exc}", file=sys.stderr)
-            return 1
+            raise DataError(str(exc)) from exc
 
     for warning in _warnings(planned):
         print(f"{PROG}: warning: {warning}", file=sys.stderr)
@@ -249,6 +221,11 @@ def _warnings(planned: Sequence[tuple[ExportResult, Path]]) -> list[str]:
     for result, _ in planned:
         seen.update(dict.fromkeys(result.warnings))
     return list(seen)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+    return run(PROG, lambda: _run(args))
 
 
 if __name__ == "__main__":  # pragma: no cover

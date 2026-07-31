@@ -1,54 +1,30 @@
 """Mapping the KeyStep Pro's 24 drum lanes to MIDI note numbers.
 
-A drum note stores a **lane index** in parameter 117, not a pitch. What note
-that lane actually transmits is decided by the device's Drum Map, which is a
-*global device setting* -- ``deviceGlobalParametersId 65`` -- and is **not
-carried in the project file**. No ``.KeyStepPro`` file contains it, MIDI
-Control Center keeps no copy on disk, and it cannot be written into a project.
+Parameter 117 stores a **lane index**, not a pitch. Which note a lane transmits
+is a global device setting that no project file contains and none can be
+written into -- spec 3.2.1 has the MCC field definitions and the evidence.
 
 So this module holds an *assumption about the user's device*, never a decoded
 fact, and every consumer is expected to say which map it used.
 
-The shape of the setting is not guesswork. MCC ships the definition at
-``/Library/Arturia/MIDI Control Center/Resources/KeyStepPro.json`` in a
-``globalFields`` group named "Drum Map":
-
-===============  ==============  ==========================  ==============
-``globalParamId``  Name          Range                       Default
-===============  ==============  ==========================  ==============
-``81``           Mode            0 = Chromatic, 1 = Custom   0 (Chromatic)
-``82``           Low note        0-103                       0
-``83``..``106``  Note 1..Note 24 0-127                       36..59
-===============  ==============  ==========================  ==============
-
-Two things follow. There are exactly **24** lanes -- which is where
-``DRUM_LANE_COUNT`` comes from, rather than from any array size in the file.
-And the factory mapping is chromatic from MIDI note 36: Arturia's manual says
-"the default mapping starts at MIDI note 36", and the Custom defaults 36..59
-are exactly that run.
-
-Two details remain unconfirmed on hardware and are recorded in the roadmap as
-Test D1: whether a factory-reset device is chromatic-from-36 or
-chromatic-from-0 (MCC's ``defaultValue`` for Low note is 0, which disagrees
-with the manual), and whether chromatic mode maps lane *i* to ``low + i`` or
-``low + i + 1``. This module implements ``low + i``, matching the manual's
-"which note the lowest key will trigger".
+Chromatic mode is implemented as lane *i* -> ``low + i``, matching Arturia's
+"which note the lowest key will trigger". That reading and the factory default
+of 36 are both unconfirmed on hardware (roadmap Test D1).
 """
-
-from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Final
+from typing import Any, Final, Self
 
-from ksp.constants import DRUM_LANE_COUNT, note_name
+from ksp.constants import DRUM_LANE_COUNT
+from ksp.encoding import note_name
+from ksp.types import Lane, Pitch
 
-#: Arturia's documented default. The Custom defaults in ``KeyStepPro.json``
-#: are 36..59, i.e. a chromatic run from here, and the manual agrees.
+#: Arturia's documented default; the Custom defaults in KeyStepPro.json are
+#: 36..59, i.e. a chromatic run from here.
 DEFAULT_CHROMATIC_LOW: Final = 36
 
-#: ``globalParamId 79`` (Drum output) defaults to 10, separately from tracks
-#: 1-4 which default to 0-3.
+#: globalParamId 79 (Drum output) defaults to 10, unlike tracks 1-4 (0-3).
 DEFAULT_DRUM_CHANNEL: Final = 10
 
 #: Highest Low note MCC will accept in chromatic mode.
@@ -115,17 +91,17 @@ GM_DRUM_NAMES: Final[dict[int, str]] = {
 class DrumMap:
     """Lane index -> MIDI note, for all 24 lanes.
 
-    Construct through :meth:`chromatic` or :meth:`custom` rather than directly;
-    both produce a descriptive ``name`` that callers are expected to print
-    alongside any resolved note, because the mapping is an assumption about the
-    user's hardware and not something read from their file.
+    Construct through :meth:`chromatic` or :meth:`custom`, which set a
+    descriptive ``name`` callers are expected to print alongside any resolved
+    note -- the mapping is an assumption about the user's hardware.
     """
 
-    notes: tuple[int, ...]
+    notes: tuple[Pitch, ...]
     name: str = "chromatic-36"
+
+    #: Non-fatal oddities, e.g. a custom map sending two lanes to one note.
+    #: Reported, never silently repaired.
     warnings: tuple[str, ...] = field(default=())
-    """Non-fatal oddities, e.g. a custom map that sends two lanes to the same
-    note. Reported, never silently repaired."""
 
     def __post_init__(self) -> None:
         if len(self.notes) != DRUM_LANE_COUNT:
@@ -138,9 +114,9 @@ class DrumMap:
 
         duplicates = sorted({n for n in self.notes if self.notes.count(n) > 1})
         if duplicates and not self.warnings:
-            # The hardware permits this, so it is not an error -- but it makes
-            # note -> lane lossy, and a converter silently picking one lane is
-            # exactly the kind of quiet wrong answer this project avoids.
+            # Permitted by the hardware, so not an error -- but it makes
+            # note -> lane lossy, and silently picking one lane is exactly the
+            # kind of quiet wrong answer this project avoids.
             object.__setattr__(
                 self,
                 "warnings",
@@ -153,31 +129,29 @@ class DrumMap:
             )
 
     @classmethod
-    def chromatic(cls, low: int = DEFAULT_CHROMATIC_LOW) -> DrumMap:
+    def chromatic(cls, low: int = DEFAULT_CHROMATIC_LOW) -> Self:
         """Lane *i* plays ``low + i``, the device's Chromatic mode."""
-        # MCC caps Low note at 103, which puts the top lane at 126 -- one short
-        # of 127. Whether that is an off-by-one in Arturia's range or in this
-        # module's ``low + i`` reading is unconfirmed (roadmap Test D1), so the
-        # device's own limit is enforced rather than a wider one derived from
-        # it. No separate overflow check is needed: 103 + 23 cannot exceed 127.
+        # MCC's own cap of 103 is enforced rather than a wider limit derived
+        # from it: that puts the top lane at 126, and whether the missing 127
+        # is an off-by-one in Arturia's range or in our low+i reading is
+        # unconfirmed (Test D1). 103 + 23 cannot overflow, so no second check.
         if not MIN_NOTE <= low <= MAX_CHROMATIC_LOW:
             raise ValueError(f"chromatic low note {low} is outside {MIN_NOTE}-{MAX_CHROMATIC_LOW}")
         return cls(
-            notes=tuple(range(low, low + DRUM_LANE_COUNT)),
+            notes=tuple(Pitch(n) for n in range(low, low + DRUM_LANE_COUNT)),
             name=f"chromatic-{low}",
         )
 
     @classmethod
-    def custom(cls, notes: Sequence[int]) -> DrumMap:
+    def custom(cls, notes: Sequence[int]) -> Self:
         """An explicit 24-entry map, the device's Custom Notes mode."""
-        return cls(notes=tuple(notes), name="custom")
+        return cls(notes=tuple(Pitch(n) for n in notes), name="custom")
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> DrumMap:
+    def from_dict(cls, data: dict[str, Any]) -> Self:
         """Build from an already-parsed config mapping.
 
-        Deliberately takes a dict, not a path: this module must not decide
-        where files live. The CLI loads the file and passes the result in.
+        Takes a dict, not a path: this module must not decide where files live.
         """
         mode = data.get("mode", "chromatic")
         if mode == "chromatic":
@@ -192,27 +166,24 @@ class DrumMap:
             return cls.custom(notes)
         raise ValueError(f"unknown drum map mode {mode!r}, expected 'chromatic' or 'custom'")
 
-    def has_lane(self, lane: int) -> bool:
+    def has_lane(self, lane: Lane) -> bool:
         """Whether *lane* is one the device actually has."""
         return 0 <= lane < DRUM_LANE_COUNT
 
-    def note_for_lane(self, lane: int) -> int:
+    def note_for_lane(self, lane: Lane) -> Pitch:
         """The MIDI note lane *lane* transmits."""
         if not self.has_lane(lane):
             raise ValueError(f"lane {lane} is outside 0-{DRUM_LANE_COUNT - 1}")
         return self.notes[lane]
 
-    def lane_for_note(self, note: int) -> int | None:
-        """The lane that plays *note*, or ``None`` if the map does not reach it.
-
-        ``None`` is a real answer and must not be smoothed over. Snapping an
-        unmapped drum hit to the nearest lane produces a file that loads
-        cleanly and plays the wrong instrument, with nothing to signal the
-        error -- the same failure mode as a guessed gate table.
-        """
+    def lane_for_note(self, note: Pitch) -> Lane | None:
+        """The lane that plays *note*, or ``None`` if the map does not reach it."""
+        # None is a real answer: snapping an unmapped hit to the nearest lane
+        # would play the wrong instrument with nothing to signal it -- the same
+        # failure mode as a guessed gate table.
         for lane, mapped in enumerate(self.notes):
             if mapped == note:
-                return lane
+                return Lane(lane)
         return None
 
     def describe(self) -> str:
@@ -221,13 +192,10 @@ class DrumMap:
         what = f"chromatic from {self.notes[0]}" if chromatic else "custom"
         return f"{what} (assumed - not in file)"
 
-    def label_for_lane(self, lane: int) -> str:
-        """Render a lane as ``lane 0 -> C1 (36) Bass Drum 1``.
-
-        A lane the device does not have is shown as-is rather than resolved.
-        The reader warns about those separately; inventing a note for one here
-        would hide it.
-        """
+    def label_for_lane(self, lane: Lane) -> str:
+        """Render a lane as ``lane 0 -> C1 (36) Bass Drum 1``."""
+        # A lane the device lacks is shown as-is rather than resolved: the
+        # reader warns about those, and inventing a note would hide it.
         if not self.has_lane(lane):
             return f"lane {lane} (out of range)"
         note = self.note_for_lane(lane)

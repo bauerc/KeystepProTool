@@ -17,7 +17,8 @@ from ksp.drum_map import (
     GM_DRUM_NAMES,
     DrumMap,
 )
-from ksp_cli.dump import parse_drum_map, resolve_drum_map
+from ksp.types import Lane, Pitch
+from ksp_cli.common import parse_drum_map, resolve_drum_map
 
 
 class TestDefaults:
@@ -50,12 +51,12 @@ class TestDefaults:
 
 class TestLookup:
     @pytest.mark.parametrize("lane", range(DRUM_LANE_COUNT))
-    def test_chromatic_round_trip(self, lane: int) -> None:
+    def test_chromatic_round_trip(self, lane: Lane) -> None:
         drum_map = DrumMap.chromatic()
         assert drum_map.lane_for_note(drum_map.note_for_lane(lane)) == lane
 
     @pytest.mark.parametrize("lane", range(DRUM_LANE_COUNT))
-    def test_custom_round_trip(self, lane: int) -> None:
+    def test_custom_round_trip(self, lane: Lane) -> None:
         """A scrambled map must round-trip too, or reverse lookup is order-dependent."""
         notes = [(37 * i + 5) % 128 for i in range(DRUM_LANE_COUNT)]
         drum_map = DrumMap.custom(notes)
@@ -68,21 +69,21 @@ class TestLookup:
         loads cleanly and plays the wrong instrument, with nothing to signal
         the error -- the same failure mode as a guessed gate table.
         """
-        assert DrumMap.chromatic(36).lane_for_note(100) is None
-        assert DrumMap.chromatic(36).lane_for_note(35) is None
+        assert DrumMap.chromatic(36).lane_for_note(Pitch(100)) is None
+        assert DrumMap.chromatic(36).lane_for_note(Pitch(35)) is None
 
     def test_duplicate_notes_warn_and_resolve_to_lowest_lane(self) -> None:
         notes = [36] * 2 + list(range(38, 38 + DRUM_LANE_COUNT - 2))
         drum_map = DrumMap.custom(notes)
-        assert drum_map.lane_for_note(36) == 0
+        assert drum_map.lane_for_note(Pitch(36)) == 0
         assert drum_map.warnings
         assert "lowest" in drum_map.warnings[0]
 
     def test_lane_outside_the_device_is_rejected(self) -> None:
         drum_map = DrumMap.chromatic()
-        assert not drum_map.has_lane(DRUM_LANE_COUNT)
+        assert not drum_map.has_lane(Lane(DRUM_LANE_COUNT))
         with pytest.raises(ValueError, match="outside"):
-            drum_map.note_for_lane(DRUM_LANE_COUNT)
+            drum_map.note_for_lane(Lane(DRUM_LANE_COUNT))
 
 
 class TestValidation:
@@ -115,15 +116,15 @@ class TestValidation:
 
 class TestRendering:
     def test_label_names_the_gm_instrument(self) -> None:
-        assert DrumMap.chromatic(36).label_for_lane(0) == "lane 0 -> C1 (36) Bass Drum 1"
+        assert DrumMap.chromatic(36).label_for_lane(Lane(0)) == "lane 0 -> C1 (36) Bass Drum 1"
 
     def test_label_without_a_gm_name_still_renders(self) -> None:
         drum_map = DrumMap.chromatic(0)
-        assert drum_map.label_for_lane(0) == "lane 0 -> C-2 (0)"
+        assert drum_map.label_for_lane(Lane(0)) == "lane 0 -> C-2 (0)"
 
     def test_label_for_a_lane_the_device_lacks_is_not_resolved(self) -> None:
         """Better to show the raw lane than to invent a note for it."""
-        assert "out of range" in DrumMap.chromatic().label_for_lane(60)
+        assert "out of range" in DrumMap.chromatic().label_for_lane(Lane(60))
 
     def test_describe_says_it_is_an_assumption(self) -> None:
         """The annotation is load-bearing: this is device state we cannot read."""

@@ -22,7 +22,7 @@ and each is an :class:`ExportOptions` field rather than a buried literal:
   unlike ``ksp-dump`` this cannot fall back to printing the lane number.
 * **Gate length.** Only six encodings are hardware-confirmed (spec 6).
   Anything else is exported at ``default_gate`` and warned about, never
-  interpolated -- see :mod:`ksp.constants`.
+  interpolated -- see :mod:`ksp.encoding`.
 
 The work is in three layers, so the M8/M9 Swift port translates arithmetic
 rather than a MIDI library:
@@ -43,9 +43,10 @@ from typing import Final
 
 import mido
 
-from ksp import constants
+from ksp import constants, encoding
 from ksp.drum_map import DEFAULT_DRUM_CHANNEL, DrumMap
 from ksp.model import Note, NoteKind, Pattern, Project
+from ksp.types import Pitch
 
 #: 480 divides evenly by 3 and 4, so triplet step sizes stay exact if M6 ever
 #: decodes the triplet bit.
@@ -63,6 +64,9 @@ DRUM_CHANNEL: Final = DEFAULT_DRUM_CHANNEL - 1
 #: note-off in MIDI, which is a different thing. Exported at 1 instead.
 MIN_VELOCITY: Final = 1
 
+#: Swing percentage at which steps sit on a flat grid.
+NO_SWING: Final = 50
+
 
 @dataclass(frozen=True)
 class ExportOptions:
@@ -72,7 +76,7 @@ class ExportOptions:
     steps_per_beat: int = DEFAULT_STEPS_PER_BEAT
     drum_map: DrumMap = field(default_factory=DrumMap.chromatic)
     drum_channel: int = DRUM_CHANNEL
-    default_gate: float = constants.DEFAULT_GATE_LENGTH
+    default_gate: float = encoding.DEFAULT_GATE_LENGTH
     """Length in steps for a gate encoding that is not in the measured table.
     Defaults to the length a freshly placed note has on the device, which is
     the one value available without inventing an encoding (spec 6, M7)."""
@@ -113,7 +117,7 @@ class RenderedNote:
 
     tick: int
     duration_ticks: int
-    pitch: int
+    pitch: Pitch
     velocity: int
     channel: int
 
@@ -204,15 +208,11 @@ class _Warnings:
 
 def declared_step_count(pattern: Pattern, kind: NoteKind) -> int:
     """The step count the pattern declares for *kind*."""
-    if kind is NoteKind.DRUM and pattern.drum_step_count is not None:
-        return pattern.drum_step_count
-    return pattern.seq_step_count
+    return pattern.timing_for(kind).step_count
 
 
 def swing_percent(pattern: Pattern, kind: NoteKind) -> int:
-    if kind is NoteKind.DRUM and pattern.drum_swing_percent is not None:
-        return pattern.drum_swing_percent
-    return pattern.seq_swing_percent
+    return pattern.timing_for(kind).swing_percent
 
 
 def step_count(pattern: Pattern, kind: NoteKind) -> int:
@@ -247,7 +247,7 @@ def render_pattern(
             f"not stored in the project file (spec 3.2.1)"
         )
         warnings.extend(options.drum_map.warnings)
-    if options.apply_swing and swing != 50:
+    if options.apply_swing and swing != NO_SWING:
         warnings.add(
             f"pattern {pattern.number} uses {swing}% swing; exported with the standard swing "
             f"interpretation, which is not measured against the device"
@@ -294,25 +294,27 @@ def _render_note(
     warnings: _Warnings,
 ) -> RenderedNote | None:
     ticks_per_step = options.ticks_per_step
-    pitch = note.pitch
     if kind is NoteKind.DRUM:
         # A lane the device does not have means parameter 117 is not the
         # 0-based lane index we think it is. The reader already warns; here
         # there is simply no note to emit, so the note is dropped loudly.
-        if not options.drum_map.has_lane(note.pitch):
+        lane = note.as_lane
+        if not options.drum_map.has_lane(lane):
             warnings.add(
-                f"drum lane {note.pitch} is outside the device's "
+                f"drum lane {lane} is outside the device's "
                 f"0-{constants.DRUM_LANE_COUNT - 1} lanes and was dropped"
             )
             return None
-        pitch = options.drum_map.note_for_lane(note.pitch)
+        pitch = options.drum_map.note_for_lane(lane)
+    else:
+        pitch = note.as_pitch
 
     if note.time_shift:
         warnings.add(
             "note(s) carry a non-zero time shift; its timing encoding is not measured, "
             "so the shift was not applied"
         )
-    if len(note.skip) != len(constants.SKIP_SEQUENCES):
+    if len(note.skip) != len(encoding.SKIP_SEQUENCES):
         warnings.add(
             "note(s) are set to play on only some of the 16/32/48/64 sequences; the export "
             "renders one pass of each pattern and includes them all"
