@@ -10,8 +10,5 @@
   },
     "attribution": {
     "sessionUrl": false
-  },
-    "worktree": {
-    "bgIsolation": "none"
   }
 }

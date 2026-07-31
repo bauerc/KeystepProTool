@@ -492,9 +492,10 @@ misreading.
 produces files that load fine and play with wrong note durations — the worst kind of bug,
 because nothing errors.
 
-**To resolve:** on the hardware, place a single note, step its gate through every selectable
-value, and export at each setting. Diff to build the table. Roughly 10–15 captures. Gate is
-pure lookup data once measured.
+**To resolve:** one device read for the displayed values and **one export** carrying a whole
+sweep — detent *k* on step *k*, so a single pattern holds the entire table. See
+[`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md) tier 2, and read the capture with
+`tools/gate_table.py`. Gate is pure lookup data once measured.
 
 **Default gate is `7` (0.5).** A freshly placed note stores `7`, confirmed by `project_9`'s
 untouched notes and by `initial_project`. Alongside it, a fresh note's other defaults are

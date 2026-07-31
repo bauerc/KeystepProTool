@@ -1,0 +1,30 @@
+# Gate encoder census -- protocol T2.0.
+#
+# NOT YET CAPTURED. This file is a template: it deliberately contains no
+# values. Anything below a section header is read as hardware ground truth by
+# tools/gate_table.py, so a placeholder number here would be indistinguishable
+# from a measurement. Delete this notice when you fill it in.
+#
+# Method: one note on step 1. Turn the Gate encoder to its minimum, then step
+# up one detent at a time to the maximum, writing down the display at every
+# detent. Repeat on Track 1 in drum mode with one Kick.
+#
+# Format: a "melodic" or "drum" line opens a section; every line after it is
+# one displayed value, in detent order, lowest first. Blank lines and lines
+# starting with # are ignored. Record a non-numeric extreme literally -- TIE,
+# HOLD, inf -- rather than normalising it to a number; the tool keeps it as a
+# label and excludes it from the monotonicity check.
+#
+# Header lines to record when capturing:
+#   date, firmware version, D_seq, D_drum
+#
+# Example of the shape (NOT data -- these numbers are invented):
+#   melodic
+#   0.5
+#   1
+#   drum
+#   0.5
+
+melodic
+
+drum

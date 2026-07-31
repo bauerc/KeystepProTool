@@ -50,8 +50,13 @@ Every test below is one capture. A capture is:
 
 ### Rules
 
-- **One change per capture.** A capture containing more than one deliberate change is discarded,
-  not interpreted. Two changes make the diff ambiguous and there is no way to tell afterwards.
+- **One change per capture *address*.** A capture may carry many changes provided each lands on a
+  **distinct key that you can predict before you export**. The diff is then self-labeling —
+  `124_110_1_1_7` can only have come from the seventh note's gate. What is forbidden is two
+  changes that could land on the *same* key, or any change whose address you cannot name in
+  advance; those make the diff ambiguous and there is no way to tell afterwards which edit
+  produced what. Batching this way is not a new licence: **T7.2** already reads a seven-point
+  Time Shift curve from one capture, and `ROADMAP.md` gets all 24 drum-map lanes from one.
 - **Do not touch anything else** — not the tempo, not the transport, not another track. Every
   key that moves is a signal, and unrelated changes bury the one you want.
 - **If you lose track of what you changed, discard and redo.** A wrong entry in the table is worse
@@ -70,7 +75,7 @@ No tooling needs to exist first. This is enough:
 from ksp import lenient_json
 
 BASE = "project_files/captures/B0-baseline.KeyStepPro"
-CAP  = "project_files/captures/T2-gate-04.KeyStepPro"
+CAP  = "project_files/captures/T2-gate-sweep.KeyStepPro"
 
 a = lenient_json.load_path(BASE)
 b = lenient_json.load_path(CAP)
@@ -192,10 +197,20 @@ Run them cumulatively: each starts from the previous capture.
 
 ## Tier 2 — M7, the gate length table
 
-**~20 captures.** The long pole, and the only tier that is pure lookup data. Spec §6 has six
+**1 capture, plus one reported list.** The only tier that is pure lookup data. Spec §6 has six
 hardware-confirmed points and explicitly warns against inventing a formula for the rest, because
 a wrong table produces files that load fine and play with wrong note durations, with nothing to
 signal the error.
+
+An earlier version of this tier exported once per detent, which with an unknown detent count is
+anywhere from 20 to 200+ MCC round trips. That was never necessary. An export is a whole-project
+snapshot, so one capture carries up to 1024 independently addressed gate values per track, and
+the sweep fits in it **however many detents turn out to exist** — stored gate is a 7-bit field,
+so 128 is the hard ceiling and two patterns of one track hold that.
+
+What a capture can *never* recover is the **displayed** value: it exists only on the device screen
+and in your notes. So this tier is one device **read** for the display axis and one **export** for
+the stored axis, paired by position.
 
 | Displayed | Stored |
 |---|---|
@@ -210,52 +225,80 @@ Below 3 this fits `stored = 8·g + 3`; above 3 it compresses to roughly `4·g`. 
 captures gave `4 → 31`, so the break is real. `initial_project` also contains a stored `2`, which
 is *below* the 0.5 point — so the range extends further down than any documented capture reaches.
 
-### T2.1–T2.n — Melodic gate sweep
+### T2.0 — Encoder census (a **read**, no export)
 
-- **Resolves:** the full `110` table.
-- **Device:** from B0.1. Track 2, pattern 1. Place one note at beat 1, any pitch. Then step Gate
-  from its **minimum to its maximum, one detent at a time**, exporting at every single value.
-  Change nothing else, ever.
-- **Capture:** `T2-gate-<display>.KeyStepPro`, where `<display>` is the displayed value with the
-  decimal point replaced by `p` — `T2-gate-0p5`, `T2-gate-1`, `T2-gate-3p5`. If the display shows
-  something non-numeric at the extremes (e.g. a tie or hold indication), name it literally:
-  `T2-gate-tie`.
-- **Diff against:** the previous capture in the sweep.
-- **Keys:** `124_110_1_1_1` only.
-- **Confirms if:** exactly one key moves per capture, and the six known points reproduce. Those
-  six are a built-in check that the procedure is being followed — **if a known point disagrees,
-  stop and re-read the display rather than recording it.**
-- **Falsified if:** two displayed values map to one stored value, or the sequence is not monotonic.
-- **If falsified:** capture both directions (sweep up, then down) — a non-monotonic or
-  hysteretic encoder reading is a different problem from a non-linear table, and the fix is
-  different.
-- **Note the count.** However many detents there are is how many captures this is. Record the
-  minimum and maximum displayed values in the ledger; the range itself is currently unknown, and
-  the stored `2` in `initial_project` says the bottom is lower than 0.5.
+The display axis, and the test that sizes everything after it. Run it first; nothing here can be
+built until you know how many detents there are.
 
-### T2.x — Where does the stored `2` come from?
+- **Resolves:** the displayed gate values, in order, and the detent count.
+- **Device:** from B0.1. Track 2, pattern 1, one note at step 1. Turn the Gate encoder to its
+  **minimum**, then step it up **one detent at a time to the maximum**, reading the display at
+  every detent.
+- **Report:** the ordered list of displayed values and the count `D_seq`. Write any non-numeric
+  extreme literally — `TIE`, `HOLD`, `∞` — rather than normalising it to a number.
+- **Then the drum side:** Track 1 in drum mode, one Kick at step 1. Same sweep → `D_drum` and its
+  list.
+- **Deliverable:** `analysis/gate_display_sweep.txt`. Nothing is exported.
+- **Compare the two lists before building anything.** If they are identical, T2.1's drum sweep can
+  be cut to the anchor detents; if they differ, both sides need a full sweep. The per-detent-export
+  version of this tier could only discover that after five captures.
 
-- **Resolves:** the one unmeasured value that exists in real user material.
-  `initial_project` Track 1 pattern 1 has a drum note with `118` = 2, which `ksp-dump` prints as
-  `?(2)`.
-- **Device:** during the sweep, when the stored value reaches 2, note the displayed value.
-- **Confirms if:** 2 appears in the sweep at all.
-- **If it does not appear:** 2 may only be reachable on the drum track, or via a control other
-  than the Gate encoder (a tie, a very short trigger). Try T2.y before concluding it is unreachable.
+### T2.0a — Overrun pre-flight (30 seconds, no export)
 
-### T2.y — Drum gate spot-check
+The one assumption the packed layout rests on: that a long gate is still settable when the next
+step is occupied.
 
-- **Resolves:** whether `118` (drum) uses the same table as `110` (melodic), or a different one.
-  Nothing currently establishes this — spec §6 assumes one table for both.
-- **Device:** from B0.1. Track 1 in drum mode, an untouched pattern. Place a Kick at beat 1. Set
-  Gate to each of **0.5, 1, 2, 4** and the minimum, exporting at each. Five captures.
-- **Capture:** `T2-drumgate-<display>.KeyStepPro`
-- **Keys:** `123_118_<pattern>_1_1`
-- **Confirms if:** the stored values match the melodic table at the same displayed values.
-- **Falsified if:** they differ at any point.
-- **If falsified:** the drum table needs its own full sweep — repeat T2.1–T2.n on the drum track.
-  Budget another ~20 captures. Better to discover this from five captures than after writing the
-  converter.
+- **Device:** notes on steps 1 and 2. Set step 1's Gate to the **maximum** and read the display
+  back.
+- **Expect it to hold.** `project_5` already carries a gate-2 note with the *same pitch* repeating
+  on the very next step, so overrun is legal; this only confirms it at the extreme.
+- **If the device clamps it** to the distance to the next note: fall back to the spaced layout —
+  one note every 8 steps (8 per pattern, 16 patterns per track = 128 detents), still one export.
+  **Record which layout you used in the ledger**, because the analysis needs to know.
+
+### T2.1 — The gate sweep (**one capture**)
+
+- **Resolves:** the full `110` **and** `118` tables.
+- **Device:** from B0.1. Set the pattern step count to 64.
+  - **Track 2, pattern 1 — melodic sweep.** One note per step, placed in **ascending step order**.
+    The note on step *k* gets **detent *k*** from T2.0's list. Let pitch ascend as far as the
+    keyboard allows — pitch is a free cross-check on the pairing, not a measurement.
+    If `D_seq > 64`, continue at detent 65 on **pattern 2**.
+  - **Track 1 in DRUM mode, pattern 1 — drum sweep.** One Kick per step, same rule: step *k* gets
+    detent *k*. If T2.0's two lists matched exactly this may be cut to the anchor detents
+    (minimum, the six known points, maximum) — but it costs no extra export either way, so prefer
+    the full sweep.
+  - Leave velocity, time shift, randomness and step skip at their defaults. Touch nothing else.
+- **Capture:** `T2-gate-sweep.KeyStepPro` — **one export.**
+- **Keys:** `124_110_1_1_<1..D_seq>` and `124_50_1_1_<1..D_seq>`; `123_118_1_1_<1..D_drum>` and
+  `123_54_1_1_<1..D_drum>`; plus `124_98_1` for the step count.
+- **Read it with:** `uv run python tools/gate_table.py`, which pairs stored against displayed and
+  runs every check below. Run it **before leaving the device**, so a failed check can be re-read
+  rather than re-staged.
+- **Confirms if:** the six known points reproduce at the same displayed values, stored gate is
+  strictly monotonic in detent index, and no two detents share a stored value.
+- **Falsified if:**
+  - *a known point disagrees* → the pairing is off by one somewhere. **Stop and re-read the
+    display rather than recording it.**
+  - *the sequence is not monotonic* → a hysteretic encoder reading, which is a different problem
+    from a non-linear table. Redo **T2.0** sweeping down as well as up; that is a read, not a
+    capture, so it costs nothing.
+  - *two detents share a stored value* → the display has finer resolution than the storage. That
+    is itself the finding, and it means display→stored is many-to-one, which M5's encode path has
+    to handle.
+- **Index spaces (spec §4).** `110`/`118` are indexed by **note ordinal**; `50`/`54` by step, so
+  where the device does not pool notes in step order, ordinal *k* is **not** detent *k*. **It
+  demonstrably does not always:** `initial_project`'s Track 1 drum pool is out of step order in
+  three places, which `tools/gate_table.py` reports when run against it. So this is a real case,
+  not a hypothetical — the tool pairs through `50`/`54` rather than assuming, which handles it.
+  **Record in the ledger whether the ordinals came out in step order**, because it tells a writer
+  what note ordering the device produces.
+- **This capture carries a second deliberate change** — the step count at `124_98_1`. That is
+  legal under the amended rule: it is a distinct address, named in advance.
+- **The stored `2`.** `initial_project` has a drum note with `118` = 2, below the 0.5 point and
+  unexplained. The tool reports whether the sweep reached it and at what displayed value. If it
+  never appears on either side, 2 is not reachable from the Gate encoder and is set some other way
+  (a tie, a trigger); say so in the ledger rather than leaving it open.
 
 ---
 
@@ -731,8 +774,9 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 | T1.2 | | pitch E3 | | |
 | T1.3 | | velocity 127 | | |
 | T1.4 | | deleted | | residue? |
-| T2.* | | gate = | | one row per detent |
-| T2.y | | drum gate = | | same table as melodic? |
+| T2.0 | | gate detents, min→max | — | `D_seq` = , `D_drum` = ; lists in `gate_display_sweep.txt` |
+| T2.0a | | max gate beside an occupied step | — | held, or clamped? layout used: packed / spaced |
+| T2.1 | | one capture, detent *k* on step *k* | | ordinals in step order? stored `2` reached? |
 | T3.1 | | track 1 seq mode | | |
 | T3.2 | | track 1 drum mode | | bit that moved: |
 | T3.3 | | ARP on | | |
@@ -768,14 +812,17 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 |---|---|---|---|
 | B0 | 2 | noise floor | all |
 | 1 | 4 | write-path key set | M4 |
-| 2 | ~20 | gate table | M7 |
+| 2 | 1 | gate table (melodic **and** drum) | M7 |
 | 3 | 4 | drum-mode bit | M6 |
 | 4 | 8 | step-active semantics, real limits | M6 |
 | 5 | ~14 | pattern scalars, chaining, step-skip semantics | M6, M2 |
 | 6 | 2 | standing caveats | M3 |
 | 7 | ~13 | Time Shift range, swing semantics | M7, M5 |
 | 8 | ~6 recordings | what a Time Shift unit is worth in time | M2, M5 |
-| | **~73** | | |
+| | **~54** | | |
+
+Tier 2 also costs two device **reads** (T2.0, T2.0a) that produce no file; they are not captures
+but they are where the gate display axis comes from, and T2.1 cannot be staged without them.
 
 Tiers are ordered by value per capture and each is independently useful — stopping after any tier
 leaves a coherent result rather than a half-finished one. B0 is not optional; everything else is.
@@ -785,6 +832,8 @@ Tier 4 rest → Tier 6 → Tier 5 → Tier 8**.
 
 - **D1 and Tier 3** are the two places where the current code is arguably *wrong* rather than merely
   incomplete.
+- **Tier 2 is one capture** and resolves a whole encoding, so there is little reason to defer it.
+  It used to be the long pole; it is now among the cheapest tiers here.
 - **T7.1 is two captures and jumps the queue** because it is a go/no-go: if the Time Shift range is
   only ±4, the rest of Tier 7's shift work and most of Tier 8 are not worth running at all.
 - **T7.5 is the third place the code may be wrong** — `reader._swing` and MCC's own field label
