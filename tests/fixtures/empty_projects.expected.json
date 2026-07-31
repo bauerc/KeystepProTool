@@ -1,0 +1,26 @@
+{
+  "provenance": "The two baselines: MCC's own exported default, and a project the user initialised and exported without touching anything. Confirmed on the hardware readout only for BPM, which shows 120.",
+  "comment": "These matter more than they look. An empty project is the one case where a reader that mistakes uninitialised storage for content fails loudly instead of subtly -- Track 1 slot 4 is zero-filled rather than sentinel-filled in every known file, which naively reads as 64 notes at step 1 with velocity 0, in both parameter sets, in all 16 patterns.",
+  "projects": [
+    {
+      "project_file": "Default.KeyStepPro",
+      "description": "MCC's factory template, shipped with the application.",
+      "tempo_bpm": 120.0,
+      "global_swing_percent": 50,
+      "version": null,
+      "total_keys": 153496,
+      "expected_note_count": 0,
+      "expected_warning_substrings": ["no 'version' key"]
+    },
+    {
+      "project_file": "user_empty_project.KeyStepPro",
+      "description": "Initialised and exported by the user with no edits made.",
+      "tempo_bpm": 120.0,
+      "global_swing_percent": 50,
+      "version": "2.5.20",
+      "total_keys": 153497,
+      "expected_note_count": 0,
+      "expected_warning_substrings": []
+    }
+  ]
+}
