@@ -5,8 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this project is
 
 Converts between Standard MIDI files and Arturia KeyStep Pro `.KeyStepPro` project files.
-MIDI Control Center (MCC) can export MIDI but cannot import it — that gap is the reason this
-tool exists.
+MIDI Control Center (MCC) offers no way to get sequencer patterns in or out as MIDI — that gap is
+the reason this tool exists.
+
+**MCC has no MIDI export for the KeyStep Pro** — confirmed in the UI. This matches the static
+evidence: `KeyStepPro.json` declares `actions: ["store", "recall"]`, and the binary's only
+MIDI-file-writing strings sit in the BeatStep Pro `.mbseq` save path. So `ksp2midi` is the only
+MIDI writer that exists for this device, and there is **no reference render to check timing
+against** — the hardware's live MIDI output is the sole ground truth.
 
 The file format is already decoded and hardware-validated. **Read
 `analysis/KeyStepPro_Format_Spec.md` before touching format code** — it is the authoritative
@@ -72,9 +78,12 @@ the milestone implementing them lands, so an installed command never crashes on 
   *global device setting* and is not in the project file at all: it cannot be read from one or
   written into one. `ksp.drum_map` holds it as configuration with a documented default
   (chromatic from 36) and every consumer must state which map it assumed.
-- Gate length (`110`/`118`) is non-linear and **still unmeasured** (M7, needs hardware). Until the
-  table exists, write a default gate and warn — do not guess an encoding, because a wrong table
-  produces files that load fine and play wrong.
+- **The three timing encodings are unmeasured** (M7, needs hardware): gate length (`110`/`118`) is
+  non-linear with six known points; time shift (`112`/`120`) has a confirmed centre of 49 but an
+  unknown range and unknown unit; swing (`74`, `97`/`114`) has **never been set in any sample file**,
+  so it cannot be decoded at the desk at all. Until they are measured, stay on the grid, write a
+  default gate, and warn — do not guess an encoding, because a wrong one produces files that load
+  fine and play wrong. See `analysis/Timing_Calibration.md`.
 
 ## Repository data is not source
 
