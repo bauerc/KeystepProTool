@@ -68,7 +68,11 @@ deviceGlobalParametersId  65
   purely by **scanning the Templates directory**, which is world-writable — so a tool can drop
   files there with no elevation and no Finder integration. MCC scans at launch, so expect to
   restart it before a new file appears.
-- **MCC can export MIDI files but cannot import them.** That is the gap this project fills.
+- **MCC has no MIDI export for the KeyStep Pro, and no import either** — confirmed in the UI.
+  `KeyStepPro.json` declares only `actions: ["store", "recall"]`, and the binary's sole
+  MIDI-file-writing code sits in the **BeatStep Pro** `.mbseq` save path, which is where the
+  often-repeated "MCC can export MIDI" claim comes from. Getting patterns out as `.mid` is the gap
+  this project fills, and it means there is no reference render to check our own output against.
 - There is no CLI, AppleScript dictionary, or headless mode. Automation must be file-level.
 
 ---
@@ -424,7 +428,26 @@ warns — it resolves the *mode*, it does not discard data.
 
 ---
 
-## 6. Open question: gate length encoding
+## 6. Open questions: the timing encodings
+
+Three encodings remain unmeasured, and all three displace a note in time. They are collected here
+because one hardware session resolves all of them — see
+[`Timing_Calibration.md`](./Timing_Calibration.md) for the model and
+[`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md) tiers 2, 7 and 8 for the captures.
+
+| Encoding | Parameters | State | Captures |
+|---|---|---|---|
+| Gate length | `110` / `118` | six points measured, rest unknown | Tier 2 |
+| Time shift range and linearity | `112` / `120` | centre 49 confirmed; range unknown | T7.1–T7.3 |
+| Time shift unit (ticks? ms?) | `112` / `120` | wholly unknown | Tier 8 |
+| Swing semantics | `74`, `97` / `114` | **never exercised** in any sample file | T7.4–T7.7 |
+
+**Swing deserves particular caution.** `74` reads 50 and `97` / `114` read 25 in all 16 patterns of
+all four tracks of all five sample projects, so there is no observational data on it whatsoever.
+MCC labels `97` / `114` a signed offset (−25 %…+25 %) while `ksp.reader._swing` reads them as an
+absolute percentage; the two agree only because the global is always 50 here.
+
+### 6.1 Gate length
 
 Gate (`110` / `118`) is **not linear** and is not yet fully decoded. Observed
 display → stored values, all hardware-confirmed:

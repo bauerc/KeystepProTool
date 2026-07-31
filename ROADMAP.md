@@ -125,9 +125,13 @@ byte-identical file. Turns "not project state" from an inference into an asserte
 ### M2 — KeyStep Pro → MIDI export
 **Artifact:** `.KeyStepPro` → `.mid`, openable in any DAW.
 
-**Why it stands alone:** this is genuinely useful software on its own. MCC has MIDI export for
-some things but no path for getting sequencer patterns out as MIDI files. It also directly
-serves the README's "and vice versa".
+**Why it stands alone:** this is genuinely useful software on its own. MCC has **no MIDI export at
+all for the KeyStep Pro** — confirmed in the UI; the export people remember is the BeatStep Pro's
+`.mbseq` path. It also directly serves the README's "and vice versa".
+
+A consequence worth stating: `ksp2midi` is therefore the only MIDI writer for this device, so
+there is no reference render to diff against and the hardware's live output is the only ground
+truth for timing (M7, protocol tier 8).
 
 **Test:** convert `project_5`, open in a DAW, confirm the notes, timing and velocities match the
 documented description. This is the first point where a mistake becomes *audible*, which catches
@@ -202,17 +206,29 @@ patterns longer than 64 steps split across pattern slots.
 
 ---
 
-### M7 — Gate length table
-**Artifact:** the measured display → stored lookup table, as data.
+### M7 — Timing calibration
+**Artifact:** the measured constants for the three encodings that place a note in time — gate
+length, time shift, and swing — as data.
 
-**Why it is separate:** gate is the one encoding still unresolved (spec §6). It is non-linear and
-does not fit a clean formula. Until measured, M5/M6 write a default gate and warn.
+**Why it is separate:** these are the encodings still unresolved (spec §6), and none fits a clean
+formula. Until measured, M2 exports on the grid and warns, and M5/M6 write a default gate and warn.
 
-**Test:** place one note, step its gate through every selectable value, export at each, diff.
-Roughly 10–15 captures. Once captured it is pure lookup data and drops straight in.
+**Scope**, all resolved in one session because the device is already out:
 
-**Needs hardware.** Do not guess this — a wrong table produces files that load fine and play
-wrong, with nothing to signal the error.
+- **Gate table** (`110` / `118`) — six points known, the rest is a sweep. Protocol tier 2.
+- **Time shift range and linearity** (`112` / `120`) — the centre of 49 is confirmed but nothing
+  establishes the range; `project_5`'s ±4 may not be the limit. Protocol T7.1–T7.3.
+- **Swing semantics** (`74`, `97` / `114`) — **never exercised in any sample file**, so it cannot be
+  decoded at the desk at all. Protocol T7.4–T7.7, which also settles whether `reader._swing` is
+  right to read the per-pattern value as absolute rather than a signed offset.
+- **What one time-shift unit is worth in time** — needs a recording of the device's MIDI output
+  rather than an export, because the quantity is not in the file. Protocol tier 8.
+
+See `analysis/Timing_Calibration.md` for the model and the arithmetic.
+
+**Needs hardware**, and tier 8 additionally needs a DAW or interface to record MIDI. Do not guess
+any of it — a wrong timing constant produces files that load fine and play wrong, with nothing to
+signal the error.
 
 ---
 
@@ -248,7 +264,7 @@ it is worth building after M6 — see the caveat under **Stack**.
 | M4 Mutation | | **Yes** | M3 |
 | M5 MVP convert | | No (desk-testable) | M3, drum `52` packing |
 | M6 Full convert | | No (desk-testable) | M5, M1.5 |
-| M7 Gate table | | **Yes** | M3 |
+| M7 Timing calibration | | **Yes** | M3 |
 | M8 Distribution | | For final check | M6 |
 | M9 GUI | | For final check | M8 |
 

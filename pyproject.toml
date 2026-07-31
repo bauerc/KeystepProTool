@@ -56,7 +56,12 @@ select = [
 
 [tool.mypy]
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "tools"]
+
+# mido ships no py.typed, so strict mode rejects the import outright.
+[[tool.mypy.overrides]]
+module = "mido.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

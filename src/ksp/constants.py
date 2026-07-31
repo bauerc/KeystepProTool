@@ -126,6 +126,25 @@ G_DRUM_MAP_NOTE_1: Final = 83  # ..106 = Note 1..Note 24, custom mode
 #: stored 48 is -1. Confirmed by the +1..+4 / -1..-4 ramp in project_5.
 TIME_SHIFT_CENTRE: Final = 49
 
+#: The displayed range of time shift. Unmeasured -- project_5's ramp only
+#: reaches +-4 and nothing establishes it is the limit. Protocol T7.1.
+TIME_SHIFT_RANGE: Final[tuple[int, int] | None] = None
+
+#: What one unit of time shift is worth, as a fraction of a step. Unmeasured:
+#: it may instead be a fixed tick count or an absolute time, which needs a
+#: recording of the device's MIDI output to tell apart (protocol tier 8; see
+#: analysis/Timing_Calibration.md). None until then, and never guessed -- a
+#: wrong timing constant produces files that load cleanly and play wrong.
+TIME_SHIFT_UNIT: Final[float | None] = None
+
+
+def time_shift_fraction(shift: int) -> float | None:
+    """Return *shift* as a fraction of a step, or ``None`` while unmeasured."""
+    if TIME_SHIFT_UNIT is None:
+        return None
+    return shift * TIME_SHIFT_UNIT
+
+
 #: Step skip is a 4-bit mask over the four 16-step sequences a pattern can run
 #: as. 15 (all four) is the default. Spec section 5.
 SKIP_SEQUENCES: Final = (16, 32, 48, 64)
