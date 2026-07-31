@@ -46,18 +46,37 @@ simply be sufficient and M9 may never be worth building. Decide after M6, not no
 
 ## Milestones
 
-### M1 — Reader and dump
+### M1 — Reader and dump ✅ **done**
 **Artifact:** `ksp-dump project_5.KeyStepPro` prints a readable tree: tracks → patterns → notes.
 
 **Why it stands alone:** inspect any project file without opening MCC. Useful immediately for
 understanding your own projects.
 
-**Test:** output must reproduce `analysis/project_5_description.txt` and
-`analysis/project_9_tests.txt`. These two files are hardware-confirmed and become the permanent
-regression fixtures — the §5 validation table in the spec is effectively the expected output.
+**Test:** output reproduces `analysis/project_5_description.txt` and
+`analysis/project_9_tests.txt`. Expected values live in `tests/fixtures/` as JSON, transcribed
+by hand from those documents rather than generated from the reader, so a future Swift port can
+be checked against the identical files.
 
-**Watch for:** the two index spaces (spec §4). This milestone exists largely to get that right
-before anything depends on it.
+**Delivered:** `ksp.lenient_json` / `keys` / `constants` / `model` / `reader`, and the
+`ksp-dump` command (`--all`, `--track`, `--pattern`, `--json`).
+
+**What it turned up.** Four things the spec did not have, now folded into it:
+
+- **Tempo is decoded** — parameters `70`–`72` are little-endian 7-bit chunks holding BPM × 100.
+  Confirmed against the hardware readout via the two empty baselines.
+- **Track 1's fourth polyphony slot is zero-filled, not sentinel-filled**, in every pattern of
+  every sample. Read naively, an *empty* project decodes as 2,048 phantom notes. The `!= 127`
+  existence rule needs the zero-fill exception alongside it (spec §4).
+- **Parameter `100` does not identify drum mode** — it reads 26 everywhere. Usually harmless,
+  because the unused parameter set is sentinel-filled, but `initial_project` Track 1 pattern 1
+  holds a real melody *and* real drums, so the reader reports both. M6 must isolate the real bit.
+- **The drum step-active bitmask (`52`) is not fully decoded.** Its packing fits both
+  hardware-confirmed projects but not real user material. Harmless for reading — the note list is
+  authoritative — but it blocks writing, so M5/M6 depend on it.
+
+One discrepancy is recorded rather than resolved: `project_5_description.txt` gives Time Shift
+−1 for both kick hits, and the file stores −1 and **+1**. The fixture asserts the conflict so it
+stays visible until someone re-checks it on the device.
 
 ---
 
@@ -130,9 +149,14 @@ patterns longer than 64 steps split across pattern slots.
 
 **Watch for:**
 - Track 1 in DRUM mode uses a completely different parameter set (spec §3.2), and the mode
-  bitfield must match what you write.
+  bitfield must match what you write. **M1 found that parameter `100` does not currently
+  distinguish the modes** — isolating the real bit is part of this milestone.
+- The drum step-active bitmask `52` must be written consistently with the note list, and **its
+  packing is not yet decoded** (spec §5). Reading does not need it; writing does.
 - Anything over 64 steps must be split and chained, never silently truncated.
 - Poly slots cap at 3 (4 on Track 1) — decide and document what happens to a 5-note chord.
+  Track 1's fourth slot is zero-filled in every known file and may not be usable at all; do not
+  assume it works without testing on the device.
 
 ---
 
@@ -173,16 +197,22 @@ it is worth building after M6 — see the caveat under **Stack**.
 
 ## Dependency summary
 
-| Milestone | Needs hardware? | Depends on |
-|---|---|---|
-| M1 Reader | No | — |
-| M2 MIDI export | No | M1 |
-| M3 Round-trip | No | M1 |
-| M4 Mutation | **Yes** | M3 |
-| M5 MVP convert | No (desk-testable) | M3 |
-| M6 Full convert | No (desk-testable) | M5 |
-| M7 Gate table | **Yes** | M3 |
-| M8 Distribution | For final check | M6 |
-| M9 GUI | For final check | M8 |
+| Milestone | Status | Needs hardware? | Depends on |
+|---|---|---|---|
+| M1 Reader | ✅ done | No | — |
+| M2 MIDI export | | No | M1 |
+| M3 Round-trip | | No | M1 |
+| M4 Mutation | | **Yes** | M3 |
+| M5 MVP convert | | No (desk-testable) | M3, drum `52` packing |
+| M6 Full convert | | No (desk-testable) | M5, mode bit in `100` |
+| M7 Gate table | | **Yes** | M3 |
+| M8 Distribution | | For final check | M6 |
+| M9 GUI | | For final check | M8 |
 
 M1–M3 and M5–M6 can all be built and tested with nothing but the files already in this repo.
+
+Two format questions M1 surfaced sit on the critical path to writing, and neither needs
+hardware to investigate — both are decodable from the files already checked in:
+
+- **Drum step-active packing (`52`)** — blocks M5/M6.
+- **Drum-mode bit (`100`)** — blocks M6.

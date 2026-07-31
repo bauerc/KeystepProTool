@@ -7,6 +7,19 @@ Supersedes [`KeyStepPro_File_Format_Analysis_deprecated.md`](./KeyStepPro_File_F
 **Derived from:** MIDI Control Center 1.23.0.134 and the project files in `../project_files/`
 **Validated against:** `project_5_description.txt` / `project_9_tests.txt` (settings confirmed
 on the physical hardware)
+**Executable check:** every claim below is asserted by the M1 reader's test suite, which decodes
+all five sample projects. Sections 4 and 6 in particular are enforced by
+`tests/test_reader.py`.
+
+### Sample projects
+
+| File | What it is |
+|---|---|
+| `Default.KeyStepPro` | MCC's factory template, exported from the application. No `version` key |
+| `user_empty_project.KeyStepPro` | Initialised and exported by the user with no edits. The empty baseline |
+| `project_5.KeyStepPro` | The main ground truth — one drum pattern and one melodic pattern, documented step by step |
+| `project_9.KeyStepPro` | Three targeted single-note tests isolating gate and step skip |
+| `initial_project.KeyStepPro` | Real user material across several tracks and patterns. Not documented, but it is where the format's awkward cases show up |
 
 ---
 
@@ -148,9 +161,18 @@ keys use **`paramId`**. Confusing the two is an easy mistake.
 | `120` | DRUM note time shift | **note** |
 | `121` | DRUM note randomness | **note** |
 
-Track 1 uses the drum set *or* the sequencer set depending on its mode, which lives in the
-`100` bitfield. In a drum-mode pattern the sequencer params (`48`–`50`, `109`–`113`) are all
-sentinel-filled, and vice versa. A converter must set the mode to match what it writes.
+Track 1 plays the drum set *or* the sequencer set depending on its mode, which is documented as
+living in the `100` bitfield — but see the caveat in section 5: `100` does not currently
+distinguish them.
+
+Usually the unused set is fully sentinel-filled, which makes the live one obvious. That is not
+guaranteed: `initial_project` Track 1 pattern 1 has real content in **both**. A converter must
+set the mode to match what it writes, and a reader should not assume only one set is populated.
+
+`117` holds the **drum lane**, 0-based — lane 0 is the kick, confirmed by `project_5`; lanes up
+to 19 appear in `initial_project`, consistent with the device's 24 lanes. Its value in an
+*empty* list is `60`, not `127`, and drum velocity `119` defaults to `100` rather than `127`.
+Neither is a note: existence is decided by `54` alone, which is sentinel-filled as usual.
 
 ### 3.3 Per-pattern scalars (index = pattern 1–16)
 
@@ -161,7 +183,7 @@ sentinel-filled, and vice versa. A converter must set the mode to match what it 
 | `99` / `116` | Bitfield: triplet, swing offset, polyrhythm, step size, playback direction |
 | `100` | Bitfield: ARP/Drum mode, ARP type, ARP octave |
 | `107` / `108` | Root note / scale |
-| `40` | Pattern data state |
+| `40` | Pattern data state: `0` in the factory template, `2` initialised but empty, `3` holds data |
 | `20`–`23`, `25`–`28` | Program Change (Seq / Drum), MSB/LSB split |
 | `101`–`106` | User scales 1 and 2, each split MSB / MidSB / LSB |
 
@@ -173,8 +195,19 @@ rather than 4,096.
 
 `39` track data state · `85` / `86` transposition & octave bitfields · `122` track transposition ·
 `87` chord (16 per track) · `59` / `60` track seq / drum colour · `123` track MIDI channel ·
-`70`–`72` project tempo (LSB / MidSB / MSB) · `73` global BPM + metronome bitfield ·
-`74` global swing · `75` current scene · `68` / `69` ARP groups.
+`70`–`72` project tempo · `73` global BPM + metronome bitfield ·
+`74` global swing · `75` current scene (0-based) · `68` / `69` ARP groups.
+
+**Tempo is decoded.** `70`–`72` are a little-endian value in 7-bit chunks holding **BPM × 100**:
+
+```
+bpm = (p70 + p71 * 128 + p72 * 16384) / 100
+```
+
+`project_5` stores 96, 93, 0 → 12000 → **120.00 BPM**. `initial_project` stores 16, 103, 0 →
+13200 → **132.00 BPM**. Both empty baselines store 96, 93, 0 and the hardware readout shows
+120 BPM, which confirms the decode against the device rather than against another file.
+Note the ordering: `70` is the **least** significant chunk.
 
 Global *device* settings — CV/gate outputs, MIDI channel routing, sync, drum map, knob
 assignments, velocity/aftertouch curves — are **not** in the project file. They live under
@@ -212,10 +245,27 @@ velocity `127` is genuinely ambiguous in isolation.
 > **The authoritative existence test is `paramId 50` (or `54` for drums) `!= 127`.**
 > Never infer note presence from velocity.
 
-### Polyphony slots
+### Polyphony slots, and the zero-fill trap
 
 `idx2` is the poly/chord voice: **1–4 on Track 1**, **1–3 on Tracks 2–4**. Simultaneous notes
 at the same step are distributed across slots.
+
+> **Track 1's fourth slot is zero-filled, not sentinel-filled.** In all 16 patterns of all five
+> sample projects — including both empty baselines and real user material — `123_50_*_4_*` and
+> `123_54_*_4_*` are entirely `0`, as are the matching pitch and velocity arrays. The firmware
+> appears never to initialise it.
+
+This is the one place where the `!= 127` existence rule is not sufficient on its own. Read
+literally, a zero-filled slot is 64 notes at step 0 with velocity 0, in both parameter sets, in
+every pattern — so a completely empty project decodes as 2,048 phantom notes.
+
+The reliable test is narrow: treat a slot as uninitialised only when **note→step, pitch and
+velocity are all uniformly zero**. That cannot be confused with real data, because a note with
+velocity 0 is silent and 64 notes cannot all sit on step 0. `project_5`'s kick is note→step `0`
+with pitch (lane) `0` and is correctly kept, because its velocity is 127.
+
+Whether slot 4 is usable at all on the hardware is untested — no sample project puts a fourth
+voice on Track 1. A writer should not assume it works.
 
 ---
 
@@ -279,14 +329,53 @@ The KeyStep Pro can run a pattern as four consecutive 16-step sequences (16 / 32
 Track 1 (item `123`), pattern 1, documented as "kick on beats 1 and 5":
 
 - `123_52_1_1_1` = **17** = `0b0001_0001` → bits 0 and 4 → **steps 1 and 5**.
-  `52` packs 8 steps per index, so 64 steps occupy indices 1–8.
+  `52` appears to pack 8 steps per index, so 64 steps would occupy indices 1–8. See the caveat below.
 - `54` (note→step) = `0`, `4` → steps 1 and 5. ✓
-- `119` velocity = 127, 50 ✓ · `121` randomness = 80, 90 ✓ · `120` time shift = 48, 50 (i.e. −1, +1) ✓
+- `119` velocity = 127, 50 ✓ · `121` randomness = 80, 90 ✓
+- `120` time shift = 48, 50 → −1 and **+1**. ⚠ The description gives −1 for *both* kicks. See
+  "Unresolved: drum time shift" below.
 - `53` skip = 3 (`{16,32}`), 12 (`{48,64}`) ✓ — note-indexed here, unlike the melodic `49`.
 
 > The melodic `49` is step-indexed while the drum `53` is note-indexed. This asymmetry is what
 > the data shows consistently across files, but it is unusual enough to re-confirm before
 > relying on it in a writer.
+
+### Unresolved: drum time shift in `project_5`
+
+`project_5_description.txt` states Time Shift **−1** for both kick hits. Parameter `120` stores
+`48` and `50`, which decode to −1 and **+1** against the centre of 49.
+
+Every other value in the project reproduces exactly, and the melodic +1…+4 / −1…−4 ramp
+independently confirms that the centre is 49, so a transcription slip in the description is the
+likelier explanation — but it has not been re-checked on the device. The M1 fixtures record the
+file's value and keep the conflict asserted, so it cannot quietly disappear.
+
+### Caveat: the drum step-active bitmask (`52`) is not fully decoded
+
+The 8-steps-per-index reading above reproduces both hardware-confirmed projects exactly
+(`project_5`: 17 → steps 1 and 5; `project_9`: 1 → step 1). It does **not** account for
+`initial_project`, which is real user material: pattern 1 slot 1 holds a kick on steps 1, 5, 9,
+13 and a second lane on every odd step, yet `52` reads `17, 34` where the packing predicts
+`17, 17` and `85, 85` respectively.
+
+Since `52` is redundant with the note list, this does not block reading — **notes come from
+`54` plus `117`–`121`, which is authoritative**. It does block writing, because a writer has to
+emit `52` consistently. Resolve before M5/M6.
+
+By contrast the melodic step-active array (`48`) *is* understood, and agrees with the note list
+on every slot of both hardware-confirmed projects. The M1 reader cross-checks it on every slot
+and warns rather than reconciling.
+
+### Caveat: parameter `100` does not currently identify drum mode
+
+`100` is documented as the ARP/Drum mode bitfield, but it reads **26 in every pattern of every
+sample project** — including patterns that are unambiguously melodic and ones that are
+unambiguously drum. It cannot presently be used to tell which parameter set is live.
+
+Usually this does not matter, because the unused set is fully sentinel-filled. But it is not
+always decisive: **`initial_project` Track 1 pattern 1 holds both** a real 64-step melody and a
+real 12-note drum pattern. A reader must report both; a writer must isolate the actual mode bit
+before it can set it. Deferred to M6.
 
 ---
 
@@ -315,6 +404,13 @@ because nothing errors.
 **To resolve:** on the hardware, place a single note, step its gate through every selectable
 value, and export at each setting. Diff to build the table. Roughly 10–15 captures. Gate is
 pure lookup data once measured.
+
+**Default gate is `7` (0.5).** A freshly placed note stores `7`, confirmed by `project_9`'s
+untouched notes and by `initial_project`. Alongside it, a fresh note's other defaults are
+velocity `100`, time shift `49` (0), randomness `100` and step skip `15` (all four sequences).
+
+The M1 reader decodes only the six measured points and prints anything else as `?(raw)` rather
+than interpolating. `initial_project` contains at least one such value (`2`).
 
 ---
 

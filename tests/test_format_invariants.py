@@ -17,15 +17,27 @@ from pathlib import Path
 import pytest
 
 SAMPLE_NAMES = [
+    "Default.KeyStepPro",
     "initial_project.KeyStepPro",
     "project_5.KeyStepPro",
     "project_9.KeyStepPro",
+    "user_empty_project.KeyStepPro",
 ]
+
+#: ``Default.KeyStepPro`` is MCC's factory template and is the only sample
+#: without a ``version`` key -- spec section 2, and the reason M5 has to inject
+#: one when it uses the template as a baseline.
+NAMES_WITHOUT_VERSION = {"Default.KeyStepPro"}
 
 
 @pytest.fixture(params=SAMPLE_NAMES)
-def sample_bytes(request: pytest.FixtureRequest, project_files_dir: Path) -> bytes:
-    path = project_files_dir / str(request.param)
+def sample_name(request: pytest.FixtureRequest) -> str:
+    return str(request.param)
+
+
+@pytest.fixture
+def sample_bytes(sample_name: str, project_files_dir: Path) -> bytes:
+    path = project_files_dir / sample_name
     assert path.is_file(), f"missing sample project: {path}"
     return path.read_bytes()
 
@@ -73,6 +85,19 @@ def test_is_not_strict_json(sample_bytes: bytes) -> None:
 def test_declares_keysteppro_device(sample_bytes: bytes) -> None:
     """The ``device`` key is first and identifies the hardware."""
     assert sample_bytes.startswith(b'{\n\t"device": "KeyStepPro",\n')
+
+
+def test_version_key_follows_device_except_in_the_factory_template(
+    sample_name: str, sample_bytes: bytes
+) -> None:
+    """User saves carry ``version``; MCC's factory template does not.
+
+    M5 builds output from the template, so it has to add the key. Pinning the
+    distinction here means the assumption is checked against every sample
+    rather than remembered.
+    """
+    has_version = sample_bytes.startswith(b'{\n\t"device": "KeyStepPro",\n\t"version": ')
+    assert has_version is (sample_name not in NAMES_WITHOUT_VERSION)
 
 
 def test_ground_truth_descriptions_are_present(analysis_dir: Path) -> None:

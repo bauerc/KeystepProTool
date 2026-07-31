@@ -1,0 +1,51 @@
+{
+  "project_file": "project_9.KeyStepPro",
+  "source_document": "analysis/project_9_tests.txt",
+  "provenance": "Hand-transcribed from the three targeted tests. Each places one note and changes exactly one setting, leaving the rest at their defaults. The changed setting is hardware-confirmed; the untouched fields are transcribed from the file, corroborated by the two empty baselines.",
+  "tempo_bpm": 120.0,
+  "global_swing_percent": 50,
+  "defaults": {
+    "comment": "What a freshly placed note looks like when nothing is edited.",
+    "velocity": 100,
+    "gate": 0.5,
+    "time_shift": 0,
+    "randomness": 100,
+    "skip": [16, 32, 48, 64]
+  },
+  "patterns": [
+    {
+      "track": 1,
+      "pattern": 2,
+      "mode": "drum",
+      "drum_step_count": 16,
+      "comment": "Test 1 -- gate on a drum track. Single kick at beat 1, gate raised to 4, everything else default.",
+      "confirmed_fields": ["gate"],
+      "notes": [
+        {"kind": "drum", "slot": 1, "index": 1, "step": 1, "pitch": 0, "velocity": 100, "gate": 4.0, "time_shift": 0, "randomness": 100, "skip": [16, 32, 48, 64]}
+      ]
+    },
+    {
+      "track": 1,
+      "pattern": 3,
+      "mode": "drum",
+      "drum_step_count": 16,
+      "comment": "Test 2 -- step skip on a drum track. Single kick at beat 1, set to play only in sequence 32. Confirms the drum skip parameter is note-indexed and that a single-sequence mask is bit 1 alone.",
+      "confirmed_fields": ["skip"],
+      "notes": [
+        {"kind": "drum", "slot": 1, "index": 1, "step": 1, "pitch": 0, "velocity": 100, "gate": 0.5, "time_shift": 0, "randomness": 100, "skip": [32]}
+      ]
+    },
+    {
+      "track": 3,
+      "pattern": 2,
+      "mode": "seq",
+      "seq_step_count": 16,
+      "comment": "Test 3 -- gate on a melodic track, for comparison with test 1. C3 at beat 1, gate 4. Pitch 60 displaying as C3 is what fixes the octave convention.",
+      "confirmed_fields": ["gate", "pitch"],
+      "notes": [
+        {"kind": "seq", "slot": 1, "index": 1, "step": 1, "pitch": 60, "velocity": 100, "gate": 4.0, "time_shift": 0, "randomness": 100, "skip": [16, 32, 48, 64]}
+      ]
+    }
+  ],
+  "unresolved": []
+}

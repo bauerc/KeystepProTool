@@ -9,11 +9,12 @@ dependencies = [
 ]
 
 # Console entry points land with the milestones that implement them:
-#   ksp-dump  -> M1 (ksp_cli.dump:main)
 #   ksp2midi  -> M2 (ksp_cli.export:main)
 #   midi2ksp  -> M5 (ksp_cli.convert:main)
 # Declaring them before the modules exist would install commands that crash
 # on invocation, so they are added alongside the code.
+[project.scripts]
+ksp-dump = "ksp_cli.dump:main"
 
 [build-system]
 requires = ["hatchling"]
