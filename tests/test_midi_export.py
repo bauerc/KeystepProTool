@@ -311,7 +311,14 @@ def _with_swing(project: Project, percent: int) -> Project:
     build the case; doing it on the model keeps the sample files untouched.
     """
     track = project.track(3)
-    pattern = replace(track.pattern(1), seq_swing_percent=percent)
+    original = track.pattern(1)
+    pattern = replace(
+        original,
+        timing={
+            **original.timing,
+            NoteKind.SEQ: replace(original.timing[NoteKind.SEQ], swing_percent=percent),
+        },
+    )
     patterns = tuple(pattern if p.number == 1 else p for p in track.patterns)
     tracks = tuple(replace(t, patterns=patterns) if t.number == 3 else t for t in project.tracks)
     return replace(project, tracks=tracks)

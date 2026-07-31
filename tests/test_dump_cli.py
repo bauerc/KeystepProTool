@@ -165,7 +165,8 @@ class TestDrumMapFlag:
         self, project_files_dir: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         argv = [str(project_files_dir / "project_5.KeyStepPro"), "--drum-map", "chromatic:200"]
-        assert main(argv) == 1
+        # 2, not 1: a bad flag is a usage error, the same as it is for ksp2midi.
+        assert main(argv) == 2
         assert "drum map:" in capsys.readouterr().err
 
     def test_a_config_file_is_used_when_no_flag_is_given(
