@@ -15,50 +15,12 @@ from ksp.drum_map import DEFAULT_CHROMATIC_LOW, DrumMap
 from ksp.model import NoteKind, Pattern, Project, Track
 from ksp.reader import load
 
-#: Where a user's own drum map lives, if they have one. Path resolution stays
-#: in the CLI: ``ksp`` must not decide where files are.
-CONFIG_PATH = Path.home() / ".config" / "keysteppro" / "drum_map.json"
+# The --drum-map grammar is shared with ksp2midi so both commands accept the
+# same syntax and the same config file. CONFIG_PATH stays a name in this
+# module so tests can point it somewhere harmless.
+from ksp_cli.drum_map_option import CONFIG_PATH, parse_drum_map, resolve_drum_map
 
-
-def parse_drum_map(spec: str) -> DrumMap | None:
-    """Parse a ``--drum-map`` argument.
-
-    ``chromatic:36`` | ``custom:36,38,42,...`` | ``none``. ``None`` means do
-    not resolve lanes at all, which is the honest output when the user's device
-    settings are unknown and they would rather see the raw lane number.
-    """
-    if spec == "none":
-        return None
-    kind, _, rest = spec.partition(":")
-    if kind == "chromatic":
-        if not rest:
-            return DrumMap.chromatic()
-        return DrumMap.chromatic(_int(rest, "chromatic low note"))
-    if kind == "custom":
-        return DrumMap.custom([_int(part, "custom note") for part in rest.split(",")])
-    raise ValueError(f"unknown drum map {spec!r}; expected chromatic:N, custom:a,b,c or none")
-
-
-def _int(text: str, what: str) -> int:
-    try:
-        return int(text.strip())
-    except ValueError:
-        raise ValueError(f"{what} {text.strip()!r} is not a number") from None
-
-
-def resolve_drum_map(spec: str | None, config_path: Path | None = None) -> DrumMap | None:
-    """Pick the drum map: the flag wins, then the config file, then the default.
-
-    *config_path* is looked up at call time rather than bound as a default, so
-    a test can point it somewhere harmless instead of depending on whether the
-    machine running the suite happens to have a personal config.
-    """
-    if spec is not None:
-        return parse_drum_map(spec)
-    path = CONFIG_PATH if config_path is None else config_path
-    if path.is_file():
-        return DrumMap.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    return DrumMap.chromatic(DEFAULT_CHROMATIC_LOW)
+__all__ = ["CONFIG_PATH", "format_project", "main", "parse_drum_map", "resolve_drum_map"]
 
 
 def _format_gate(gate: float | None, raw: int) -> str:
@@ -151,35 +113,6 @@ def format_project(
     return "\n".join(lines)
 
 
-def _select(project: Project, track: int | None, pattern: int | None) -> Project:
-    """Narrow a project to one track and/or one pattern.
-
-    Filtering rebuilds the model rather than filtering at print time so that
-    ``--json`` and the text output always show the same selection.
-    """
-    tracks = tuple(t for t in project.tracks if track is None or t.number == track)
-    if pattern is not None:
-        tracks = tuple(
-            Track(
-                number=t.number,
-                item_id=t.item_id,
-                patterns=tuple(p for p in t.patterns if p.number == pattern),
-                drum_mode=t.drum_mode,
-            )
-            for t in tracks
-        )
-    return Project(
-        device=project.device,
-        version=project.version,
-        tempo_bpm=project.tempo_bpm,
-        global_swing_percent=project.global_swing_percent,
-        current_scene=project.current_scene,
-        tracks=tracks,
-        source_name=project.source_name,
-        warnings=project.warnings,
-    )
-
-
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ksp-dump",
@@ -221,7 +154,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
     try:
-        drum_map = resolve_drum_map(args.drum_map)
+        drum_map = resolve_drum_map(args.drum_map, CONFIG_PATH)
     except json.JSONDecodeError as exc:  # a ValueError, so it must come first
         print(f"ksp-dump: drum map: {CONFIG_PATH}: {exc}", file=sys.stderr)
         return 1
@@ -238,7 +171,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"ksp-dump: {args.path}: {exc}", file=sys.stderr)
         return 1
 
-    project = _select(project, args.track, args.pattern)
+    project = project.select(track=args.track, pattern=args.pattern)
 
     if args.as_json:
         print(json.dumps(project.to_dict(drum_map), indent=2))

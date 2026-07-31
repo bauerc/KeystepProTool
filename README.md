@@ -7,8 +7,8 @@ plan is in [`ROADMAP.md`](./ROADMAP.md).
 
 ## Status
 
-Milestone 1 of 9 is done: reading and inspecting project files. Converting to MIDI (M2) and from
-MIDI (M5) is next.
+Milestones 1, 1.5 and 2 of 9 are done: reading and inspecting project files, the drum map, and
+exporting projects as MIDI. Converting *from* MIDI (M5) is next.
 
 ## Install
 
@@ -73,6 +73,53 @@ or turn resolution off entirely with `--drum-map none` to see bare lane numbers.
 A gate printed as `?(2)` means that encoding has not been measured on the hardware yet. Only six
 gate values are confirmed, and the tool prints the raw number rather than guessing at the rest.
 See M7 in the roadmap.
+
+## `ksp2midi`
+
+Turn a project into a Standard MIDI file. MIDI Control Center can push patterns *to* the device
+but has no way of getting them off as a `.mid`, so this direction is useful on its own:
+
+```sh
+uv run ksp2midi project_files/project_5.KeyStepPro -o project_5.mid
+```
+
+```
+wrote project_5.mid
+  12 note(s) from pattern(s) 1
+  tracks: Track 1 (drum), Track 3
+```
+
+Patterns that hold notes are laid end to end in pattern order, and pattern N starts at the same
+point on every track — so tracks keep the relationship the hardware gives them. Each KeyStep Pro
+track becomes its own MIDI track; Track 1's drum set becomes a second one on channel 10.
+
+| Option | Effect |
+|---|---|
+| `-o PATH` | Destination (default: the input file with a `.mid` suffix) |
+| `--track N` / `--pattern N` | Export only one track or pattern |
+| `--steps-per-beat N` | Step size (default 4, i.e. 1/16 steps) |
+| `--drum-map SPEC` | Same grammar and config file as `ksp-dump` (default `chromatic:36`) |
+| `--include-stale` | Export both note sets of a pattern that holds both |
+| `--no-swing` | Place every step on a flat grid |
+| `--force` | Overwrite an existing output file |
+
+Anything the export had to decide for itself is printed to stderr as a warning, because three
+things it needs are not in the project file:
+
+- **Step size** is stored in a bitfield we have not decoded, so `--steps-per-beat` supplies it.
+- **The drum map** is a device-global setting, not project data. The export names the map it
+  assumed every time. Unlike `ksp-dump`, `--drum-map none` is refused: a MIDI file has to name a
+  note for every lane, so there is no honest way to leave a lane unresolved.
+- **Gate lengths** are only measured at six points (M7). Anything else is exported at the length
+  a freshly placed note has, and warned about — never interpolated.
+
+Where a pattern holds both a melodic and a drum note set, only the one the track's mode flag
+(parameter `86` bit 6) says the device plays is exported — the other is leftovers from before the
+track was switched over, and exporting it would put notes in the file that no hardware produces.
+`--include-stale` exports both.
+
+Note **time shift is not applied**: how much time one shift unit is worth has never been
+measured, so the export leaves the grid alone and says so.
 
 ## Development
 

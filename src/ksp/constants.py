@@ -137,6 +137,16 @@ SKIP_SEQUENCES: Final = (16, 32, 48, 64)
 #: is the worst available failure mode because nothing errors.
 GATE_TABLE: Final = {7: 0.5, 11: 1.0, 19: 2.0, 27: 3.0, 29: 3.5, 31: 4.0}
 
+# The displayed gate is a length in **steps**: project_5 documents the note
+# placed on beat 9 and tied through beat 12 -- four steps -- as gate 4. That is
+# what lets M2 turn a gate into a MIDI note duration.
+
+#: A freshly placed note stores gate 7, i.e. half a step (spec section 6).
+#: This is the fallback wherever an encoding is not in ``GATE_TABLE``: the
+#: device's own default is the one length we can use without inventing one.
+DEFAULT_GATE_STORED: Final = 7
+DEFAULT_GATE_LENGTH: Final = GATE_TABLE[DEFAULT_GATE_STORED]
+
 
 def decode_gate(stored: int) -> float | None:
     """Return the displayed gate length, or ``None`` if it is not yet known."""
