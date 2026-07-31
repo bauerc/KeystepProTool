@@ -175,10 +175,16 @@ velocity `119` defaults to `100` rather than `127`. Neither is a note: existence
 
 ### 3.2.1 The drum map — 24 lanes, and it is **not in the project file**
 
-The device has exactly **24** drum lanes. This is *derived*, not assumed: `KeyStepPro.json`
-defines 24 `Note N` fields in a `globalFields` group named "Drum Map". No array in any project
-file has cardinality 24 — a full index scan of the corpus finds dimension sizes
-`{3, 4, 5, 16, 64}` only. The lane is a **value** of `117`, never an index.
+The device has exactly **24** drum lanes. This is *derived*, not assumed, and two independent
+lines of evidence agree:
+
+- `KeyStepPro.json` defines 24 `Note N` fields in a `globalFields` group named "Drum Map".
+- Parameter `51` is **lane-indexed**: `123_51_<pattern>_1_<1..24>` holds `15` in entries 1–24 and
+  `0` in 25–64, in every sample file. `52` decomposes the same way — 24 lanes × 10 parts. See
+  findings 3 and 6 of `Format_Corrections_Issue.md`.
+
+Note that `117` carries the lane as a **value**, not as an index, so the *note pool* arrays give
+no hint of the lane count; `51` and `52` are where the 24 shows up structurally.
 
 | globalParamId | Name | Range | Default | Shown when |
 |---|---|---|---|---|
@@ -197,7 +203,8 @@ mapping is necessarily an assumption about the owner's device and must be labell
 which is what `ksp.drum_map` does, defaulting to chromatic from 36 (the manual: "the default
 mapping starts at MIDI note 36", and the Custom defaults 36…59 are exactly that run).
 
-Two points still need the hardware, recorded as **Test D1** in the roadmap:
+Two points still need the hardware, recorded as **test D5** in
+[`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md):
 
 - MCC's `defaultValue` for Mode is Chromatic with Low note `0`, which would put lane 0 at MIDI
   note 0 — disagreeing with both the manual and the Custom defaults. MCC `defaultValue`s are its
@@ -415,7 +422,8 @@ The flag that *can* is **`86` bit 6**, and two independent lines of evidence agr
 
 It is **track-level, not per-pattern**, which matches the device's Drum button, and the field is
 named *Arp*/Drum, so on tracks 2–4 bit 6 presumably means ARP. Both worth confirming on
-hardware; Test D1 does so for free.
+hardware; test D5 of `Hardware_Test_Protocol.md` does so for free, and Tier 3 there is reduced to
+a single confirming capture as a result.
 
 This resolves the ambiguity that made the reader report `PatternMode.BOTH`. **`initial_project`
 Track 1 pattern 1 holds both** a real 64-step melody and a real 12-note drum pattern; bit 6 is

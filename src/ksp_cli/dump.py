@@ -21,11 +21,10 @@ CONFIG_PATH = Path.home() / ".config" / "keysteppro" / "drum_map.json"
 
 
 def parse_drum_map(spec: str) -> DrumMap | None:
-    """Parse a ``--drum-map`` argument.
+    """Parse ``chromatic:36`` | ``custom:36,38,...`` | ``none``.
 
-    ``chromatic:36`` | ``custom:36,38,42,...`` | ``none``. ``None`` means do
-    not resolve lanes at all, which is the honest output when the user's device
-    settings are unknown and they would rather see the raw lane number.
+    ``None`` means leave lanes unresolved -- the honest output when the user
+    would rather see the raw lane than an assumed note.
     """
     if spec == "none":
         return None
@@ -47,12 +46,9 @@ def _int(text: str, what: str) -> int:
 
 
 def resolve_drum_map(spec: str | None, config_path: Path | None = None) -> DrumMap | None:
-    """Pick the drum map: the flag wins, then the config file, then the default.
-
-    *config_path* is looked up at call time rather than bound as a default, so
-    a test can point it somewhere harmless instead of depending on whether the
-    machine running the suite happens to have a personal config.
-    """
+    """Pick the drum map: the flag wins, then the config file, then the default."""
+    # config_path is read at call time, not bound as a default, so tests do not
+    # depend on whether the machine has a personal config.
     if spec is not None:
         return parse_drum_map(spec)
     path = CONFIG_PATH if config_path is None else config_path

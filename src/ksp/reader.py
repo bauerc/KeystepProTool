@@ -96,13 +96,10 @@ def _read_track(raw: dict[str, Any], number: int, item_id: int) -> Track:
 
 
 def _read_drum_mode(raw: dict[str, Any], item_id: int) -> bool:
-    """Whether this track is in DRUM mode, from parameter 86 bit 6.
-
-    Only Track 1 has a drum parameter set, so the bit is only meaningful
-    there; MCC names the field "Arp/Drum mode state : bit 6", which on tracks
-    2-4 presumably means ARP. Reported as False for those rather than
-    pretending it says something about drums.
-    """
+    """Whether this track is in DRUM mode, from parameter 86 bit 6."""
+    # Only Track 1 has a drum set. MCC names the field "Arp/Drum mode state",
+    # so on tracks 2-4 bit 6 presumably means ARP -- report False rather than
+    # pretend it says something about drums.
     if item_id != constants.DRUM_TRACK_ITEM_ID:
         return False
     bits = _scalar(raw, item_id, constants.P_TRACK_MODE_BITS, default=0)
@@ -114,19 +111,12 @@ def _read_pattern(
 ) -> Pattern:
     """Decode one pattern from whichever parameter set(s) hold notes.
 
-    Track 1 carries a melodic and a drum set side by side and plays one or the
-    other. The mode bitfield documented for this (parameter 100) does not
-    work -- it reads 26 in every pattern of every sample project, including
-    ones that are unambiguously melodic and ones that are unambiguously drum.
-    The flag that *does* work is parameter 86 bit 6, read per track and passed
-    in as *drum_mode*.
-
-    Note content alone is not always decisive: ``initial_project`` Track 1
-    pattern 1 holds a real 64-note melody *and* a real 12-note drum pattern.
-    The mode flag resolves which of those the device plays, but every note is
-    still reported and the leftover set is called out in a warning -- a reader
-    that silently discarded real user data would hide exactly the surprises
-    this milestone exists to find.
+    Track 1 holds a melodic and a drum set side by side and plays one. The
+    documented flag (parameter 100) reads 26 everywhere and says nothing; the
+    one that works is 86 bit 6, passed in as *drum_mode*. Note content alone is
+    not decisive -- ``initial_project`` Track 1 pattern 1 holds a real 64-note
+    melody *and* real drums -- so the flag picks the live set while every note
+    is still reported and the leftovers are warned about.
     """
     warnings: list[str] = []
 

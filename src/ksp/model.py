@@ -33,9 +33,9 @@ class NoteKind(StrEnum):
 class PatternMode(StrEnum):
     """Which parameter set(s) of a pattern hold notes.
 
-    ``BOTH`` is not a hardware mode -- the device plays one or the other. It
-    means the file has notes in both sets and we cannot yet tell which is
-    live, so the reader reports everything rather than guessing.
+    ``BOTH`` is not a hardware mode. Since the drum-mode flag (86 bit 6) was
+    located the reader resolves the live set instead, so this is now only
+    reachable if a future file defeats that.
     """
 
     SEQ = "seq"
@@ -84,9 +84,8 @@ class Note:
     def labelled(self, drum_map: DrumMap | None) -> str:
         """Like :attr:`label`, but resolving a drum lane through *drum_map*.
 
-        Without a map a drum note can only be reported as ``lane 0``, because
-        which MIDI note that lane transmits is a device setting the file does
-        not contain.
+        Without a map a drum note is only ``lane 0``: which note it transmits
+        is a device setting the file does not contain.
         """
         if self.kind is NoteKind.DRUM:
             if drum_map is None:
@@ -168,13 +167,10 @@ class Track:
     number: int
     item_id: int
     patterns: tuple[Pattern, ...]
+    #: Arp/Drum mode bit (parameter 86, bit 6). On Track 1 this says whether the
+    #: drum set is the live one. Track-level, like the device's Drum button.
+    #: Parameter 100 was expected to carry this and does not.
     drum_mode: bool = False
-    """Whether the track's Arp/Drum mode bit (parameter 86, bit 6) is set.
-
-    Only Track 1 has a drum parameter set, and this is what says whether it is
-    the live one. It is track-level rather than per-pattern, matching the
-    device's Drum button. Parameter 100 was expected to carry this and does
-    not -- it reads 26 everywhere."""
 
     @property
     def is_empty(self) -> bool:

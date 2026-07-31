@@ -94,10 +94,12 @@ P_DRUM_VELOCITY: Final = 119
 P_DRUM_TIME_SHIFT: Final = 120
 P_DRUM_RANDOMNESS: Final = 121
 
-#: The device has 24 drum lanes. This is derived rather than assumed: MCC's
-#: parameter dictionary defines exactly 24 "Note N" fields in its Drum Map
-#: group (``globalParamId`` 83-106). No array in the project file has this
-#: cardinality -- the lane is a *value* of parameter 117, never an index.
+#: The device has 24 drum lanes. Derived rather than assumed, from two
+#: independent places: MCC's parameter dictionary defines exactly 24 "Note N"
+#: fields in its Drum Map group (``globalParamId`` 83-106), and parameter 51
+#: is lane-indexed -- ``123_51_<pattern>_1_<1..24>`` holds 15 in entries 1-24
+#: and 0 beyond, in every sample file. Note that 117 carries the lane as a
+#: *value*, so the note pool itself gives no hint of the count.
 DRUM_LANE_COUNT: Final = 24
 
 #: Per-track bitfield. Bit 6 is the Arp/Drum mode state, named as such by

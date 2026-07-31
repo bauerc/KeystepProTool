@@ -11,14 +11,19 @@ open — the packing of `52`, the poly-slot count, the step-active warnings — 
 desk from MCC's parameter dictionary and are **not** in this document. Do not spend device time
 on them.
 
+**Also resolved at the desk since this document was written:** the drum-mode flag is **`86`
+bit 6**, not a bit of `100`. Tier 3 below is reduced from a discovery to a one-capture
+confirmation — see the note at its head. That is three captures saved.
+
 **What is genuinely unknown and needs the device:**
 
 | Question | Blocks | Tier |
 |---|---|---|
 | The gate length table (`110` / `118`) | M7, and correct note durations in M5/M6 | 2 |
-| Which bit of `100` is drum mode | M6 | 3 |
+| ~~Which bit of `100` is drum mode~~ → confirm `86` bit 6 | M6 | 3 |
 | Whether an unflagged pooled drum note sounds | M6 correctness | 4 |
 | Real poly and drum-lane limits | M6 | 4 |
+| **Which MIDI note each of the 24 drum lanes plays** | **M2 export, M6 import** | **4 (D5)** |
 | The `99` / `116` bitfield layout | M6 | 5 |
 | Pattern chaining beyond 64 steps (`84`) | M6 | 5 |
 
@@ -254,7 +259,24 @@ is *below* the 0.5 point — so the range extends further down than any document
 
 ## Tier 3 — M6, the drum-mode bit
 
-**4 captures.** The only remaining blocker on M6. Parameter `100` is documented as
+> **Reduced to 1 capture.** This tier was written when the mode flag was unknown. It is now
+> resolved at the desk: the flag is **`86` bit 6**, not a bit of `100`. MCC's dictionary names
+> field 17 (`paramId 86`) *"Track keyboard octave, chord mode state, Arp/Drum mode state in a
+> bitfield"* with the comment *"Arp/Drum mode state : bit 6"*, and the file evidence agrees
+> exactly: `123_86` is **66** (`0b1000010`, bit 6 set) in `project_5`, `project_9` and
+> `initial_project` — every sample holding drum notes — and **2** in both empty baselines, while
+> tracks 2–4 never set it.
+>
+> T3.2's own fallback text called this: it said to look at the per-track scalars
+> `123_39`, `85`, `86`, `59`, `60` if `100` did not move. `86` is the answer.
+>
+> **Run T3.2 only**, as a confirmation, and skip T3.1, T3.3 and T3.4. Two things still want a
+> device: that bit 6 means *drum* rather than *arp* on Track 1, and that it is genuinely
+> track-level rather than per-pattern. One capture settles both. If you are running **D5**
+> anyway, it already covers this — put Track 1 in drum mode there and check `123_86` in that
+> export instead, and skip Tier 3 entirely.
+
+**Originally 4 captures.** Parameter `100` is documented as
 "Pattern Seq ARP/Drum mode, ARP type, ARP octave in a bitfield" with the dictionary's own comment
 placing ARP octave at bits 4–6. It reads **26** (`0b0011010`) in every pattern of all five sample
 files — including patterns that are unambiguously melodic and ones that are unambiguously drum —
@@ -376,6 +398,77 @@ This matters because `initial_project` Track 1 pattern 1 holds a real 64-note me
 - **If all move together:** it is a per-pattern value stored redundantly, and the "poly step count"
   name means something else. Either way this is one capture and it settles it.
 
+### D5 — Which MIDI note does each drum lane play?
+
+**2 captures + one MIDI capture.** The only test in this document that observes the device's
+**MIDI output** rather than a file, because the answer is not in any file.
+
+- **Resolves:** the lane → MIDI note drum map. A drum note stores a **lane index** in `117`, not
+  a pitch, so neither M2 (export) nor M6 (import) can handle drums without this. It is currently
+  an assumption in `ksp.drum_map`, defaulting to chromatic from 36.
+- **Why it is not a diff test.** The map is a **global device setting**, not project state. MCC's
+  dictionary defines it under `deviceGlobalParametersId 65` — Mode (`globalParamId 81`,
+  0 = Chromatic / 1 = Custom), Low note (`82`, 0–103) and Note 1…Note 24 (`83`–`106`, 0–127,
+  defaults 36…59). No `bulkOperation` carries item `65`, no sample file has a key beginning
+  `65_`, and MCC keeps no copy on disk — it reads them live over SysEx. **So no export will ever
+  contain the answer.** This is the case T3.2's fallback paragraph anticipated, confirmed.
+- **What is actually unknown.** Two things, both because MCC's `defaultValue`s describe its own
+  UI fallback when no device is attached rather than the device's factory state:
+  1. Is a factory device Chromatic-from-36, Chromatic-from-0, or Custom? MCC's Mode default is
+     Chromatic with Low note **0** (lane 0 → MIDI note 0), which contradicts both the manual
+     ("the default mapping starts at MIDI note 36") and the Custom defaults of 36…59.
+  2. In Chromatic mode with Low note `L`, does lane *i* play `L + i` or `L + i + 1`? The manual's
+     "which note the lowest key will trigger" implies the former, but `82`'s `maxValue: 103` then
+     puts lane 23 at 126 — one short of 127, where the latter lands exactly.
+
+**Device steps.**
+
+1. **Read the map off the device first.** In Utility/Config, find the Drum Map page and write
+   down Mode, and then either Low note or all 24 Custom notes. **This is the step that cannot be
+   recovered later** and it alone answers question 1. Do this before changing anything.
+2. From B0.1. Track 1 in **drum mode**, an untouched pattern. Set the pattern to **24 steps**.
+   Place **one hit on each of the 24 lanes, lane *i* at step *i+1*** — lane 0 at step 1, lane 1
+   at step 2, … lane 23 at step 24. Leave velocity, gate, time shift, randomness and step skip
+   untouched at fresh-note defaults.
+   *One hit per step, not 24 at once: the note pool is per-slot and simultaneous hits would
+   spread across slots, and a chord of 24 notes cannot be represented anyway. Spreading them
+   keeps every hit in slot 1 and keeps the MIDI capture unambiguous.*
+3. Export as `D5-lane-sweep.KeyStepPro`.
+4. Connect the KeyStep Pro over USB, open a MIDI monitor (MIDI Monitor.app, or `receivemidi`
+   from `brew install receivemidi`), and **play the pattern once**, capturing the note-on stream.
+   Save the log as `project_files/captures/D5-lane-sweep.midilog.txt`.
+5. Optional but cheap: change the Drum Map (Mode → Custom, Note 1 → 60) and export again as
+   `D5-map-changed.KeyStepPro`. **This is the falsification test for "the map is not in the
+   file".**
+
+- **Captures:** `D5-lane-sweep.KeyStepPro`, `D5-lane-sweep.midilog.txt`, `D5-map-changed.KeyStepPro`
+- **Keys:** `123_117_<pattern>_1_<1..24>` (the lane per pooled note), `123_54_<pattern>_1_<1..24>`
+  (its step), and `123_86` for the mode bit
+- **Confirms if:**
+  - `117` entries 1–24 read `0, 1, 2, … 23` and `54` reads `0, 1, 2, … 23` — the lane encoding is
+    0-based and spans exactly 24, matching `51`'s lane-indexed 1–24 array.
+  - Step *n* in the MIDI log fires exactly **one** note-on, so its pitch **is** the note for lane
+    *n−1*. That is all 24 mappings from one capture.
+  - Those 24 pitches match the Drum Map readout from step 1, which resolves the `L + i` vs
+    `L + i + 1` question outright.
+  - `D5-map-changed.KeyStepPro` is **byte-identical** to `D5-lane-sweep.KeyStepPro`.
+  - `123_86` has bit 6 set.
+- **Falsified if:**
+  - Any `117` entry exceeds 23, or the device refuses a lane — then 24 is not the lane count and
+    both `51`'s array and MCC's 24 `Note N` fields need re-reading.
+  - The MIDI pitches are not contiguous under a Chromatic map — then chromatic mode is not a
+    simple offset and the tool must stop defaulting to one.
+  - `D5-map-changed` differs from `D5-lane-sweep` — then the map *is* project state after all,
+    the keys that moved are where it lives, and `ksp.drum_map` should read it from the file
+    rather than assume it. **This would be the most valuable falsification in this document.**
+- **If confirmed:** transcribe the readout into `analysis/drum_map_device_settings.txt` (a
+  hand-written hardware record, treated like `project_5_description.txt` — never reformatted)
+  and the 24 mappings into `tests/fixtures/drum_map.expected.json` **by hand**, not generated
+  from the tool, per the anti-circularity rule.
+- **Also record:** the MIDI **channel** the note-ons arrive on. `globalParamId 79` (Drum output)
+  defaults to `10` where tracks 1–4 default to 0–3, and whether that displays as channel 10 or 11
+  is unverified.
+
 ---
 
 ## Tier 5 — M6, pattern scalars
@@ -493,14 +586,17 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 | T1.4 | | deleted | | residue? |
 | T2.* | | gate = | | one row per detent |
 | T2.y | | drum gate = | | same table as melodic? |
-| T3.1 | | track 1 seq mode | | |
-| T3.2 | | track 1 drum mode | | bit that moved: |
-| T3.3 | | ARP on | | |
-| T3.4 | | ARP octave +1 | | |
+| T3.1 | | ~~track 1 seq mode~~ skipped | | superseded — flag is `86` bit 6 |
+| T3.2 | | track 1 drum mode | | confirm `123_86` bit 6; skip if D5 run |
+| T3.3 | | ~~ARP on~~ skipped | | |
+| T3.4 | | ~~ARP octave +1~~ skipped | | |
 | D1 | | step 5 toggled off | | **did beat 5 sound?** |
 | D2 | | 3- then 4-note chord | | 4th note went where? |
 | D3 | | >64 drum hits | | slot 2 used? |
 | D4 | | lane 1 = 12 steps | | |
+| D5 | | **Drum Map readout:** Mode = , Low note = | | **the map is not in any file — this readout is the only record** |
+| D5 | | lanes 0–23 at steps 1–24 | | note-ons captured: |
+| D5 | | drum map changed | | export byte-identical? |
 | T5.* | | `99` field = | | one row per setting |
 | T5.6 | | root note / scale | | |
 | T5.7 | | 3-pattern chain | | |
@@ -514,15 +610,20 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 | B0 | 2 | noise floor | all |
 | 1 | 4 | write-path key set | M4 |
 | 2 | ~20 | gate table | M7 |
-| 3 | 4 | drum-mode bit | M6 |
-| 4 | 8 | step-active semantics, real limits | M6 |
+| 3 | ~~4~~ **1** | drum-mode bit — now only a confirmation of `86` bit 6 | M6 |
+| 4 | ~~8~~ **11** | step-active semantics, real limits, **the drum map (D5)** | M6, **M2** |
 | 5 | ~12 | pattern scalars, chaining | M6 |
 | 6 | 2 | standing caveats | M3 |
 | | **~52** | | |
 
+D5 adds three captures and Tier 3 loses three, so the total is unchanged.
+
 Tiers are ordered by value per capture and each is independently useful — stopping after any tier
 leaves a coherent result rather than a half-finished one. B0 is not optional; everything else is.
 
-If time is short, the ranking is **B0 → D1 → Tier 3 → Tier 2 → Tier 1 → Tier 4 rest → Tier 6 →
-Tier 5**. D1 and Tier 3 are the two places where the current code is arguably *wrong* rather than
-merely incomplete.
+If time is short, the ranking is **B0 → D1 → D5 → Tier 2 → Tier 1 → Tier 4 rest → Tier 6 →
+Tier 5**, with T3.2 folded into D5. D1 and D5 are the two places where the current code is
+arguably *wrong* rather than merely incomplete: D1 because `ksp-dump` may be reporting notes that
+never sound, D5 because every drum note it prints carries an assumed MIDI note that nothing has
+verified. D5 also needs a MIDI monitor rather than just MCC, so set that up before the session
+rather than during it.

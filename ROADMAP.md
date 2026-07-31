@@ -92,33 +92,24 @@ owned this gap.
 dictionary defines it outright (spec §3.2.1): Mode (`globalParamId 81`), Low note (`82`) and
 Note 1…Note 24 (`83`–`106`, defaults 36…59). Three consequences:
 
-- **24 lanes is now derived rather than assumed.** Previously the spec asserted it as background
-  knowledge with no citation; the highest lane in any sample is 19.
+- **24 lanes is now derived rather than assumed.** The spec asserted it as background knowledge
+  with no citation; the highest lane in any sample is 19. Two independent derivations now agree:
+  MCC's 24 `Note N` fields, and `51`'s lane-indexed 1–24 array (finding 6 of
+  `analysis/Format_Corrections_Issue.md`).
 - **The map is device-global (`paramId 65`) and is not in the project file** — not recoverable
   from one, not writable into one. So the tool treats it as *configuration with a documented
   default* (chromatic from 36), never as a decoded fact, and always prints which map it used.
 - **The drum-mode flag is `86` bit 6, not `100`** (spec §5). Found incidentally, confirmed by
   MCC's own field name and by exact correlation across all five samples. This removes one of the
-  two blockers listed at the bottom of this file.
+  two blockers listed at the bottom of this file, and cuts Tier 3 of the hardware protocol from
+  four captures to one.
 
-**Still needs hardware — Test D1.** Two things MCC's `defaultValue`s cannot settle: whether a
-factory device is chromatic-from-36 or chromatic-from-0, and whether chromatic mode maps lane
-*i* to `low + i` or `low + i + 1`.
-
-Method, following `analysis/project_9_tests.txt`: on an untouched pattern with Track 1 in DRUM
-mode, first write down the device's current Drum Map readout, then place one hit on each of the
-24 lanes — lane *i* at step *i+1*, 24-step pattern, everything else left at fresh-note defaults.
-Export, then capture the MIDI output while it plays once. Step *n* fires exactly one note-on, so
-the captured pitch *is* the note for lane *n−1*: all 24 mappings from one capture, and the
-lane encoding cross-checks against `123_117_*` in the export.
-
-One hit per step rather than 24 at once because Track 1 has only 4 poly slots. **The same export
-is also the discriminating case for the undecoded `52` packing** — 24 lanes across 24
-consecutive steps is exactly the "vary lanes, hold steps constant" case `initial_project`
-demands — so capture it in the same session as M7's gate sweep.
-
-**Test D2**, five minutes and no capture: change the Drum Map, export again, expect a
-byte-identical file. Turns "not project state" from an inference into an asserted fact.
+**Still needs hardware — test D5** in
+[`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md), where the full
+procedure lives. Two things MCC's `defaultValue`s cannot settle: whether a factory device is
+chromatic-from-36 or chromatic-from-0, and whether chromatic mode maps lane *i* to `low + i` or
+`low + i + 1`. It is the one test in that document needing a **MIDI monitor** rather than an
+export diff, because no export can contain the answer.
 
 ---
 
@@ -242,11 +233,11 @@ it is worth building after M6 — see the caveat under **Stack**.
 | Milestone | Status | Needs hardware? | Depends on |
 |---|---|---|---|
 | M1 Reader | ✅ done | No | — |
-| M1.5 Drum map | ✅ done | Test D1 confirms the default | M1 |
+| M1.5 Drum map | ✅ done | D5 confirms the default | M1 |
 | M2 MIDI export | | No | M1, M1.5 |
 | M3 Round-trip | | No | M1 |
 | M4 Mutation | | **Yes** | M3 |
-| M5 MVP convert | | No (desk-testable) | M3, drum `52` packing |
+| M5 MVP convert | | No (desk-testable) | M3 |
 | M6 Full convert | | No (desk-testable) | M5, M1.5 |
 | M7 Gate table | | **Yes** | M3 |
 | M8 Distribution | | For final check | M6 |
@@ -254,11 +245,15 @@ it is worth building after M6 — see the caveat under **Stack**.
 
 M1–M3 and M5–M6 can all be built and tested with nothing but the files already in this repo.
 
-Of the two format questions M1 surfaced, one is now closed:
+Both format questions M1 surfaced are now closed, from the desk:
 
-- **Drum step-active packing (`52`)** — still open, blocks M5/M6. Decodable from the files
-  already checked in, and M1.5's Test D1 export would settle it outright.
+- ~~**Drum step-active packing (`52`)**~~ — **resolved** in
+  `analysis/Format_Corrections_Issue.md` (finding 3): a flat 240-entry array laid out lane-major,
+  24 lanes × 10 parts × 7 bits. That document is a work order and its code and spec edits are
+  still to be applied.
 - ~~**Drum-mode bit (`100`)**~~ — **resolved at M1.5**: the flag is `86` bit 6. Spec §5.
 
-Hardware captures worth doing in one session: M7's gate sweep, M1.5's Test D1 (drum map, and the
-`52` packing case for free) and D2, plus the `project_5` drum time-shift re-check.
+Hardware work is scheduled in `analysis/Hardware_Test_Protocol.md`, not here. The captures most
+relevant to drums are **D5** (the drum map — the one test needing a MIDI monitor), **D1** (does
+an unflagged pooled drum note sound), T2.y (whether drum gate shares the melodic table) and T6.1
+(the `project_5` drum time-shift conflict).
