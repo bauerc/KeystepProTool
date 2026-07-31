@@ -27,6 +27,7 @@ packages = ["src/ksp", "src/ksp_cli"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
+    "pytest-xdist>=3.5.0",
     "mypy>=1.11",
     "ruff>=0.6",
     "pre-commit>=3.8",
@@ -71,7 +72,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-markers"
+addopts = "--strict-markers -q --tb=short --maxfail=1"
 markers = [
     "hardware: requires a physical KeyStep Pro (deselect with -m 'not hardware')",
     "slow: marks tests as slow integration/e2e tests (skipped during AI validation)",
