@@ -22,6 +22,9 @@ htmlcov/
 #MIDI Files
 *.mid
 
+#IDE
+.vscode/
+
 #Captures
 project_files/captures/
 # NOTE: uv.lock is deliberately NOT ignored. It is committed so that

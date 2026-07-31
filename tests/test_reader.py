@@ -5,14 +5,20 @@ cover the pieces in isolation, so that a failure points at *which* encoding
 broke rather than just reporting that a note came out wrong.
 """
 
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
 
 from ksp import constants
 from ksp.keys import key, read_array
-from ksp.model import NoteKind, PatternMode
+from ksp.model import NoteKind, PatternMode, Project
 from ksp.reader import load, read_project, slot_is_initialised
+
+
+@lru_cache(maxsize=16)
+def cached_load(file_path: Path | str) -> Project:
+    return load(file_path)
 
 
 class TestEncodings:
@@ -114,7 +120,7 @@ class TestAgainstRealFiles:
         Existence is decided by the note->step parameter alone. A reader that
         tested velocity would drop this note entirely.
         """
-        project = load(project_files_dir / "project_5.KeyStepPro")
+        project = cached_load(project_files_dir / "project_5.KeyStepPro")
         first_kick = project.track(1).pattern(1).notes[0]
         assert first_kick.velocity == constants.SENTINEL
         assert first_kick.kind is NoteKind.DRUM
@@ -125,7 +131,7 @@ class TestAgainstRealFiles:
         This is the whole point of M1. Reading the skip mask at note index 10
         instead would give 15 (the default) rather than the correct 12.
         """
-        project = load(project_files_dir / "project_5.KeyStepPro")
+        project = cached_load(project_files_dir / "project_5.KeyStepPro")
         tenth = project.track(3).pattern(1).notes[9]
         assert (tenth.index, tenth.step) == (10, 13)
         assert tenth.skip == (48, 64)
@@ -134,7 +140,7 @@ class TestAgainstRealFiles:
         self, project_files_dir: Path
     ) -> None:
         """project_9 test 2: one kick at step 1, playing only in sequence 32."""
-        project = load(project_files_dir / "project_9.KeyStepPro")
+        project = cached_load(project_files_dir / "project_9.KeyStepPro")
         note = project.track(1).pattern(3).notes[0]
         assert (note.step, note.skip) == (1, (32,))
 
@@ -148,7 +154,7 @@ class TestAgainstRealFiles:
         user notes would hide exactly the surprise this test exists to keep
         visible.
         """
-        project = load(project_files_dir / "initial_project.KeyStepPro")
+        project = cached_load(project_files_dir / "initial_project.KeyStepPro")
         pattern = project.track(1).pattern(1)
         assert project.track(1).drum_mode is True
         assert pattern.mode is PatternMode.DRUM
@@ -166,14 +172,17 @@ class TestAgainstRealFiles:
         """
         with_drums = ("project_5", "project_9", "initial_project")
         without = ("Default", "user_empty_project")
+
+        # 1. Check projects that should have drum mode enabled
         for name in with_drums:
-            project = load(project_files_dir / f"{name}.KeyStepPro")
+            project = cached_load(project_files_dir / f"{name}.KeyStepPro")  # Read once
             assert project.track(1).drum_mode is True, name
+            assert [t.drum_mode for t in project.tracks[1:]] == [False] * 3, name
+
+        # 2. Check projects that should NOT have drum mode enabled
         for name in without:
-            project = load(project_files_dir / f"{name}.KeyStepPro")
+            project = cached_load(project_files_dir / f"{name}.KeyStepPro")  # Read once
             assert project.track(1).drum_mode is False, name
-        for name in with_drums + without:
-            project = load(project_files_dir / f"{name}.KeyStepPro")
             assert [t.drum_mode for t in project.tracks[1:]] == [False] * 3, name
 
     def test_step_active_flags_agree_with_the_note_list(self, project_files_dir: Path) -> None:
@@ -183,7 +192,7 @@ class TestAgainstRealFiles:
         asserts the hardware-confirmed projects produce no such warnings.
         """
         for name in ("project_5.KeyStepPro", "project_9.KeyStepPro"):
-            project = load(project_files_dir / name)
+            project = cached_load(project_files_dir / name)
             disagreements = [
                 w
                 for track in project.tracks
