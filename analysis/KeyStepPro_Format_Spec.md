@@ -100,7 +100,8 @@ A single flat JSON object. No nesting anywhere.
 ```
 
 `itemId` selects a functional section, `paramId` selects a parameter within it, and one to three
-indices address pattern / slot / step-or-note.
+indices address pattern / pool chunk / step-or-note. "Pool chunk" is `idx2`; it is *not* a
+polyphony voice, and `52` does not follow this scheme at all — see section 4.
 
 ### Write-fidelity rules
 
@@ -217,11 +218,17 @@ Two points still need the hardware, recorded as **Test D1** in the roadmap:
 | `97` / `114` | Seq / DRUM swing % — stored with a **+25 offset** (±25% → 0…50) |
 | `98` / `115` | Seq / DRUM step count — **0-based** (15 = 16 steps) |
 | `99` / `116` | Bitfield: triplet, swing offset, polyrhythm, step size, playback direction |
-| `100` | Bitfield: ARP/Drum mode, ARP type, ARP octave |
+| `100` | Bitfield. Dictionary says ARP/Drum mode, ARP type, ARP octave; only **ARP octave (bits 4–6)** is hardware-confirmed. Drum mode is `86` bit 6, not here |
 | `107` / `108` | Root note / scale |
-| `40` | Pattern data state: `0` in the factory template, `2` initialised but empty, `3` holds data |
+| `40` | Pattern data state: `0` in the factory template, `2` initialised but empty, `3` holds data. **A latch** — see below |
 | `20`–`23`, `25`–`28` | Program Change (Seq / Drum), MSB/LSB split |
 | `101`–`106` | User scales 1 and 2, each split MSB / MidSB / LSB |
+
+**`40` never goes back down.** Capture `T1-note-delete` removes a pattern's only note: every note
+parameter returns to sentinel, but `124_40_1` stays at `3`. A pattern that has ever held a note
+reads "holds data" forever, so emptiness must never be inferred from `40` — count the pool
+instead. (The per-track equivalent `39` behaves the same way: it reads `3` on all five tracks of
+a freshly initialised project.)
 
 Params `109`–`113` and `117`–`121` also appear in a **one-index form** (`<item>_<param>_<pattern>`)
 holding the pattern's **default** value for that field — hence array sizes of 4,112 (`16×4×64 + 16`)
@@ -265,12 +272,35 @@ which parameter you are reading:
 The KeyStep Pro therefore does **not** store a step grid of note data. It stores a **compact
 event list** per slot, plus a separate per-step activity array.
 
+### A third layout: the drum step-active bit array (`52`)
+
+`52` is neither step-indexed nor note-indexed. It is a **flattened `[lane][part]` bit array**,
+lane-major, packed **7 bits per entry** with **10 entries per lane** (10 × 7 = 70 ≥ 64 steps).
+Its two trailing indices are storage geometry, not lane and step:
+
+```
+flat = lane * 10 + (step // 7)
+key  = 123_52_<pattern>_<flat // 64 + 1>_<flat % 64 + 1>
+bit  = step % 7
+```
+
+Hardware-confirmed on `D1-two-hits` / `D1-step-off` (lane 0 → steps {0, 4}, then {0} after the
+toggle) and `D3-drum-overflow` (lanes 0–2 all 64 steps set, lane 3 clear — exactly the three
+lanes that were filled). It also reproduces on real user material: `initial_project` pattern 1
+lane 0 → {0, 4, 8, 12} and pattern 3 lane 7 → all 16 steps, each matching that lane's pool
+exactly.
+
+The melodic equivalent `48` is far simpler — one entry per step, value `1` or `0`, and in every
+file observed the whole pattern's flags sit in **slot 1**, with slots 2–3 unused. No capture yet
+shows what `48` does once a melodic pool spills past 64 events.
+
 Consequences for writing files:
 
 1. Notes must be packed **contiguously from index 1**, with no gaps.
 2. Every written note needs its step recorded in `50` / `54`.
-3. `48` / `52` (step active) must be kept consistent with the note list — they are redundant
-   with it, and the firmware reads both.
+3. `48` / `52` (step active) must be kept consistent with the note list. They are **not**
+   merely redundant with it: the firmware plays the flags, so a pooled note whose flag is clear
+   is silent (see "Pooled does not mean audible" below).
 4. The tail of every array must be sentinel-filled.
 
 ### The `127` sentinel
@@ -281,10 +311,21 @@ velocity `127` is genuinely ambiguous in isolation.
 > **The authoritative existence test is `paramId 50` (or `54` for drums) `!= 127`.**
 > Never infer note presence from velocity.
 
-### Polyphony slots, and the zero-fill trap
+### `idx2` is a pool chunk, not a voice — and the zero-fill trap
 
-`idx2` is the poly/chord voice: **1–4 on Track 1**, **1–3 on Tracks 2–4**. Simultaneous notes
-at the same step are distributed across slots.
+`idx2` runs **1–4 on Track 1** and **1–3 on Tracks 2–4**, and it is tempting to read it as a
+poly/chord voice. It is not. It **chunks one flat note pool into blocks of 64 entries**, giving
+a real capacity of **192 events per pattern** (3 × 64) on every track.
+
+Polyphony is expressed inside a chunk, as **consecutive note ordinals sharing the same `50`
+(or `54`) value**. Hardware-confirmed by capture `D2-chord4-tr3` / `D2-chord4-tr1`: a four-note
+chord is accepted on both Track 3 and Track 1, and lands in **slot 1, ordinals 1–4**, all with
+`50` = 0, while slots 2 and 3 stay entirely sentinel-filled. There is no three-voice ceiling,
+and Track 1 has no extra voice.
+
+Notes reach slot 2 only when slot 1's 64 entries are full. `D3-drum-overflow` fills a drum
+pattern past capacity: the events land 64 in slot 1, 64 in slot 2, 64 in slot 3, and the device
+then displays a **192-note limit** error. So the ceiling is real and the firmware enforces it.
 
 > **Track 1's fourth slot is zero-filled, not sentinel-filled.** In all 16 patterns of all five
 > sample projects — including both empty baselines and real user material — `123_50_*_4_*` and
@@ -300,8 +341,23 @@ velocity are all uniformly zero**. That cannot be confused with real data, becau
 velocity 0 is silent and 64 notes cannot all sit on step 0. `project_5`'s kick is note→step `0`
 with pitch (lane) `0` and is correctly kept, because its velocity is 127.
 
-Whether slot 4 is usable at all on the hardware is untested — no sample project puts a fourth
-voice on Track 1. A writer should not assume it works.
+Slot 4 is now measured, and it is a phantom: `D2-chord4-tr1` adds a fourth chord voice on
+Track 1 and `123_*_1_4_*` does not move at all — the note goes to slot 1 ordinal 4 like every
+other track. A writer must never place events there.
+
+### Pooled does not mean audible
+
+A note can sit in the pool, fully formed, and still be silent. `D1-two-hits` / `D1-step-off`
+toggle a drum step off **without deleting its note**: the pooled entry survives byte-for-byte
+and only the step-active bit clears — and the step does not sound on the device.
+
+> **Existence and audibility are different tests.** `50` / `54` `!= 127` says a note *exists*.
+> Whether it *plays* additionally requires its **step-active bit** (`48` melodic, `52` drum) to
+> be set. A reader that reports pooled notes is correct; an exporter that renders them without
+> checking the flag emits audio the hardware never makes.
+
+This is not hypothetical. In `initial_project`, pattern 3 lanes 0 and 19 hold 20 pooled drum
+notes with no flags at all, and pattern 1 lane 17 holds 8 of which only 4 are flagged.
 
 ---
 
@@ -404,21 +460,23 @@ picking a scale. Worth capturing in the same hardware session as the gate sweep 
 note, step its time shift through its range, export at each setting, and time the result against
 an unshifted note.
 
-### Caveat: the drum step-active bitmask (`52`) is not fully decoded
+### Resolved: the drum step-active bitmask (`52`)
 
-The 8-steps-per-index reading above reproduces both hardware-confirmed projects exactly
-(`project_5`: 17 → steps 1 and 5; `project_9`: 1 → step 1). It does **not** account for
-`initial_project`, which is real user material: pattern 1 slot 1 holds a kick on steps 1, 5, 9,
-13 and a second lane on every odd step, yet `52` reads `17, 34` where the packing predicts
-`17, 17` and `85, 85` respectively.
+An earlier 8-steps-per-index reading fitted both hardware-confirmed projects (`project_5`:
+17 → steps 1 and 5; `project_9`: 1 → step 1) but failed on `initial_project`, where pattern 1
+holds a kick on steps 1, 5, 9, 13 and a second lane on every odd step, yet `52` reads `17, 34`
+where that packing predicts `17, 17` and `85, 85`.
 
-Since `52` is redundant with the note list, this does not block reading — **notes come from
-`54` plus `117`–`121`, which is authoritative**. It does block writing, because a writer has to
-emit `52` consistently. Resolve before M5/M6.
+The correct layout is **7 bits per entry, lane-major, 10 entries per lane**, given in section 4.
+Under it `17, 34` decodes to lane 0 → steps {0, 4, 8, 12}, matching that lane's pool exactly,
+and lane 17's flags are found at a different offset entirely. It reproduces on every file and
+capture checked.
 
-By contrast the melodic step-active array (`48`) *is* understood, and agrees with the note list
-on every slot of both hardware-confirmed projects. The M1 reader cross-checks it on every slot
-and warns rather than reconciling.
+This unblocks writing: a writer can now emit `52` consistently, which M5/M6 require.
+
+The melodic step-active array (`48`) is simpler — one entry per step — and agrees with the note
+list everywhere observed. Both are cross-checked by the reader, which warns rather than
+reconciling.
 
 ### Resolved: drum mode is parameter `86` bit 6, not `100`
 
@@ -435,9 +493,20 @@ The flag that *can* is **`86` bit 6**, and two independent lines of evidence agr
   `project_9` and `initial_project` — every sample holding drum notes — and **2** in both empty
   baselines. Tracks 2–4 never set it.
 
-It is **track-level, not per-pattern**, which matches the device's Drum button, and the field is
-named *Arp*/Drum, so on tracks 2–4 bit 6 presumably means ARP. Both worth confirming on
-hardware; Test D1 does so for free.
+**Confirmed on hardware.** Capture `T3-track1-drum` switches Track 1 from sequencer to drum mode
+and produces a **one-key diff**: `123_86` 2 → 66. `100` does not move at all, in that capture or
+any other.
+
+It is **track-level, not per-pattern**, which matches the device's Drum button. The field is
+named *Arp*/Drum, and on tracks 2–4 bit 6 does indeed mean ARP: `T3-arp-on` engages the
+arpeggiator on Track 2 and sets `124_86` to 66. There is no ambiguity on Track 1, because Track 1
+has no arpeggiator — drum mode replaces it entirely — so bit 6 there is unconditionally the drum
+flag.
+
+What `100` *does* carry is the **ARP octave, at bits 4–6**, matching the dictionary's own
+comment: `T3-arp-octave` moves `124_100_1` from 26 to 42, i.e. that field from 1 to 2. Toggling
+the arpeggiator on and off leaves `100` untouched, so ARP on/off is not stored there either.
+Note the scope difference: `86` is per-track, `100` is per-pattern.
 
 This resolves the ambiguity that made the reader report `PatternMode.BOTH`. **`initial_project`
 Track 1 pattern 1 holds both** a real 64-step melody and a real 12-note drum pattern; bit 6 is
@@ -542,6 +611,7 @@ envelope, so this would need live frame capture to reverse. The file route needs
 | Item `121` = arpeggiator / chord memory | Scenes |
 | Track 1's extra params are a modulation lane | A complete DRUM-mode parameter set |
 | All indices are `pattern_slot_step` | Two index spaces: step-indexed vs note-indexed |
+| `idx2` is a polyphony voice, capped at 3 (4 on Track 1) | A 64-entry pool chunk. Chords share a chunk as consecutive ordinals; capacity is 192 events |
 | Risk of omitting keys the firmware needs | Key set is fixed and identical across all files |
 | `arturia2midi` is doing this on GitHub | Could not be found. Treat as unverified |
 

@@ -11,20 +11,28 @@ open — the packing of `52`, the poly-slot count, the step-active warnings — 
 desk from MCC's parameter dictionary and are **not** in this document. Do not spend device time
 on them.
 
+**Progress.** B0 and tiers 1, 3 and 4 have been run — 18 captures, all in
+`project_files/captures/`. Their results are recorded in each tier's section below and in the
+ledger. Tiers 2 and 5–8 are untouched, so every timing question is exactly as open as it was.
+
 **What is genuinely unknown and needs the device:**
 
 | Question | Blocks | Tier |
 |---|---|---|
 | The gate length table (`110` / `118`) | M7, and correct note durations in M5/M6 | 2 |
-| Which bit of `100` is drum mode | M6 | 3 |
-| Whether an unflagged pooled drum note sounds | M6 correctness | 4 |
-| Real poly and drum-lane limits | M6 | 4 |
+| Whether melodic step-off behaves like drum step-off | M5/M6 export correctness | 4 |
+| Whether a melodic pool spills into slot 2 like a drum pool | M6 | 4 |
 | The `99` / `116` bitfield layout | M6 | 5 |
 | Pattern chaining beyond 64 steps (`84`) | M6 | 5 |
 | Time Shift range and linearity (`112` / `120`) | M7; whether shift is usable at all | 7 |
 | Which parameter governs effective swing (`74` / `97` / `114`) | M7, and `reader._swing` may be wrong | 7 |
 | Whether `113` randomness is probability or timing jitter | the validity of every timing measurement | 7 |
 | What one Time Shift unit is worth in time | M2's grid-quantise warning, M5's quantiser | 8 |
+
+**Answered, and no longer worth device time:** which bit of `100` is drum mode (T3.2 — it is
+`86` bit 6, and `100` never moves); whether an unflagged pooled drum note sounds (D1 — it does
+not); the real poly and pool limits (D2/D3 — `idx2` is a 64-entry pool chunk, not a voice, and
+the ceiling is 192 events per pattern).
 
 The last four are the subject of [`Timing_Calibration.md`](./Timing_Calibration.md), which carries
 the model and the arithmetic; tiers 7 and 8 below are the captures that feed it.
@@ -112,6 +120,11 @@ measured before any signal is trusted.
 - **If it differs elsewhere:** stop and record what moved. Something about the device state is
   not what the existing samples assume, and every later capture inherits that.
 
+> **Result — mild deviation, benign.** Six keys differ, none of them `120_*` only as predicted:
+> `120_37` and `122_39`, `123_39`, `124_39`, `125_39`, `126_39`, each `2 → 3`. So this device
+> marks every track "holds data" where the checked-in sample says "initialised but empty". It is
+> the same latch behaviour T1.4 found in `40`. Every later capture inherits this baseline.
+
 ### B0.2 — Null capture
 
 - **Resolves:** which keys drift on their own. This is the false-positive floor.
@@ -125,9 +138,20 @@ measured before any signal is trusted.
 > B0.2 also settles a small M3 question for free: if two untouched exports are byte-identical,
 > MCC's writer is deterministic and the round-trip target is well defined.
 
+> **Result — the noise floor is zero.** The two exports are **byte-identical** (`cmp` reports no
+> difference), not merely equal key-for-key. No keys drift on their own, so any key that moves in
+> a later capture is signal. And MCC's writer is deterministic, which means **M3's
+> byte-identical round-trip is a well-defined target**, not an aspiration.
+
 ---
 
-## Tier 1 — M4, write-path sanity
+## Tier 1 — M4, write-path sanity ✅ run
+
+> **Result — confirmed, with one finding.** T1.1 moved exactly the eight predicted keys with
+> exactly the predicted values. T1.2 and T1.3 each moved exactly one key. **T1.4 is partially
+> falsified: `124_40_1` stays at 3 after the note is deleted**, while every note parameter
+> returns to sentinel — so `40` is a latch and cannot be used as an emptiness test. Everything
+> else about deletion fully reverses creation.
 
 **4 captures.** Cheap, fast, and they give M4 ("change one note in a real project, load it in MCC,
 push to the device") the ground truth it needs. Each is a single edit on **Track 2, pattern 1**,
@@ -259,7 +283,28 @@ is *below* the 0.5 point — so the range extends further down than any document
 
 ---
 
-## Tier 3 — M6, the drum-mode bit
+## Tier 3 — M6, the drum-mode bit ✅ run — resolved
+
+> **Result — the mode flag is `86` bit 6, not `100`.** T3.2 is a **one-key diff**:
+> `123_86` 2 → 66. `100` does not move in that capture or any other. This confirms at the device
+> what the spec had already derived from MCC's dictionary.
+>
+> The ARP captures separate the fields cleanly. `T3-arp-on` sets `124_86` to 66 and leaves `100`
+> untouched, so ARP on/off is *also* `86` bit 6 and is **not** in `100`. `T3-arp-octave` moves
+> `124_100_1` from 26 to 42 — the bits 4–6 field going 1 → 2 — confirming the dictionary's
+> comment that **ARP octave lives at bits 4–6**. Note the scope difference: `86` is per-track,
+> `100` is per-pattern.
+>
+> Bit 6 therefore means "alternate mode": DRUM on Track 1, ARP on Tracks 2–4. **There is no
+> ambiguity on Track 1**, because Track 1 has no arpeggiator — drum mode replaces it entirely —
+> so no further capture is needed.
+>
+> **Procedural caveat:** T3.1 is not a single-change capture. Its diff against B0.1 is 969 keys,
+> because it also placed a note *and* initialised the whole Track 1 drum block (192 entries each
+> of `118`–`121` moving off the template's placeholder values to sentinel). T3.3 and T3.4 were
+> also not taken from the T3.1 baseline as written — Track 1 had been returned to sequencer mode
+> with a drum hit left in place. Both are still interpretable, but do not re-read them as clean
+> one-change diffs.
 
 **4 captures.** The only remaining blocker on M6. Parameter `100` is documented as
 "Pattern Seq ARP/Drum mode, ARP type, ARP octave in a bitfield" with the dictionary's own comment
@@ -309,7 +354,26 @@ This matters because `initial_project` Track 1 pattern 1 holds a real 64-note me
 
 ---
 
-## Tier 4 — M6, step-active semantics and real limits
+## Tier 4 — M6, step-active semantics and real limits ✅ run
+
+> **Result — D1 confirmed, D2 falsified, D3 and D4 confirmed.** Summary:
+>
+> - **D1: the flags are authoritative.** `123_52_1_1_1` goes 17 → 1 and *nothing else moves* —
+>   the pooled note for beat 5 survives byte-for-byte — and beat 5 **does not sound**. So a
+>   pooled note with its step-active bit clear is silent, and `ksp-dump` / `ksp2midi` were
+>   reporting notes the device never plays.
+> - **D2: the polyphony-slot model was wrong.** The 4-note chord is *accepted* on both tracks and
+>   lands in **slot 1, ordinals 1–4**, all sharing `50` = 0; slots 2–3 stay sentinel-filled and
+>   Track 1's slot 4 stays zero-filled. `idx2` is a pool chunk, not a voice.
+> - **D3: capacity is 192 events**, as 3 chunks of 64 — the fourth "slot" on Track 1 is a
+>   phantom. The device raised a 192-note limit error, matching.
+> - **D4: confirmed exactly.** `123_51_1_1_1` → 11, entries 2–24 stay 15. `51` is per-lane.
+>
+> D1 and D3 together also **decode the `52` packing**, which the spec had listed as unresolved:
+> it is a flattened `[lane][part]` bit array, lane-major, 7 bits per entry, 10 entries per lane
+> (`flat = lane*10 + step//7`; `i2 = flat//64 + 1`, `i3 = flat%64 + 1`, `bit = step%7`).
+> Cross-checked against `initial_project`, where it explains the `17, 34` values the old
+> 8-bit reading could not.
 
 **8 captures.** D1 is the highest-value single test in this document.
 
@@ -382,6 +446,49 @@ This matters because `initial_project` Track 1 pattern 1 holds a real 64-note me
 - **Falsified if:** all 24 entries move together, or a different key changes.
 - **If all move together:** it is a per-pattern value stored redundantly, and the "poly step count"
   name means something else. Either way this is one capture and it settles it.
+
+### T4.5 — Melodic step-off ⬜ not yet run
+
+**3 captures.** The melodic counterpart to D1, which tested drums only.
+
+- **Resolves:** whether `48` behaves like `52` — i.e. whether a melodic note left in the pool
+  with its step-active flag clear is silent. The reader and MIDI export now drop such notes on
+  *both* parameter sets, but only the drum half is measured. The melodic half rests on D1 plus
+  the fact that `48` and the note list agree in every file we have, which is suggestive, not
+  proof.
+- **Device:** from B0.1. Track 2, pattern 1. Place notes at **beat 1** and **beat 5**, export.
+  Then **toggle step 5 off without deleting the note** — the same control D1 used, not a clear —
+  export. **Then listen: play the pattern and note whether beat 5 sounds.**
+- **Captures:** `T4-melodic-two-notes.KeyStepPro`, `T4-melodic-step-off.KeyStepPro`
+- **Keys:** `124_48_1_1_5`, and `124_50_1_1_<1..2>` plus `124_109_1_1_<1..2>` to show the pool
+  is untouched
+- **Confirms if:** `124_48_1_1_5` goes 1 → 0, the pool entry survives unchanged, and beat 5
+  does not sound — exactly D1's shape.
+- **Falsified if:** the pool entry is cleared alongside the flag (then melodic deletion and
+  deactivation are the same operation), or the note still sounds with its flag clear.
+- **If falsified:** `ExportOptions.include_inactive` must stop applying to melodic notes, and
+  the reader's melodic `active` decode becomes informational only.
+
+### T4.6 — Melodic pool overflow ⬜ not yet run
+
+**1 capture.** D3 established that a *drum* pool spills into chunk 2 at 64 events. Nothing shows
+that a melodic one does, and no sample file has more than 64 melodic notes in a pattern.
+
+- **Resolves:** whether melodic notes chunk the way drum notes do, and — the part that matters
+  for code — **whether `48` stays wholly in slot 1 or follows the chunking**. The reader
+  currently reads melodic step-active from slot 1 only and treats it as pattern-wide; that is
+  the one assumption in the change with no capture behind it.
+- **Device:** from B0.1. Track 2, pattern 1, 64 steps. Enter **more than 64 notes** — chords on
+  every step is the fastest route. Export. Note whether the device refuses any, and at what count.
+- **Capture:** `T4-melodic-overflow.KeyStepPro`
+- **Keys:** `124_50_1_2_*` and `124_109_1_2_*` (did the pool spill?), `124_48_1_1_*` and
+  `124_48_1_2_*` (did the flags spill?)
+- **Confirms if:** events past 64 appear in slot 2, and `124_48_1_2_*` stays all-zero with every
+  flag still in slot 1.
+- **Falsified if:** `48` slot 2 is populated — then step-active is chunked alongside the pool and
+  the reader must read all chunks, not just the first.
+- **Also record the ceiling.** If the device errors, note the number and whether it matches the
+  192 that D3 produced for drums.
 
 ---
 
@@ -723,24 +830,31 @@ cleanly and plays with wrong timing, and nothing errors.
 
 Fill in as you go. This table is the record; the `.KeyStepPro` files are the evidence.
 
+**Stored values below are read back from the capture files. A `NOT RECORDED` in the *displayed*
+column means the value was never written down at the desk and cannot be recovered from the file
+— do not back-fill it from the stored number, since agreement between the two is exactly what
+the column exists to test.**
+
 | Test ID | Date | Displayed value / setting | Stored value | Notes |
 |---|---|---|---|---|
-| B0.1 | | — | | |
-| B0.2 | | — | | keys that drift on their own: |
-| T1.1 | | fresh note, C3 @ beat 1 | | |
-| T1.2 | | pitch E3 | | |
-| T1.3 | | velocity 127 | | |
-| T1.4 | | deleted | | residue? |
+| B0.1 | 2026-07-31 | — | 6 keys vs `user_empty_project`: `120_37` and `122_39`…`126_39`, all 2 → 3 | export route: NOT RECORDED |
+| B0.2 | 2026-07-31 | — | identical | keys that drift on their own: **none — byte-identical** |
+| T1.1 | 2026-07-31 | fresh note, C3 @ beat 1; gate NOT RECORDED | `50`=0, `109`=60, `110`=7, `111`=100, `112`=49, `113`=100, `48`=1, `40`=3 | all 8 predicted keys, predicted values |
+| T1.2 | 2026-07-31 | pitch E3 | `124_109_1_1_1`: 60 → 64 | one key, as predicted |
+| T1.3 | 2026-07-31 | velocity 127 | `124_111_1_1_1`: 100 → 127 | one key; note still present (`50` unchanged at 0) |
+| T1.4 | 2026-07-31 | deleted | `48`, `50`, `109`, `110`, `112`, `113` → sentinel | **residue: `124_40_1` stays 3.** `40` is a latch |
 | T2.* | | gate = | | one row per detent |
 | T2.y | | drum gate = | | same table as melodic? |
-| T3.1 | | track 1 seq mode | | |
-| T3.2 | | track 1 drum mode | | bit that moved: |
-| T3.3 | | ARP on | | |
-| T3.4 | | ARP octave +1 | | |
-| D1 | | step 5 toggled off | | **did beat 5 sound?** No |
-| D2 | | 3- then 4-note chord | | 4th note went where? |
-| D3 | | >64 drum hits | | slot 2 used? Error message on keyboard showed up saying 192 note limit hit when 3 lanes were filled with 64 notes in a single pattern |
-| D4 | | lane 1 = 12 steps | | |
+| T3.1 | 2026-07-31 | track 1 seq mode | 969 keys (see caveat) | **not a single-change capture** — also placed a note and initialised the drum block |
+| T3.2 | 2026-07-31 | track 1 drum mode | `123_86`: 2 → 66 | bit that moved: **6**. One-key diff; `100` never moved |
+| T3.3 | 2026-07-31 | ARP on (Track 2) | `124_86`: 2 → 66 | `100` untouched — ARP on/off is not in `100` |
+| T3.4 | 2026-07-31 | ARP octave +1; from/to NOT RECORDED | `124_100_1`: 26 → 42 | bits 4–6 field 1 → 2 → ARP octave confirmed at bits 4–6 |
+| D1 | 2026-07-31 | step 5 toggled off | `123_52_1_1_1`: 17 → 1; pool unchanged | **did beat 5 sound?** No. Does the UI still show the step as filled? NOT RECORDED |
+| D2 | 2026-07-31 | 3- then 4-note chord (pitches NOT RECORDED) | slot 1 ordinal 4 gains `50`=0, `109`=59; slots 2–4 untouched | 4th note went where? **Slot 1, ordinal 4** — accepted, not refused. Identical on Track 1 and Track 3 |
+| D3 | 2026-07-31 | >64 drum hits | 192 notes: 64 each in slots 1, 2, 3 (lanes 0, 1, 2) | slot 2 used? **Yes.** Error message on keyboard showed up saying 192 note limit hit when 3 lanes were filled with 64 notes in a single pattern. Refused or overwrote at 193? NOT RECORDED |
+| D4 | 2026-07-31 | lane 1 = 12 steps; displayed counts NOT RECORDED | `123_51_1_1_1`: 15 → 11; entries 2–24 stay 15 | confirmed exactly — `51` is per-lane and 0-based |
+| T4.5 | | melodic step 5 toggled off | | **did beat 5 sound?** |
+| T4.6 | | >64 melodic notes | | did `48` spill to slot 2? ceiling reached at: |
 | T5.* | | `99` field = | | one row per setting |
 | T5.6 | | root note / scale | | |
 | T5.7 | | 3-pattern chain | | |
@@ -764,31 +878,36 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 
 ## Effort summary
 
-| Tier | Captures | Resolves | Milestone |
-|---|---|---|---|
-| B0 | 2 | noise floor | all |
-| 1 | 4 | write-path key set | M4 |
-| 2 | ~20 | gate table | M7 |
-| 3 | 4 | drum-mode bit | M6 |
-| 4 | 8 | step-active semantics, real limits | M6 |
-| 5 | ~14 | pattern scalars, chaining, step-skip semantics | M6, M2 |
-| 6 | 2 | standing caveats | M3 |
-| 7 | ~13 | Time Shift range, swing semantics | M7, M5 |
-| 8 | ~6 recordings | what a Time Shift unit is worth in time | M2, M5 |
-| | **~73** | | |
+| Tier | Captures | Resolves | Milestone | Status |
+|---|---|---|---|---|
+| B0 | 2 | noise floor | all | ✅ done |
+| 1 | 4 | write-path key set | M4 | ✅ done |
+| 2 | ~20 | gate table | M7 | ⬜ |
+| 3 | 4 | drum-mode bit | M6 | ✅ done |
+| 4 | 8 + 3 new | step-active semantics, real limits | M6 | ✅ D1–D4 done; T4.5/T4.6 open |
+| 5 | ~14 | pattern scalars, chaining, step-skip semantics | M6, M2 | ⬜ |
+| 6 | 2 | standing caveats | M3 | ⬜ |
+| 7 | ~13 | Time Shift range, swing semantics | M7, M5 | ⬜ |
+| 8 | ~6 recordings | what a Time Shift unit is worth in time | M2, M5 | ⬜ |
+| | **~76**, of which **18 run** | | | |
 
 Tiers are ordered by value per capture and each is independently useful — stopping after any tier
 leaves a coherent result rather than a half-finished one. B0 is not optional; everything else is.
 
-If time is short, the ranking is **B0 → D1 → Tier 3 → T7.1 → Tier 2 → Tier 1 → rest of Tier 7 →
-Tier 4 rest → Tier 6 → Tier 5 → Tier 8**.
+**Remaining ranking: T4.5 → T7.1 → Tier 2 → rest of Tier 7 → T4.6 → Tier 6 → Tier 5 → Tier 8.**
 
-- **D1 and Tier 3** are the two places where the current code is arguably *wrong* rather than merely
-  incomplete.
+- **T4.5 leads** because it is the one open question that the *shipped* code already depends on:
+  the export drops inactive melodic notes on the strength of D1's drum result plus a corpus where
+  `48` never disagrees with the pool. Three captures make that measured instead of inferred.
 - **T7.1 is two captures and jumps the queue** because it is a go/no-go: if the Time Shift range is
   only ±4, the rest of Tier 7's shift work and most of Tier 8 are not worth running at all.
-- **T7.5 is the third place the code may be wrong** — `reader._swing` and MCC's own field label
+- **T7.5 is the other place the code may be wrong** — `reader._swing` and MCC's own field label
   disagree about whether per-pattern swing is absolute or a signed offset, and no existing test can
   tell, because every sample file is swing-neutral.
 - **Tier 8 is last** because it is the only tier needing a recording rig rather than just the device
   and MCC, and because Tier 7 supplies the range it sweeps.
+
+The original ranking put D1 and Tier 3 first as "the two places where the current code is arguably
+wrong". Both have now been run and both were: D1 found the export emitting silent notes, and
+Tier 3 confirmed the mode flag. D2 additionally overturned the polyphony-slot model, which nothing
+had flagged as doubtful.
