@@ -23,7 +23,8 @@ spec and delete the row.
 
 | # | ***Question*** | Why it matters | Your answer |
 |---|---|---|---|
-| 1.1 | ***What exact route did you use to get a project off the device and into a `.KeyStepPro` file?*** (e.g. sync from KSP into MCC → Project menu → Save As → which folder) | The protocol asks for this to be recorded once so the captures are reproducible. Nobody can repeat a capture without it, and the whole corpus depends on the route being the same each time. | |
+| 1.1 | ***What exact route did you use to get a project off the device and into a `.KeyStepPro` file?*** (e.g. sync from KSP into MCC → Project menu → Save As → which folder) | The protocol asks for this to be recorded once so the captures are reproducible. Nobody can repeat a capture without it, and the whole corpus depends on the route being the same each time. | On the physical keyboard, it Save and Project at the same time. Click the encoder button next to the display to save. Using MCC, click the project that was saved (been using the Project 2 slot) and select the 'Recall From' button on the MCC UI. Then using linux commands used `mv` to moved the saved and renamed project file to the project directory, for example  From: /Library/Arturia/MIDI Control Center/Templates/KeyStepPro/T2gatetable.KeyStepPro
+  To:   /Users/cameronbauer/repos/KeystepProTool/project_files/captures/T2-gate-table.KeyStepPro |
 
 ---
 
@@ -34,10 +35,10 @@ noted. The stored value is already in the spec; what is missing is what the devi
 
 | # | ***Question*** | Stored value (from the file) | Your answer |
 |---|---|---|---|
-| 2.1 | ***When you placed the fresh note for T1.1, what gate length did the display show?*** | `110` = 7 | |
-| 2.2 | ***What ARP octave did the display show before and after you changed it in T3.4?*** | `100` field at bits 4–6 went 1 → 2 | |
-| 2.3 | ***In D4, what step counts did the display show — for the lane you shortened, and for the others?*** | `51` = 11 and 15 | |
-| 2.4 | ***In D2, what were the four pitches of the chord you played?*** | `109` = 48, 52, 55, 59 | |
+| 2.1 | ***When you placed the fresh note for T1.1, what gate length did the display show?*** | `110` = 7 | ,5|
+| 2.2 | ***What ARP octave did the display show before and after you changed it in T3.4?*** | `100` field at bits 4–6 went 1 → 2 | The ARP Octave is NOT a display value on the device UI. It is a selection on the physical keys starting on the second physical octave. The default value was 0 (the C#3 key). I held the SHIFT button on the device and hit the D3 key to select ARP Octave +1 as marked on the device physically. The device has 5 values for ARP Octave, -1 0 +1 +2 +3|
+| 2.3 | ***In D4, what step counts did the display show — for the lane you shortened, and for the others?*** | `51` = 11 and 15 | Step Count for the short one was marked as 12. The rest were marked as 16. To get this behaviour I had to select Poly mode in Track 1 Drum mode. This was done by holding the SHIFT key and pressing what would E2 key. The Seq/Drum Mode options are Mono and Poly. Mono would be on the D#2 key|
+| 2.4 | ***In D2, what were the four pitches of the chord you played?*** | `109` = 48, 52, 55, 59 | C2, E2, G2, B2|
 
 **Why 2.1 and 2.3 are worth answering.** Both test a decoding assumption. If T1.1's display read
 `0.5`, that confirms the gate table's bottom entry from a second direction. If D4's display read
@@ -52,9 +53,9 @@ visible while it is happening.
 
 | # | ***Question*** | Context | Your answer |
 |---|---|---|---|
-| 3.1 | ***After you toggled step 5 off in D1, did the device UI still show that step as containing something?*** | You already recorded that beat 5 **did not sound** — that is the key result and it is banked. This asks whether the UI distinguishes "step off, note still stored" from "step empty". | |
-| 3.2 | ***In D3, when you hit the 192-note limit, did the device refuse the next hit, or overwrite an existing one?*** | You recorded the 192-note error message. Refuse vs overwrite decides what a writer must do when source material is too dense — reject the file, or drop notes and warn. | |
-| 3.3 | ***In D2, when you added the 4th note to the chord, did the device give any feedback, or did it just accept it?*** | The file shows it accepted, in slot 1 ordinal 4. If the device said nothing, then there is no 3-note limit at all and the old "poly slots cap at 3" note was simply wrong. | |
+| 3.1 | ***After you toggled step 5 off in D1, did the device UI still show that step as containing something?*** | You already recorded that beat 5 **did not sound** — that is the key result and it is banked. This asks whether the UI distinguishes "step off, note still stored" from "step empty". | No. The device showed nothing. The 5 step key is a physical button. You can turn it on and off by pressing it. If it is on, it is lit up. If it is up it is off. It is impossible to overwrite the button. If you press a new pitch and then press and hold 5 it will merely turn on the old note. To fully erase it you must hold the ERASE button on the device and press the physical step button|
+| 3.2 | ***In D3, when you hit the 192-note limit, did the device refuse the next hit, or overwrite an existing one?*** | You recorded the 192-note error message. Refuse vs overwrite decides what a writer must do when source material is too dense — reject the file, or drop notes and warn. | The device refused the next hit and immediately displayed the error message on the display. |
+| 3.3 | ***In D2, when you added the 4th note to the chord, did the device give any feedback, or did it just accept it?*** | The file shows it accepted, in slot 1 ordinal 4. If the device said nothing, then there is no 3-note limit at all and the old "poly slots cap at 3" note was simply wrong. | No feedback. To add the note, the device had to enter Step Edit mode (a physical button) and then press the new note to add it to the others. Step Edit is not on by default and turns off if you switch to a different project and switch back|
 
 ---
 
@@ -62,7 +63,7 @@ visible while it is happening.
 
 | # | ***Question*** | Why it matters | Your answer |
 |---|---|---|---|
-| 4.1 | ***Do you still have the notes from the 2026-07-31 session, or is what is in the files all that survives?*** | Decides whether section 2 is answerable at all, or whether those four values need their captures re-run. | |
+| 4.1 | ***Do you still have the notes from the 2026-07-31 session, or is what is in the files all that survives?*** | Decides whether section 2 is answerable at all, or whether those four values need their captures re-run. | What is the 7 31 session? All the notes in the files when I imported the midi dumps to Logic Pro were exactly as I entered them into the Keypad Pro|
 
 ---
 
