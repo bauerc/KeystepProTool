@@ -137,6 +137,11 @@ the Project Browser and loads. Round-trip through M2 as a desk check first.
 **Scope discipline:** monophonic and single-pattern on purpose. Resist widening this — M6 exists
 for that.
 
+**Target a melodic track (2–4), not Track 1.** Track 1 is the only track carrying a drum
+parameter set, and the flag that selects between the two is not yet decoded (#14). Writing to
+tracks 2–4 sidesteps that entirely, so M5 depends on nothing beyond M3. Aiming the MVP at
+Track 1 would pull an unsolved format question onto the critical path for no gain.
+
 ---
 
 ### M6 — Full conversion
@@ -203,16 +208,20 @@ it is worth building after M6 — see the caveat under **Stack**.
 | M2 MIDI export | | No | M1 |
 | M3 Round-trip | | No | M1 |
 | M4 Mutation | | **Yes** | M3 |
-| M5 MVP convert | | No (desk-testable) | M3, drum `52` packing |
-| M6 Full convert | | No (desk-testable) | M5, mode bit in `100` |
+| M5 MVP convert | | No (desk-testable) | M3 |
+| M6 Full convert | | No (desk-testable) | M5, drum `52` packing, mode bit in `100` |
 | M7 Gate table | | **Yes** | M3 |
 | M8 Distribution | | For final check | M6 |
 | M9 GUI | | For final check | M8 |
 
 M1–M3 and M5–M6 can all be built and tested with nothing but the files already in this repo.
 
-Two format questions M1 surfaced sit on the critical path to writing, and neither needs
-hardware to investigate — both are decodable from the files already checked in:
+Two format questions M1 surfaced sit on the critical path to writing. **Both block M6, both are
+decodable from the files already checked in, and neither has to wait for M2–M5.** They are
+tracked as sub-issues of the M6 issue rather than as milestones of their own, because neither
+produces a usable artifact on its own — they unblock one:
 
-- **Drum step-active packing (`52`)** — blocks M5/M6.
-- **Drum-mode bit (`100`)** — blocks M6.
+- **Drum step-active packing (`52`)** — [#13](https://github.com/bauerc/KeystepProTool/issues/13).
+- **Drum-mode bit (`100`)** — [#14](https://github.com/bauerc/KeystepProTool/issues/14).
+
+Neither blocks M5, provided M5 keeps to its stated scope — see the note there.
