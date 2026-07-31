@@ -137,11 +137,31 @@ truth for timing (M7, protocol tier 8).
 documented description. This is the first point where a mistake becomes *audible*, which catches
 whole classes of error that diffing does not.
 
-**Delivered:** `ksp.midi_export` and the `ksp2midi` command (`--track`, `--pattern`,
-`--steps-per-beat`, `--ticks-per-beat`, `--drum-map`, `--drum-channel`, `--include-stale`,
-`--no-swing`, `--force`, `--quiet`). `tests/test_midi_export.py` asserts the exported notes of
-`project_5` and `project_9` against the hardware-confirmed descriptions rather than against our
-own reader.
+**Delivered:** `ksp.midi_export` and the `ksp2midi` command (`--split`, `--track`, `--pattern`,
+`--steps-per-beat`, `--ticks-per-beat`, `--drum-map`, `--drum-channel`, `--default-gate`,
+`--include-stale`, `--no-swing`, `--dry-run`, `--force`, `--quiet`).
+`tests/test_midi_export.py` asserts the exported notes of `project_5` and `project_9` against the
+hardware-confirmed descriptions rather than against our own reader.
+
+**M2.2 (issue #22)** finished the option set the M2 plan specified and split the module into three
+layers — `render_pattern` (plain tick data) → `arrange` (timeline placement) → `build_midi_file`
+(the only part that knows what `mido` is). The layering is for M8–M9: the Swift port translates
+arithmetic instead of hunting for a MIDI library, and the tests assert against plain data rather
+than parsed MIDI. It also added `--split` (one file per non-empty (track, pattern), no layout
+invented at all), `--dry-run`, `--default-gate`, and a warning when tracks hold different total
+lengths — the point past which the file and the hardware stop agreeing about what plays together.
+
+**Two options from that plan were deliberately not shipped**, both for the same reason: the number
+they need has never been measured, and a wrong one produces a file that loads cleanly and plays
+wrong.
+
+- **`--passes`** (expanding the 16/32/48/64 step-skip cycle) waits on **protocol T5.8**. The spec
+  reads the four sequences as *pages* of a 64-step pattern, but `project_5`'s 16-step pattern
+  carries notes masked to 48 and 64, which under that reading could never sound. Until the device
+  says which it is, the export renders one pass, includes every note, and warns.
+- **`--time-shift approx`** waits on **protocol tier 8**. There is no documented guess to opt into
+  — the centre of `112`/`120` is confirmed but the duration of one unit is not, so there is
+  nothing to scale by that we would not be inventing.
 
 **Built on M1.5.** Drum lanes resolve through `ksp.drum_map.DrumMap`, sharing `ksp-dump`'s
 `--drum-map` grammar and config file, and the map used is named on every export. `--drum-map

@@ -1,11 +1,15 @@
-"""Rendering a decoded project as a Standard MIDI file.
+"""Rendering a decoded project as one or more Standard MIDI files.
 
 The device does not store an arrangement -- it stores 4 tracks x 16 independent
 patterns, each a loop. Turning that into a linear MIDI file means choosing a
-layout, and the one here is: **patterns that hold notes are laid end to end in
-pattern order, and pattern N starts at the same tick on every track.** Tracks
-therefore keep the relationship the hardware gives them (pattern N plays
-against pattern N), and patterns nobody uses take up no time.
+layout, and there are two:
+
+* **Merged** (the default) -- patterns that hold notes are laid end to end in
+  pattern order, and pattern N starts at the same tick on every track, in a
+  single file. Tracks therefore keep the relationship the hardware gives them
+  (pattern N plays against pattern N), and patterns nobody uses take up no time.
+* **Split** -- one file per non-empty (track, pattern), each starting at tick 0.
+  No layout is invented at all; the caller reassembles them.
 
 Three quantities the file does not tell us have to be supplied from outside,
 and each is an :class:`ExportOptions` field rather than a buried literal:
@@ -17,15 +21,24 @@ and each is an :class:`ExportOptions` field rather than a buried literal:
   and named in the output. MIDI has no way to express an unresolved lane, so
   unlike ``ksp-dump`` this cannot fall back to printing the lane number.
 * **Gate length.** Only six encodings are hardware-confirmed (spec 6).
-  Anything else is exported at the device's own default note length and
-  warned about, never interpolated -- see :mod:`ksp.constants`.
+  Anything else is exported at ``default_gate`` and warned about, never
+  interpolated -- see :mod:`ksp.constants`.
+
+The work is in three layers, so the M8/M9 Swift port translates arithmetic
+rather than a MIDI library:
+
+1. :func:`render_pattern` -- one pattern's notes become plain
+   :class:`RenderedNote` data, ticks relative to the pattern's own start.
+2. :func:`arrange` -- renderings are placed on a timeline and grouped into MIDI
+   tracks, still as plain data.
+3. :func:`build_midi_file` -- the only part that knows what ``mido`` is.
 
 Nothing here reads or writes a path: the caller gets a ``mido.MidiFile`` and
 decides where it goes.
 """
 
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Final
 
 import mido
@@ -59,6 +72,11 @@ class ExportOptions:
     steps_per_beat: int = DEFAULT_STEPS_PER_BEAT
     drum_map: DrumMap = field(default_factory=DrumMap.chromatic)
     drum_channel: int = DRUM_CHANNEL
+    default_gate: float = constants.DEFAULT_GATE_LENGTH
+    """Length in steps for a gate encoding that is not in the measured table.
+    Defaults to the length a freshly placed note has on the device, which is
+    the one value available without inventing an encoding (spec 6, M7)."""
+
     apply_swing: bool = True
     """Swing percent is decoded, but its *timing* meaning is the standard
     one (the first of each step pair takes that share of the pair), which has
@@ -81,10 +99,64 @@ class ExportOptions:
             )
         if not 0 <= self.drum_channel <= 15:
             raise ValueError("drum_channel must be 0-15")
+        if self.default_gate <= 0:
+            raise ValueError("default_gate must be greater than 0")
 
     @property
     def ticks_per_step(self) -> int:
         return self.ticks_per_beat // self.steps_per_beat
+
+
+@dataclass(frozen=True)
+class RenderedNote:
+    """One note as a DAW will see it, in ticks. No MIDI library involved."""
+
+    tick: int
+    duration_ticks: int
+    pitch: int
+    velocity: int
+    channel: int
+
+
+@dataclass(frozen=True)
+class Rendering:
+    """One parameter set of one pattern, rendered from its own tick 0."""
+
+    track_number: int
+    kind: NoteKind
+    pattern_number: int
+    notes: tuple[RenderedNote, ...]
+    length_ticks: int
+    warnings: tuple[str, ...] = ()
+
+    @property
+    def midi_track_name(self) -> str:
+        if self.kind is NoteKind.DRUM:
+            return f"Track {self.track_number} (drum)"
+        return f"Track {self.track_number}"
+
+
+@dataclass(frozen=True)
+class ArrangedTrack:
+    """One MIDI track's worth of notes, at absolute ticks."""
+
+    name: str
+    notes: tuple[RenderedNote, ...]
+
+
+@dataclass(frozen=True)
+class Arrangement:
+    """Renderings placed on a timeline, ready to become a file."""
+
+    tracks: tuple[ArrangedTrack, ...]
+    length_ticks: int
+    pattern_numbers: tuple[int, ...]
+    track_numbers: tuple[int, ...]
+    warnings: tuple[str, ...] = ()
+
+    @property
+    def note_count(self) -> int:
+        return sum(len(t.notes) for t in self.tracks)
 
 
 @dataclass(frozen=True)
@@ -96,21 +168,14 @@ class ExportResult:
     pattern_numbers: tuple[int, ...]
     track_names: tuple[str, ...]
     warnings: tuple[str, ...]
+    track_numbers: tuple[int, ...] = ()
+    """KeyStep Pro track numbers in this file -- what a split export names its
+    files after. ``track_names`` holds the MIDI track names, which are not the
+    same thing once Track 1's drum set becomes a track of its own."""
 
     @property
     def is_empty(self) -> bool:
         return self.note_count == 0
-
-
-@dataclass
-class _Event:
-    """A note being placed. Mutable because overlap resolution shortens it."""
-
-    start: int
-    end: int
-    pitch: int
-    velocity: int
-    channel: int
 
 
 @dataclass
@@ -137,251 +202,140 @@ class _Warnings:
         return tuple(self._lines)
 
 
-@dataclass(frozen=True)
-class _Region:
-    """One parameter set of one pattern, ready to be placed on the timeline."""
-
-    track_number: int
-    kind: NoteKind
-    pattern: Pattern
-    notes: tuple[Note, ...]
-
-    @property
-    def step_count(self) -> int:
-        """Declared length, widened to hold any note that sits past it."""
-        # A note past the declared count does not play on the device, but
-        # dropping it silently would hide a real disagreement in the file.
-        declared = self.pattern.seq_step_count
-        if self.kind is NoteKind.DRUM and self.pattern.drum_step_count is not None:
-            declared = self.pattern.drum_step_count
-        return max(declared, max(n.step for n in self.notes))
-
-    @property
-    def declared_step_count(self) -> int:
-        if self.kind is NoteKind.DRUM and self.pattern.drum_step_count is not None:
-            return self.pattern.drum_step_count
-        return self.pattern.seq_step_count
-
-    @property
-    def swing_percent(self) -> int:
-        if self.kind is NoteKind.DRUM and self.pattern.drum_swing_percent is not None:
-            return self.pattern.drum_swing_percent
-        return self.pattern.seq_swing_percent
-
-    @property
-    def midi_track_name(self) -> str:
-        if self.kind is NoteKind.DRUM:
-            return f"Track {self.track_number} (drum)"
-        return f"Track {self.track_number}"
+def declared_step_count(pattern: Pattern, kind: NoteKind) -> int:
+    """The step count the pattern declares for *kind*."""
+    if kind is NoteKind.DRUM and pattern.drum_step_count is not None:
+        return pattern.drum_step_count
+    return pattern.seq_step_count
 
 
-def export_project(project: Project, options: ExportOptions | None = None) -> ExportResult:
-    """Render *project* as a type-1 MIDI file.
+def swing_percent(pattern: Pattern, kind: NoteKind) -> int:
+    if kind is NoteKind.DRUM and pattern.drum_swing_percent is not None:
+        return pattern.drum_swing_percent
+    return pattern.seq_swing_percent
 
-    Only patterns holding notes are rendered; narrow with
-    :meth:`ksp.model.Project.select` first to pick one track or pattern.
+
+def step_count(pattern: Pattern, kind: NoteKind) -> int:
+    """Declared length, widened to hold any note that sits past it."""
+    # A note past the declared count does not play on the device, but dropping
+    # it silently would hide a real disagreement in the file.
+    notes = pattern.notes_of(kind)
+    return max(declared_step_count(pattern, kind), max((n.step for n in notes), default=0))
+
+
+def render_pattern(
+    pattern: Pattern, *, track_number: int, kind: NoteKind, options: ExportOptions | None = None
+) -> Rendering:
+    """Turn one parameter set of one pattern into plain tick data.
+
+    Ticks count from the pattern's own start, so the caller decides where the
+    pattern sits. This is where every timing decision is made and what the
+    tests assert against.
     """
     options = options or ExportOptions()
     warnings = _Warnings()
-
-    regions = _regions(project, options, warnings)
-    offsets = _pattern_offsets(regions, options)
-
-    midi = mido.MidiFile(type=1, ticks_per_beat=options.ticks_per_beat)
-    midi.tracks.append(_conductor_track(project, _total_ticks(regions, offsets, options)))
-
-    note_count = 0
-    track_names: list[str] = []
-    for name, group in _group_by_midi_track(regions):
-        events: list[_Event] = []
-        for region in group:
-            events.extend(_events_for(region, offsets[region.pattern.number], options, warnings))
-        if not events:
-            continue
-        _resolve_overlaps(events, warnings)
-        midi.tracks.append(_midi_track(name, events))
-        track_names.append(name)
-        note_count += len(events)
-
-    _collect_reader_warnings(regions, warnings)
-    return ExportResult(
-        midi=midi,
-        note_count=note_count,
-        pattern_numbers=tuple(sorted(offsets)),
-        track_names=tuple(track_names),
-        warnings=warnings.tuple(),
-    )
-
-
-def _regions(project: Project, options: ExportOptions, warnings: _Warnings) -> tuple[_Region, ...]:
-    """Every (track, pattern, parameter set) that holds notes and actually plays.
-
-    Track 1 can hold a melodic *and* a drum set in the same pattern -- leftovers
-    from before the track was switched over. Parameter 86 bit 6 says which one
-    the device plays, so only that one is exported; the other would be notes no
-    hardware ever produces.
-    """
-    regions: list[_Region] = []
-    for track in project.tracks:
-        live = NoteKind.DRUM if track.drum_mode else NoteKind.SEQ
-        for pattern in track.patterns:
-            populated = [k for k in (NoteKind.SEQ, NoteKind.DRUM) if pattern.notes_of(k)]
-            kinds = populated
-            if len(populated) > 1 and not options.include_stale:
-                # Only when both sets hold notes does the flag have to decide.
-                # A pattern holding just one set is exported whatever the flag
-                # says -- the reader already warns about that disagreement, and
-                # dropping real user data over it would be worse.
-                kinds = [live]
-                stale = next(k for k in populated if k is not live)
-                warnings.add(
-                    f"track {track.number} pattern {pattern.number}: both note sets hold "
-                    f"notes; parameter 86 bit 6 says {live.value} plays, so the "
-                    f"{stale.value} set was not exported (--include-stale exports both)"
-                )
-            regions.extend(
-                _Region(
-                    track_number=track.number,
-                    kind=kind,
-                    pattern=pattern,
-                    notes=pattern.notes_of(kind),
-                )
-                for kind in kinds
-            )
-    return tuple(regions)
-
-
-def _pattern_offsets(regions: Sequence[_Region], options: ExportOptions) -> dict[int, int]:
-    """Place each used pattern on the timeline, in pattern order."""
-    # A pattern occupies the longest step count any track gives it, so tracks
-    # of unequal length stay aligned at every boundary instead of drifting.
-    lengths: dict[int, int] = {}
-    for region in regions:
-        number = region.pattern.number
-        lengths[number] = max(lengths.get(number, 0), region.step_count)
-
-    offsets: dict[int, int] = {}
-    cursor = 0
-    for number in sorted(lengths):
-        offsets[number] = cursor
-        cursor += lengths[number] * options.ticks_per_step
-    return offsets
-
-
-def _group_by_midi_track(regions: Sequence[_Region]) -> list[tuple[str, list[_Region]]]:
-    """Gather regions into one MIDI track per (KeyStep Pro track, note kind)."""
-    groups: dict[str, list[_Region]] = {}
-    for region in sorted(regions, key=lambda r: (r.track_number, r.kind is NoteKind.DRUM)):
-        groups.setdefault(region.midi_track_name, []).append(region)
-    return list(groups.items())
-
-
-def _total_ticks(
-    regions: Sequence[_Region], offsets: dict[int, int], options: ExportOptions
-) -> int:
-    """Length of the whole arrangement, patterns included."""
-    return max(
-        (
-            offsets[region.pattern.number] + region.step_count * options.ticks_per_step
-            for region in regions
-        ),
-        default=0,
-    )
-
-
-def _conductor_track(project: Project, total_ticks: int) -> mido.MidiTrack:
-    """Track 0: name, tempo and time signature, no notes."""
-    # End-of-track sits at the end of the last pattern rather than the last
-    # note, so a DAW sees the arrangement's real length.
-    track = mido.MidiTrack()
-    track.append(mido.MetaMessage("track_name", name=project.source_name or project.device, time=0))
-    track.append(mido.MetaMessage("set_tempo", tempo=mido.bpm2tempo(project.tempo_bpm), time=0))
-    track.append(mido.MetaMessage("time_signature", numerator=4, denominator=4, time=0))
-    track.append(mido.MetaMessage("end_of_track", time=total_ticks))
-    return track
-
-
-def _events_for(
-    region: _Region, offset: int, options: ExportOptions, warnings: _Warnings
-) -> list[_Event]:
     ticks_per_step = options.ticks_per_step
-    region_end = offset + region.step_count * ticks_per_step
-    channel = options.drum_channel if region.kind is NoteKind.DRUM else region.track_number - 1
+    steps = step_count(pattern, kind)
+    length_ticks = steps * ticks_per_step
+    swing = swing_percent(pattern, kind)
+    channel = options.drum_channel if kind is NoteKind.DRUM else track_number - 1
 
-    if region.kind is NoteKind.DRUM:
+    if kind is NoteKind.DRUM:
         warnings.add(
             f"drum lanes resolved through the {options.drum_map.describe()} map on channel "
             f"{options.drum_channel + 1}; the KeyStep Pro drum map is a device global and is "
             f"not stored in the project file (spec 3.2.1)"
         )
         warnings.extend(options.drum_map.warnings)
-    if options.apply_swing and region.swing_percent != 50:
+    if options.apply_swing and swing != 50:
         warnings.add(
-            f"pattern {region.pattern.number} uses {region.swing_percent}% swing; exported "
-            f"with the standard swing interpretation, which is not measured against the device"
+            f"pattern {pattern.number} uses {swing}% swing; exported with the standard swing "
+            f"interpretation, which is not measured against the device"
         )
-    if region.step_count > region.declared_step_count:
+    if steps > declared_step_count(pattern, kind):
         warnings.add(
-            f"track {region.track_number} pattern {region.pattern.number} ({region.kind.value}): "
-            f"note(s) sit past the declared {region.declared_step_count}-step length and would "
-            f"not play on the device; exported anyway"
+            f"track {track_number} pattern {pattern.number} ({kind.value}): note(s) sit past the "
+            f"declared {declared_step_count(pattern, kind)}-step length and would not play on "
+            f"the device; exported anyway"
+        )
+    # A pattern the reader could not fully resolve produces MIDI that is
+    # confidently wrong in a way the file itself will not reveal.
+    warnings.extend(f"track {track_number}: {line}" for line in pattern.warnings)
+
+    notes: list[RenderedNote] = []
+    for note in pattern.notes_of(kind):
+        rendered = _render_note(note, kind, channel, swing, options, warnings)
+        if rendered is None:
+            continue
+        if rendered.tick + rendered.duration_ticks > length_ticks:
+            warnings.add(
+                f"pattern {pattern.number}: note(s) whose gate ran past the end of the pattern "
+                f"were shortened to it"
+            )
+            rendered = replace(rendered, duration_ticks=max(1, length_ticks - rendered.tick))
+        notes.append(rendered)
+
+    return Rendering(
+        track_number=track_number,
+        kind=kind,
+        pattern_number=pattern.number,
+        notes=tuple(notes),
+        length_ticks=length_ticks,
+        warnings=warnings.tuple(),
+    )
+
+
+def _render_note(
+    note: Note,
+    kind: NoteKind,
+    channel: int,
+    swing: int,
+    options: ExportOptions,
+    warnings: _Warnings,
+) -> RenderedNote | None:
+    ticks_per_step = options.ticks_per_step
+    pitch = note.pitch
+    if kind is NoteKind.DRUM:
+        # A lane the device does not have means parameter 117 is not the
+        # 0-based lane index we think it is. The reader already warns; here
+        # there is simply no note to emit, so the note is dropped loudly.
+        if not options.drum_map.has_lane(note.pitch):
+            warnings.add(
+                f"drum lane {note.pitch} is outside the device's "
+                f"0-{constants.DRUM_LANE_COUNT - 1} lanes and was dropped"
+            )
+            return None
+        pitch = options.drum_map.note_for_lane(note.pitch)
+
+    if note.time_shift:
+        warnings.add(
+            "note(s) carry a non-zero time shift; its timing encoding is not measured, "
+            "so the shift was not applied"
+        )
+    if len(note.skip) != len(constants.SKIP_SEQUENCES):
+        warnings.add(
+            "note(s) are set to play on only some of the 16/32/48/64 sequences; the export "
+            "renders one pass of each pattern and includes them all"
         )
 
-    events: list[_Event] = []
-    for note in region.notes:
-        pitch = note.pitch
-        if region.kind is NoteKind.DRUM:
-            # A lane the device does not have means parameter 117 is not the
-            # 0-based lane index we think it is. The reader already warns; here
-            # there is simply no note to emit, so the note is dropped loudly.
-            if not options.drum_map.has_lane(note.pitch):
-                warnings.add(
-                    f"drum lane {note.pitch} is outside the device's "
-                    f"0-{constants.DRUM_LANE_COUNT - 1} lanes and was dropped"
-                )
-                continue
-            pitch = options.drum_map.note_for_lane(note.pitch)
+    tick = (note.step - 1) * ticks_per_step
+    if options.apply_swing:
+        tick += _swing_delay(note.step, swing, ticks_per_step)
 
-        if note.time_shift:
-            warnings.add(
-                "note(s) carry a non-zero time shift; its timing encoding is not measured, "
-                "so the shift was not applied"
-            )
-        if len(note.skip) != len(constants.SKIP_SEQUENCES):
-            warnings.add(
-                "note(s) are set to play on only some of the 16/32/48/64 sequences; the "
-                "export renders one pass of each pattern and includes them all"
-            )
-
-        start = offset + (note.step - 1) * ticks_per_step
-        if options.apply_swing:
-            start += _swing_delay(note.step, region.swing_percent, ticks_per_step)
-
-        gate = note.gate
-        if gate is None:
-            gate = constants.DEFAULT_GATE_LENGTH
-            warnings.add(
-                f"gate encoding {note.gate_raw} is not measured (roadmap M7); exported at the "
-                f"device's default {gate:g}-step length"
-            )
-        end = start + max(1, round(gate * ticks_per_step))
-        if end > region_end:
-            warnings.add(
-                f"pattern {region.pattern.number}: note(s) whose gate ran past the end of the "
-                f"pattern were shortened to it"
-            )
-            end = max(start + 1, region_end)
-
-        events.append(
-            _Event(
-                start=start,
-                end=end,
-                pitch=pitch,
-                velocity=max(MIN_VELOCITY, note.velocity),
-                channel=channel,
-            )
+    gate = note.gate
+    if gate is None:
+        gate = options.default_gate
+        warnings.add(
+            f"gate encoding {note.gate_raw} is not measured (roadmap M7); exported at "
+            f"the {gate:g}-step default length"
         )
-    return events
+    return RenderedNote(
+        tick=tick,
+        duration_ticks=max(1, round(gate * ticks_per_step)),
+        pitch=pitch,
+        velocity=max(MIN_VELOCITY, note.velocity),
+        channel=channel,
+    )
 
 
 def _swing_delay(step: int, swing_percent: int, ticks_per_step: int) -> int:
@@ -393,46 +347,142 @@ def _swing_delay(step: int, swing_percent: int, ticks_per_step: int) -> int:
     return round(ticks_per_step * (2 * swing_percent / 100 - 1))
 
 
-def _resolve_overlaps(events: list[_Event], warnings: _Warnings) -> None:
+def arrange(renderings: Sequence[Rendering]) -> Arrangement:
+    """Lay renderings end to end in pattern order, aligned across tracks.
+
+    A pattern occupies the longest length any track gives it, so tracks of
+    unequal length stay aligned at every pattern boundary instead of drifting.
+    """
+    warnings = _Warnings()
+    for rendering in renderings:
+        warnings.extend(rendering.warnings)
+
+    lengths: dict[int, int] = {}
+    for rendering in renderings:
+        number = rendering.pattern_number
+        lengths[number] = max(lengths.get(number, 0), rendering.length_ticks)
+
+    offsets: dict[int, int] = {}
+    cursor = 0
+    for number in sorted(lengths):
+        offsets[number] = cursor
+        cursor += lengths[number]
+
+    groups: dict[str, list[RenderedNote]] = {}
+    for rendering in sorted(
+        renderings, key=lambda r: (r.track_number, r.kind is NoteKind.DRUM, r.pattern_number)
+    ):
+        offset = offsets[rendering.pattern_number]
+        groups.setdefault(rendering.midi_track_name, []).extend(
+            replace(n, tick=n.tick + offset) for n in rendering.notes
+        )
+
+    _warn_on_unequal_tracks(renderings, warnings)
+    tracks = tuple(
+        ArrangedTrack(name=name, notes=_resolve_overlaps(notes, warnings))
+        for name, notes in groups.items()
+        if notes
+    )
+    return Arrangement(
+        tracks=tracks,
+        length_ticks=cursor,
+        pattern_numbers=tuple(sorted(offsets)),
+        track_numbers=tuple(sorted({r.track_number for r in renderings})),
+        warnings=warnings.tuple(),
+    )
+
+
+def _warn_on_unequal_tracks(renderings: Sequence[Rendering], warnings: _Warnings) -> None:
+    """Say so when the tracks do not add up to the same length.
+
+    This export restarts every track at each pattern boundary; the device
+    loops each track independently, so from the first mismatch onwards the
+    hardware and the file no longer agree about what plays together.
+    """
+    totals: dict[int, dict[int, int]] = {}
+    for rendering in renderings:
+        by_pattern = totals.setdefault(rendering.track_number, {})
+        by_pattern[rendering.pattern_number] = max(
+            by_pattern.get(rendering.pattern_number, 0), rendering.length_ticks
+        )
+    lengths = {track: sum(patterns.values()) for track, patterns in totals.items()}
+    if len(set(lengths.values())) > 1:
+        summary = ", ".join(f"track {t}: {n} ticks" for t, n in sorted(lengths.items()))
+        warnings.add(
+            f"tracks hold different total lengths ({summary}); this export aligns pattern N "
+            f"across tracks, but the device loops each track on its own, so they drift apart"
+        )
+
+
+def _resolve_overlaps(notes: list[RenderedNote], warnings: _Warnings) -> tuple[RenderedNote, ...]:
     """Stop a long gate from swallowing the next note of the same pitch."""
     # Two note-ons for one pitch with one note-off between them hangs in most
     # DAWs. The device retriggers, so the earlier note is shortened instead.
-    events.sort(key=lambda e: (e.start, e.pitch))
-    previous: dict[tuple[int, int], _Event] = {}
-    for event in events:
-        key = (event.channel, event.pitch)
-        earlier = previous.get(key)
-        if earlier is not None and earlier.end > event.start:
-            earlier.end = max(earlier.start + 1, event.start)
-            warnings.add(
-                "overlapping note(s) of the same pitch were shortened so each has its own note-off"
-            )
-        previous[key] = event
+    ordered = sorted(notes, key=lambda n: (n.tick, n.pitch))
+    resolved: list[RenderedNote] = []
+    previous: dict[tuple[int, int], int] = {}  # (channel, pitch) -> index in resolved
+    for note in ordered:
+        key = (note.channel, note.pitch)
+        index = previous.get(key)
+        if index is not None:
+            earlier = resolved[index]
+            if earlier.tick + earlier.duration_ticks > note.tick:
+                resolved[index] = replace(earlier, duration_ticks=max(1, note.tick - earlier.tick))
+                warnings.add(
+                    "overlapping note(s) of the same pitch were shortened so each has its "
+                    "own note-off"
+                )
+        previous[key] = len(resolved)
+        resolved.append(note)
+    return tuple(resolved)
 
 
-def _midi_track(name: str, events: Sequence[_Event]) -> mido.MidiTrack:
-    """Turn absolute-tick events into a delta-time MIDI track."""
+def build_midi_file(
+    arrangement: Arrangement, *, name: str, tempo_bpm: float, ticks_per_beat: int
+) -> mido.MidiFile:
+    """Turn an arrangement into a type-1 MIDI file. The only ``mido`` layer."""
+    midi = mido.MidiFile(type=1, ticks_per_beat=ticks_per_beat)
+    midi.tracks.append(_conductor_track(name, tempo_bpm, arrangement.length_ticks))
+    for track in arrangement.tracks:
+        midi.tracks.append(_midi_track(track))
+    return midi
+
+
+def _conductor_track(name: str, tempo_bpm: float, total_ticks: int) -> mido.MidiTrack:
+    """Track 0: name, tempo and time signature, no notes."""
+    # End-of-track sits at the end of the last pattern rather than the last
+    # note, so a DAW sees the arrangement's real length.
     track = mido.MidiTrack()
     track.append(mido.MetaMessage("track_name", name=name, time=0))
+    track.append(mido.MetaMessage("set_tempo", tempo=mido.bpm2tempo(tempo_bpm), time=0))
+    track.append(mido.MetaMessage("time_signature", numerator=4, denominator=4, time=0))
+    track.append(mido.MetaMessage("end_of_track", time=total_ticks))
+    return track
+
+
+def _midi_track(arranged: ArrangedTrack) -> mido.MidiTrack:
+    """Turn absolute-tick notes into a delta-time MIDI track."""
+    track = mido.MidiTrack()
+    track.append(mido.MetaMessage("track_name", name=arranged.name, time=0))
 
     # note_off sorts before note_on at the same tick so that a note retriggering
     # exactly where the previous one ends does not read as a hanging note.
     timed: list[tuple[int, int, mido.Message]] = []
-    for event in events:
+    for note in arranged.notes:
         timed.append(
             (
-                event.start,
+                note.tick,
                 1,
                 mido.Message(
-                    "note_on", note=event.pitch, velocity=event.velocity, channel=event.channel
+                    "note_on", note=note.pitch, velocity=note.velocity, channel=note.channel
                 ),
             )
         )
         timed.append(
             (
-                event.end,
+                note.tick + note.duration_ticks,
                 0,
-                mido.Message("note_off", note=event.pitch, velocity=0, channel=event.channel),
+                mido.Message("note_off", note=note.pitch, velocity=0, channel=note.channel),
             )
         )
     timed.sort(key=lambda item: (item[0], item[1], item[2].note))
@@ -445,9 +495,90 @@ def _midi_track(name: str, events: Sequence[_Event]) -> mido.MidiTrack:
     return track
 
 
-def _collect_reader_warnings(regions: Sequence[_Region], warnings: _Warnings) -> None:
-    """Carry the reader's own complaints about exported patterns through."""
-    # A pattern the reader could not fully resolve produces a MIDI file that is
-    # confidently wrong in a way the file itself will not reveal.
-    for region in regions:
-        warnings.extend(f"track {region.track_number}: {line}" for line in region.pattern.warnings)
+def export_project(project: Project, options: ExportOptions | None = None) -> ExportResult:
+    """Render *project* as a single type-1 MIDI file.
+
+    Only patterns holding notes are rendered; narrow with
+    :meth:`ksp.model.Project.select` first to pick one track or pattern.
+    """
+    options = options or ExportOptions()
+    renderings = render_project(project, options)
+    return _result(arrange(renderings), project, options)
+
+
+def export_split(
+    project: Project, options: ExportOptions | None = None
+) -> tuple[ExportResult, ...]:
+    """One file per non-empty (track, pattern), each starting at tick 0.
+
+    Nothing is laid out across patterns, so this is the layout that invents
+    least; the caller names the files from each result's ``track_numbers`` and
+    ``pattern_numbers``.
+    """
+    options = options or ExportOptions()
+    parts: dict[tuple[int, int], list[Rendering]] = {}
+    for rendering in render_project(project, options):
+        # Track 1 can contribute a melodic *and* a drum rendering under
+        # --include-stale; both belong to the same (track, pattern) file.
+        parts.setdefault((rendering.track_number, rendering.pattern_number), []).append(rendering)
+
+    results = []
+    for _, group in sorted(parts.items()):
+        result = _result(arrange(group), project, options)
+        if not result.is_empty:
+            results.append(result)
+    return tuple(results)
+
+
+def render_project(project: Project, options: ExportOptions | None = None) -> tuple[Rendering, ...]:
+    """Render every (track, pattern, parameter set) that holds notes and plays.
+
+    Track 1 can hold a melodic *and* a drum set in the same pattern -- leftovers
+    from before the track was switched over. Parameter 86 bit 6 says which one
+    the device plays, so only that one is exported; the other would be notes no
+    hardware ever produces.
+    """
+    options = options or ExportOptions()
+    renderings: list[Rendering] = []
+    for track in project.tracks:
+        live = NoteKind.DRUM if track.drum_mode else NoteKind.SEQ
+        for pattern in track.patterns:
+            populated = [k for k in (NoteKind.SEQ, NoteKind.DRUM) if pattern.notes_of(k)]
+            kinds = populated
+            stale_warning: str | None = None
+            if len(populated) > 1 and not options.include_stale:
+                # Only when both sets hold notes does the flag have to decide.
+                # A pattern holding just one set is exported whatever the flag
+                # says -- the reader already warns about that disagreement, and
+                # dropping real user data over it would be worse.
+                kinds = [live]
+                stale = next(k for k in populated if k is not live)
+                stale_warning = (
+                    f"track {track.number} pattern {pattern.number}: both note sets hold "
+                    f"notes; parameter 86 bit 6 says {live.value} plays, so the "
+                    f"{stale.value} set was not exported (--include-stale exports both)"
+                )
+            for kind in kinds:
+                rendering = render_pattern(
+                    pattern, track_number=track.number, kind=kind, options=options
+                )
+                if stale_warning is not None:
+                    rendering = replace(rendering, warnings=(stale_warning, *rendering.warnings))
+                renderings.append(rendering)
+    return tuple(renderings)
+
+
+def _result(arrangement: Arrangement, project: Project, options: ExportOptions) -> ExportResult:
+    return ExportResult(
+        midi=build_midi_file(
+            arrangement,
+            name=project.source_name or project.device,
+            tempo_bpm=project.tempo_bpm,
+            ticks_per_beat=options.ticks_per_beat,
+        ),
+        note_count=arrangement.note_count,
+        pattern_numbers=arrangement.pattern_numbers,
+        track_names=tuple(t.name for t in arrangement.tracks),
+        warnings=arrangement.warnings,
+        track_numbers=arrangement.track_numbers,
+    )

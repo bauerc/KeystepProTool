@@ -360,6 +360,15 @@ The KeyStep Pro can run a pattern as four consecutive 16-step sequences (16 / 32
 
 `15` = plays always (the default). `5` = {16, 48}. `12` = {48, 64}.
 
+> **Unresolved: repeats or pages?** "Four consecutive 16-step sequences" reads as four *pages* of
+> a 64-step pattern, but `project_5` pattern 1 is only **16 steps** and carries notes masked to 48
+> and 64 — which under the pages reading could never sound, contradicting a hardware-confirmed
+> description. Under a *repeats* reading (the pattern loops four times and the mask picks which
+> loops a note plays in) every mask is meaningful at any length. Nothing in the files separates
+> the two; **protocol T5.8** does, on the device. Until then `ksp2midi` renders a single pass,
+> includes every note whatever its mask, and warns that it did — a `--passes` expansion built on
+> the wrong reading would produce files that play confidently wrong.
+
 ### Drum validation
 
 Track 1 (item `123`), pattern 1, documented as "kick on beats 1 and 5":

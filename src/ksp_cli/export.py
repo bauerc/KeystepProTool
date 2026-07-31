@@ -1,4 +1,4 @@
-"""``ksp2midi`` -- write a ``.KeyStepPro`` project out as a MIDI file.
+"""``ksp2midi`` -- write a ``.KeyStepPro`` project out as MIDI.
 
 MIDI Control Center can put patterns onto the device but has no way of getting
 them off as a ``.mid``, so this is the direction that is useful on its own.
@@ -17,6 +17,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from ksp.constants import DEFAULT_GATE_LENGTH
 from ksp.midi_export import (
     DEFAULT_STEPS_PER_BEAT,
     DEFAULT_TICKS_PER_BEAT,
@@ -24,7 +25,9 @@ from ksp.midi_export import (
     ExportOptions,
     ExportResult,
     export_project,
+    export_split,
 )
+from ksp.model import Project
 from ksp.reader import load
 from ksp_cli.drum_map_option import CONFIG_PATH, DRUM_MAP_HELP, resolve_drum_map
 
@@ -34,10 +37,11 @@ PROG = "ksp2midi"
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=PROG,
-        description="Convert an Arturia KeyStep Pro project into a Standard MIDI file.",
+        description="Convert an Arturia KeyStep Pro project into Standard MIDI file(s).",
         epilog=(
-            "Patterns that hold notes are laid end to end in pattern order, and pattern N "
-            "starts at the same point on every track."
+            "By default patterns that hold notes are laid end to end in pattern order in one "
+            "file, and pattern N starts at the same point on every track. --split writes each "
+            "(track, pattern) to its own file instead."
         ),
     )
     parser.add_argument("path", type=Path, help="a .KeyStepPro project file")
@@ -45,7 +49,18 @@ def _build_parser() -> argparse.ArgumentParser:
         "-o",
         "--output",
         type=Path,
-        help="destination .mid file (default: the input file with a .mid suffix)",
+        help=(
+            "destination .mid file (default: the input file with a .mid suffix); "
+            "with --split, a directory (default: the input file's own directory)"
+        ),
+    )
+    parser.add_argument(
+        "--split",
+        action="store_true",
+        help=(
+            "write one file per non-empty (track, pattern), named "
+            "<stem>_track{N}_pattern{P}.mid, each starting at its own tick 0"
+        ),
     )
     parser.add_argument("--track", type=int, choices=range(1, 5), help="export only this track")
     parser.add_argument(
@@ -79,6 +94,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="MIDI channel for drum lanes (default: %(default)s)",
     )
     parser.add_argument(
+        "--default-gate",
+        type=float,
+        default=DEFAULT_GATE_LENGTH,
+        metavar="STEPS",
+        help=(
+            "note length in steps for a gate encoding that is not measured "
+            "(default: %(default)s, the length a freshly placed note has on the device)"
+        ),
+    )
+    parser.add_argument(
         "--include-stale",
         action="store_true",
         help=(
@@ -93,20 +118,50 @@ def _build_parser() -> argparse.ArgumentParser:
         help="ignore per-pattern swing and place every step on a flat grid",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="report what would be written, and write nothing",
+    )
+    parser.add_argument(
         "--force", action="store_true", help="overwrite the output file if it already exists"
     )
     parser.add_argument("--quiet", action="store_true", help="suppress the summary on stdout")
     return parser
 
 
-def _summary(result: ExportResult, destination: Path) -> str:
+def _summary(result: ExportResult, destination: Path, dry_run: bool) -> str:
     patterns = ", ".join(str(n) for n in result.pattern_numbers)
     tracks = ", ".join(result.track_names)
+    verb = "would write" if dry_run else "wrote"
     return (
-        f"wrote {destination}\n"
+        f"{verb} {destination}\n"
         f"  {result.note_count} note(s) from pattern(s) {patterns}\n"
         f"  tracks: {tracks}"
     )
+
+
+def _split_name(source: Path, result: ExportResult) -> str:
+    """``<stem>_track{N}_pattern{P}.mid`` -- one file holds exactly one of each."""
+    track = result.track_numbers[0]
+    pattern = result.pattern_numbers[0]
+    return f"{source.stem}_track{track}_pattern{pattern}.mid"
+
+
+def _plan(
+    args: argparse.Namespace, project: Project, options: ExportOptions
+) -> list[tuple[ExportResult, Path]]:
+    """Pair each rendered file with where it goes. Nothing is written yet."""
+    narrowed = project.select(track=args.track, pattern=args.pattern)
+    if args.split:
+        directory = args.output or args.path.parent
+        return [
+            (result, directory / _split_name(args.path, result))
+            for result in export_split(narrowed, options)
+        ]
+    result = export_project(narrowed, options)
+    if result.is_empty:
+        return []
+    return [(result, args.output or args.path.with_suffix(".mid"))]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -137,6 +192,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             steps_per_beat=args.steps_per_beat,
             drum_map=drum_map,
             drum_channel=args.drum_channel - 1,
+            default_gate=args.default_gate,
             apply_swing=args.apply_swing,
             include_stale=args.include_stale,
         )
@@ -153,8 +209,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"{PROG}: {args.path}: {exc}", file=sys.stderr)
         return 1
 
-    result = export_project(project.select(track=args.track, pattern=args.pattern), options)
-    if result.is_empty:
+    planned = _plan(args, project, options)
+    if not planned:
         # Writing a MIDI file with no notes in it would look like success.
         print(
             f"{PROG}: {args.path}: nothing to export (no selected pattern holds notes)",
@@ -162,22 +218,37 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 1
 
-    destination = args.output or args.path.with_suffix(".mid")
-    if destination.exists() and not args.force:
-        print(f"{PROG}: {destination} already exists (use --force to overwrite)", file=sys.stderr)
+    existing = [str(path) for _, path in planned if path.exists()]
+    if existing and not args.force:
+        print(
+            f"{PROG}: {', '.join(existing)} already exists (use --force to overwrite)",
+            file=sys.stderr,
+        )
         return 1
 
-    try:
-        result.midi.save(destination)
-    except OSError as exc:
-        print(f"{PROG}: {exc}", file=sys.stderr)
-        return 1
+    if not args.dry_run:
+        try:
+            for _, path in planned:
+                path.parent.mkdir(parents=True, exist_ok=True)
+            for result, path in planned:
+                result.midi.save(path)
+        except OSError as exc:
+            print(f"{PROG}: {exc}", file=sys.stderr)
+            return 1
 
-    for warning in result.warnings:
+    for warning in _warnings(planned):
         print(f"{PROG}: warning: {warning}", file=sys.stderr)
     if not args.quiet:
-        print(_summary(result, destination))
+        print("\n".join(_summary(result, path, args.dry_run) for result, path in planned))
     return 0
+
+
+def _warnings(planned: Sequence[tuple[ExportResult, Path]]) -> list[str]:
+    """Every file's warnings, each said once however many files repeat it."""
+    seen: dict[str, None] = {}
+    for result, _ in planned:
+        seen.update(dict.fromkeys(result.warnings))
+    return list(seen)
 
 
 if __name__ == "__main__":  # pragma: no cover
