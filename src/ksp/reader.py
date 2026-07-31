@@ -17,6 +17,7 @@ wrong. Spec section 4.
 """
 
 from collections.abc import Sequence
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,7 @@ from ksp.keys import get_int, read_array
 from ksp.model import Note, NoteKind, Pattern, PatternMode, Project, Track
 
 
+@lru_cache(maxsize=16)
 def load(path: Path | str) -> Project:
     """Read and decode a ``.KeyStepPro`` file."""
     path = Path(path)

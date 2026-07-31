@@ -27,5 +27,9 @@ htmlcov/
 
 #Captures
 project_files/captures/
+
+#Profiling
+*.stats
+
 # NOTE: uv.lock is deliberately NOT ignored. It is committed so that
 # `uv sync --locked` reproduces an identical environment everywhere.

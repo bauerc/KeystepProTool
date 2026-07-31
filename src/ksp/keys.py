@@ -10,12 +10,23 @@ Spec section 2. Centralising key construction here means the two index spaces
 getting the string right is not also their problem.
 """
 
+from functools import lru_cache
 from typing import Any
 
 
+@lru_cache(maxsize=4096)
 def key(item: int, param: int, *indices: int) -> str:
     """Build a file key from an item, a parameter and 0-3 indices."""
-    return "_".join(str(part) for part in (item, param, *indices))
+    n = len(indices)
+    if n == 0:
+        return f"{item}_{param}"
+    elif n == 1:
+        return f"{item}_{param}_{indices[0]}"
+    elif n == 2:
+        return f"{item}_{param}_{indices[0]}_{indices[1]}"
+    elif n == 3:
+        return f"{item}_{param}_{indices[0]}_{indices[1]}_{indices[2]}"
+    return f"{item}_{param}_" + "_".join(str(i) for i in indices)
 
 
 def get_int(raw: dict[str, Any], item: int, param: int, *indices: int) -> int | None:
@@ -30,11 +41,13 @@ def get_int(raw: dict[str, Any], item: int, param: int, *indices: int) -> int | 
             mean the file's shape differs from every sample we have, which is
             worth surfacing loudly rather than silently coercing.
     """
-    value = raw.get(key(item, param, *indices))
+    k = key(item, param, *indices)
+
+    value = raw.get(k)
     if value is None:
         return None
     if not isinstance(value, int):
-        raise TypeError(f"{key(item, param, *indices)} holds {type(value).__name__}, expected int")
+        raise TypeError(f"{k} holds {type(value).__name__}, expected int")
     return value
 
 
@@ -48,4 +61,15 @@ def read_array(
     file's index 1. Every caller wants one convention or the other and mixing
     them is how the two index spaces get confused in the first place.
     """
-    return [get_int(raw, item, param, *prefix, i) for i in range(1, length + 1)]
+    base_key = key(item, param, *prefix) + "_"
+
+    result: list[int | None] = [None] * length
+    for idx in range(length):
+        k = f"{base_key}{idx + 1}"
+        val = raw.get(k)
+        if val is not None:
+            if not isinstance(val, int):
+                raise TypeError(f"{k} holds {type(val).__name__}, expected int")
+            result[idx] = val
+
+    return result
