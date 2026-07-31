@@ -12,13 +12,8 @@ from typing import Any
 import mido
 import pytest
 
-from ksp.midi_export import (
-    DRUM_CHANNEL,
-    DRUM_LANE_BASE,
-    ExportOptions,
-    ExportResult,
-    export_project,
-)
+from ksp.drum_map import DEFAULT_CHROMATIC_LOW, DrumMap
+from ksp.midi_export import DRUM_CHANNEL, ExportOptions, ExportResult, export_project
 from ksp.model import Project
 from ksp.reader import load
 
@@ -154,20 +149,30 @@ def test_drum_lanes_map_onto_the_general_midi_percussion_channel(
     """Kick on beats 1 and 5, velocities 127 and 50, gates 1 and 2."""
     notes = played(exported_5.midi, "Track 1 (drum)")
 
-    assert [n.note for n in notes] == [DRUM_LANE_BASE, DRUM_LANE_BASE]  # lane 0
+    # Lane 0 under the default chromatic-36 map is the GM bass drum.
+    assert [n.note for n in notes] == [DEFAULT_CHROMATIC_LOW, DEFAULT_CHROMATIC_LOW]
     assert [n.channel for n in notes] == [DRUM_CHANNEL, DRUM_CHANNEL]
     assert [n.start for n in notes] == [0, 4 * TICKS_PER_STEP]
     assert [n.velocity for n in notes] == [127, 50]
     assert [n.duration for n in notes] == [1 * TICKS_PER_STEP, 2 * TICKS_PER_STEP]
 
 
-def test_the_drum_map_convention_is_declared_not_implied(exported_5: ExportResult) -> None:
-    """The device's drum map is a global setting, not project data (spec 3.4).
+def test_the_drum_map_is_named_in_the_output_not_left_implied(
+    exported_5: ExportResult,
+) -> None:
+    """The map is a device global, not project data (spec 3.2.1).
 
-    Exporting lane 0 as MIDI 36 is therefore our choice, and a choice the
-    output has to own up to.
+    Which one was used is therefore an assumption, and one the output has to
+    own up to on every export.
     """
-    assert any("drum map is a device global" in w for w in exported_5.warnings)
+    assert any("chromatic from 36 (assumed - not in file)" in w for w in exported_5.warnings)
+
+
+def test_a_custom_drum_map_moves_the_exported_notes(project_5: Project) -> None:
+    """The same lane must follow whatever map the user's device actually has."""
+    result = export_project(project_5, ExportOptions(drum_map=DrumMap.custom(range(60, 84))))
+    assert [n.note for n in played(result.midi, "Track 1 (drum)")] == [60, 60]
+    assert any("custom (assumed - not in file)" in w for w in result.warnings)
 
 
 def test_unapplied_time_shift_is_reported(exported_5: ExportResult) -> None:
@@ -218,14 +223,44 @@ def test_an_unmeasured_gate_falls_back_to_the_device_default_and_says_so(
 
 
 def test_reader_warnings_survive_into_the_export(project_files_dir: Path) -> None:
-    """A pattern the reader could not resolve makes a MIDI file that lies.
-
-    initial_project's Track 1 pattern 1 holds both a melody and a drum
-    pattern, and nothing in the file says which one the device plays.
-    """
+    """Anything the reader could not resolve makes a MIDI file that may lie."""
     result = export_project(load(project_files_dir / "initial_project.KeyStepPro"))
     assert any("holds both melodic" in w for w in result.warnings)
-    assert "Track 1" in result.track_names and "Track 1 (drum)" in result.track_names
+
+
+def test_only_the_set_the_device_plays_is_exported(project_files_dir: Path) -> None:
+    """initial_project Track 1 pattern 1 holds a melody *and* a drum pattern.
+
+    Parameter 86 bit 6 says the track is in drum mode, so the 64-note melody is
+    leftovers from before it was switched over -- notes no hardware would play.
+    Exporting them would put phantom material in a file meant to be listened to.
+    """
+    project = load(project_files_dir / "initial_project.KeyStepPro").select(track=1, pattern=1)
+
+    live = export_project(project)
+    assert live.track_names == ("Track 1 (drum)",)
+    assert any("not exported (--include-stale" in w for w in live.warnings)
+
+    both = export_project(project, ExportOptions(include_stale=True))
+    assert both.track_names == ("Track 1", "Track 1 (drum)")
+    assert both.note_count > live.note_count
+
+
+def test_a_pattern_holding_one_set_is_exported_whatever_the_mode_flag_says(
+    project_5: Project,
+) -> None:
+    """The flag only decides when *both* sets are populated.
+
+    A track left in drum mode whose pattern holds only a melody must still
+    export that melody -- filtering on the flag alone would silently drop real
+    user data. No sample project has this combination, so it is constructed.
+    """
+    melodic = project_5.select(track=3)
+    in_drum_mode = replace(melodic, tracks=(replace(melodic.tracks[0], drum_mode=True),))
+
+    result = export_project(in_drum_mode)
+    assert result.track_names == ("Track 3",)
+    assert result.note_count == 10
 
 
 def test_an_empty_project_exports_nothing(project_files_dir: Path) -> None:
@@ -278,8 +313,8 @@ def test_step_size_is_configurable_because_the_file_does_not_say(project_5: Proj
     assert [n.start for n in played(eighths.midi, "Track 3")][:2] == [0, 240]
 
 
-def test_the_drum_map_base_is_configurable(project_5: Project) -> None:
-    result = export_project(project_5, ExportOptions(drum_lane_base=60))
+def test_the_chromatic_drum_map_base_is_configurable(project_5: Project) -> None:
+    result = export_project(project_5, ExportOptions(drum_map=DrumMap.chromatic(60)))
     assert played(result.midi, "Track 1 (drum)")[0].note == 60
 
 
@@ -290,7 +325,6 @@ def test_the_drum_map_base_is_configurable(project_5: Project) -> None:
         ({"ticks_per_beat": 0}, "at least 1"),
         ({"ticks_per_beat": 100, "steps_per_beat": 3}, "not divisible"),
         ({"drum_channel": 16}, "0-15"),
-        ({"drum_lane_base": 128}, "0-127"),
     ],
 )
 def test_options_that_cannot_produce_exact_timing_are_rejected(

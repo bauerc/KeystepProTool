@@ -13,8 +13,9 @@ and each is an :class:`ExportOptions` field rather than a buried literal:
 * **Step size.** Held in the undecoded bitfield ``99``/``116`` (spec 3.3).
   Defaults to 1/16.
 * **The drum map.** Lane -> MIDI note is a *device global*, explicitly not in
-  the project file (spec 3.4), so lane 0 is mapped to MIDI 36 by the General
-  MIDI convention and the export says so.
+  the project file (spec 3.2.1), so a :class:`ksp.drum_map.DrumMap` is supplied
+  and named in the output. MIDI has no way to express an unresolved lane, so
+  unlike ``ksp-dump`` this cannot fall back to printing the lane number.
 * **Gate length.** Only six encodings are hardware-confirmed (spec 6).
   Anything else is exported at the device's own default note length and
   warned about, never interpolated -- see :mod:`ksp.constants`.
@@ -30,6 +31,7 @@ from typing import Final
 import mido
 
 from ksp import constants
+from ksp.drum_map import DEFAULT_DRUM_CHANNEL, DrumMap
 from ksp.model import Note, NoteKind, Pattern, Project
 
 #: 480 divides evenly by 3 and 4, so triplet step sizes stay exact if M6 ever
@@ -40,12 +42,9 @@ DEFAULT_TICKS_PER_BEAT: Final = 480
 #: 1/16 is the device's default and the only setting our sample projects use.
 DEFAULT_STEPS_PER_BEAT: Final = 4
 
-#: MIDI channel 10, where every DAW expects percussion.
-DRUM_CHANNEL: Final = 9
-
-#: General MIDI bass drum. Drum lanes are exported as consecutive notes from
-#: here, which is a *convention*, not something decoded from the file.
-DRUM_LANE_BASE: Final = 36
+#: The device's Drum output default (``globalParamId 79``) is channel 10,
+#: counting from 1; MIDI messages count channels from 0.
+DRUM_CHANNEL: Final = DEFAULT_DRUM_CHANNEL - 1
 
 #: A note stored with velocity 0 is silent on the device and would read as a
 #: note-off in MIDI, which is a different thing. Exported at 1 instead.
@@ -58,12 +57,17 @@ class ExportOptions:
 
     ticks_per_beat: int = DEFAULT_TICKS_PER_BEAT
     steps_per_beat: int = DEFAULT_STEPS_PER_BEAT
-    drum_lane_base: int = DRUM_LANE_BASE
+    drum_map: DrumMap = field(default_factory=DrumMap.chromatic)
     drum_channel: int = DRUM_CHANNEL
     apply_swing: bool = True
     """Swing percent is decoded, but its *timing* meaning is the standard
     one (the first of each step pair takes that share of the pair), which has
     not been measured against the device. Turn it off to get a flat grid."""
+
+    include_stale: bool = False
+    """Export both note sets of a pattern that holds both, rather than the one
+    parameter 86 bit 6 says the device plays. Off by default: the point of a
+    MIDI export is to hear what the hardware does."""
 
     def __post_init__(self) -> None:
         if self.steps_per_beat < 1:
@@ -77,8 +81,6 @@ class ExportOptions:
             )
         if not 0 <= self.drum_channel <= 15:
             raise ValueError("drum_channel must be 0-15")
-        if not 0 <= self.drum_lane_base <= 127:
-            raise ValueError("drum_lane_base must be a MIDI note, 0-127")
 
     @property
     def ticks_per_step(self) -> int:
@@ -146,12 +148,9 @@ class _Region:
 
     @property
     def step_count(self) -> int:
-        """Declared length, widened to hold any note that sits past it.
-
-        A note beyond the declared step count does not play on the device, but
-        dropping it silently would hide a real disagreement in the file, so it
-        is exported and warned about instead.
-        """
+        """Declared length, widened to hold any note that sits past it."""
+        # A note past the declared count does not play on the device, but
+        # dropping it silently would hide a real disagreement in the file.
         declared = self.pattern.seq_step_count
         if self.kind is NoteKind.DRUM and self.pattern.drum_step_count is not None:
             declared = self.pattern.drum_step_count
@@ -179,14 +178,13 @@ class _Region:
 def export_project(project: Project, options: ExportOptions | None = None) -> ExportResult:
     """Render *project* as a type-1 MIDI file.
 
-    Only patterns holding notes are rendered; the caller narrows the project
-    first (see :meth:`ksp.model.Project.select`) if it wants a single track or
-    pattern.
+    Only patterns holding notes are rendered; narrow with
+    :meth:`ksp.model.Project.select` first to pick one track or pattern.
     """
     options = options or ExportOptions()
     warnings = _Warnings()
 
-    regions = _regions(project)
+    regions = _regions(project, options, warnings)
     offsets = _pattern_offsets(regions, options)
 
     midi = mido.MidiFile(type=1, ticks_per_beat=options.ticks_per_beat)
@@ -215,29 +213,48 @@ def export_project(project: Project, options: ExportOptions | None = None) -> Ex
     )
 
 
-def _regions(project: Project) -> tuple[_Region, ...]:
-    """Every (track, pattern, parameter set) combination that holds notes.
+def _regions(project: Project, options: ExportOptions, warnings: _Warnings) -> tuple[_Region, ...]:
+    """Every (track, pattern, parameter set) that holds notes and actually plays.
 
-    Track 1 can hold a melodic *and* a drum set in the same pattern (spec 5).
-    Each becomes its own region, and later its own MIDI track, because they
-    need different channels and different pitch meanings.
+    Track 1 can hold a melodic *and* a drum set in the same pattern -- leftovers
+    from before the track was switched over. Parameter 86 bit 6 says which one
+    the device plays, so only that one is exported; the other would be notes no
+    hardware ever produces.
     """
-    return tuple(
-        _Region(track_number=track.number, kind=kind, pattern=pattern, notes=notes)
-        for track in project.tracks
-        for pattern in track.patterns
-        for kind in (NoteKind.SEQ, NoteKind.DRUM)
-        if (notes := pattern.notes_of(kind))
-    )
+    regions: list[_Region] = []
+    for track in project.tracks:
+        live = NoteKind.DRUM if track.drum_mode else NoteKind.SEQ
+        for pattern in track.patterns:
+            populated = [k for k in (NoteKind.SEQ, NoteKind.DRUM) if pattern.notes_of(k)]
+            kinds = populated
+            if len(populated) > 1 and not options.include_stale:
+                # Only when both sets hold notes does the flag have to decide.
+                # A pattern holding just one set is exported whatever the flag
+                # says -- the reader already warns about that disagreement, and
+                # dropping real user data over it would be worse.
+                kinds = [live]
+                stale = next(k for k in populated if k is not live)
+                warnings.add(
+                    f"track {track.number} pattern {pattern.number}: both note sets hold "
+                    f"notes; parameter 86 bit 6 says {live.value} plays, so the "
+                    f"{stale.value} set was not exported (--include-stale exports both)"
+                )
+            regions.extend(
+                _Region(
+                    track_number=track.number,
+                    kind=kind,
+                    pattern=pattern,
+                    notes=pattern.notes_of(kind),
+                )
+                for kind in kinds
+            )
+    return tuple(regions)
 
 
 def _pattern_offsets(regions: Sequence[_Region], options: ExportOptions) -> dict[int, int]:
-    """Place each used pattern on the timeline, in pattern order.
-
-    A pattern occupies the longest step count any track gives it, so tracks
-    of unequal length stay aligned at every pattern boundary instead of
-    drifting apart.
-    """
+    """Place each used pattern on the timeline, in pattern order."""
+    # A pattern occupies the longest step count any track gives it, so tracks
+    # of unequal length stay aligned at every boundary instead of drifting.
     lengths: dict[int, int] = {}
     for region in regions:
         number = region.pattern.number
@@ -273,12 +290,9 @@ def _total_ticks(
 
 
 def _conductor_track(project: Project, total_ticks: int) -> mido.MidiTrack:
-    """Track 0: name, tempo and time signature, no notes.
-
-    Its end-of-track sits at the end of the last pattern rather than at the
-    last note, so a DAW importing the file sees the arrangement's real length
-    instead of stopping wherever the music happens to stop.
-    """
+    """Track 0: name, tempo and time signature, no notes."""
+    # End-of-track sits at the end of the last pattern rather than the last
+    # note, so a DAW sees the arrangement's real length.
     track = mido.MidiTrack()
     track.append(mido.MetaMessage("track_name", name=project.source_name or project.device, time=0))
     track.append(mido.MetaMessage("set_tempo", tempo=mido.bpm2tempo(project.tempo_bpm), time=0))
@@ -296,10 +310,11 @@ def _events_for(
 
     if region.kind is NoteKind.DRUM:
         warnings.add(
-            f"drum lanes exported as MIDI notes {options.drum_lane_base}+lane on channel "
+            f"drum lanes resolved through the {options.drum_map.describe()} map on channel "
             f"{options.drum_channel + 1}; the KeyStep Pro drum map is a device global and is "
-            f"not stored in the project file (spec 3.4)"
+            f"not stored in the project file (spec 3.2.1)"
         )
+        warnings.extend(options.drum_map.warnings)
     if options.apply_swing and region.swing_percent != 50:
         warnings.add(
             f"pattern {region.pattern.number} uses {region.swing_percent}% swing; exported "
@@ -316,13 +331,16 @@ def _events_for(
     for note in region.notes:
         pitch = note.pitch
         if region.kind is NoteKind.DRUM:
-            pitch += options.drum_lane_base
-            if pitch > 127:
+            # A lane the device does not have means parameter 117 is not the
+            # 0-based lane index we think it is. The reader already warns; here
+            # there is simply no note to emit, so the note is dropped loudly.
+            if not options.drum_map.has_lane(note.pitch):
                 warnings.add(
-                    f"drum lane {note.pitch} maps above MIDI note 127 and was dropped; "
-                    f"lower --drum-lane-base to export it"
+                    f"drum lane {note.pitch} is outside the device's "
+                    f"0-{constants.DRUM_LANE_COUNT - 1} lanes and was dropped"
                 )
                 continue
+            pitch = options.drum_map.note_for_lane(note.pitch)
 
         if note.time_shift:
             warnings.add(
@@ -367,24 +385,18 @@ def _events_for(
 
 
 def _swing_delay(step: int, swing_percent: int, ticks_per_step: int) -> int:
-    """Delay applied to the second step of each pair.
-
-    Standard swing: at *p* percent the first step of a pair takes *p* of the
-    pair's duration, so the second starts ``2 * p / 100 - 1`` steps late. 50%
-    is no swing.
-    """
+    """Delay applied to the second step of each pair."""
+    # Standard swing: at p percent the first step of a pair takes p of the
+    # pair, so the second starts 2*p/100 - 1 steps late. 50% is no swing.
     if step % 2:
         return 0
     return round(ticks_per_step * (2 * swing_percent / 100 - 1))
 
 
 def _resolve_overlaps(events: list[_Event], warnings: _Warnings) -> None:
-    """Stop a long gate from swallowing the next note of the same pitch.
-
-    Two note-ons for one pitch with only one note-off between them leaves a
-    hanging note in most DAWs. The device retriggers instead, so the earlier
-    note is shortened to where the later one begins.
-    """
+    """Stop a long gate from swallowing the next note of the same pitch."""
+    # Two note-ons for one pitch with one note-off between them hangs in most
+    # DAWs. The device retriggers, so the earlier note is shortened instead.
     events.sort(key=lambda e: (e.start, e.pitch))
     previous: dict[tuple[int, int], _Event] = {}
     for event in events:
@@ -434,11 +446,8 @@ def _midi_track(name: str, events: Sequence[_Event]) -> mido.MidiTrack:
 
 
 def _collect_reader_warnings(regions: Sequence[_Region], warnings: _Warnings) -> None:
-    """Carry the reader's own complaints about exported patterns through.
-
-    A pattern the reader could not fully make sense of -- Track 1 holding both
-    parameter sets, say -- produces a MIDI file that is confidently wrong in a
-    way the file itself will not reveal.
-    """
+    """Carry the reader's own complaints about exported patterns through."""
+    # A pattern the reader could not fully resolve produces a MIDI file that is
+    # confidently wrong in a way the file itself will not reveal.
     for region in regions:
         warnings.extend(f"track {region.track_number}: {line}" for line in region.pattern.warnings)

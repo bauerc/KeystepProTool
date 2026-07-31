@@ -87,27 +87,46 @@ def _read_tempo(raw: dict[str, Any]) -> float:
 
 
 def _read_track(raw: dict[str, Any], number: int, item_id: int) -> Track:
+    drum_mode = _read_drum_mode(raw, item_id)
     patterns = tuple(
-        _read_pattern(raw, item_id, p) for p in range(1, constants.PATTERNS_PER_TRACK + 1)
+        _read_pattern(raw, item_id, p, drum_mode=drum_mode)
+        for p in range(1, constants.PATTERNS_PER_TRACK + 1)
     )
-    return Track(number=number, item_id=item_id, patterns=patterns)
+    return Track(number=number, item_id=item_id, patterns=patterns, drum_mode=drum_mode)
 
 
-def _read_pattern(raw: dict[str, Any], item_id: int, pattern: int) -> Pattern:
+def _read_drum_mode(raw: dict[str, Any], item_id: int) -> bool:
+    """Whether this track is in DRUM mode, from parameter 86 bit 6.
+
+    Only Track 1 has a drum parameter set, so the bit is only meaningful
+    there; MCC names the field "Arp/Drum mode state : bit 6", which on tracks
+    2-4 presumably means ARP. Reported as False for those rather than
+    pretending it says something about drums.
+    """
+    if item_id != constants.DRUM_TRACK_ITEM_ID:
+        return False
+    bits = _scalar(raw, item_id, constants.P_TRACK_MODE_BITS, default=0)
+    return bool(bits & (1 << constants.DRUM_MODE_BIT))
+
+
+def _read_pattern(
+    raw: dict[str, Any], item_id: int, pattern: int, *, drum_mode: bool = False
+) -> Pattern:
     """Decode one pattern from whichever parameter set(s) hold notes.
 
     Track 1 carries a melodic and a drum set side by side and plays one or the
-    other. Which one is live should be in the mode bitfield (parameter 100),
-    but that field reads 26 in every pattern of every sample project --
-    including patterns that are unambiguously melodic and ones that are
-    unambiguously drum -- so it does not currently distinguish them.
+    other. The mode bitfield documented for this (parameter 100) does not
+    work -- it reads 26 in every pattern of every sample project, including
+    ones that are unambiguously melodic and ones that are unambiguously drum.
+    The flag that *does* work is parameter 86 bit 6, read per track and passed
+    in as *drum_mode*.
 
-    Presence of notes is therefore the only signal available, and it is not
-    always decisive: in ``initial_project`` Track 1 pattern 1 holds a real
-    8-note melody *and* a real 12-note drum pattern. When both are populated
-    this reports both and says so, rather than picking one and silently
-    discarding real user data. Isolating the mode bit is left to M6, the first
-    milestone that has to *write* the flag.
+    Note content alone is not always decisive: ``initial_project`` Track 1
+    pattern 1 holds a real 64-note melody *and* a real 12-note drum pattern.
+    The mode flag resolves which of those the device plays, but every note is
+    still reported and the leftover set is called out in a warning -- a reader
+    that silently discarded real user data would hide exactly the surprises
+    this milestone exists to find.
     """
     warnings: list[str] = []
 
@@ -121,15 +140,30 @@ def _read_pattern(raw: dict[str, Any], item_id: int, pattern: int) -> Pattern:
     warnings += seq_warnings + drum_warnings
 
     if seq_notes and drum_notes:
-        mode = PatternMode.BOTH
+        # Both sets hold notes, so the mode flag decides. The other set is
+        # leftovers from before the track was switched over.
+        mode = PatternMode.DRUM if drum_mode else PatternMode.SEQ
+        stale, live = (
+            (f"melodic ({len(seq_notes)})", f"drum ({len(drum_notes)})")
+            if drum_mode
+            else (f"drum ({len(drum_notes)})", f"melodic ({len(seq_notes)})")
+        )
         warnings.append(
             f"pattern {pattern} holds both melodic ({len(seq_notes)}) and drum "
-            f"({len(drum_notes)}) notes; parameter 100 does not say which plays"
+            f"({len(drum_notes)}) notes; parameter 86 bit 6 says {live} plays and "
+            f"{stale} is stale. Both are reported"
         )
     elif drum_notes:
         mode = PatternMode.DRUM
+        if not drum_mode:
+            warnings.append(f"pattern {pattern} holds drum notes but parameter 86 bit 6 is clear")
     elif seq_notes:
         mode = PatternMode.SEQ
+        if drum_mode:
+            warnings.append(
+                f"pattern {pattern} holds only melodic notes but parameter 86 bit 6 "
+                f"says the track is in drum mode"
+            )
     else:
         mode = PatternMode.EMPTY
 
@@ -253,7 +287,18 @@ def _read_slot(
             )
         )
 
-    if not drum:
+    if drum:
+        # The device has 24 lanes (MCC's Drum Map defines Note 1..Note 24), so
+        # a lane outside 0-23 would mean parameter 117 is not the 0-based lane
+        # index we think it is. Worth saying loudly rather than mapping it to
+        # some note anyway.
+        out_of_range = sorted({n.pitch for n in notes if n.pitch >= constants.DRUM_LANE_COUNT})
+        if out_of_range:
+            warnings.append(
+                f"pattern {pattern} slot {slot}: drum lane(s) {out_of_range} are outside "
+                f"0-{constants.DRUM_LANE_COUNT - 1}"
+            )
+    else:
         warnings.extend(_check_step_active(raw, item_id, pattern, slot, notes))
     return notes, warnings
 

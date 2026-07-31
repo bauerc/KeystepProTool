@@ -65,8 +65,13 @@ the milestone implementing them lands, so an installed command never crashes on 
   note to its 0-based step. The device stores an event list, not a step grid.
 - `127` means "empty" — but is also a legal pitch and velocity. The only valid existence test is
   `paramId 50 != 127` (`54` for drums). Never infer a note from its velocity.
-- Track 1 (item `123`) carries a whole second parameter set for DRUM mode; the mode bitfield
-  (`100`) must be set to match whichever set is written.
+- Track 1 (item `123`) carries a whole second parameter set for DRUM mode. The mode flag is
+  **`86` bit 6** (per-track), not the `100` bitfield the spec originally named — `100` reads 26
+  everywhere. A writer must set `86` to match whichever set it writes.
+- A drum note's `117` is a **lane index (0–23)**, not a pitch. The lane→note drum map is a
+  *global device setting* and is not in the project file at all: it cannot be read from one or
+  written into one. `ksp.drum_map` holds it as configuration with a documented default
+  (chromatic from 36) and every consumer must state which map it assumed.
 - Gate length (`110`/`118`) is non-linear and **still unmeasured** (M7, needs hardware). Until the
   table exists, write a default gate and warn — do not guess an encoding, because a wrong table
   produces files that load fine and play wrong.
@@ -87,9 +92,10 @@ in that file.
 
 ## Current state
 
-M1 (reader + `ksp-dump`) and M2 (`ksp2midi`) are merged. The codebase reads a project into
-`ksp.model` and renders it as MIDI; nothing writes `.KeyStepPro` files yet. M3 (byte-identical
-round-trip) is next, and it is the prerequisite for every writing milestone after it.
+M1 (reader + `ksp-dump`), M1.5 (`ksp.drum_map` and the real drum-mode flag) and M2 (`ksp2midi`)
+are merged. The codebase reads a project into `ksp.model` and renders it as MIDI; nothing writes
+`.KeyStepPro` files yet. M3 (byte-identical round-trip) is next, and it is the prerequisite for
+every writing milestone after it.
 
 `ksp.midi_export` is where the format's unknowns become user-visible. Three quantities it needs
 are not in the project file — step size, the drum map, and most gate encodings — and each is an
@@ -97,3 +103,7 @@ are not in the project file — step size, the drum map, and most gate encodings
 but deliberately **not applied**, because the duration of one shift unit has not been measured.
 Anything the export decides for itself is reported as a warning; when adding to it, keep that
 property rather than quietly picking a value.
+
+## Code Commentation
+
+Code should be concisely commented. Large doc strings for methods should NOT be used

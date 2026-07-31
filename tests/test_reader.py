@@ -141,16 +141,40 @@ class TestAgainstRealFiles:
     def test_a_pattern_can_hold_both_parameter_sets(self, project_files_dir: Path) -> None:
         """Track 1 pattern 1 of initial_project has a real melody and real drums.
 
-        Parameter 100 reads 26 in every pattern of every sample, so it cannot
-        currently say which one plays. Both are reported, with a warning,
-        rather than silently discarding one.
+        Parameter 100 reads 26 in every pattern of every sample and cannot say
+        which plays, but parameter 86 bit 6 can: it is set on this track. So
+        the mode resolves to DRUM and the melody is leftovers -- and every
+        note is still reported, because a reader that silently dropped 64 real
+        user notes would hide exactly the surprise this test exists to keep
+        visible.
         """
         project = load(project_files_dir / "initial_project.KeyStepPro")
         pattern = project.track(1).pattern(1)
-        assert pattern.mode is PatternMode.BOTH
+        assert project.track(1).drum_mode is True
+        assert pattern.mode is PatternMode.DRUM
         assert len(pattern.notes_of(NoteKind.SEQ)) == 64
         assert len(pattern.notes_of(NoteKind.DRUM)) == 12
-        assert any("does not say which plays" in w for w in pattern.warnings)
+        assert any("is stale. Both are reported" in w for w in pattern.warnings)
+
+    def test_drum_mode_bit_tracks_which_projects_hold_drums(self, project_files_dir: Path) -> None:
+        """Parameter 86 bit 6 is the drum-mode flag that 100 was expected to be.
+
+        MCC's dictionary names it ("Arp/Drum mode state : bit 6", paramId 86)
+        and the data agrees exactly: set on Track 1 in every sample holding
+        drum notes, clear in both empty baselines, and never set on tracks
+        2-4, which have no drum parameter set at all.
+        """
+        with_drums = ("project_5", "project_9", "initial_project")
+        without = ("Default", "user_empty_project")
+        for name in with_drums:
+            project = load(project_files_dir / f"{name}.KeyStepPro")
+            assert project.track(1).drum_mode is True, name
+        for name in without:
+            project = load(project_files_dir / f"{name}.KeyStepPro")
+            assert project.track(1).drum_mode is False, name
+        for name in with_drums + without:
+            project = load(project_files_dir / f"{name}.KeyStepPro")
+            assert [t.drum_mode for t in project.tracks[1:]] == [False] * 3, name
 
     def test_step_active_flags_agree_with_the_note_list(self, project_files_dir: Path) -> None:
         """The redundant step-active array is a free cross-check on the decode.

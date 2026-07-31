@@ -12,6 +12,7 @@ a caveat, not a failure.
 """
 
 import argparse
+import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -20,12 +21,12 @@ from ksp.midi_export import (
     DEFAULT_STEPS_PER_BEAT,
     DEFAULT_TICKS_PER_BEAT,
     DRUM_CHANNEL,
-    DRUM_LANE_BASE,
     ExportOptions,
     ExportResult,
     export_project,
 )
 from ksp.reader import load
+from ksp_cli.drum_map_option import CONFIG_PATH, DRUM_MAP_HELP, resolve_drum_map
 
 PROG = "ksp2midi"
 
@@ -69,21 +70,21 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_TICKS_PER_BEAT,
         help="MIDI resolution (default: %(default)s)",
     )
-    parser.add_argument(
-        "--drum-lane-base",
-        type=int,
-        default=DRUM_LANE_BASE,
-        help=(
-            "MIDI note that drum lane 0 maps to (default: %(default)s, the General MIDI bass "
-            "drum). The device's drum map is a global setting and is not in the project file"
-        ),
-    )
+    parser.add_argument("--drum-map", metavar="SPEC", help=DRUM_MAP_HELP)
     parser.add_argument(
         "--drum-channel",
         type=int,
         default=DRUM_CHANNEL + 1,
         metavar="{1..16}",
         help="MIDI channel for drum lanes (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--include-stale",
+        action="store_true",
+        help=(
+            "where a pattern holds both a melodic and a drum note set, export both instead of "
+            "only the one parameter 86 bit 6 says the device plays"
+        ),
     )
     parser.add_argument(
         "--no-swing",
@@ -112,12 +113,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
     try:
+        drum_map = resolve_drum_map(args.drum_map, CONFIG_PATH)
+    except json.JSONDecodeError as exc:  # a ValueError, so it must come first
+        print(f"{PROG}: drum map: {CONFIG_PATH}: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError) as exc:
+        print(f"{PROG}: drum map: {exc}", file=sys.stderr)
+        return 2
+
+    if drum_map is None:
+        # ksp-dump can print "lane 0" and leave it unresolved; a MIDI file has
+        # no way to say that, so there is nothing sensible to write.
+        print(
+            f"{PROG}: --drum-map none cannot be exported: a MIDI file has to name a note "
+            f"for every drum lane",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
         options = ExportOptions(
             ticks_per_beat=args.ticks_per_beat,
             steps_per_beat=args.steps_per_beat,
-            drum_lane_base=args.drum_lane_base,
+            drum_map=drum_map,
             drum_channel=args.drum_channel - 1,
             apply_swing=args.apply_swing,
+            include_stale=args.include_stale,
         )
     except ValueError as exc:
         print(f"{PROG}: {exc}", file=sys.stderr)

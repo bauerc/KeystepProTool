@@ -14,6 +14,7 @@ from enum import StrEnum
 from typing import Any
 
 from ksp.constants import note_name
+from ksp.drum_map import DrumMap
 
 
 class NoteKind(StrEnum):
@@ -77,13 +78,24 @@ class Note:
 
     @property
     def label(self) -> str:
-        """Human-readable pitch: a note name, or a drum lane number."""
+        """Human-readable pitch: a note name, or a bare drum lane number."""
+        return self.labelled(None)
+
+    def labelled(self, drum_map: DrumMap | None) -> str:
+        """Like :attr:`label`, but resolving a drum lane through *drum_map*.
+
+        Without a map a drum note can only be reported as ``lane 0``, because
+        which MIDI note that lane transmits is a device setting the file does
+        not contain.
+        """
         if self.kind is NoteKind.DRUM:
-            return f"lane {self.pitch}"
+            if drum_map is None:
+                return f"lane {self.pitch}"
+            return drum_map.label_for_lane(self.pitch)
         return f"{note_name(self.pitch)} ({self.pitch})"
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
+    def to_dict(self, drum_map: DrumMap | None = None) -> dict[str, Any]:
+        data: dict[str, Any] = {
             "kind": self.kind.value,
             "slot": self.slot,
             "index": self.index,
@@ -96,6 +108,11 @@ class Note:
             "randomness": self.randomness,
             "skip": list(self.skip),
         }
+        if drum_map is not None and self.kind is NoteKind.DRUM and drum_map.has_lane(self.pitch):
+            note = drum_map.note_for_lane(self.pitch)
+            data["drum_note"] = note
+            data["drum_note_name"] = note_name(note)
+        return data
 
 
 @dataclass(frozen=True)
@@ -130,7 +147,7 @@ class Pattern:
     def notes_of(self, kind: NoteKind) -> tuple[Note, ...]:
         return tuple(n for n in self.notes if n.kind is kind)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, drum_map: DrumMap | None = None) -> dict[str, Any]:
         return {
             "pattern": self.number,
             "mode": self.mode.value,
@@ -139,7 +156,7 @@ class Pattern:
             "seq_swing_percent": self.seq_swing_percent,
             "drum_step_count": self.drum_step_count,
             "drum_swing_percent": self.drum_swing_percent,
-            "notes": [n.to_dict() for n in self.notes],
+            "notes": [n.to_dict(drum_map) for n in self.notes],
             "warnings": list(self.warnings),
         }
 
@@ -151,6 +168,13 @@ class Track:
     number: int
     item_id: int
     patterns: tuple[Pattern, ...]
+    drum_mode: bool = False
+    """Whether the track's Arp/Drum mode bit (parameter 86, bit 6) is set.
+
+    Only Track 1 has a drum parameter set, and this is what says whether it is
+    the live one. It is track-level rather than per-pattern, matching the
+    device's Drum button. Parameter 100 was expected to carry this and does
+    not -- it reads 26 everywhere."""
 
     @property
     def is_empty(self) -> bool:
@@ -160,11 +184,12 @@ class Track:
         """Return pattern *number*, counting from 1."""
         return self.patterns[number - 1]
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, drum_map: DrumMap | None = None) -> dict[str, Any]:
         return {
             "track": self.number,
             "item_id": self.item_id,
-            "patterns": [p.to_dict() for p in self.patterns],
+            "drum_mode": self.drum_mode,
+            "patterns": [p.to_dict(drum_map) for p in self.patterns],
         }
 
 
@@ -190,9 +215,8 @@ class Project:
     def select(self, *, track: int | None = None, pattern: int | None = None) -> "Project":
         """Return a copy narrowed to one track and/or one pattern.
 
-        Narrowing the model rather than filtering at the point of use means
-        every consumer -- the dump tree, its ``--json`` twin, MIDI export --
-        sees the identical selection and cannot drift apart.
+        Uses ``replace`` so fields added later (``drum_mode``) survive
+        narrowing without every caller being updated.
         """
         tracks = tuple(t for t in self.tracks if track is None or t.number == track)
         if pattern is not None:
@@ -202,8 +226,8 @@ class Project:
             )
         return replace(self, tracks=tracks)
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
+    def to_dict(self, drum_map: DrumMap | None = None) -> dict[str, Any]:
+        data: dict[str, Any] = {
             "source": self.source_name,
             "device": self.device,
             "version": self.version,
@@ -211,5 +235,11 @@ class Project:
             "global_swing_percent": self.global_swing_percent,
             "current_scene": self.current_scene,
             "warnings": list(self.warnings),
-            "tracks": [t.to_dict() for t in self.tracks],
         }
+        if drum_map is not None:
+            # Named at the top level because every resolved drum note below
+            # depends on it, and it is an assumption about the user's device
+            # rather than anything read from the file.
+            data["drum_map"] = drum_map.to_dict()
+        data["tracks"] = [t.to_dict(drum_map) for t in self.tracks]
+        return data
