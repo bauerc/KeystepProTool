@@ -94,6 +94,32 @@ P_DRUM_VELOCITY: Final = 119
 P_DRUM_TIME_SHIFT: Final = 120
 P_DRUM_RANDOMNESS: Final = 121
 
+#: The device has 24 drum lanes. This is derived rather than assumed: MCC's
+#: parameter dictionary defines exactly 24 "Note N" fields in its Drum Map
+#: group (``globalParamId`` 83-106). No array in the project file has this
+#: cardinality -- the lane is a *value* of parameter 117, never an index.
+DRUM_LANE_COUNT: Final = 24
+
+#: Per-track bitfield. Bit 6 is the Arp/Drum mode state, named as such by
+#: MCC's dictionary ("Arp/Drum mode state : bit 6", paramId 86), and the data
+#: agrees: ``123_86`` is 66 (bit 6 set) in exactly the three sample projects
+#: holding drum data and 2 in both empty baselines, while tracks 2-4 never set
+#: it. This is the flag parameter 100 was expected to carry and does not.
+#: Track-level, not per-pattern, which matches the device's Drum button.
+P_TRACK_MODE_BITS: Final = 86
+DRUM_MODE_BIT: Final = 6
+
+# --- Device global parameters (spec section 3.4) ---------------------------
+# Recorded for documentation and the eventual SysEx path. These are addressed
+# by globalParamId under deviceGlobalParametersId 65 and are NOT present in
+# any project file, so nothing in the reader consumes them.
+
+GLOBAL_PARAMS_ITEM: Final = 65
+G_DRUM_OUTPUT_CHANNEL: Final = 79
+G_DRUM_MAP_MODE: Final = 81  # 0 = Chromatic, 1 = Custom
+G_DRUM_MAP_LOW_NOTE: Final = 82  # chromatic mode, 0-103
+G_DRUM_MAP_NOTE_1: Final = 83  # ..106 = Note 1..Note 24, custom mode
+
 # --- Value encodings -------------------------------------------------------
 
 #: Time shift is an offset around a centre of 49, so stored 50 is +1 and

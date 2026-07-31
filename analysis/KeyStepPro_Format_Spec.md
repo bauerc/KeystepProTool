@@ -161,18 +161,50 @@ keys use **`paramId`**. Confusing the two is an easy mistake.
 | `120` | DRUM note time shift | **note** |
 | `121` | DRUM note randomness | **note** |
 
-Track 1 plays the drum set *or* the sequencer set depending on its mode, which is documented as
-living in the `100` bitfield — but see the caveat in section 5: `100` does not currently
-distinguish them.
+Track 1 plays the drum set *or* the sequencer set depending on its mode. That mode is documented
+as living in the `100` bitfield, which does not work — the flag is **`86` bit 6**, per section 5.
 
 Usually the unused set is fully sentinel-filled, which makes the live one obvious. That is not
 guaranteed: `initial_project` Track 1 pattern 1 has real content in **both**. A converter must
 set the mode to match what it writes, and a reader should not assume only one set is populated.
 
 `117` holds the **drum lane**, 0-based — lane 0 is the kick, confirmed by `project_5`; lanes up
-to 19 appear in `initial_project`, consistent with the device's 24 lanes. Its value in an
-*empty* list is `60`, not `127`, and drum velocity `119` defaults to `100` rather than `127`.
-Neither is a note: existence is decided by `54` alone, which is sentinel-filled as usual.
+to 19 appear in `initial_project`. Its value in an *empty* list is `60`, not `127`, and drum
+velocity `119` defaults to `100` rather than `127`. Neither is a note: existence is decided by
+`54` alone, which is sentinel-filled as usual.
+
+### 3.2.1 The drum map — 24 lanes, and it is **not in the project file**
+
+The device has exactly **24** drum lanes. This is *derived*, not assumed: `KeyStepPro.json`
+defines 24 `Note N` fields in a `globalFields` group named "Drum Map". No array in any project
+file has cardinality 24 — a full index scan of the corpus finds dimension sizes
+`{3, 4, 5, 16, 64}` only. The lane is a **value** of `117`, never an index.
+
+| globalParamId | Name | Range | Default | Shown when |
+|---|---|---|---|---|
+| `81` | Mode | `0` = Chromatic, `1` = Custom | `0` | always |
+| `82` | Low note | 0–103 | `0` | Mode = Chromatic |
+| `83`–`106` | Note 1 … Note 24 | 0–127 | **36…59** | Mode = Custom |
+
+Related globals: `74` / `79` are the Drum input / output MIDI channels, both defaulting to `10`
+(tracks 1–4 default to 0–3), and `128`–`135` are "Drum Gate 1".."Drum Gate 8" for CV.
+
+**These carry `paramId 65` — `deviceGlobalParametersId` — so they are device state, not project
+state.** No `bulkOperation` has `bulkItemId: 65`; no sample file contains a key beginning `65_`;
+MCC keeps no copy on disk and reads them live over SysEx. The drum map therefore **cannot be
+recovered from a `.KeyStepPro` file and cannot be written into one.** A converter's lane↔note
+mapping is necessarily an assumption about the owner's device and must be labelled as one —
+which is what `ksp.drum_map` does, defaulting to chromatic from 36 (the manual: "the default
+mapping starts at MIDI note 36", and the Custom defaults 36…59 are exactly that run).
+
+Two points still need the hardware, recorded as **Test D1** in the roadmap:
+
+- MCC's `defaultValue` for Mode is Chromatic with Low note `0`, which would put lane 0 at MIDI
+  note 0 — disagreeing with both the manual and the Custom defaults. MCC `defaultValue`s are its
+  UI fallback when no device is attached, so the device's factory state is unconfirmed.
+- Whether chromatic mode maps lane *i* to `low + i` or `low + i + 1`. The manual's "which note
+  the lowest key will trigger" implies the former, but `maxValue: 103` then puts the top lane at
+  126, one short of 127, whereas the latter lands exactly on 127.
 
 ### 3.3 Per-pattern scalars (index = pattern 1–16)
 
@@ -366,16 +398,29 @@ By contrast the melodic step-active array (`48`) *is* understood, and agrees wit
 on every slot of both hardware-confirmed projects. The M1 reader cross-checks it on every slot
 and warns rather than reconciling.
 
-### Caveat: parameter `100` does not currently identify drum mode
+### Resolved: drum mode is parameter `86` bit 6, not `100`
 
 `100` is documented as the ARP/Drum mode bitfield, but it reads **26 in every pattern of every
 sample project** — including patterns that are unambiguously melodic and ones that are
-unambiguously drum. It cannot presently be used to tell which parameter set is live.
+unambiguously drum. It cannot be used to tell which parameter set is live.
 
-Usually this does not matter, because the unused set is fully sentinel-filled. But it is not
-always decisive: **`initial_project` Track 1 pattern 1 holds both** a real 64-step melody and a
-real 12-note drum pattern. A reader must report both; a writer must isolate the actual mode bit
-before it can set it. Deferred to M6.
+The flag that *can* is **`86` bit 6**, and two independent lines of evidence agree:
+
+- `KeyStepPro.json` names it — field id 17, `paramId 86`, `"name": "Track keyboard octave,
+  chord mode state, Arp/Drum mode state in a bitfield"`, `"comment": "Arp/Drum mode state :
+  bit 6"`.
+- The data matches exactly. `123_86` is **66** (`0b1000010`, bit 6 set) in `project_5`,
+  `project_9` and `initial_project` — every sample holding drum notes — and **2** in both empty
+  baselines. Tracks 2–4 never set it.
+
+It is **track-level, not per-pattern**, which matches the device's Drum button, and the field is
+named *Arp*/Drum, so on tracks 2–4 bit 6 presumably means ARP. Both worth confirming on
+hardware; Test D1 does so for free.
+
+This resolves the ambiguity that made the reader report `PatternMode.BOTH`. **`initial_project`
+Track 1 pattern 1 holds both** a real 64-step melody and a real 12-note drum pattern; bit 6 is
+set, so the drums are live and the melody is leftovers. The reader still reports every note and
+warns — it resolves the *mode*, it does not discard data.
 
 ---
 
