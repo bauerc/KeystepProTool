@@ -101,12 +101,17 @@ in that file.
 
 ## Current state
 
-M1 (reader + `ksp-dump`), M1.5 (`ksp.drum_map` and the real drum-mode flag) and M2 (`ksp2midi`)
-are merged. The codebase reads a project into `ksp.model` and renders it as MIDI; nothing writes
-`.KeyStepPro` files yet. M3 (byte-identical round-trip) is next, and it is the prerequisite for
-every writing milestone after it.
+M1 (reader + `ksp-dump`), M1.5 (`ksp.drum_map` and the real drum-mode flag), M2 (`ksp2midi`) and
+M2.2 (the rest of the export options) are merged. The codebase reads a project into `ksp.model`
+and renders it as MIDI; nothing writes `.KeyStepPro` files yet. M3 (byte-identical round-trip) is
+next, and it is the prerequisite for every writing milestone after it.
 
-`ksp.midi_export` is where the format's unknowns become user-visible. Three quantities it needs
+`ksp.midi_export` runs in three layers and they must stay separate: `render_pattern` turns one
+pattern into plain tick data, `arrange` places renderings on a timeline, and `build_midi_file` is
+the only part that touches `mido`. That boundary is what keeps the M8–M9 Swift port a translation
+of arithmetic, and it is why tests assert against `Rendering` data rather than parsed MIDI.
+
+`ksp.midi_export` is also where the format's unknowns become user-visible. Three quantities it needs
 are not in the project file — step size, the drum map, and most gate encodings — and each is an
 `ExportOptions` field with a documented default, never a buried constant. Time shift is decoded
 but deliberately **not applied**, because the duration of one shift unit has not been measured.

@@ -93,14 +93,35 @@ Patterns that hold notes are laid end to end in pattern order, and pattern N sta
 point on every track — so tracks keep the relationship the hardware gives them. Each KeyStep Pro
 track becomes its own MIDI track; Track 1's drum set becomes a second one on channel 10.
 
+The device loops each track independently, so tracks of different total lengths drift apart on the
+hardware while this layout keeps re-aligning them. When that happens the export says so.
+
+`--split` skips the layout question altogether and writes one file per (track, pattern), each
+starting at its own tick 0:
+
+```sh
+uv run ksp2midi project_files/project_9.KeyStepPro --split -o out/
+```
+
+```
+wrote out/project_9_track1_pattern2.mid
+  1 note(s) from pattern(s) 2
+  tracks: Track 1 (drum)
+wrote out/project_9_track1_pattern3.mid
+  ...
+```
+
 | Option | Effect |
 |---|---|
-| `-o PATH` | Destination (default: the input file with a `.mid` suffix) |
+| `-o PATH` | Destination (default: the input file with a `.mid` suffix); with `--split`, a directory |
+| `--split` | One file per non-empty (track, pattern), named `<stem>_track{N}_pattern{P}.mid` |
 | `--track N` / `--pattern N` | Export only one track or pattern |
 | `--steps-per-beat N` | Step size (default 4, i.e. 1/16 steps) |
 | `--drum-map SPEC` | Same grammar and config file as `ksp-dump` (default `chromatic:36`) |
+| `--default-gate STEPS` | Length used where a gate encoding is not measured (default 0.5) |
 | `--include-stale` | Export both note sets of a pattern that holds both |
 | `--no-swing` | Place every step on a flat grid |
+| `--dry-run` | Report what would be written, and write nothing |
 | `--force` | Overwrite an existing output file |
 
 Anything the export had to decide for itself is printed to stderr as a warning, because three
@@ -111,7 +132,8 @@ things it needs are not in the project file:
   assumed every time. Unlike `ksp-dump`, `--drum-map none` is refused: a MIDI file has to name a
   note for every lane, so there is no honest way to leave a lane unresolved.
 - **Gate lengths** are only measured at six points (M7). Anything else is exported at the length
-  a freshly placed note has, and warned about — never interpolated.
+  a freshly placed note has, and warned about — never interpolated. `--default-gate` names that
+  fallback explicitly if you have measured your own.
 
 Where a pattern holds both a melodic and a drum note set, only the one the track's mode flag
 (parameter `86` bit 6) says the device plays is exported — the other is leftovers from before the
@@ -120,6 +142,12 @@ track was switched over, and exporting it would put notes in the file that no ha
 
 Note **time shift is not applied**: how much time one shift unit is worth has never been
 measured, so the export leaves the grid alone and says so.
+
+**Step skip is not expanded either.** A note can be set to play on only some of the four
+16/32/48/64 sequences; the export renders a single pass and includes every note whatever its mask,
+warning when it does. Expanding the cycle needs to know whether those four sequences are *repeats*
+of a short pattern or *pages* of a 64-step one, and the project files contradict the obvious
+reading — see protocol test T5.8.
 
 ## Development
 

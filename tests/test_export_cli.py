@@ -225,6 +225,177 @@ def test_impossible_timing_options_are_rejected_before_any_file_is_read(
     assert "not divisible" in capsys.readouterr().err
 
 
+class TestSplit:
+    """``--split`` writes one file per (track, pattern) into a directory."""
+
+    def test_one_file_per_track_and_pattern(
+        self, project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        argv = [
+            str(project_files_dir / "project_9.KeyStepPro"),
+            "--split",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+        assert main(argv) == 0
+
+        assert sorted(p.name for p in (tmp_path / "out").iterdir()) == [
+            "project_9_track1_pattern2.mid",
+            "project_9_track1_pattern3.mid",
+            "project_9_track3_pattern2.mid",
+        ]
+        assert capsys.readouterr().out.count("wrote") == 3
+
+    def test_the_default_destination_is_the_input_directory(
+        self, project_files_dir: Path, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "project_5.KeyStepPro"
+        source.write_bytes((project_files_dir / "project_5.KeyStepPro").read_bytes())
+
+        assert main([str(source), "--split"]) == 0
+        assert (tmp_path / "project_5_track1_pattern1.mid").exists()
+        assert (tmp_path / "project_5_track3_pattern1.mid").exists()
+
+    def test_each_file_holds_only_its_own_track(
+        self, project_files_dir: Path, tmp_path: Path
+    ) -> None:
+        argv = [str(project_files_dir / "project_5.KeyStepPro"), "--split", "-o", str(tmp_path)]
+        assert main(argv) == 0
+
+        melodic = mido.MidiFile(tmp_path / "project_5_track3_pattern1.mid")
+        assert [t.name for t in melodic.tracks] == ["project_5.KeyStepPro", "Track 3"]
+
+    def test_selection_still_narrows_the_file_list(
+        self, project_files_dir: Path, tmp_path: Path
+    ) -> None:
+        argv = [
+            str(project_files_dir / "project_9.KeyStepPro"),
+            "--split",
+            "--track",
+            "3",
+            "-o",
+            str(tmp_path),
+        ]
+        assert main(argv) == 0
+        assert [p.name for p in tmp_path.iterdir()] == ["project_9_track3_pattern2.mid"]
+
+    def test_no_file_is_overwritten_without_force(
+        self, project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A partial write would be worse than none: nothing is written at all."""
+        existing = tmp_path / "project_9_track1_pattern2.mid"
+        existing.write_bytes(b"not a midi file")
+        argv = [str(project_files_dir / "project_9.KeyStepPro"), "--split", "-o", str(tmp_path)]
+
+        assert main(argv) == 1
+        assert existing.read_bytes() == b"not a midi file"
+        assert [p.name for p in tmp_path.iterdir()] == [existing.name]
+        assert "already exists" in capsys.readouterr().err
+
+        assert main([*argv, "--force"]) == 0
+        assert existing.read_bytes() != b"not a midi file"
+
+
+class TestDryRun:
+    """``--dry-run`` predicts the real run without writing anything."""
+
+    def test_nothing_is_written_but_the_plan_is_printed(
+        self, project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        destination = tmp_path / "out.mid"
+        argv = [
+            str(project_files_dir / "project_5.KeyStepPro"),
+            "-o",
+            str(destination),
+            "--dry-run",
+        ]
+        assert main(argv) == 0
+        assert not destination.exists()
+
+        captured = capsys.readouterr()
+        assert f"would write {destination}" in captured.out
+        assert "12 note(s)" in captured.out
+        assert "warning:" in captured.err  # the caveats are worth seeing first
+
+    def test_it_lists_every_file_a_split_export_would_write(
+        self, project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        argv = [
+            str(project_files_dir / "project_9.KeyStepPro"),
+            "--split",
+            "-o",
+            str(tmp_path / "out"),
+            "--dry-run",
+        ]
+        assert main(argv) == 0
+        assert not (tmp_path / "out").exists()
+
+        out = capsys.readouterr().out
+        assert out.count("would write") == 3
+        assert "project_9_track3_pattern2.mid" in out
+
+    def test_it_reports_the_same_collision_the_real_run_would_hit(
+        self, project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        destination = tmp_path / "out.mid"
+        destination.write_bytes(b"not a midi file")
+        argv = [
+            str(project_files_dir / "project_5.KeyStepPro"),
+            "-o",
+            str(destination),
+            "--dry-run",
+        ]
+        assert main(argv) == 1
+        assert "already exists" in capsys.readouterr().err
+
+
+def _durations(path: Path) -> list[int]:
+    """Note lengths in ticks, paired back out of the delta times."""
+    track = next(t for t in mido.MidiFile(path).tracks if t.name.startswith("Track"))
+    open_at: dict[tuple[int, int], int] = {}
+    durations: list[int] = []
+    tick = 0
+    for message in track:
+        tick += message.time
+        if message.type == "note_on":
+            open_at[(message.channel, message.note)] = tick
+        elif message.type == "note_off":
+            durations.append(tick - open_at.pop((message.channel, message.note)))
+    return durations
+
+
+def test_the_fallback_gate_can_be_given(
+    project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """initial_project holds a gate encoding of 2, which is not measured.
+
+    Raising the fallback moves exactly those notes and leaves the measured
+    ones alone -- the whole point of the option is that it never overrides a
+    length the hardware confirmed.
+    """
+    source = str(project_files_dir / "initial_project.KeyStepPro")
+    selection = [source, "--track", "1", "--pattern", "1", "-o"]
+
+    assert main([*selection, str(tmp_path / "default.mid")]) == 0
+    assert "0.5-step default" in capsys.readouterr().err
+    assert main([*selection, str(tmp_path / "long.mid"), "--default-gate", "1"]) == 0
+    assert "1-step default" in capsys.readouterr().err
+
+    pairs = list(
+        zip(_durations(tmp_path / "default.mid"), _durations(tmp_path / "long.mid"), strict=True)
+    )
+    assert all(long in (short, 2 * short) for short, long in pairs)
+    assert any(long == 2 * short for short, long in pairs)
+
+
+def test_a_fallback_gate_of_zero_is_rejected(
+    project_files_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = [str(project_files_dir / "project_5.KeyStepPro"), "--default-gate", "0"]
+    assert main(argv) == 2
+    assert "greater than 0" in capsys.readouterr().err
+
+
 def test_missing_file_reports_an_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert main([str(tmp_path / "nope.KeyStepPro")]) == 1
     assert "ksp2midi:" in capsys.readouterr().err

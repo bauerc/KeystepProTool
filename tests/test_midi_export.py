@@ -13,8 +13,18 @@ import mido
 import pytest
 
 from ksp.drum_map import DEFAULT_CHROMATIC_LOW, DrumMap
-from ksp.midi_export import DRUM_CHANNEL, ExportOptions, ExportResult, export_project
-from ksp.model import Project
+from ksp.midi_export import (
+    DRUM_CHANNEL,
+    ExportOptions,
+    ExportResult,
+    arrange,
+    build_midi_file,
+    export_project,
+    export_split,
+    render_pattern,
+    render_project,
+)
+from ksp.model import NoteKind, Project
 from ksp.reader import load
 
 TICKS_PER_STEP = 120  # the 480/4 default: 1/16 steps at 480 ticks per beat
@@ -325,6 +335,7 @@ def test_the_chromatic_drum_map_base_is_configurable(project_5: Project) -> None
         ({"ticks_per_beat": 0}, "at least 1"),
         ({"ticks_per_beat": 100, "steps_per_beat": 3}, "not divisible"),
         ({"drum_channel": 16}, "0-15"),
+        ({"default_gate": 0}, "greater than 0"),
     ],
 )
 def test_options_that_cannot_produce_exact_timing_are_rejected(
@@ -333,6 +344,133 @@ def test_options_that_cannot_produce_exact_timing_are_rejected(
     """A step that does not land on a whole tick would drift over 64 steps."""
     with pytest.raises(ValueError, match=message):
         ExportOptions(**kwargs)
+
+
+class TestRenderLayer:
+    """The arithmetic layer, asserted as plain data rather than parsed MIDI.
+
+    This is the half the M8/M9 Swift port has to reproduce; keeping it free of
+    ``mido`` is what makes the port a translation rather than a redesign.
+    """
+
+    def test_a_pattern_renders_from_its_own_tick_zero(self, project_5: Project) -> None:
+        """Same description values as the merged export, minus the timeline.
+
+        project_5 track 3 pattern 1: beats 1-4 C2, 5-8 C#2, then D at beats 9
+        and 13 -- the second sitting at note index 10 but step 13.
+        """
+        rendering = render_pattern(project_5.track(3).pattern(1), track_number=3, kind=NoteKind.SEQ)
+
+        assert rendering.pattern_number == 1
+        assert rendering.length_ticks == 16 * TICKS_PER_STEP
+        assert rendering.midi_track_name == "Track 3"
+        assert [n.pitch for n in rendering.notes] == [48] * 4 + [49] * 4 + [50, 50]
+        assert [n.tick for n in rendering.notes] == [
+            step * TICKS_PER_STEP for step in (0, 1, 2, 3, 4, 5, 6, 7, 8, 12)
+        ]
+        assert [n.velocity for n in rendering.notes] == [60, 70, 90, 100, 60, 70, 90, 100, 60, 120]
+        assert {n.channel for n in rendering.notes} == {2}
+
+    def test_gate_is_a_duration_in_steps(self, project_5: Project) -> None:
+        """The tie from beat 9 to beat 12 stores gate 4 and lasts four steps."""
+        rendering = render_pattern(project_5.track(3).pattern(1), track_number=3, kind=NoteKind.SEQ)
+        assert rendering.notes[8].duration_ticks == 4 * TICKS_PER_STEP
+        assert rendering.notes[9].duration_ticks == round(3.5 * TICKS_PER_STEP)
+
+    def test_the_drum_set_renders_onto_the_drum_channel(self, project_5: Project) -> None:
+        rendering = render_pattern(
+            project_5.track(1).pattern(1), track_number=1, kind=NoteKind.DRUM
+        )
+        assert rendering.midi_track_name == "Track 1 (drum)"
+        assert [n.pitch for n in rendering.notes] == [DEFAULT_CHROMATIC_LOW] * 2
+        assert {n.channel for n in rendering.notes} == {DRUM_CHANNEL}
+
+    def test_an_arrangement_can_be_built_without_touching_mido(self, project_5: Project) -> None:
+        """render -> arrange -> build: only the last step knows about MIDI."""
+        arrangement = arrange(render_project(project_5))
+
+        assert [t.name for t in arrangement.tracks] == ["Track 1 (drum)", "Track 3"]
+        assert arrangement.note_count == 12
+        assert arrangement.length_ticks == 16 * TICKS_PER_STEP
+        assert arrangement.pattern_numbers == (1,)
+        assert arrangement.track_numbers == (1, 3)
+
+        midi = build_midi_file(arrangement, name="x", tempo_bpm=120.0, ticks_per_beat=480)
+        assert [t.name for t in midi.tracks] == ["x", "Track 1 (drum)", "Track 3"]
+        assert len(played(midi, "Track 3")) == 10
+
+
+def test_an_unmeasured_gate_uses_the_length_the_caller_supplies(project_files_dir: Path) -> None:
+    """``default_gate`` names the fallback instead of burying it in the code.
+
+    The default is still the device's own, so the number is never invented --
+    but a user who has measured their own can say so.
+    """
+    pattern = load(project_files_dir / "initial_project.KeyStepPro").track(1).pattern(1)
+
+    default = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM)
+    doubled = render_pattern(
+        pattern, track_number=1, kind=NoteKind.DRUM, options=ExportOptions(default_gate=1.0)
+    )
+
+    unmeasured = [i for i, n in enumerate(pattern.notes_of(NoteKind.DRUM)) if n.gate is None]
+    assert unmeasured, "initial_project should hold at least one unmeasured gate"
+    for index in unmeasured:
+        assert default.notes[index].duration_ticks == round(0.5 * TICKS_PER_STEP)
+        assert doubled.notes[index].duration_ticks == TICKS_PER_STEP
+    assert any("0.5-step default" in w for w in default.warnings)
+    assert any("1-step default" in w for w in doubled.warnings)
+
+
+class TestSplit:
+    """One file per non-empty (track, pattern), each from its own tick 0."""
+
+    def test_one_result_per_track_and_pattern(self, project_9: Project) -> None:
+        """project_9 uses pattern 2 on two tracks and pattern 3 on one."""
+        results = export_split(project_9)
+
+        assert [(r.track_numbers, r.pattern_numbers) for r in results] == [
+            ((1,), (2,)),
+            ((1,), (3,)),
+            ((3,), (2,)),
+        ]
+        assert all(r.note_count == 1 for r in results)
+
+    def test_each_file_starts_at_tick_zero(self, project_9: Project) -> None:
+        """Merged, pattern 3 sits a pattern late; split, it stands alone."""
+        merged = played(export_project(project_9).midi, "Track 1 (drum)")
+        assert [n.start for n in merged] == [0, 16 * TICKS_PER_STEP]
+
+        pattern_3 = next(r for r in export_split(project_9) if r.pattern_numbers == (3,))
+        assert [n.start for n in played(pattern_3.midi, "Track 1 (drum)")] == [0]
+
+    def test_a_split_file_holds_only_its_own_track(self, project_5: Project) -> None:
+        results = export_split(project_5)
+        assert [r.track_names for r in results] == [("Track 1 (drum)",), ("Track 3",)]
+
+    def test_both_note_sets_of_one_pattern_stay_in_one_file(self, project_files_dir: Path) -> None:
+        """--include-stale adds a MIDI track, not a file: same (track, pattern)."""
+        project = load(project_files_dir / "initial_project.KeyStepPro").select(track=1, pattern=1)
+        (result,) = export_split(project, ExportOptions(include_stale=True))
+        assert result.track_names == ("Track 1", "Track 1 (drum)")
+
+    def test_an_empty_project_produces_no_files(self, project_files_dir: Path) -> None:
+        assert export_split(load(project_files_dir / "Default.KeyStepPro")) == ()
+
+
+def test_tracks_of_different_total_lengths_are_reported(project_9: Project) -> None:
+    """Merged, every track restarts at each pattern boundary.
+
+    The device loops each track on its own, so once the totals differ the file
+    and the hardware stop agreeing about what plays together -- worth saying
+    out loud, because nothing in the .mid reveals it.
+    """
+    result = export_project(project_9)
+    assert any("different total lengths" in w and "drift apart" in w for w in result.warnings)
+
+    # One track cannot disagree with itself, so the line must not appear.
+    alone = export_project(project_9.select(track=1))
+    assert not any("different total lengths" in w for w in alone.warnings)
 
 
 def test_the_written_file_reads_back_identically(

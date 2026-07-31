@@ -443,6 +443,32 @@ real material. Note the seq and drum defaults already differ by exactly that bit
   track and 1–4 for the sequencer tracks, per the descriptors — worth confirming, since it is the
   one place the item ordering is not the obvious one.
 
+### T5.8 — What the four step-skip sequences are
+
+- **Resolves:** whether 16 / 32 / 48 / 64 are four **repeats** of a pattern shorter than 64 steps
+  or four **pages** of a 64-step one. This blocks `ksp2midi --passes` (issue #22), which cannot be
+  written until it is known, and it is the same question for `midi2ksp` in reverse.
+- **Why it is open:** spec §5 calls them "four consecutive 16-step sequences", which reads like
+  pages — but `project_5` pattern 1 is 16 steps long and carries notes masked to 48 and 64
+  (`49` = 5 and 12). Under the pages reading those notes could never sound, which contradicts a
+  hardware-confirmed description. Under the repeats reading every mask is meaningful at any
+  pattern length. The file cannot settle it; only the device can.
+- **Device:** from B0.1. Track 2, pattern 1, length **16 steps**. Four notes at beats 1, 5, 9, 13
+  on four different pitches. Set their skip masks to 16-only, 32-only, 48-only and 64-only
+  respectively. Export, then **play the pattern and listen through at least eight loops**.
+- **Capture:** `T5-skip-16step.KeyStepPro`
+- **Keys:** `124_49_1_1_<1..16>` (step-indexed, unlike the drum `53`)
+- **Confirms repeats if:** the four notes sound on successive loops in turn — beat 1 only on
+  loop 1, beat 5 only on loop 2, and so on, cycling every four loops.
+- **Confirms pages if:** only the 16-masked note ever sounds and the other three are silent, or
+  the device refuses to set a mask above 16 on a 16-step pattern at all.
+- **Then repeat at 64 steps.** Set the pattern to 64 steps with one note per 16-step quarter, each
+  masked to a *different* sequence than the quarter it sits in. Under repeats it plays all four
+  over four loops; under pages three of them never sound. This is the case that separates the
+  readings when the pattern is long enough for both to be coherent.
+- **Also note the display.** Whatever the device calls the setting is worth transcribing verbatim —
+  the vocabulary usually gives the model away.
+
 ---
 
 ## Tier 6 — Re-checks
@@ -718,6 +744,7 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 | T5.* | | `99` field = | | one row per setting |
 | T5.6 | | root note / scale | | |
 | T5.7 | | 3-pattern chain | | |
+| T5.8 | | 16-step pattern, one note per skip mask | | **repeats or pages?** which notes sounded: |
 | T6.1 | | project_5 kick time shifts | | −1/+1 or −1/−1? |
 | T6.2 | | no trailing comma | | loaded? |
 | T7.1 | | shift min / max displayed | | **the range — run first** |
@@ -744,11 +771,11 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 | 2 | ~20 | gate table | M7 |
 | 3 | 4 | drum-mode bit | M6 |
 | 4 | 8 | step-active semantics, real limits | M6 |
-| 5 | ~12 | pattern scalars, chaining | M6 |
+| 5 | ~14 | pattern scalars, chaining, step-skip semantics | M6, M2 |
 | 6 | 2 | standing caveats | M3 |
 | 7 | ~13 | Time Shift range, swing semantics | M7, M5 |
 | 8 | ~6 recordings | what a Time Shift unit is worth in time | M2, M5 |
-| | **~71** | | |
+| | **~73** | | |
 
 Tiers are ordered by value per capture and each is independently useful — stopping after any tier
 leaves a coherent result rather than a half-finished one. B0 is not optional; everything else is.
