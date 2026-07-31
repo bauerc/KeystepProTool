@@ -291,7 +291,7 @@ This matters because `initial_project` Track 1 pattern 1 holds a real 64-note me
 
 - **Resolves:** which bit is mode, given that `100` also carries ARP type and ARP octave and a
   single-capture diff cannot separate fields that move together.
-- **Device:** from T3.1 (sequencer mode). Engage the **arpeggiator**, export. Then change the
+- **Device:** from T3.1 (sequencer mode). Engage the **arpeggiator** mode on Track 2, export. Then change the
   **ARP octave** by one, export.
 - **Captures:** `T3-arp-on.KeyStepPro`, `T3-arp-octave.KeyStepPro`
 - **Confirms if:** the ARP captures move bits 4–6 (octave, per the dictionary's comment) and
@@ -497,7 +497,7 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 | T3.2 | | track 1 drum mode | | bit that moved: |
 | T3.3 | | ARP on | | |
 | T3.4 | | ARP octave +1 | | |
-| D1 | | step 5 toggled off | | **did beat 5 sound?** |
+| D1 | | step 5 toggled off | | **did beat 5 sound?** No |
 | D2 | | 3- then 4-note chord | | 4th note went where? |
 | D3 | | >64 drum hits | | slot 2 used? |
 | D4 | | lane 1 = 12 steps | | |
