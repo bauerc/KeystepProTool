@@ -74,4 +74,6 @@ testpaths = ["tests"]
 addopts = "--strict-markers"
 markers = [
     "hardware: requires a physical KeyStep Pro (deselect with -m 'not hardware')",
+    "slow: marks tests as slow integration/e2e tests (skipped during AI validation)",
+    "fast: marks explicit core unit tests"
 ]

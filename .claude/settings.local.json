@@ -8,10 +8,36 @@
       "Bash(uv run *)"
     ]
   },
-    "attribution": {
+  "attribution": {
     "sessionUrl": false
   },
-    "worktree": {
-    "bgIsolation": "none"
+  "allowedTools": [
+    "python -m compileall -q .",
+    "mypy ."
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/guard_rails.sh",
+            "description": "Block dangerous shell operations before they execute"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/validate.sh",
+            "description": "Verify code compilation, type safety, and test criteria before completing turn"
+          }
+        ]
+      }
+    ]
   }
 }
