@@ -10,6 +10,13 @@ plan is in [`ROADMAP.md`](./ROADMAP.md).
 Milestones 1, 1.5 and 2 of 9 are done: reading and inspecting project files, the drum map, and
 exporting projects as MIDI. Converting *from* MIDI (M5) is next.
 
+The format itself now has no undecoded parts blocking that work. M2.1 read the project against
+MCC's `bulkOperation` descriptors — which declare every parameter's index geometry — and
+corrected six claims, including the drum step-active bitmask that had been the last blocker on
+writing files. It also recovered 43 real notes the reader had been silently discarding from the
+drum track. What remains unknown needs the hardware, not more analysis: the three timing
+encodings (see below).
+
 ## Install
 
 Requires Python 3.13 and [uv](https://docs.astral.sh/uv/).
@@ -139,6 +146,12 @@ Where a pattern holds both a melodic and a drum note set, only the one the track
 (parameter `86` bit 6) says the device plays is exported — the other is leftovers from before the
 track was switched over, and exporting it would put notes in the file that no hardware produces.
 `--include-stale` exports both.
+
+A drum note can be **stored but not flagged active**. The device keeps a note's settings when its
+step is switched off, so the note array holds entries that parameter `52` does not mark as
+playing. On the file evidence `52` is what decides — but that is inferred rather than measured on
+the device, so `ksp-dump` marks such notes `[not flagged active]` and `ksp2midi` exports them and
+warns, rather than deleting notes on an unconfirmed reading.
 
 Note **time shift is not applied**: how much time one shift unit is worth has never been
 measured, so the export leaves the grid alone and says so.

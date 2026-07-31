@@ -262,6 +262,18 @@ def render_pattern(
     # confidently wrong in a way the file itself will not reveal.
     warnings.extend(f"track {track_number}: {line}" for line in pattern.warnings)
 
+    inactive = sum(1 for n in pattern.notes_of(kind) if not n.active)
+    if inactive:
+        # Parameter 52 looks like the play/don't-play state, which would make
+        # these silent on the device -- but that is inferred from file state,
+        # not measured (test D1). Dropping them on an unconfirmed reading
+        # would delete the user's notes, so they are exported and named.
+        warnings.add(
+            f"track {track_number} pattern {pattern.number} ({kind.value}): {inactive} note(s) "
+            f"are stored but not flagged active by parameter 52 and may not sound on the "
+            f"device; exported anyway"
+        )
+
     notes: list[RenderedNote] = []
     for note in pattern.notes_of(kind):
         rendered = _render_note(note, kind, channel, swing, options, warnings)

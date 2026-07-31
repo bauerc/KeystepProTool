@@ -60,19 +60,28 @@ be checked against the identical files.
 **Delivered:** `ksp.lenient_json` / `keys` / `constants` / `model` / `reader`, and the
 `ksp-dump` command (`--all`, `--track`, `--pattern`, `--json`).
 
-**What it turned up.** Four things the spec did not have, now folded into it:
+**What it turned up.** Four things the spec did not have. One holds as written; the other three
+were symptoms of misread index shapes and were corrected at M2.1:
 
 - **Tempo is decoded** — parameters `70`–`72` are little-endian 7-bit chunks holding BPM × 100.
   Confirmed against the hardware readout via the two empty baselines.
-- **Track 1's fourth polyphony slot is zero-filled, not sentinel-filled**, in every pattern of
-  every sample. Read naively, an *empty* project decodes as 2,048 phantom notes. The `!= 127`
-  existence rule needs the zero-fill exception alongside it (spec §4).
-- **Parameter `100` does not identify drum mode** — it reads 26 everywhere. Usually harmless,
-  because the unused parameter set is sentinel-filled, but `initial_project` Track 1 pattern 1
-  holds a real melody *and* real drums, so the reader reports both. M6 must isolate the real bit.
-- **The drum step-active bitmask (`52`) is not fully decoded.** Its packing fits both
-  hardware-confirmed projects but not real user material. Harmless for reading — the note list is
-  authoritative — but it blocks writing, so M5/M6 depend on it.
+- ~~**Track 1's fourth polyphony slot is zero-filled**, so the `!= 127` rule needs a
+  zero-fill exception~~ — **corrected at M2.1**: slot 4 was never a poly slot. Every track has
+  **3**. Item 123 is dimensioned for a fourth so parameter `52` has room to spill, and nothing
+  writes notes there, which is why it is zero rather than sentinel-filled. The exception is gone;
+  the reader simply does not address slot 4 (spec §4).
+- ~~**Parameter `100` does not identify drum mode**~~ — **resolved at M1.5**: the flag is `86`
+  bit 6. `initial_project` Track 1 pattern 1 does hold a real melody *and* real drums, and the
+  reader reports both while naming which one plays.
+- ~~**The drum step-active bitmask (`52`) is not fully decoded**~~ — **resolved at M2.1**: one
+  flat 240-entry lane-major array, 10 parts per lane, 7 bits per entry (spec §3.2). It reproduces
+  every sample exactly. This was M5/M6's blocker.
+
+**M2.1 also found a bug this milestone had been reporting rather than fixing.** The drum note
+array is a *pool*, not a compacted list: `127` marks one empty entry, not the end. Reading it
+with the melodic rule discarded **43 real user notes** in `initial_project` patterns 5 and 9 —
+which is exactly what the "N value(s) after the end of the note list were ignored" warning was
+announcing. Parameter `52` flags those notes, which is what proves them live.
 
 One discrepancy is recorded rather than resolved: `project_5_description.txt` gives Time Shift
 −1 for both kick hits, and the file stores −1 and **+1**. The fixture asserts the conflict so it
@@ -101,9 +110,10 @@ Note 1…Note 24 (`83`–`106`, defaults 36…59). Three consequences:
   MCC's own field name and by exact correlation across all five samples. This removes one of the
   two blockers listed at the bottom of this file.
 
-**Still needs hardware — Test D1.** Two things MCC's `defaultValue`s cannot settle: whether a
-factory device is chromatic-from-36 or chromatic-from-0, and whether chromatic mode maps lane
-*i* to `low + i` or `low + i + 1`.
+**Still needs hardware — Test DM1.** (Named `DM*` to keep it distinct from the protocol
+document's Tier 4 `D1`–`D4`, which are different tests.) Two things MCC's `defaultValue`s cannot
+settle: whether a factory device is chromatic-from-36 or chromatic-from-0, and whether chromatic
+mode maps lane *i* to `low + i` or `low + i + 1`.
 
 Method, following `analysis/project_9_tests.txt`: on an untouched pattern with Track 1 in DRUM
 mode, first write down the device's current Drum Map readout, then place one hit on each of the
@@ -112,12 +122,12 @@ Export, then capture the MIDI output while it plays once. Step *n* fires exactly
 the captured pitch *is* the note for lane *n−1*: all 24 mappings from one capture, and the
 lane encoding cross-checks against `123_117_*` in the export.
 
-One hit per step rather than 24 at once because Track 1 has only 4 poly slots. **The same export
-is also the discriminating case for the undecoded `52` packing** — 24 lanes across 24
-consecutive steps is exactly the "vary lanes, hold steps constant" case `initial_project`
-demands — so capture it in the same session as M7's gate sweep.
+One hit per step rather than 24 at once because Track 1 has only 3 poly slots. The same export
+is also a free confirmation of `52`'s decoded layout — 24 lanes across 24 consecutive steps
+exercises every lane's part-0 entry, spread across all four slot indices — so capture it in the
+same session as M7's gate sweep.
 
-**Test D2**, five minutes and no capture: change the Drum Map, export again, expect a
+**Test DM2**, five minutes and no capture: change the Drum Map, export again, expect a
 byte-identical file. Turns "not project state" from an inference into an asserted fact.
 
 ---
@@ -142,6 +152,16 @@ whole classes of error that diffing does not.
 `--include-stale`, `--no-swing`, `--dry-run`, `--force`, `--quiet`).
 `tests/test_midi_export.py` asserts the exported notes of `project_5` and `project_9` against the
 hardware-confirmed descriptions rather than against our own reader.
+
+**M2.1 (issue #18)** settled six format claims from MCC's `bulkOperation` descriptors, which
+declare every parameter's index geometry and which the spec had never been read against. The
+findings and their evidence now live in the spec — §1 for the descriptors, §8 for the corrections
+table. It is a reading fix rather than a
+feature: three poly slots everywhere, `48`/`49` per pattern rather than per slot, `51` indexed by
+drum lane, `52` fully decoded, and the drum note array recognised as a pool rather than a
+compacted list. It **recovered 43 real user notes the reader had been discarding**, removed all
+five spurious warnings from `initial_project`, and cleared the last format blocker on M5/M6.
+`tests/test_index_spaces.py` pins each correction against the raw files.
 
 **M2.2 (issue #22)** finished the option set the M2 plan specified and split the module into three
 layers — `render_pattern` (plain tick data) → `arrange` (timeline placement) → `build_midi_file`
@@ -250,14 +270,15 @@ patterns longer than 64 steps split across pattern slots.
 
 **Watch for:**
 - Track 1 in DRUM mode uses a completely different parameter set (spec §3.2), and the mode
-  bitfield must match what you write. **M1 found that parameter `100` does not currently
-  distinguish the modes** — isolating the real bit is part of this milestone.
-- The drum step-active bitmask `52` must be written consistently with the note list, and **its
-  packing is not yet decoded** (spec §5). Reading does not need it; writing does.
+  bitfield must match what you write. The flag is **`86` bit 6** (resolved at M1.5), not `100`.
+- The drum step-active bitmask `52` must be written consistently with the note list. Its layout
+  is decoded (spec §3.2) and, on the file evidence, it is the array that decides what *sounds* —
+  so writing notes without setting it produces a pattern that loads and plays nothing.
 - Anything over 64 steps must be split and chained, never silently truncated.
-- Poly slots cap at 3 (4 on Track 1) — decide and document what happens to a 5-note chord.
-  Track 1's fourth slot is zero-filled in every known file and may not be usable at all; do not
-  assume it works without testing on the device.
+- Poly slots cap at **3 on every track** — decide and document what happens to a 4-note chord.
+  There is no fourth slot to fall back on: no descriptor addresses one (spec §4).
+- Write the drum note array **compacted**, with no holes. A pool with holes is legal to read but
+  a converter never needs to produce one.
 
 ---
 
@@ -313,11 +334,12 @@ it is worth building after M6 — see the caveat under **Stack**.
 | Milestone | Status | Needs hardware? | Depends on |
 |---|---|---|---|
 | M1 Reader | ✅ done | No | — |
-| M1.5 Drum map | ✅ done | Test D1 confirms the default | M1 |
-| M2 MIDI export | | No | M1, M1.5 |
+| M1.5 Drum map | ✅ done | Test DM1 confirms the default | M1 |
+| M2 MIDI export | ✅ done | No | M1, M1.5 |
+| M2.1 Format corrections | ✅ done | No | M1 |
 | M3 Round-trip | | No | M1 |
 | M4 Mutation | | **Yes** | M3 |
-| M5 MVP convert | | No (desk-testable) | M3, drum `52` packing |
+| M5 MVP convert | | No (desk-testable) | M3 |
 | M6 Full convert | | No (desk-testable) | M5, M1.5 |
 | M7 Timing calibration | | **Yes** | M3 |
 | M8 Distribution | | For final check | M6 |
@@ -325,11 +347,18 @@ it is worth building after M6 — see the caveat under **Stack**.
 
 M1–M3 and M5–M6 can all be built and tested with nothing but the files already in this repo.
 
-Of the two format questions M1 surfaced, one is now closed:
+**Both format questions M1 surfaced are now closed**, so no milestone is blocked on decoding any
+longer:
 
-- **Drum step-active packing (`52`)** — still open, blocks M5/M6. Decodable from the files
-  already checked in, and M1.5's Test D1 export would settle it outright.
+- ~~**Drum step-active packing (`52`)**~~ — **resolved at M2.1**: a flat 240-entry lane-major
+  bitmask, 7 bits per entry. Spec §3.2.
 - ~~**Drum-mode bit (`100`)**~~ — **resolved at M1.5**: the flag is `86` bit 6. Spec §5.
 
-Hardware captures worth doing in one session: M7's gate sweep, M1.5's Test D1 (drum map, and the
-`52` packing case for free) and D2, plus the `project_5` drum time-shift re-check.
+What remains open needs the device, not more desk work: the timing encodings (M7), and three
+cheap confirmations — the protocol's **D1** (does a pooled but unflagged drum note sound? i.e. is
+`52` authoritative) and **D4** (can drum lanes really run at different lengths, per `51`), plus
+M1.5's **DM1** for the drum map itself.
+
+Hardware captures worth doing in one session: M7's gate sweep, M1.5's tests DM1 (the drum map,
+plus a free confirmation of `52`'s layout) and DM2, the protocol's D1, and the `project_5` drum
+time-shift re-check.

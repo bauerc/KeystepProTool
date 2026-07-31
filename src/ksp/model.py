@@ -76,6 +76,19 @@ class Note:
     skip: tuple[int, ...]
     """Which of the 16/32/48/64 sequences this note plays in."""
 
+    active: bool = True
+    """Whether the pattern's step-active array flags this note's step.
+
+    Melodic notes are active by construction -- parameter 48 is exactly the
+    union of the note steps across the three slots in every sample file. Drum
+    notes are not: parameter 52 is consistently a *subset* of the note pool,
+    which reads as 52 holding the play/don't-play state while the pool keeps a
+    note's settings around after its step is toggled off.
+
+    That reading is inferred from file state rather than confirmed on the
+    device, so an inactive note is reported rather than filtered out. Test D1
+    settles it; see ROADMAP.md M1.5."""
+
     @property
     def label(self) -> str:
         """Human-readable pitch: a note name, or a bare drum lane number."""
@@ -107,6 +120,7 @@ class Note:
             "time_shift": self.time_shift,
             "randomness": self.randomness,
             "skip": list(self.skip),
+            "active": self.active,
         }
         if drum_map is not None and self.kind is NoteKind.DRUM and drum_map.has_lane(self.pitch):
             note = drum_map.note_for_lane(self.pitch)

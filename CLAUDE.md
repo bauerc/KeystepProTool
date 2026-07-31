@@ -67,13 +67,28 @@ the milestone implementing them lands, so an installed command never crashes on 
   projects have; it must be injected.
 - **Two index spaces** (spec §4) — the single most common source of bugs. Within one
   `(item, pattern, slot)`, params `48`/`49` are indexed by **physical step**, while `50` and
-  `109`–`113` are indexed by **ordinal position in a compact note list**, with `50` mapping each
-  note to its 0-based step. The device stores an event list, not a step grid.
+  `109`–`113` are indexed by **ordinal position in a note list**, with `50` mapping each note to
+  its 0-based step. The device stores an event list, not a step grid.
+- **Read `bulkOperation`, not just `fields[]`.** MCC's dictionary declares every parameter's
+  index geometry there; the spec was originally written from `fields[]`, which gives names only,
+  and carried six wrong shape claims for it (spec §1, §8). Any new claim about an array's shape
+  should be checked against a descriptor before it is written down.
+- **Three poly slots on every track**, Track 1 included. Item `123` is dimensioned `16 × 4 × 64`
+  only so `52` has room to spill; nothing writes notes to slot 4, which is why it holds zeros.
+  Address slots 1–3 (`constants.SLOTS_PER_PATTERN`) and the "zero-fill trap" cannot arise.
+- **The melodic and drum note arrays scan differently, and this is not an oversight.** `50` is
+  compacted, so the first `127` ends the list. `54` is a **pool**: `127` marks one empty entry
+  and the scan must run to the end. Applying the melodic rule to drums silently discards real
+  user notes — it cost 43 of them before M2.1.
 - `127` means "empty" — but is also a legal pitch and velocity. The only valid existence test is
-  `paramId 50 != 127` (`54` for drums). Never infer a note from its velocity.
+  `paramId 50 != 127` (`54` for drums), **per entry**. Never infer a note from its velocity.
 - Track 1 (item `123`) carries a whole second parameter set for DRUM mode. The mode flag is
   **`86` bit 6** (per-track), not the `100` bitfield the spec originally named — `100` reads 26
   everywhere. A writer must set `86` to match whichever set it writes.
+- **`52` (drum step active) is decoded** — one flat 240-entry lane-major bitmask, 10 parts per
+  lane, 7 bits per entry, spilling across the slot index (spec §3.2). On the file evidence it,
+  not the note pool, decides what sounds; that is pending hardware test D1, so the reader reports
+  `Note.active` per note rather than filtering. `51` is indexed by **drum lane 1–24**, not step.
 - A drum note's `117` is a **lane index (0–23)**, not a pitch. The lane→note drum map is a
   *global device setting* and is not in the project file at all: it cannot be read from one or
   written into one. `ksp.drum_map` holds it as configuration with a documented default
@@ -101,10 +116,15 @@ in that file.
 
 ## Current state
 
-M1 (reader + `ksp-dump`), M1.5 (`ksp.drum_map` and the real drum-mode flag), M2 (`ksp2midi`) and
-M2.2 (the rest of the export options) are merged. The codebase reads a project into `ksp.model`
-and renders it as MIDI; nothing writes `.KeyStepPro` files yet. M3 (byte-identical round-trip) is
-next, and it is the prerequisite for every writing milestone after it.
+M1 (reader + `ksp-dump`), M1.5 (`ksp.drum_map` and the real drum-mode flag), M2 (`ksp2midi`),
+M2.1 (the format corrections) and M2.2 (the rest of the export options) are merged. The codebase
+reads a project into `ksp.model` and renders it as MIDI; nothing writes `.KeyStepPro` files yet.
+M3 (byte-identical round-trip) is next, and it is the prerequisite for every writing milestone
+after it.
+
+**No part of the format is still undecoded.** M2.1 closed the last one (`52`), so M5/M6 are
+blocked by nothing but the work itself. Everything still open needs the hardware: the three
+timing encodings (M7) and the D1/D4 confirmations.
 
 `ksp.midi_export` runs in three layers and they must stay separate: `render_pattern` turns one
 pattern into plain tick data, `arrange` places renderings on a timeline, and `build_midi_file` is

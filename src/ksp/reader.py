@@ -5,18 +5,26 @@ The whole difficulty of this milestone is in one place: within a single
 depending on the parameter.
 
 * **Step-indexed** -- 48 (step active) and 49 (melodic step skip): the index
-  is a physical step, 1-64.
+  is a physical step, 1-64. Both live at slot 1 only; slots 2-4 are padding.
 * **Note-indexed** -- 50/54 (note -> step) and 109-113 / 117-121: the index is
-  an ordinal in a compact note list, and 50 (or 54 for drums) says which step
-  that note sits on.
+  an ordinal in a note list, and 50 (or 54 for drums) says which step that
+  note sits on.
 
 So the device does not store a step grid of note data. It stores an event list
 plus a separate per-step activity array. Reading it with a single index space
 produces values that look almost right, which is worse than values that look
 wrong. Spec section 4.
+
+**The two note lists are scanned by different rules, and this is not an
+oversight.** The melodic list (50) really is compacted: no slot in any sample
+file holds a value after an interior sentinel, so the first 127 ends it. The
+drum array (54) is a *pool* -- ``initial_project`` pattern 5 has sentinels at
+entries 28-29 with real, parameter-52-flagged notes behind them -- so a 127
+marks one empty entry and the scan must carry on to the end. Sharing one rule
+here silently discards real user notes, which is what this reader used to do.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -132,11 +140,28 @@ def _read_pattern(
     """
     warnings: list[str] = []
 
-    seq_notes, seq_warnings = _read_note_lists(raw, item_id, pattern, kind=NoteKind.SEQ)
+    # Step-active state is per pattern, not per slot: parameter 48 is indexed
+    # at slot 1 only and holds the union over all three slots, and parameter
+    # 52 is one flat array covering every lane. Both are read once here and
+    # handed down, which is also what makes the cross-checks below correct.
+    seq_active = _read_seq_step_active(raw, item_id, pattern)
+    seq_notes, seq_warnings = _read_note_lists(
+        raw, item_id, pattern, kind=NoteKind.SEQ, is_active=lambda _pitch, step: step in seq_active
+    )
+    seq_warnings += _check_seq_step_active(pattern, seq_active, seq_notes)
+
     drum_notes: tuple[Note, ...] = ()
     drum_warnings: list[str] = []
     if item_id == constants.DRUM_TRACK_ITEM_ID:
-        drum_notes, drum_warnings = _read_note_lists(raw, item_id, pattern, kind=NoteKind.DRUM)
+        drum_active = _read_drum_step_active(raw, pattern)
+        drum_notes, drum_warnings = _read_note_lists(
+            raw,
+            item_id,
+            pattern,
+            kind=NoteKind.DRUM,
+            is_active=lambda lane, step: step in drum_active.get(lane, frozenset()),
+        )
+        drum_warnings += _check_drum_step_active(pattern, drum_active, drum_notes)
 
     notes = seq_notes + drum_notes
     warnings += seq_warnings + drum_warnings
@@ -218,20 +243,38 @@ def _swing(raw: dict[str, Any], item_id: int, param: int, pattern: int) -> int:
 
 
 def _read_note_lists(
-    raw: dict[str, Any], item_id: int, pattern: int, *, kind: NoteKind
+    raw: dict[str, Any],
+    item_id: int,
+    pattern: int,
+    *,
+    kind: NoteKind,
+    is_active: Callable[[int, int], bool],
 ) -> tuple[tuple[Note, ...], list[str]]:
-    """Decode every polyphony slot of one pattern for one parameter set."""
+    """Decode every polyphony slot of one pattern for one parameter set.
+
+    Three slots on every track. Item 123 is dimensioned for a fourth, but no
+    descriptor addresses a note parameter there and it is uniformly zero in
+    every sample -- it exists so parameter 52 has somewhere to spill.
+    """
     notes: list[Note] = []
     warnings: list[str] = []
-    for slot in range(1, constants.SLOTS_BY_ITEM[item_id] + 1):
-        slot_notes, slot_warnings = _read_slot(raw, item_id, pattern, slot, kind=kind)
+    for slot in range(1, constants.SLOTS_PER_PATTERN + 1):
+        slot_notes, slot_warnings = _read_slot(
+            raw, item_id, pattern, slot, kind=kind, is_active=is_active
+        )
         notes.extend(slot_notes)
         warnings.extend(slot_warnings)
     return tuple(notes), warnings
 
 
 def _read_slot(
-    raw: dict[str, Any], item_id: int, pattern: int, slot: int, *, kind: NoteKind
+    raw: dict[str, Any],
+    item_id: int,
+    pattern: int,
+    slot: int,
+    *,
+    kind: NoteKind,
+    is_active: Callable[[int, int], bool],
 ) -> tuple[list[Note], list[str]]:
     drum = kind is NoteKind.DRUM
     if drum:
@@ -252,9 +295,6 @@ def _read_slot(
 
     pitch = column(p_pitch)
     velocity = column(p_velocity)
-    if not slot_is_initialised(note_step, pitch, velocity):
-        return [], []
-
     gate = column(p_gate)
     shift = column(p_shift)
     random = column(p_random)
@@ -266,9 +306,14 @@ def _read_slot(
     warnings: list[str] = []
     for i, step in enumerate(note_step):
         if step is None or step == constants.SENTINEL:
-            # Note lists are packed contiguously from index 1, so the first
-            # sentinel ends the list. Anything past it is stale data from an
-            # earlier edit and must not be reported as a playing note.
+            if drum:
+                # A hole in the pool, not the end of it. The device keeps a
+                # note's settings when its step is toggled off, so entries
+                # after a sentinel are ordinary data.
+                continue
+            # The melodic list *is* compacted -- verified across all five
+            # samples -- so the first sentinel ends it and anything past it is
+            # stale data from an earlier edit.
             trailing = [v for v in note_step[i + 1 :] if v is not None and v != constants.SENTINEL]
             if trailing:
                 warnings.append(
@@ -279,19 +324,21 @@ def _read_slot(
 
         skip_index = i if drum else step
         skip_mask = skip[skip_index]
+        value = _required(pitch[i])
         notes.append(
             Note(
                 kind=kind,
                 slot=slot,
                 index=i + 1,
                 step=step + 1,
-                pitch=_required(pitch[i]),
+                pitch=value,
                 velocity=_required(velocity[i]),
                 gate_raw=_required(gate[i]),
                 gate=constants.decode_gate(_required(gate[i])),
                 time_shift=_required(shift[i]) - constants.TIME_SHIFT_CENTRE,
                 randomness=_required(random[i]),
                 skip=constants.decode_skip_mask(skip_mask if skip_mask is not None else 0),
+                active=is_active(value, step + 1),
             )
         )
 
@@ -306,63 +353,95 @@ def _read_slot(
                 f"pattern {pattern} slot {slot}: drum lane(s) {out_of_range} are outside "
                 f"0-{constants.DRUM_LANE_COUNT - 1}"
             )
-    else:
-        warnings.extend(_check_step_active(raw, item_id, pattern, slot, notes))
     return notes, warnings
 
 
-def slot_is_initialised(
-    note_step: Sequence[int | None], pitch: Sequence[int | None], velocity: Sequence[int | None]
-) -> bool:
-    """Distinguish a genuinely empty slot from an uninitialised one.
+def _read_seq_step_active(raw: dict[str, Any], item_id: int, pattern: int) -> set[int]:
+    """Steps flagged by parameter 48, which lives at slot 1 only.
 
-    An unused slot is normally sentinel-filled, and the ``127`` in its first
-    note->step entry ends the list immediately. Slot 4 of Track 1 is the
-    exception: it is filled with **zeros**, in all 16 patterns of all five
-    sample projects -- including both empty baselines and real user material --
-    for both the melodic and drum parameter sets. Taken at face value that
-    reads as 64 notes at step 1 with velocity 0, i.e. 128 phantom notes per
-    pattern in a file that holds nothing.
-
-    Zero-fill is therefore treated as uninitialised. The test is deliberately
-    narrow: all three of note->step, pitch and velocity uniformly zero. A real
-    note list cannot look like that, because a note with velocity 0 makes no
-    sound and 64 notes cannot all share step 1.
-    """
-    return not (
-        all(v == 0 for v in note_step)
-        and all(v == 0 for v in pitch)
-        and all(v == 0 for v in velocity)
-    )
-
-
-def _check_step_active(
-    raw: dict[str, Any], item_id: int, pattern: int, slot: int, notes: list[Note]
-) -> list[str]:
-    """Cross-check the note list against the redundant step-active array.
-
-    Parameter 48 marks which steps are active and duplicates information the
-    note list already carries. Comparing them is close to free and catches a
-    misread index space immediately, so it runs on every slot.
-
-    The drum equivalent (parameter 52, a packed bitmask) is deliberately not
-    checked. Its 8-steps-per-index packing reproduces exactly on the two
-    hardware-confirmed projects but does not account for the values in
-    ``initial_project``, which is real user material rather than throwaway
-    data -- so the packing is not understood well enough to raise warnings
-    from. Notes come from the note list, which is the authoritative source.
+    MCC's descriptors address 48 and 49 with index-2 fixed at ``[1]`` on every
+    item, unlike the note parameters which use ``[1, 2, 3]``. Slots 2-4 are
+    padding and are uniformly zero in every sample file.
     """
     active = read_array(
-        raw, item_id, constants.P_SEQ_STEP_ACTIVE, pattern, slot, length=constants.MAX_STEPS
+        raw, item_id, constants.P_SEQ_STEP_ACTIVE, pattern, 1, length=constants.MAX_STEPS
     )
-    from_flags = {i + 1 for i, v in enumerate(active) if v == 1}
+    return {i + 1 for i, v in enumerate(active) if v == 1}
+
+
+def _read_drum_step_active(raw: dict[str, Any], pattern: int) -> dict[int, set[int]]:
+    """Decode parameter 52 into lane -> flagged steps.
+
+    One flat 240-entry array, lane-major, spilling across the slot index --
+    slots 1-3 in full plus slot 4 indices 1-48. See ``constants`` for the
+    geometry and the descriptors it comes from.
+    """
+    flags: dict[int, set[int]] = {}
+    entry = 0
+    for slot in range(1, constants.SLOT_INDEX_MAX + 1):
+        values = read_array(
+            raw,
+            constants.DRUM_TRACK_ITEM_ID,
+            constants.P_DRUM_STEP_ACTIVE,
+            pattern,
+            slot,
+            length=constants.MAX_STEPS,
+        )
+        for value in values:
+            if entry >= constants.DRUM_STEP_ACTIVE_ENTRIES:
+                return flags
+            if value:
+                lane, steps = constants.decode_drum_step_active(entry, value)
+                flags.setdefault(lane, set()).update(steps)
+            entry += 1
+    return flags
+
+
+def _check_seq_step_active(pattern: int, active: set[int], notes: tuple[Note, ...]) -> list[str]:
+    """Cross-check parameter 48 against the note list, once per pattern.
+
+    48 duplicates information the note list already carries, so comparing them
+    is close to free and catches a misread index space immediately. It has to
+    be compared against the **union over the three slots**: a chord puts one
+    note per slot on the same step, and no single slot then holds every
+    flagged step. Comparing per slot is what made ``initial_project`` Track 3
+    pattern 3 report three disagreements that were not there.
+    """
     from_notes = {n.step for n in notes}
-    if from_flags == from_notes:
+    if active == from_notes:
         return []
     return [
-        f"pattern {pattern} slot {slot}: step-active flags disagree with the note list "
-        f"(only in flags: {sorted(from_flags - from_notes)}, "
-        f"only in notes: {sorted(from_notes - from_flags)})"
+        f"pattern {pattern}: step-active flags disagree with the note list "
+        f"(only in flags: {sorted(active - from_notes)}, "
+        f"only in notes: {sorted(from_notes - active)})"
+    ]
+
+
+def _check_drum_step_active(
+    pattern: int, active: dict[int, set[int]], notes: tuple[Note, ...]
+) -> list[str]:
+    """Check that every step parameter 52 flags has a note behind it.
+
+    This is the mirror image of the melodic check, and deliberately one-sided.
+    Pooled notes with no flag are normal -- that asymmetry is the evidence for
+    52 being the play/don't-play state. A *flag* with no note would mean the
+    device is sounding something with no settings, which cannot be right, so
+    it means the decode is wrong and is worth saying loudly.
+    """
+    pooled: dict[int, set[int]] = {}
+    for note in notes:
+        pooled.setdefault(note.pitch, set()).add(note.step)
+
+    orphans = {
+        lane: sorted(steps - pooled.get(lane, set()))
+        for lane, steps in active.items()
+        if steps - pooled.get(lane, set())
+    }
+    if not orphans:
+        return []
+    return [
+        f"pattern {pattern}: drum step-active flags mark step(s) with no note in the "
+        f"pool ({orphans}), so parameter 52's layout is not what we think"
     ]
 
 

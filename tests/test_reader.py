@@ -13,7 +13,7 @@ import pytest
 from ksp import constants
 from ksp.keys import key, read_array
 from ksp.model import NoteKind, PatternMode, Project
-from ksp.reader import load, read_project, slot_is_initialised
+from ksp.reader import load, read_project
 
 
 @lru_cache(maxsize=16)
@@ -72,28 +72,41 @@ class TestKeys:
         assert read_array(raw, 125, 50, 1, 1, length=3) == [0, 4, None]
 
 
-class TestSlotInitialisation:
-    """Track 1 slot 4 is zero-filled, not sentinel-filled, in every known file."""
+class TestDrumStepActiveGeometry:
+    """Parameter 52's flat 240-entry layout, exercised as pure arithmetic.
 
-    def test_zero_filled_slot_is_uninitialised(self) -> None:
-        zeros = [0] * constants.MAX_STEPS
-        assert not slot_is_initialised(zeros, zeros, zeros)
+    ``tests/test_index_spaces.py`` proves it against the sample files; these
+    pin the address maths on its own, so a failure says which half broke.
+    """
 
-    def test_sentinel_filled_slot_is_initialised_but_empty(self) -> None:
-        sentinels = [constants.SENTINEL] * constants.MAX_STEPS
-        assert slot_is_initialised(sentinels, sentinels, sentinels)
+    @pytest.mark.parametrize(
+        ("lane", "part", "address"),
+        [(0, 0, (1, 1)), (0, 9, (1, 10)), (6, 4, (2, 1)), (17, 0, (3, 43)), (23, 9, (4, 48))],
+    )
+    def test_the_flat_index_spills_across_slots(
+        self, lane: int, part: int, address: tuple[int, int]
+    ) -> None:
+        assert constants.drum_step_active_address(lane, part) == address
 
-    def test_a_real_note_at_step_zero_is_not_mistaken_for_zero_fill(self) -> None:
-        """The narrow test matters: step 1 with pitch 0 is a legal drum note.
+    def test_the_address_round_trips(self) -> None:
+        for entry in range(constants.DRUM_STEP_ACTIVE_ENTRIES):
+            lane, part = constants.drum_step_active_lane_part(entry)
+            slot, index = constants.drum_step_active_address(lane, part)
+            assert (slot - 1) * constants.MAX_STEPS + index - 1 == entry
 
-        project_5's kick is exactly that -- note->step 0, lane 0 -- so only
-        velocity separates it from uninitialised storage. Requiring all three
-        arrays to be uniformly zero is what keeps a real note readable.
-        """
-        note_step = [0] + [constants.SENTINEL] * (constants.MAX_STEPS - 1)
-        pitch = [0] + [constants.SENTINEL] * (constants.MAX_STEPS - 1)
-        velocity = [127] + [constants.SENTINEL] * (constants.MAX_STEPS - 1)
-        assert slot_is_initialised(note_step, pitch, velocity)
+    @pytest.mark.parametrize(
+        ("entry", "value", "expected"),
+        [
+            (0, 17, (0, (1, 5))),  # 0b0010001 -> steps 1 and 5, project_5's kick
+            (1, 34, (0, (9, 13))),  # 0b0100010 -> steps 9 and 13
+            (0, 1, (0, (1,))),  # project_9's single kick on step 1
+            (170, 1, (17, (1,))),  # lane 17 part 0 lives at slot 3 index 43
+        ],
+    )
+    def test_seven_bits_per_entry_lsb_first(
+        self, entry: int, value: int, expected: tuple[int, tuple[int, ...]]
+    ) -> None:
+        assert constants.decode_drum_step_active(entry, value) == expected
 
 
 class TestProjectLevel:

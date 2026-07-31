@@ -54,7 +54,10 @@ def timing_keys(raw: dict[str, Any]) -> Iterator[str]:
                     if candidate in raw:
                         yield candidate
                     continue
-                for slot in range(1, constants.SLOTS_BY_ITEM.get(item, 3) + 1):
+                # Every slot the key space has, not just the three that hold
+                # notes: this diffs raw captures, so a value appearing where
+                # we do not expect one is exactly what it exists to show.
+                for slot in range(1, constants.SLOT_INDEX_MAX + 1):
                     for note in range(1, constants.MAX_STEPS + 1):
                         candidate = keys.key(item, param, pattern, slot, note)
                         if candidate in raw:

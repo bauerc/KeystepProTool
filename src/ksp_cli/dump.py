@@ -68,12 +68,17 @@ def _pattern_lines(pattern: Pattern, drum_map: DrumMap | None) -> Iterator[str]:
             yield f"        slot {slot}"
             for note in (n for n in notes if n.slot == slot):
                 shift = f"{note.time_shift:+d}" if note.time_shift else " 0"
+                # A drum note the step-active array does not flag is stored
+                # but (on the evidence of finding 5) silent. Marked rather
+                # than hidden: it is the user's note either way, and the
+                # authority claim is not hardware-confirmed yet.
+                muted = "" if note.active else "  [not flagged active]"
                 yield (
                     f"          note {note.index:>2}  step {note.step:>2}  "
                     f"{note.labelled(drum_map):<{width}} "
                     f"vel {note.velocity:>3}  gate {_format_gate(note.gate, note.gate_raw)}  "
                     f"shift {shift}  rand {note.randomness:>3}  "
-                    f"seq {_format_skip(note.skip)}"
+                    f"seq {_format_skip(note.skip)}{muted}"
                 )
     for warning in pattern.warnings:
         yield f"      ! {warning}"

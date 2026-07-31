@@ -5,18 +5,18 @@ setting known values on the device, exporting them, and diffing.
 
 **Audience:** a human at the device, and an agent re-reading this later to interpret the captures.
 
-**Companion document:** [`Format_Corrections_Issue.md`](./Format_Corrections_Issue.md). Read its
-summary table before starting. Several questions the format spec and `ROADMAP.md` still list as
-open — the packing of `52`, the poly-slot count, the step-active warnings — were resolved at the
-desk from MCC's parameter dictionary and are **not** in this document. Do not spend device time
-on them.
+**Companion document:** [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md), whose §8
+corrections table is worth reading before starting. Several questions the spec and `ROADMAP.md`
+once listed as open — the packing of `52`, the poly-slot count, the step-active warnings — were
+resolved at the desk from MCC's `bulkOperation` descriptors (milestone M2.1) and are **not** in
+this document. Do not spend device time on them.
 
 **What is genuinely unknown and needs the device:**
 
 | Question | Blocks | Tier |
 |---|---|---|
 | The gate length table (`110` / `118`) | M7, and correct note durations in M5/M6 | 2 |
-| Which bit of `100` is drum mode | M6 | 3 |
+| Confirming the drum-mode flag is `86` bit 6, and what bit 6 means on tracks 2–4 | M6 | 3 |
 | Whether an unflagged pooled drum note sounds | M6 correctness | 4 |
 | Real poly and drum-lane limits | M6 | 4 |
 | The `99` / `116` bitfield layout | M6 | 5 |
@@ -261,14 +261,21 @@ is *below* the 0.5 point — so the range extends further down than any document
 
 ## Tier 3 — M6, the drum-mode bit
 
-**4 captures.** The only remaining blocker on M6. Parameter `100` is documented as
-"Pattern Seq ARP/Drum mode, ARP type, ARP octave in a bitfield" with the dictionary's own comment
-placing ARP octave at bits 4–6. It reads **26** (`0b0011010`) in every pattern of all five sample
-files — including patterns that are unambiguously melodic and ones that are unambiguously drum —
-so nothing in the current corpus distinguishes the modes.
+**4 captures.** This is now a **confirmation, not a blocker** — M1.5 identified the flag as
+**`86` bit 6**, named by MCC's own dictionary ("Arp/Drum mode state : bit 6") and matching the
+data exactly: `123_86` is 66 in every sample holding drum notes and 2 in both empty baselines.
+The reader and `ksp2midi` already rely on it.
 
-This matters because `initial_project` Track 1 pattern 1 holds a real 64-note melody *and* a real
-12-note drum pattern. A reader cannot tell which plays; a writer cannot set the flag.
+Parameter `100` is documented as "Pattern Seq ARP/Drum mode, ARP type, ARP octave in a bitfield"
+but reads **26** (`0b0011010`) in every pattern of all five sample files, including ones that are
+unambiguously melodic and ones that are unambiguously drum. It cannot distinguish the modes.
+
+Two things are still genuinely open, and these captures settle both: whether `86` bit 6 really is
+what the device toggles (rather than a value that merely correlates across five files), and what
+bit 6 means on tracks 2–4, where the field is named *Arp*/Drum and there is no drum parameter set
+at all. It still matters that `initial_project` Track 1 pattern 1 holds a real 64-note melody
+*and* a real 12-note drum pattern — that is the case where getting the flag wrong exports the
+wrong half of a pattern.
 
 ### T3.1 — Track 1 in sequencer mode
 

@@ -7,9 +7,10 @@ Supersedes [`KeyStepPro_File_Format_Analysis_deprecated.md`](./KeyStepPro_File_F
 **Derived from:** MIDI Control Center 1.23.0.134 and the project files in `../project_files/`
 **Validated against:** `project_5_description.txt` / `project_9_tests.txt` (settings confirmed
 on the physical hardware)
-**Executable check:** every claim below is asserted by the M1 reader's test suite, which decodes
-all five sample projects. Sections 4 and 6 in particular are enforced by
-`tests/test_reader.py`.
+**Executable check:** every claim below is asserted by the test suite, which decodes all five
+sample projects. Sections 4 and 6 are enforced by `tests/test_reader.py`; the index-space and
+drum-decoding claims in sections 3.2, 4 and 5 are enforced by `tests/test_index_spaces.py`,
+which reads the raw files directly so that a reader bug cannot make them pass.
 
 ### Sample projects
 
@@ -29,8 +30,15 @@ all five sample projects. Sections 4 and 6 in particular are enforced by
 - It is **not strict JSON** — it has trailing commas.
 - Its structure is encoded entirely in the **key names**: `<itemId>_<paramId>[_i1][_i2][_i3]`.
 - The complete parameter dictionary is **shipped by MCC on disk** — you do not need to guess it.
+  `fields[]` gives the names; **`bulkOperation` gives the index shapes**, and you need both (§1).
 - Within a track/pattern/slot, **some parameters are indexed by step and others by note ordinal**.
   This is the single most important thing to get right.
+- **Three poly slots on every track**, Track 1 included. Item 123 is dimensioned for a fourth so
+  that parameter `52` has room to spill; nothing writes notes there (§4).
+- The melodic note list is **compacted**, the drum note array is a **pool with holes**. `127` ends
+  the first and marks one empty entry in the second — the same rule cannot serve both (§4).
+- `52` (drum step active) is **fully decoded**: one flat 240-entry lane-major bitmask, 7 bits per
+  entry (§3.2). On the file evidence it, not the note pool, decides what sounds (§5).
 - The key set is **fixed**. A converter overwrites values; it never adds or removes keys.
 
 ---
@@ -47,6 +55,28 @@ MCC keeps device data **outside** its app bundle, in a shared, world-readable di
 | `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/Factory/Default.KeyStepPro` | **Canonical blank project** — the ideal converter baseline |
 | `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/` | MCC's project library. Files here appear in the Project Browser |
 | `/Library/Arturia/MIDI Control Center/Firmware/keystep-pro_Firmware_Update_2.5.20.0.kspf` | Firmware. A ZIP containing `info.json` + a DFU `.bin` |
+
+### `fields[]` names things; `bulkOperation` shapes them
+
+Two parts of `KeyStepPro.json` answer different questions, and reading only the first is how this
+document came to carry five wrong claims about index spaces (§8):
+
+| Key | What it gives | What it does **not** give |
+|---|---|---|
+| `fields[]` | 205 parameter **names** — what `paramId 52` is called | Any indication of an array's shape |
+| `bulkOperation` | Every parameter's **index geometry**: which index ranges are addressable, and what each index means. 18 top-level entries expanding to **85** leaf descriptors | Value encodings — gate, swing and time shift are still unmeasured (§6) |
+
+A leaf descriptor looks like this:
+
+```json
+{"bulkParamIds": [48, 49], "bulkItemId": [[123], ["IDX"], [1], 17, 16],
+ "desc": "Pattern idx / Step seq parameters (step 17 -> 32) (step active, step skip)"}
+```
+
+Read it as: parameters `48` and `49`, item `123`, pattern `IDX` (substituted from the enclosing
+`multibulk_idx` range), **index-2 fixed at `1` and only `1`**, index-3 running 16 values from 17.
+A nested list is a set of literal index values; a trailing `start, count` pair is a range. That
+middle `[1]` — against `[1, 2, 3]` on the note parameters — is the whole of §4's poly-slot rule.
 
 Device identity, from `KeyStepPro.json`:
 
@@ -155,10 +185,10 @@ keys use **`paramId`**. Confusing the two is an easy mistake.
 
 | paramId | Arturia's name | Indexed by |
 |---|---|---|
-| `51` | DRUM poly step count | step |
-| `52` | DRUM step active | **packed bitmask**, 8 steps per index |
+| `51` | DRUM poly step count | **drum lane 1–24** |
+| `52` | DRUM step active | flat 240-entry bitmask, lane-major — see below |
 | `53` | DRUM step skip | **note** |
-| `54` | DRUM step corresponding step | **note** (`127` = empty) |
+| `54` | DRUM step corresponding step | **note** (`127` = empty entry, *not* a terminator) |
 | `117` | DRUM note pitch (drum lane) | **note** |
 | `118` | DRUM note gate length | **note** |
 | `119` | DRUM note velocity | **note** |
@@ -173,9 +203,58 @@ guaranteed: `initial_project` Track 1 pattern 1 has real content in **both**. A 
 set the mode to match what it writes, and a reader should not assume only one set is populated.
 
 `117` holds the **drum lane**, 0-based — lane 0 is the kick, confirmed by `project_5`; lanes up
-to 19 appear in `initial_project`. Its value in an *empty* list is `60`, not `127`, and drum
+to 19 appear in `initial_project`. Its value in an *empty* entry is `60`, not `127`, and drum
 velocity `119` defaults to `100` rather than `127`. Neither is a note: existence is decided by
-`54` alone, which is sentinel-filled as usual.
+`54` alone, per entry.
+
+#### `51` is one step count per drum lane
+
+```
+[51] | [[123], ["IDX"], [1],  1, 12] | Pattern idx / DRUM parameters (DRUM 1 -> 12) (poly step count)
+[51] | [[123], ["IDX"], [1], 13, 12] | Pattern idx / DRUM parameters (DRUM 12 -> 24) (poly step count)
+```
+
+Index-2 fixed at `1`, index-3 running 1–24: **one entry per drum lane**, not per step. Each drum
+lane can therefore run at its own length, which is how the KeyStep Pro does polyrhythm on the
+drum track. Every sample file holds `15` (a 16-step lane, 0-based like the other step counts) in
+entries 1–24 and `0` beyond. No sample has non-uniform values, so *that lanes really can differ*
+is inference from the addressing rather than observation — **test D4** confirms it cheaply.
+
+#### `52` is a flat 240-entry bitmask, and it is fully decoded
+
+Sixteen descriptors cover `52`, and read in order they spell the layout out:
+
+```
+[52] | [[123], ["IDX"], [1],  1, 16] | (DRUM 1 part 1 to 10, DRUM 2 part 1 to 6) (step active)
+[52] | [[123], ["IDX"], [1], 17, 16] | (DRUM 2 part 7 to 10, DRUM 3 part 1 to 10, DRUM 4 part 1 to 2)
+...
+[52] | [[123], ["IDX"], [4], 33, 16] | (DRUM 23 part 5 to 10, DRUM 24 part 1 to 10)
+```
+
+It is **one flat 240-entry array laid out lane-major**, spilling across the slot index rather
+than restarting at each slot: slot 1 indices 1–64, slot 2 1–64, slot 3 1–64, slot 4 1–48.
+240 = **24 lanes × 10 parts**. Ten parts over 64 steps means **7 bits per entry**, the natural
+width for a format whose values are all MIDI 7-bit:
+
+```
+n     = (slot - 1) * 64 + idx           # 1 .. 240
+lane  = (n - 1) // 10                   # 0-based, 0 .. 23  (lane 0 = kick)
+part  = (n - 1) %  10                   # 0 .. 9
+step  = part * 7 + bit + 1              # bit 0 .. 6, LSB first
+```
+
+**Worked check.** `initial_project` Track 1 pattern 1 slot 1 stores `52` = `17, 34` at indices 1
+and 2, i.e. lane 0 parts 0 and 1:
+
+- part 0 → steps 1–7. `17` = `0b0010001` → bits 0, 4 → **steps 1, 5**
+- part 1 → steps 8–14. `34` = `0b0100010` → bits 1, 5 → **steps 9, 13**
+
+Lane 0's note list in that pattern is steps 1, 5, 9, 13. Exact. That same pattern's other lane is
+lane 17, whose parts live at `n` = 171–180 → **slot 3, indices 43–52**, which is why the values
+looked scattered and unexplainable while `52` was read as a 16-entry per-slot array.
+
+This is the spill that forces item 123's arrays to be dimensioned `16 × 4 × 64`. Every other
+parameter in the item inherits that shape — see §4.
 
 ### 3.2.1 The drum map — 24 lanes, and it is **not in the project file**
 
@@ -201,7 +280,8 @@ mapping is necessarily an assumption about the owner's device and must be labell
 which is what `ksp.drum_map` does, defaulting to chromatic from 36 (the manual: "the default
 mapping starts at MIDI note 36", and the Custom defaults 36…59 are exactly that run).
 
-Two points still need the hardware, recorded as **Test D1** in the roadmap:
+Two points still need the hardware, recorded as **Test DM1** in the roadmap (distinct from the
+protocol document's Tier 4 `D1`):
 
 - MCC's `defaultValue` for Mode is Chromatic with Low note `0`, which would put lane 0 at MIDI
   note 0 — disagreeing with both the manual and the Custom defaults. MCC `defaultValue`s are its
@@ -258,20 +338,39 @@ assignments, velocity/aftertouch curves — are **not** in the project file. The
 Within a single `(item, pattern, slot)`, the third index means two different things depending on
 which parameter you are reading:
 
-- **Step-indexed** — `48`, `49`: index is the physical step position, 1–64.
+- **Step-indexed** — `48`, `49`: index is the physical step position, 1–64. Both are addressed at
+  **slot 1 only** (`[[123], ["IDX"], [1], …]`), and slot 1 holds the union over all three note
+  slots. Slots 2–4 exist as padding and are uniformly `0` in every sample file.
 - **Note-indexed** — `50`, `109`–`113` (and drum `53`, `54`, `117`–`121`): index is the ordinal
   position in a **note list**, and `paramId 50` (or `54`) maps that note to its **0-based step**.
 
-The KeyStep Pro therefore does **not** store a step grid of note data. It stores a **compact
-event list** per slot, plus a separate per-step activity array.
+The KeyStep Pro therefore does **not** store a step grid of note data. It stores an **event list**
+per slot, plus a separate per-step activity array.
 
-Consequences for writing files:
+Consequences for **writing** files — these are rules for writers, not invariants a reader may
+assume (see the two scan rules below):
 
-1. Notes must be packed **contiguously from index 1**, with no gaps.
+1. Write notes packed **contiguously from index 1**, with no gaps. A compacted pool is
+   well-formed, so a converter never needs to produce holes even though it must tolerate them.
 2. Every written note needs its step recorded in `50` / `54`.
-3. `48` / `52` (step active) must be kept consistent with the note list — they are redundant
-   with it, and the firmware reads both.
+3. `48` / `52` (step active) must be kept consistent with the note list, and the firmware reads
+   both. For drums `52` appears to be the **authoritative** one — see §5.
 4. The tail of every array must be sentinel-filled.
+
+### Two note lists, two scan rules
+
+This is the distinction that matters most for a reader, and the two sets genuinely differ:
+
+| | Melodic `50` | Drum `54` |
+|---|---|---|
+| Layout | **Compacted** — no gaps | A **pool** — `127` marks one empty entry |
+| Meaning of `127` | Terminator: the list ends | A hole: keep scanning to index 64 |
+| Verified by | No slot in any of the five samples holds a value after an interior `127` | `initial_project` pattern 5 slot 1 has sentinels at entries 28–29 with real notes at 30–34 behind them |
+
+Those notes behind the holes are provably live, not leftovers: `52` flags **exactly** their lanes
+and steps. Applying the compacted rule to the drum set discards them — 43 real user notes across
+`initial_project` patterns 5 and 9 — which is what the M1 reader did while reporting
+"N value(s) after the end of the note list were ignored".
 
 ### The `127` sentinel
 
@@ -281,27 +380,34 @@ velocity `127` is genuinely ambiguous in isolation.
 > **The authoritative existence test is `paramId 50` (or `54` for drums) `!= 127`.**
 > Never infer note presence from velocity.
 
-### Polyphony slots, and the zero-fill trap
+### Polyphony slots — three on every track, Track 1 included
 
-`idx2` is the poly/chord voice: **1–4 on Track 1**, **1–3 on Tracks 2–4**. Simultaneous notes
-at the same step are distributed across slots.
+`idx2` is the poly/chord voice, and it runs **1–3 on all four tracks**. Simultaneous notes at the
+same step are distributed across slots. Both note-parameter groups are addressed at `[1, 2, 3]`
+on item 123 exactly as on 124–126:
 
-> **Track 1's fourth slot is zero-filled, not sentinel-filled.** In all 16 patterns of all five
-> sample projects — including both empty baselines and real user material — `123_50_*_4_*` and
-> `123_54_*_4_*` are entirely `0`, as are the matching pitch and velocity arrays. The firmware
-> appears never to initialise it.
+```
+[109, 110, 111, 112, 113, 50]      | [[123], ["IDX"], [1, 2, 3], 1, 16] | Note seq parameters
+[53, 54, 117, 118, 119, 120, 121]  | [[123], ["IDX"], [1, 2, 3], 1, 16] | Note DRUM parameters
+```
 
-This is the one place where the `!= 127` existence rule is not sufficient on its own. Read
-literally, a zero-filled slot is 64 notes at step 0 with velocity 0, in both parameter sets, in
-every pattern — so a completely empty project decodes as 2,048 phantom notes.
+**No descriptor anywhere addresses a note parameter at index-2 value 4.** The files say the same
+thing without the dictionary: tracks 2–4 have no slot-4 keys at all, and on item 123 slot 4
+exists for *every* three-index parameter, including `48`, `49` and `50`, which have no use for a
+fourth voice.
 
-The reliable test is narrow: treat a slot as uninitialised only when **note→step, pitch and
-velocity are all uniformly zero**. That cannot be confused with real data, because a note with
-velocity 0 is silent and 64 notes cannot all sit on step 0. `project_5`'s kick is note→step `0`
-with pitch (lane) `0` and is correctly kept, because its velocity is 127.
+> **Why slot 4 exists on Track 1 at all:** parameter `52` needs 240 entries (§3.2) and is packed
+> across this same address space, so item 123's arrays are dimensioned `16 × 4 × 64` to give it
+> room. Every parameter in the item inherits that shape.
 
-Whether slot 4 is usable at all on the hardware is untested — no sample project puts a fourth
-voice on Track 1. A writer should not assume it works.
+So slot 4 of the note parameters is space **nothing writes to** — which is exactly why it holds
+uniform `0` rather than the sentinel fill an unused-but-real slot would carry. Read literally it
+looks like 64 notes at step 0 with velocity 0 in every pattern, i.e. 2,048 phantom notes in an
+empty project; the fix is simply not to address it, not to special-case zero-fill.
+
+This also settles a question the previous version of this section left open: whether a fourth
+voice is usable on the hardware. It is not addressable, so there is nothing to test. Poly caps at
+**3 everywhere**.
 
 ---
 
@@ -373,8 +479,8 @@ The KeyStep Pro can run a pattern as four consecutive 16-step sequences (16 / 32
 
 Track 1 (item `123`), pattern 1, documented as "kick on beats 1 and 5":
 
-- `123_52_1_1_1` = **17** = `0b0001_0001` → bits 0 and 4 → **steps 1 and 5**.
-  `52` appears to pack 8 steps per index, so 64 steps would occupy indices 1–8. See the caveat below.
+- `123_52_1_1_1` = **17** = `0b0010001` → bits 0 and 4 → **steps 1 and 5**. Entry 1 is lane 0
+  part 0, covering steps 1–7 at 7 bits per entry (§3.2).
 - `54` (note→step) = `0`, `4` → steps 1 and 5. ✓
 - `119` velocity = 127, 50 ✓ · `121` randomness = 80, 90 ✓
 - `120` time shift = 48, 50 → −1 and **+1**. ⚠ The description gives −1 for *both* kicks. See
@@ -404,21 +510,35 @@ picking a scale. Worth capturing in the same hardware session as the gate sweep 
 note, step its time shift through its range, export at each setting, and time the result against
 an unshifted note.
 
-### Caveat: the drum step-active bitmask (`52`) is not fully decoded
+### Resolved: `52` is decoded, and it looks authoritative
 
-The 8-steps-per-index reading above reproduces both hardware-confirmed projects exactly
-(`project_5`: 17 → steps 1 and 5; `project_9`: 1 → step 1). It does **not** account for
-`initial_project`, which is real user material: pattern 1 slot 1 holds a kick on steps 1, 5, 9,
-13 and a second lane on every odd step, yet `52` reads `17, 34` where the packing predicts
-`17, 17` and `85, 85` respectively.
+The bitmask is fully specified in §3.2 — a flat 240-entry lane-major array, 7 bits per entry.
+It reproduces `project_5` (steps 1 and 5 on lane 0), `project_9` (step 1 on lane 0) and every
+lane of `initial_project` patterns 2, 6 and 12 exactly. This closes the blocker on M5/M6, which
+needed the packing in order to write it back consistently.
 
-Since `52` is redundant with the note list, this does not block reading — **notes come from
-`54` plus `117`–`121`, which is authoritative**. It does block writing, because a writer has to
-emit `52` consistently. Resolve before M5/M6.
+**Which of `52` and the note pool decides what sounds?** The file evidence says `52`:
 
-By contrast the melodic step-active array (`48`) *is* understood, and agrees with the note list
-on every slot of both hardware-confirmed projects. The M1 reader cross-checks it on every slot
-and warns rather than reconciling.
+- Every step `52` flags has a pooled note behind it — all five files, all 16 patterns, no
+  exceptions.
+- The converse is false. Many pooled notes carry no flag: `initial_project` pattern 3 lane 19
+  holds 16 pooled notes on steps 1–16 and `52` flags none of them.
+
+That asymmetry is what you would expect if `52` is the play/don't-play state and the pool is
+parameter storage the device keeps when a step is toggled off. Under the older reading — pool
+authoritative, `52` redundant — there is no account of why the "redundant" array is always a
+subset and never a superset.
+
+> **Confidence:** strong, but this is a claim about device *behaviour* inferred from file
+> *state*, which is weaker evidence than the shape findings. **Test D1** confirms it on hardware.
+> Until it runs, the reader decodes both and reports the flag state **per note** rather than
+> filtering: a note that is pooled but unflagged is information the user wants either way, and
+> discarding it on an unconfirmed reading would delete real user data. `ksp2midi` exports such
+> notes and names them in a warning.
+
+The melodic `48` is understood and agrees with the note list on every pattern of all five files —
+provided it is compared against the **union over slots 1–3**. Comparing it per slot is wrong and
+produces disagreements that do not exist, because a chord puts one note per slot on one step.
 
 ### Resolved: drum mode is parameter `86` bit 6, not `100`
 
@@ -437,7 +557,7 @@ The flag that *can* is **`86` bit 6**, and two independent lines of evidence agr
 
 It is **track-level, not per-pattern**, which matches the device's Drum button, and the field is
 named *Arp*/Drum, so on tracks 2–4 bit 6 presumably means ARP. Both worth confirming on
-hardware; Test D1 does so for free.
+hardware; Test DM1 does so for free.
 
 This resolves the ambiguity that made the reader report `PatternMode.BOTH`. **`initial_project`
 Track 1 pattern 1 holds both** a real 64-step melody and a real 12-note drum pattern; bit 6 is
@@ -549,6 +669,22 @@ The deprecated document's *high-level* observations — flat JSON, trailing comm
 the key names, 16 patterns × 64 steps, template-and-overwrite as the practical strategy — were
 sound. Its **field-level mappings** were not.
 
+### Corrections to earlier versions of *this* document
+
+Six claims here were wrong, all for the same reason: they were derived from `fields[]`, which
+names parameters but says nothing about their shape. `bulkOperation` (§1) settles all six, and
+each is re-derivable from `../project_files/` alone.
+
+| Prior claim | Reality | Where |
+|---|---|---|
+| `48` / `49` are per-slot | Slot 1 only; slots 2–4 are zero padding, and slot 1 is the union over the note slots | §4 |
+| Track 1 has 4 poly slots | **3 on every track.** Slot 4 is dimensioning for `52`, not a voice | §4 |
+| Track 1's slot 4 is zero-filled because "the firmware never initialises it" | True observation, wrong cause — nothing addresses it, so nothing writes it | §4 |
+| `52` packs 8 steps per index and is not fully decoded | Flat 240-entry lane-major array, 10 parts per lane, **7** bits per entry | §3.2 |
+| Drum notes are a compacted list terminated by `127` | A **pool**: `127` is one empty entry. The old rule silently dropped 43 real notes | §4 |
+| `51` is indexed by step | Indexed by **drum lane**, 1–24 — one step count per lane | §3.2 |
+| Notes come from `54` + `117`–`121`, "which is authoritative" | `52` is the play/don't-play state; the pool is storage. Pending **test D1** | §5 |
+
 ---
 
 ## 9. Reproducing these findings
@@ -565,13 +701,38 @@ def load(path):
 spec = load('/Library/Arturia/MIDI Control Center/Resources/KeyStepPro.json')
 proj = load('project_files/project_5.KeyStepPro')
 
-# the parameter dictionary
+# the parameter dictionary: names
 for f in spec['fields']:
     print(f.get('paramId'), f.get('name'))
 
 # Track 3, pattern 1, slot 1 — pitch by note ordinal
 print([proj.get(f'125_109_1_1_{i}') for i in range(1, 13)])
 ```
+
+**Do not stop at `fields[]`.** It gives names and no shapes, and every correction in §8 came from
+reading the part that gives shapes. To print the `bulkOperation` descriptors flattened:
+
+```python
+def walk(o, depth=0):
+    if isinstance(o, dict):
+        d = o.get('desc') or o.get('multibulk_desc')
+        if 'bulkParamIds' in o:
+            print(' ' * depth, o['bulkParamIds'], '|', json.dumps(o.get('bulkItemId')), '|', d)
+        elif d:
+            print(' ' * depth, '##', d, o.get('multibulk_idx', ''))
+        for k, v in o.items():
+            if k == 'multibulk':
+                walk(v, depth + 2)
+    elif isinstance(o, list):
+        for x in o:
+            walk(x, depth)
+
+walk(spec['bulkOperation'])          # 85 leaf descriptors
+```
+
+If MCC is not installed, every §8 correction is still checkable against `../project_files/`
+alone — the dictionary explains *why*, the files prove *that*. `tests/test_index_spaces.py` does
+exactly that, reading the raw files rather than going through the reader.
 
 The §5 tables were produced this way. Any claim here that cannot be re-derived from
 `KeyStepPro.json` plus the files in `../project_files/` should be treated as suspect.

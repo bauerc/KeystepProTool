@@ -26,10 +26,20 @@ DRUM_TRACK_ITEM_ID: Final = 123
 PATTERNS_PER_TRACK: Final = 16
 MAX_STEPS: Final = 64
 
-#: Polyphony slots per track. Track 1 has four addressable slots but the
-#: fourth is zero-filled in every sample project rather than sentinel-filled,
-#: i.e. the firmware never initialises it. See ``reader.slot_is_initialised``.
-SLOTS_BY_ITEM: Final = {123: 4, 124: 3, 125: 3, 126: 3}
+#: Polyphony slots per pattern -- three on every track, Track 1 included.
+#: MCC's ``bulkOperation`` descriptors address the note parameters at index-2
+#: ``[1, 2, 3]`` on all four items and never at 4. Item 123's arrays are
+#: dimensioned 16x4x64 anyway, because parameter 52 needs the room (see
+#: ``DRUM_STEP_ACTIVE_ENTRIES``), and every parameter in the item inherits
+#: that shape -- which is why slot 4 of the note parameters is uniformly zero
+#: rather than sentinel-filled. It was never a fourth voice. Spec section 4.
+SLOTS_PER_PATTERN: Final = 3
+
+#: Highest slot index that exists in the key space, as opposed to the highest
+#: that holds notes. Item 123 is dimensioned to 4; tracks 2-4 stop at 3 and
+#: have no slot-4 keys at all. Only tools enumerating raw keys need this --
+#: anything reading notes wants ``SLOTS_PER_PATTERN``.
+SLOT_INDEX_MAX: Final = 4
 
 # --- Project / global parameters (spec section 3.4) ------------------------
 
@@ -84,10 +94,10 @@ P_SEQ_RANDOMNESS: Final = 113
 
 # --- Drum note parameters, item 123 only (spec section 3.2) ---------------
 
-P_DRUM_POLY_STEP_COUNT: Final = 51
-P_DRUM_STEP_ACTIVE: Final = 52  # packing not fully decoded, see reader
+P_DRUM_POLY_STEP_COUNT: Final = 51  # lane-indexed 1-24, one length per lane
+P_DRUM_STEP_ACTIVE: Final = 52  # flat 240-entry bitmask, see below
 P_DRUM_STEP_SKIP: Final = 53  # note-indexed, unlike the melodic 49
-P_DRUM_NOTE_STEP: Final = 54  # note-indexed, 0-based step
+P_DRUM_NOTE_STEP: Final = 54  # note-indexed, 0-based step, pooled not compacted
 P_DRUM_PITCH: Final = 117  # drum lane index, 0-based (0 = kick)
 P_DRUM_GATE: Final = 118
 P_DRUM_VELOCITY: Final = 119
@@ -99,6 +109,52 @@ P_DRUM_RANDOMNESS: Final = 121
 #: group (``globalParamId`` 83-106). No array in the project file has this
 #: cardinality -- the lane is a *value* of parameter 117, never an index.
 DRUM_LANE_COUNT: Final = 24
+
+# --- The DRUM step-active bitmask (52), spec section 3.2 -------------------
+# Sixteen bulkOperation descriptors spell this layout out in words -- "DRUM 1
+# part 1 to 10, DRUM 2 part 1 to 6" for the first sixteen entries, running on
+# to "DRUM 23 part 5 to 10, DRUM 24 part 1 to 10" at slot 4. Read in order they
+# describe one flat 240-entry array laid out lane-major, spilling across the
+# slot index rather than restarting at each slot. That spill is why the values
+# looked scattered while 52 was read as a per-slot array.
+
+#: Parts per lane. 10 parts x 7 bits covers 70 steps, enough for the 64 maximum.
+DRUM_PARTS_PER_LANE: Final = 10
+
+#: Bits per entry -- 7, the natural width for a format whose values are MIDI
+#: 7-bit. Part *p* covers steps ``7p+1`` to ``7p+7``, LSB first.
+DRUM_STEPS_PER_PART: Final = 7
+
+#: 24 lanes x 10 parts. Occupies slots 1-3 entirely plus slot 4 indices 1-48,
+#: which is the reason item 123 is dimensioned for a fourth slot at all.
+DRUM_STEP_ACTIVE_ENTRIES: Final = DRUM_LANE_COUNT * DRUM_PARTS_PER_LANE
+
+
+def drum_step_active_address(lane: int, part: int) -> tuple[int, int]:
+    """Return the ``(slot, index)`` key indices holding *lane*'s *part*.
+
+    Both returned values are 1-based, matching the file's own indexing.
+    """
+    n = lane * DRUM_PARTS_PER_LANE + part
+    slot, index = divmod(n, MAX_STEPS)
+    return slot + 1, index + 1
+
+
+def drum_step_active_lane_part(entry: int) -> tuple[int, int]:
+    """Inverse of :func:`drum_step_active_address`, from a 0-based flat index."""
+    return divmod(entry, DRUM_PARTS_PER_LANE)
+
+
+def decode_drum_step_active(entry: int, value: int) -> tuple[int, tuple[int, ...]]:
+    """Decode one flat entry into its lane and the 1-based steps it flags."""
+    lane, part = drum_step_active_lane_part(entry)
+    steps = tuple(
+        part * DRUM_STEPS_PER_PART + bit + 1
+        for bit in range(DRUM_STEPS_PER_PART)
+        if value >> bit & 1
+    )
+    return lane, steps
+
 
 #: Per-track bitfield. Bit 6 is the Arp/Drum mode state, named as such by
 #: MCC's dictionary ("Arp/Drum mode state : bit 6", paramId 86), and the data
