@@ -3,7 +3,9 @@
     "allow": [
       "Bash(plutil -extract CFBundleDocumentTypes json -o - '/Applications/Arturia/MIDI Control Center.app/Contents/Info.plist')",
       "Bash(plutil -extract CFBundleShortVersionString raw -o - '/Applications/Arturia/MIDI Control Center.app/Contents/Info.plist')",
-      "Read(//Applications/Arturia/MIDI Control Center.app/Contents/Resources/**)"
+      "Read(//Applications/Arturia/MIDI Control Center.app/Contents/Resources/**)",
+      "Bash(uv sync *)",
+      "Bash(uv run *)"
     ]
   }
 }

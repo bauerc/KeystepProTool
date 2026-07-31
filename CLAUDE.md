@@ -94,3 +94,7 @@ in that file.
 `main` holds documentation, tooling and package skeletons only — no format code has been merged
 yet. M1 (reader + `ksp-dump`, validated against the two hardware-confirmed description files) is
 the next milestone.
+
+## Code Commentation
+
+Code should be concisely commented. Large doc strings for methods should NOT be used
