@@ -98,3 +98,7 @@ the next milestone.
 ## Code Commentation
 
 Code should be concisely commented. Large doc strings for methods should NOT be used
+
+## Project Cleanup
+
+Claude Plan files committed to this repository should be deleted as part of the implementation task.
