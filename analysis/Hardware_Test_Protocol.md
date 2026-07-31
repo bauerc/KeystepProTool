@@ -499,7 +499,7 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 | T3.4 | | ARP octave +1 | | |
 | D1 | | step 5 toggled off | | **did beat 5 sound?** No |
 | D2 | | 3- then 4-note chord | | 4th note went where? |
-| D3 | | >64 drum hits | | slot 2 used? |
+| D3 | | >64 drum hits | | slot 2 used? Error message on keyboard showed up saying 192 note limit hit when 3 lanes were filled with 64 notes in a single pattern |
 | D4 | | lane 1 = 12 steps | | |
 | T5.* | | `99` field = | | one row per setting |
 | T5.6 | | root note / scale | | |
