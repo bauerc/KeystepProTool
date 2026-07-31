@@ -74,6 +74,9 @@ def _pattern_lines(pattern: Pattern, drum_map: DrumMap | None) -> Iterator[str]:
                     f"vel {note.velocity:>3}  gate {_format_gate(note.gate, note.gate_raw)}  "
                     f"shift {shift}  rand {note.randomness:>3}  "
                     f"seq {_format_skip(note.skip)}"
+                    # Only ever flagged when clear: a silent note is the
+                    # surprise, an audible one is the norm.
+                    f"{'' if note.active else '  [SILENT: no step-active flag]'}"
                 )
     for warning in pattern.warnings:
         yield f"      ! {warning}"

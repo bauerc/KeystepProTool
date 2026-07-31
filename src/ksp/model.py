@@ -76,6 +76,17 @@ class Note:
     skip: tuple[int, ...]
     """Which of the 16/32/48/64 sequences this note plays in."""
 
+    active: bool = True
+    """Whether the step-active flag says the device plays this note.
+
+    Existence and audibility are different tests: a note is in the pool
+    because ``50``/``54`` is not the sentinel, but it only sounds if its bit
+    in ``48``/``52`` is set. Capture D1 toggled a drum step off without
+    deleting the note -- the pool entry survived unchanged and the step did
+    not sound. Defaults to True so a caller constructing a Note by hand gets
+    an audible one.
+    """
+
     @property
     def label(self) -> str:
         """Human-readable pitch: a note name, or a bare drum lane number."""
@@ -107,6 +118,7 @@ class Note:
             "time_shift": self.time_shift,
             "randomness": self.randomness,
             "skip": list(self.skip),
+            "active": self.active,
         }
         if drum_map is not None and self.kind is NoteKind.DRUM and drum_map.has_lane(self.pitch):
             note = drum_map.note_for_lane(self.pitch)

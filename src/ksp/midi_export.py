@@ -87,6 +87,13 @@ class ExportOptions:
     parameter 86 bit 6 says the device plays. Off by default: the point of a
     MIDI export is to hear what the hardware does."""
 
+    include_inactive: bool = False
+    """Export pooled notes whose step-active flag is clear. Off by default for
+    the same reason as *include_stale*: the device does not play them (capture
+    D1), so exporting them invents audio. Turn it on to see everything the
+    file holds, e.g. to recover an edit that was deactivated rather than
+    deleted."""
+
     def __post_init__(self) -> None:
         if self.steps_per_beat < 1:
             raise ValueError("steps_per_beat must be at least 1")
@@ -215,11 +222,16 @@ def swing_percent(pattern: Pattern, kind: NoteKind) -> int:
     return pattern.seq_swing_percent
 
 
-def step_count(pattern: Pattern, kind: NoteKind) -> int:
-    """Declared length, widened to hold any note that sits past it."""
+def step_count(pattern: Pattern, kind: NoteKind, notes: Sequence[Note] | None = None) -> int:
+    """Declared length, widened to hold any note that sits past it.
+
+    *notes* defaults to every note of *kind*; pass the subset actually being
+    exported so a note that is omitted does not stretch the pattern.
+    """
     # A note past the declared count does not play on the device, but dropping
     # it silently would hide a real disagreement in the file.
-    notes = pattern.notes_of(kind)
+    if notes is None:
+        notes = pattern.notes_of(kind)
     return max(declared_step_count(pattern, kind), max((n.step for n in notes), default=0))
 
 
@@ -235,7 +247,21 @@ def render_pattern(
     options = options or ExportOptions()
     warnings = _Warnings()
     ticks_per_step = options.ticks_per_step
-    steps = step_count(pattern, kind)
+
+    # Filter before measuring: a note the device does not play must not
+    # stretch the pattern it sits in.
+    playable = pattern.notes_of(kind)
+    if not options.include_inactive:
+        silent = [n for n in playable if not n.active]
+        if silent:
+            warnings.add(
+                f"track {track_number} pattern {pattern.number} ({kind.value}): {len(silent)} "
+                f"pooled note(s) have no step-active flag and do not sound on the device; "
+                f"omitted. Pass include_inactive to export them anyway"
+            )
+            playable = tuple(n for n in playable if n.active)
+
+    steps = step_count(pattern, kind, playable)
     length_ticks = steps * ticks_per_step
     swing = swing_percent(pattern, kind)
     channel = options.drum_channel if kind is NoteKind.DRUM else track_number - 1
@@ -263,7 +289,7 @@ def render_pattern(
     warnings.extend(f"track {track_number}: {line}" for line in pattern.warnings)
 
     notes: list[RenderedNote] = []
-    for note in pattern.notes_of(kind):
+    for note in playable:
         rendered = _render_note(note, kind, channel, swing, options, warnings)
         if rendered is None:
             continue
