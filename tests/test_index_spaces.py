@@ -21,9 +21,13 @@ from ksp.reader import load
 
 SAMPLES = ("Default", "user_empty_project", "project_5", "project_9", "initial_project")
 
-#: The two hardware-confirmed projects. Everywhere else the drum flags are a
-#: strict subset of the pool (finding 5); here they match it exactly.
-CONFIRMED = ("project_5", "project_9")
+#: The two projects with a transcribed description of the device display, so
+#: the intended settings are known independently of the file. Every sample here
+#: came off the hardware -- this pair is just the one we can check *intent*
+#: against. They happen to have no toggled-off drum steps, so their 52 flags
+#: match the note pool exactly; elsewhere the flags are a strict subset, which
+#: is real device state rather than a defect in the file (finding 5).
+DOCUMENTED = ("project_5", "project_9")
 
 
 @pytest.fixture(scope="module")
@@ -197,11 +201,16 @@ class TestDrumStepActive:
             for lane, steps in drum_flags(raw, pattern).items():
                 assert steps <= pool.get(lane, set()), f"{name} p{pattern} lane {lane}"
 
-    @pytest.mark.parametrize("name", CONFIRMED)
-    def test_flags_equal_the_pool_on_the_confirmed_projects(
+    @pytest.mark.parametrize("name", DOCUMENTED)
+    def test_flags_equal_the_pool_where_nothing_was_toggled_off(
         self, raw_projects: dict[str, Any], name: str
     ) -> None:
-        """Where the hardware description says what plays, the two agree exactly."""
+        """In the two documented projects every stored drum note is also flagged.
+
+        Which is what the transcribed descriptions say should be the case --
+        nothing in them was placed and then switched off. It pins the decode
+        against known intent, not just against internal consistency.
+        """
         raw = raw_projects[name]
         for pattern in range(1, constants.PATTERNS_PER_TRACK + 1):
             pool = {lane: steps for lane, steps in drum_pool(raw, pattern).items() if steps}

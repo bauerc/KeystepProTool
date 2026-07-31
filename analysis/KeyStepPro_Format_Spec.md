@@ -14,13 +14,25 @@ which reads the raw files directly so that a reader bug cannot make them pass.
 
 ### Sample projects
 
-| File | What it is |
-|---|---|
-| `Default.KeyStepPro` | MCC's factory template, exported from the application. No `version` key |
-| `user_empty_project.KeyStepPro` | Initialised and exported by the user with no edits. The empty baseline |
-| `project_5.KeyStepPro` | The main ground truth — one drum pattern and one melodic pattern, documented step by step |
-| `project_9.KeyStepPro` | Three targeted single-note tests isolating gate and step skip |
-| `initial_project.KeyStepPro` | Real user material across several tracks and patterns. Not documented, but it is where the format's awkward cases show up |
+**All five are real device data** — four exported from the KeyStep Pro itself, one the factory
+template MCC ships. None is synthetic or hand-written. What differs between them is whether we
+also hold a *transcription of the device display* saying what the settings were meant to be:
+
+| File | What it is | Intent documented? |
+|---|---|---|
+| `Default.KeyStepPro` | MCC's factory template, exported from the application. No `version` key | n/a — empty |
+| `user_empty_project.KeyStepPro` | Initialised and exported from the device with no edits. The empty baseline | n/a — empty |
+| `project_5.KeyStepPro` | The main ground truth — one drum pattern and one melodic pattern | **Yes** — `project_5_description.txt`, read off the hardware display |
+| `project_9.KeyStepPro` | Three targeted single-note tests isolating gate and step skip | **Yes** — `project_9_tests.txt` |
+| `initial_project.KeyStepPro` | Real user material across several tracks and patterns — where the format's awkward cases show up | No |
+
+> **"Hardware-confirmed" in this document means the second column, not the first.** It is a claim
+> about corroborating *intent*, never about a file's provenance. `initial_project` is every bit as
+> much a device export as the other two, and its contents are authoritative evidence about the
+> format — most of §3.2's `52` decode and all of §4's pool finding rest on it, because it is the
+> only sample that exercises the awkward cases at all. What it lacks is a written record of what
+> its author was trying to play, which matters only when a decode needs checking against intent
+> rather than against the bytes.
 
 ---
 
@@ -529,8 +541,13 @@ parameter storage the device keeps when a step is toggled off. Under the older r
 authoritative, `52` redundant — there is no account of why the "redundant" array is always a
 subset and never a superset.
 
-> **Confidence:** strong, but this is a claim about device *behaviour* inferred from file
-> *state*, which is weaker evidence than the shape findings. **Test D1** confirms it on hardware.
+It is worth being clear about what kind of evidence this is: **the firmware itself wrote that
+subset**, in a project exported from the device after real use. It is not an artefact of a
+hand-made or synthetic file. That is why the asymmetry is persuasive at all.
+
+> **Confidence:** strong, but the gap it cannot close is that a project file records what is
+> *stored*, never what is *audible* — no export, however genuine, can say whether an unflagged
+> note makes a sound. That needs the device playing. **Test D1** does exactly that.
 > Until it runs, the reader decodes both and reports the flag state **per note** rather than
 > filtering: a note that is pooled but unflagged is information the user wants either way, and
 > discarding it on an unconfirmed reading would delete real user data. `ksp2midi` exports such
