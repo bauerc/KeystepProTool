@@ -80,7 +80,7 @@ stays visible until someone re-checks it on the device.
 
 ---
 
-### M2 — KeyStep Pro → MIDI export
+### M2 — KeyStep Pro → MIDI export ✅ **done**
 **Artifact:** `.KeyStepPro` → `.mid`, openable in any DAW.
 
 **Why it stands alone:** this is genuinely useful software on its own. MCC has MIDI export for
@@ -90,6 +90,33 @@ serves the README's "and vice versa".
 **Test:** convert `project_5`, open in a DAW, confirm the notes, timing and velocities match the
 documented description. This is the first point where a mistake becomes *audible*, which catches
 whole classes of error that diffing does not.
+
+**Delivered:** `ksp.midi_export` and the `ksp2midi` command (`--track`, `--pattern`,
+`--steps-per-beat`, `--ticks-per-beat`, `--drum-lane-base`, `--drum-channel`, `--no-swing`,
+`--force`, `--quiet`). `tests/test_midi_export.py` asserts the exported notes of `project_5` and
+`project_9` against the hardware-confirmed descriptions rather than against our own reader.
+
+**The layout decision.** The device stores no arrangement — 4 tracks × 16 independent loops — so
+a linear MIDI file has to invent one. Patterns holding notes are laid end to end in pattern
+order, and **pattern N starts at the same tick on every track**, which preserves the one
+relationship the hardware does give (pattern N plays against pattern N). Unused patterns take up
+no time. Each KeyStep Pro track becomes a MIDI track; Track 1's drum set becomes a second one.
+
+**What it turned up.**
+
+- **Gate is a length in steps.** `project_5`'s note placed on beat 9 and tied through beat 12 —
+  four steps — stores gate 4. That is what makes a gate convertible into a duration at all, and
+  it is now recorded in `ksp.constants`. Unmeasured encodings export at the fresh-note default
+  (0.5) with a warning; nothing is interpolated.
+- **Long gates have to be truncated at the next note of the same pitch.** `project_5` beat 1 has
+  gate 2 with the same pitch repeating on beat 2. The device retriggers; MIDI would be left
+  holding an unmatched note-on. The export shortens and warns.
+- **Three things the export needs are not in the project file**: step size (in the undecoded
+  `99`/`116` bitfield), the drum map (a device global, spec §3.4), and most gate encodings (M7).
+  Each is an explicit option with a documented default rather than a buried constant.
+- **Time shift is not applied.** Its centre is confirmed but the *duration* of one unit has never
+  been measured, so the export keeps the flat grid and says so. Measuring it belongs with M7's
+  gate sweep — same hardware session, same method.
 
 ---
 

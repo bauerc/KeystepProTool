@@ -9,7 +9,7 @@ The model is intentionally read-only. Mutation belongs to M3+, once there is a
 byte-identical round-trip proving that what we write back is what MCC expects.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any
 
@@ -186,6 +186,21 @@ class Project:
     def track(self, number: int) -> Track:
         """Return track *number*, counting from 1."""
         return self.tracks[number - 1]
+
+    def select(self, *, track: int | None = None, pattern: int | None = None) -> "Project":
+        """Return a copy narrowed to one track and/or one pattern.
+
+        Narrowing the model rather than filtering at the point of use means
+        every consumer -- the dump tree, its ``--json`` twin, MIDI export --
+        sees the identical selection and cannot drift apart.
+        """
+        tracks = tuple(t for t in self.tracks if track is None or t.number == track)
+        if pattern is not None:
+            tracks = tuple(
+                replace(t, patterns=tuple(p for p in t.patterns if p.number == pattern))
+                for t in tracks
+            )
+        return replace(self, tracks=tracks)
 
     def to_dict(self) -> dict[str, Any]:
         return {

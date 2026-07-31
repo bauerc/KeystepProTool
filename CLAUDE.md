@@ -47,6 +47,7 @@ Two packages under a `src/` layout, with a strict dependency direction:
 
 Console entry points (`ksp-dump`, `ksp2midi`, `midi2ksp`) are added to `pyproject.toml` only when
 the milestone implementing them lands, so an installed command never crashes on invocation.
+`midi2ksp` is still unclaimed.
 
 ### Format facts that shape the code
 
@@ -86,6 +87,13 @@ in that file.
 
 ## Current state
 
-`main` holds documentation, tooling and package skeletons only — no format code has been merged
-yet. M1 (reader + `ksp-dump`, validated against the two hardware-confirmed description files) is
-the next milestone.
+M1 (reader + `ksp-dump`) and M2 (`ksp2midi`) are merged. The codebase reads a project into
+`ksp.model` and renders it as MIDI; nothing writes `.KeyStepPro` files yet. M3 (byte-identical
+round-trip) is next, and it is the prerequisite for every writing milestone after it.
+
+`ksp.midi_export` is where the format's unknowns become user-visible. Three quantities it needs
+are not in the project file — step size, the drum map, and most gate encodings — and each is an
+`ExportOptions` field with a documented default, never a buried constant. Time shift is decoded
+but deliberately **not applied**, because the duration of one shift unit has not been measured.
+Anything the export decides for itself is reported as a warning; when adding to it, keep that
+property rather than quietly picking a value.

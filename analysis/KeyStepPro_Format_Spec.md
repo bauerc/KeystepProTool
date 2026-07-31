@@ -350,6 +350,15 @@ independently confirms that the centre is 49, so a transcription slip in the des
 likelier explanation — but it has not been re-checked on the device. The M1 fixtures record the
 file's value and keep the conflict asserted, so it cannot quietly disappear.
 
+### Unresolved: how long one time-shift unit is
+
+The *centre* of `112` / `120` is confirmed, so a stored value decodes to a signed shift. What a
+shift of ±1 is worth **in time** is not known — presumably a fraction of a step, but nothing
+measures it. M2's MIDI export therefore places every note on the flat grid and warns rather than
+picking a scale. Worth capturing in the same hardware session as the gate sweep (§6): place one
+note, step its time shift through its range, export at each setting, and time the result against
+an unshifted note.
+
 ### Caveat: the drum step-active bitmask (`52`) is not fully decoded
 
 The 8-steps-per-index reading above reproduces both hardware-confirmed projects exactly
@@ -392,6 +401,11 @@ display → stored values, all hardware-confirmed:
 | 3 | 27 |
 | 3.5 | 29 |
 | 4 | 31 |
+
+**The displayed gate is a length in steps.** `project_5_description.txt` documents a note placed
+on beat 9 and tied through beat 12 — four steps — as gate 4, and the file stores `110` = 31 for
+it. So once the table is complete, a gate converts directly into a note duration; M2's MIDI
+export relies on this.
 
 Up to gate 3 this fits `stored = 8·g + 3` exactly. Above 3 it compresses to roughly `4·g`.
 Two independent captures both produced `4 → 31`, so the deviation is real rather than a

@@ -92,34 +92,6 @@ def format_project(project: Project, *, show_all: bool = False) -> str:
     return "\n".join(lines)
 
 
-def _select(project: Project, track: int | None, pattern: int | None) -> Project:
-    """Narrow a project to one track and/or one pattern.
-
-    Filtering rebuilds the model rather than filtering at print time so that
-    ``--json`` and the text output always show the same selection.
-    """
-    tracks = tuple(t for t in project.tracks if track is None or t.number == track)
-    if pattern is not None:
-        tracks = tuple(
-            Track(
-                number=t.number,
-                item_id=t.item_id,
-                patterns=tuple(p for p in t.patterns if p.number == pattern),
-            )
-            for t in tracks
-        )
-    return Project(
-        device=project.device,
-        version=project.version,
-        tempo_bpm=project.tempo_bpm,
-        global_swing_percent=project.global_swing_percent,
-        current_scene=project.current_scene,
-        tracks=tracks,
-        source_name=project.source_name,
-        warnings=project.warnings,
-    )
-
-
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ksp-dump",
@@ -160,7 +132,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"ksp-dump: {args.path}: {exc}", file=sys.stderr)
         return 1
 
-    project = _select(project, args.track, args.pattern)
+    project = project.select(track=args.track, pattern=args.pattern)
 
     if args.as_json:
         print(json.dumps(project.to_dict(), indent=2))
