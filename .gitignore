@@ -19,8 +19,10 @@ htmlcov/
 # Claude Code worktrees
 .claude/worktrees/
 
+#MIDI Files
+*.mid
+
 #Captures
 project_files/captures/
-
 # NOTE: uv.lock is deliberately NOT ignored. It is committed so that
 # `uv sync --locked` reproduces an identical environment everywhere.
