@@ -64,8 +64,13 @@ the milestone implementing them lands, so an installed command never crashes on 
   note to its 0-based step. The device stores an event list, not a step grid.
 - `127` means "empty" — but is also a legal pitch and velocity. The only valid existence test is
   `paramId 50 != 127` (`54` for drums). Never infer a note from its velocity.
-- Track 1 (item `123`) carries a whole second parameter set for DRUM mode; the mode bitfield
-  (`100`) must be set to match whichever set is written.
+- Track 1 (item `123`) carries a whole second parameter set for DRUM mode. The mode flag is
+  **`86` bit 6** (per-track), not the `100` bitfield the spec originally named — `100` reads 26
+  everywhere. A writer must set `86` to match whichever set it writes.
+- A drum note's `117` is a **lane index (0–23)**, not a pitch. The lane→note drum map is a
+  *global device setting* and is not in the project file at all: it cannot be read from one or
+  written into one. `ksp.drum_map` holds it as configuration with a documented default
+  (chromatic from 36) and every consumer must state which map it assumed.
 - Gate length (`110`/`118`) is non-linear and **still unmeasured** (M7, needs hardware). Until the
   table exists, write a default gate and warn — do not guess an encoding, because a wrong table
   produces files that load fine and play wrong.
