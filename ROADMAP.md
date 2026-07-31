@@ -204,6 +204,10 @@ nothing downstream can be trusted.
 
 **Test:** `md5` comparison. Pure desk work, no hardware, no MIDI involved.
 
+**The target is known to be reachable.** Capture B0.2 exported an untouched project twice and the
+two files are **byte-identical**, so MCC's writer is deterministic and there is no drift to chase.
+Any difference this milestone sees is ours.
+
 **Also settle here:** whether MCC accepts strict JSON without the trailing comma. Export one file
 without it and try loading. If it works, drop the comma-preservation requirement permanently.
 

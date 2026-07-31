@@ -156,8 +156,8 @@ keys use **`paramId`**. Confusing the two is an easy mistake.
 
 | paramId | Arturia's name | Indexed by |
 |---|---|---|
-| `51` | DRUM poly step count | step |
-| `52` | DRUM step active | **packed bitmask**, 8 steps per index |
+| `51` | DRUM poly step count — **per lane**, 0-based (see below) | **lane** |
+| `52` | DRUM step active | **packed bitmask**, lane-major, 7 steps per index (§4) |
 | `53` | DRUM step skip | **note** |
 | `54` | DRUM step corresponding step | **note** (`127` = empty) |
 | `117` | DRUM note pitch (drum lane) | **note** |
@@ -177,6 +177,12 @@ set the mode to match what it writes, and a reader should not assume only one se
 to 19 appear in `initial_project`. Its value in an *empty* list is `60`, not `127`, and drum
 velocity `119` defaults to `100` rather than `127`. Neither is a note: existence is decided by
 `54` alone, which is sentinel-filled as usual.
+
+**`51` is a step count per drum lane**, 0-based like the melodic `98`, with one entry for each
+of the 24 lanes. Every sample file holds a uniform 15 across all lanes, which left it ambiguous;
+capture `D4-lane-steplength` sets one lane to a different length and only that lane's entry
+moves (`123_51_1_1_1` → 11, entries 2–24 unchanged at 15). So drum lanes really can run at
+different lengths, and a writer must set all 24.
 
 ### 3.2.1 The drum map — 24 lanes, and it is **not in the project file**
 
@@ -568,6 +574,23 @@ pure lookup data once measured.
 **Default gate is `7` (0.5).** A freshly placed note stores `7`, confirmed by `project_9`'s
 untouched notes and by `initial_project`. Alongside it, a fresh note's other defaults are
 velocity `100`, time shift `49` (0), randomness `100` and step skip `15` (all four sequences).
+
+**The complete key set a note-creating writer must produce** was measured directly by capture
+`T1-note-place`, which placed one note in an untouched pattern and moved exactly eight keys —
+no more:
+
+| Key | Value | Meaning |
+|---|---|---|
+| `50` | `0` | note→step, 0-based |
+| `109` | pitch | the MIDI note |
+| `110` | `7` | gate (0.5) |
+| `111` | `100` | velocity |
+| `112` | `49` | time shift, centred |
+| `113` | `100` | randomness |
+| `48` | `1` | step active |
+| `40` | `3` | pattern holds data |
+
+Deleting that note returns all of them to sentinel **except `40`**, which latches at 3 (§3.3).
 
 The M1 reader decodes only the six measured points and prints anything else as `?(raw)` rather
 than interpolating. `initial_project` contains at least one such value (`2`).
