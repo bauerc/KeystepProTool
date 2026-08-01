@@ -442,7 +442,8 @@ again, with the step-64 light going out. The toggle was a diagnostic action, not
 > same way on the device. So shortening a pattern disables those notes without deleting anything,
 > and lengthening it enables them again, intact. A writer must therefore preserve them, and a
 > reader must not treat "past the declared length" as evidence that an entry is leftover junk.
-> `ksp2midi` exports them and warns, which loses nothing and says so.
+> `ksp2midi` drops them by default, the same as any other disabled note, and says how many;
+> `--include-disabled` exports them.
 
 **This is not the step-skip question.** The 16 / 32 / 48 / 64 *mask* (`49` / `53`, "repeats or
 pages?" in §5) is a separate mechanism and is still unresolved — protocol **T5.8** decides it.

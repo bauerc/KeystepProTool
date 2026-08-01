@@ -47,6 +47,7 @@ class Code(StrEnum):
 
     # --- export ---
     DISABLED_NOT_EXPORTED = "disabled-not-exported"
+    DISABLED_EXPORTED = "disabled-exported"
     STALE_NOTE_SET = "stale-note-set"
     SWING_UNVERIFIED = "swing-unverified"
     DISABLED_PAST_LAST_STEP = "disabled-past-last-step"
@@ -122,8 +123,12 @@ SUMMARIES: Mapping[Code, Summary] = {
         "which is not measured against the device",
     ),
     Code.DISABLED_PAST_LAST_STEP: Summary(
-        "{subjects} across {sites} are disabled (past the last step) and do not play on the "
-        "device; exported anyway",
+        "{subjects} across {sites} are disabled (past the last step) and were not exported; "
+        "--include-disabled exports them",
+    ),
+    Code.DISABLED_EXPORTED: Summary(
+        "{subjects} across {sites} are disabled but were exported because --include-disabled "
+        "is set; the device does not play them",
     ),
     Code.GATE_SHORTENED: Summary(
         "{sites} hold notes whose gate ran past the end of the pattern; they were shortened to it",

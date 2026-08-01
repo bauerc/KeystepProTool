@@ -90,14 +90,12 @@ class ExportOptions:
     MIDI export is to hear what the hardware does."""
 
     include_disabled: bool = False
-    """Export notes whose step is turned off. Off by default for the same
-    reason as *include_stale*: the device does not play them (capture D1), so
-    exporting them invents audio. Turn it on to see everything the file holds,
-    e.g. to recover an edit that was disabled rather than deleted.
-
-    Only this kind of disabled note is affected. Notes past the last step are
-    also disabled, but they are exported either way -- see
-    :func:`step_count`."""
+    """Export disabled notes -- both kinds: step turned off, and past the
+    pattern's last step. Off by default for the same reason as *include_stale*:
+    the device plays neither, so exporting them invents audio the hardware
+    never makes. A user who turned a step off wants it gone from the MIDI too.
+    Turn it on to see everything the file holds, e.g. to recover an edit that
+    was disabled rather than deleted."""
 
     def __post_init__(self) -> None:
         if self.steps_per_beat < 1:
@@ -221,8 +219,8 @@ def step_count(pattern: Pattern, kind: NoteKind, notes: Sequence[Note] | None = 
     *notes* defaults to every note of *kind*; pass the subset actually being
     exported so a note that is omitted does not stretch the pattern.
     """
-    # A note past the declared count does not play on the device, but dropping
-    # it silently would hide a real disagreement in the file.
+    # Only reachable with include_disabled, which keeps notes past the last
+    # step; the pattern is widened so they still land where the file puts them.
     if notes is None:
         notes = pattern.notes_of(kind)
     return max(declared_step_count(pattern, kind), max((n.step for n in notes), default=0))
@@ -243,21 +241,43 @@ def render_pattern(
     ticks_per_step = options.ticks_per_step
 
     # Filter before measuring: a note the device does not play must not
-    # stretch the pattern it sits in.
+    # stretch the pattern it sits in. Both ways of being disabled are dropped
+    # together -- the user turned these off, so the default export is what the
+    # device plays, not everything the file holds.
+    last = declared_step_count(pattern, kind)
     playable = pattern.notes_of(kind)
+    step_off = [n for n in playable if not n.active]
+    past_last = [n for n in playable if n.active and n.step > last]
     said_step_off = False
-    if not options.include_disabled:
-        disabled = [n for n in playable if not n.active]
-        if disabled:
+
+    if options.include_disabled:
+        if step_off or past_last:
+            collector.add(
+                Code.DISABLED_EXPORTED,
+                f"{len(step_off) + len(past_last)} disabled note(s) were exported because "
+                f"--include-disabled is set; the device does not play them",
+                site=site,
+                subjects=len(step_off) + len(past_last),
+            )
+    else:
+        if step_off:
             collector.add(
                 Code.DISABLED_NOT_EXPORTED,
-                f"{len(disabled)} disabled note(s), step turned off, were not exported; "
+                f"{len(step_off)} disabled note(s), step turned off, were not exported; "
                 f"--include-disabled exports them",
                 site=site,
-                subjects=len(disabled),
+                subjects=len(step_off),
             )
             said_step_off = True
-            playable = tuple(n for n in playable if n.active)
+        if past_last:
+            collector.add(
+                Code.DISABLED_PAST_LAST_STEP,
+                f"{len(past_last)} disabled note(s), past the last step of {last}, were not "
+                f"exported; --include-disabled exports them",
+                site=site,
+                subjects=len(past_last),
+            )
+        playable = tuple(n for n in playable if n.active and n.step <= last)
 
     steps = step_count(pattern, kind, playable)
     length_ticks = steps * ticks_per_step
@@ -278,16 +298,6 @@ def render_pattern(
             f"uses {swing}% swing; exported with the standard swing interpretation, "
             f"which is not measured against the device",
             site=Site(pattern=pattern.number),
-        )
-    if steps > declared_step_count(pattern, kind):
-        past = [n for n in playable if n.step > declared_step_count(pattern, kind)]
-        collector.add(
-            Code.DISABLED_PAST_LAST_STEP,
-            f"{len(past)} disabled note(s), past the last step of "
-            f"{declared_step_count(pattern, kind)}, so they do not play on the device; "
-            f"exported anyway",
-            site=site,
-            subjects=len(past),
         )
     # A pattern the reader could not fully resolve produces MIDI that is
     # confidently wrong in a way the file itself will not reveal. The reader's
