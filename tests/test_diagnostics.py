@@ -66,8 +66,8 @@ def test_exact_repeats_are_dropped() -> None:
 def test_the_same_code_at_different_sites_survives() -> None:
     """Otherwise the counts would under-report, which is worse than noise."""
     collector = Collector()
-    collector.add(Code.POOLED_NOTE_UNFLAGGED, "2 notes", site=Site(pattern=1), subjects=2)
-    collector.add(Code.POOLED_NOTE_UNFLAGGED, "2 notes", site=Site(pattern=5), subjects=2)
+    collector.add(Code.DISABLED_STEP_OFF, "2 notes", site=Site(pattern=1), subjects=2)
+    collector.add(Code.DISABLED_STEP_OFF, "2 notes", site=Site(pattern=5), subjects=2)
     assert len(collector.report()) == 2
 
 
@@ -85,14 +85,14 @@ def test_insertion_order_is_kept() -> None:
 def report() -> Report:
     collector = Collector()
     collector.add(
-        Code.POOLED_NOTE_UNFLAGGED,
-        "5 pooled note(s) have no step-active flag",
+        Code.DISABLED_STEP_OFF,
+        "5 disabled note(s), step turned off",
         site=Site(track=1, pattern=5, kind="drum"),
         subjects=5,
     )
     collector.add(
-        Code.POOLED_NOTE_UNFLAGGED,
-        "2 pooled note(s) have no step-active flag",
+        Code.DISABLED_STEP_OFF,
+        "2 disabled note(s), step turned off",
         site=Site(track=1, pattern=9, kind="drum"),
         subjects=2,
     )
@@ -102,7 +102,7 @@ def report() -> Report:
 
 def test_grouping_is_by_code_in_first_appearance_order(report: Report) -> None:
     assert [g.code for g in report.grouped()] == [
-        Code.POOLED_NOTE_UNFLAGGED,
+        Code.DISABLED_STEP_OFF,
         Code.TIME_SHIFT_NOT_APPLIED,
     ]
 
@@ -116,8 +116,7 @@ def test_the_default_view_is_one_line_per_code(report: Report) -> None:
     lines = report.render()
     assert len(lines) == 2
     assert lines[0] == (
-        "2 patterns hold pooled notes with no step-active flag (7 notes); "
-        "they do not sound on the device"
+        "2 patterns hold disabled notes (7 notes, step turned off); they do not play on the device"
     )
 
 
@@ -202,10 +201,10 @@ def test_severity_defaults_to_warning() -> None:
 
 def test_to_dict_is_serialisable() -> None:
     entry = Diagnostic(
-        Code.POOLED_NOTE_UNFLAGGED, "detail", site=Site(track=1, pattern=9, kind="drum"), subjects=2
+        Code.DISABLED_STEP_OFF, "detail", site=Site(track=1, pattern=9, kind="drum"), subjects=2
     )
     assert entry.to_dict() == {
-        "code": "pooled-note-unflagged",
+        "code": "disabled-step-off",
         "severity": "warning",
         "site": {"track": 1, "pattern": 9, "kind": "drum", "slot": None},
         "detail": "detail",

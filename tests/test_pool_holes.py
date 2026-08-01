@@ -75,13 +75,13 @@ def test_pattern_9_recovers_the_lane_7_and_lane_19_runs(initial_project) -> None
 def test_the_false_alarms_are_gone(initial_project) -> None:  # type: ignore[no-untyped-def]
     """Both warning classes the truncated scan produced.
 
-    The pooled-but-unflagged warning must survive -- it is a real finding
-    about the file, not an artefact of the scan.
+    The disabled-note warning must survive -- it is a real finding about the
+    file, not an artefact of the scan.
     """
     warnings = [w for p in initial_project.tracks[0].patterns for w in p.warnings]
     assert not any("after the end of the note list" in w for w in warnings)
     assert not any("flagged active but hold no note" in w for w in warnings)
-    assert any("do not sound on the device" in w for w in warnings)
+    assert any("disabled note(s), step turned off" in w for w in warnings)
 
 
 # --- The invariants that justify the two different scan rules --------------

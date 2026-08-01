@@ -392,14 +392,19 @@ A note sounds only if **all three** hold:
 3. **its step is within the pattern's declared length** — `98` melodic, `115` drum.
 
 **Hardware-observed** on `initial_project` Track 1 pattern 9. `123_115_9` = 47, i.e. a 48-step
-drum pattern, and the pattern holds flagged pooled notes out to step 63. With Last Step at 48
-those steps show nothing on the device and do not sound. Setting Last Step to 64 makes them
-appear and play; setting it back to 48 silences them again, with the step-64 light going out.
+drum pattern, and the pattern holds pooled, step-active notes out to step 63.
 
-> **Notes past the last step are retained, not stale.** Shortening a pattern hides them without
-> deleting anything, and lengthening it brings them back intact. A writer must therefore preserve
-> them, and a reader must not treat "past the declared length" as evidence that an entry is
-> leftover junk. `ksp2midi` exports them and warns, which loses nothing and says so.
+**In the project's saved state those notes are disabled and do not play** — that is the file's
+own configuration and the correct behaviour. The observation was made by deliberately raising
+Last Step to 64, at which point they appear and sound; lowering it back to 48 disables them
+again, with the step-64 light going out. The toggle was a diagnostic action, not the file's state.
+
+> **Notes past the last step are disabled, not stale.** Being past the last step is one of the
+> two ways a note is disabled — the other is its step being turned off — and both are toggled the
+> same way on the device. So shortening a pattern disables those notes without deleting anything,
+> and lengthening it enables them again, intact. A writer must therefore preserve them, and a
+> reader must not treat "past the declared length" as evidence that an entry is leftover junk.
+> `ksp2midi` exports them and warns, which loses nothing and says so.
 
 **This is not the step-skip question.** The 16 / 32 / 48 / 64 *mask* (`49` / `53`, "repeats or
 pages?" in §5) is a separate mechanism and is still unresolved — protocol **T5.8** decides it.

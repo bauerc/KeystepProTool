@@ -37,7 +37,7 @@ def test_export_collapses_repeats_by_default(
 
     assert len(_warning_lines(err)) < len(_warning_lines(verbose_err))
     # The ten per-pattern repeats become one counted line.
-    assert "10 patterns hold pooled notes with no step-active flag (116 notes)" in err
+    assert "116 notes across 10 patterns are disabled (step turned off)" in err
 
 
 def test_export_says_how_much_it_hid(
@@ -65,10 +65,10 @@ def test_every_kind_survives_collapsing(
     assert export_main(argv) == 0
     default = capsys.readouterr().err
     for phrase in (
-        "step-active flag",
+        "disabled (step turned off)",
         "drum lanes resolved through",
         "gate encoding 2 is not measured",
-        "sit past the declared",
+        "past the last step of 48",
         "different total lengths",
         "16/32/48/64",
     ):

@@ -88,12 +88,15 @@ class ExportOptions:
     parameter 86 bit 6 says the device plays. Off by default: the point of a
     MIDI export is to hear what the hardware does."""
 
-    include_inactive: bool = False
-    """Export pooled notes whose step-active flag is clear. Off by default for
-    the same reason as *include_stale*: the device does not play them (capture
-    D1), so exporting them invents audio. Turn it on to see everything the
-    file holds, e.g. to recover an edit that was deactivated rather than
-    deleted."""
+    include_disabled: bool = False
+    """Export notes whose step is turned off. Off by default for the same
+    reason as *include_stale*: the device does not play them (capture D1), so
+    exporting them invents audio. Turn it on to see everything the file holds,
+    e.g. to recover an edit that was disabled rather than deleted.
+
+    Only this kind of disabled note is affected. Notes past the last step are
+    also disabled, but they are exported either way -- see
+    :func:`step_count`."""
 
     def __post_init__(self) -> None:
         if self.steps_per_beat < 1:
@@ -241,16 +244,18 @@ def render_pattern(
     # Filter before measuring: a note the device does not play must not
     # stretch the pattern it sits in.
     playable = pattern.notes_of(kind)
-    if not options.include_inactive:
-        silent = [n for n in playable if not n.active]
-        if silent:
+    said_step_off = False
+    if not options.include_disabled:
+        disabled = [n for n in playable if not n.active]
+        if disabled:
             collector.add(
-                Code.INACTIVE_NOTES_OMITTED,
-                f"{len(silent)} pooled note(s) have no step-active flag and do not sound on "
-                f"the device; omitted. Pass include_inactive to export them anyway",
+                Code.DISABLED_NOT_EXPORTED,
+                f"{len(disabled)} disabled note(s), step turned off, were not exported; "
+                f"--include-disabled exports them",
                 site=site,
-                subjects=len(silent),
+                subjects=len(disabled),
             )
+            said_step_off = True
             playable = tuple(n for n in playable if n.active)
 
     steps = step_count(pattern, kind, playable)
@@ -276,16 +281,22 @@ def render_pattern(
     if steps > declared_step_count(pattern, kind):
         past = [n for n in playable if n.step > declared_step_count(pattern, kind)]
         collector.add(
-            Code.NOTE_PAST_PATTERN_LENGTH,
-            f"{len(past)} note(s) sit past the declared "
-            f"{declared_step_count(pattern, kind)}-step length and would not play on the "
-            f"device; exported anyway",
+            Code.DISABLED_PAST_LAST_STEP,
+            f"{len(past)} disabled note(s), past the last step of "
+            f"{declared_step_count(pattern, kind)}, so they do not play on the device; "
+            f"exported anyway",
             site=site,
             subjects=len(past),
         )
     # A pattern the reader could not fully resolve produces MIDI that is
-    # confidently wrong in a way the file itself will not reveal.
-    collector.extend(d.at(track=track_number) for d in pattern.diagnostics)
+    # confidently wrong in a way the file itself will not reveal. The reader's
+    # own step-off finding is dropped when the export has just said the same
+    # thing more usefully -- it names the flag that brings the notes back.
+    collector.extend(
+        d.at(track=track_number)
+        for d in pattern.diagnostics
+        if not (said_step_off and d.code is Code.DISABLED_STEP_OFF)
+    )
 
     notes: list[RenderedNote] = []
     for note in playable:
@@ -585,10 +596,13 @@ def render_project(project: Project, options: ExportOptions | None = None) -> tu
                 # dropping real user data over it would be worse.
                 kinds = [live]
                 stale = next(k for k in populated if k is not live)
+                # Carries the counts the reader's own line has, so that line
+                # can be dropped below without losing anything.
                 stale_diagnostic = Diagnostic(
                     Code.STALE_NOTE_SET,
-                    f"both note sets hold notes; parameter 86 bit 6 says {live.value} plays, "
-                    f"so the {stale.value} set was not exported "
+                    f"holds both melodic ({len(pattern.notes_of(NoteKind.SEQ))}) and drum "
+                    f"({len(pattern.notes_of(NoteKind.DRUM))}) notes; parameter 86 bit 6 says "
+                    f"{live.value} plays, so the {stale.value} set was not exported "
                     f"(--include-stale exports both)",
                     site=Site(track=track.number, pattern=pattern.number),
                 )
@@ -597,9 +611,15 @@ def render_project(project: Project, options: ExportOptions | None = None) -> tu
                     pattern, track_number=track.number, kind=kind, options=options
                 )
                 if stale_diagnostic is not None:
+                    # The reader says the same pattern holds both sets. This
+                    # says that *and* which flag brings the other one back, so
+                    # its duplicate is dropped rather than printed alongside.
+                    kept = tuple(
+                        d for d in rendering.diagnostics if d.code is not Code.MIXED_NOTE_SETS
+                    )
                     rendering = replace(
                         rendering,
-                        diagnostics=Report((stale_diagnostic, *rendering.diagnostics)),
+                        diagnostics=Report((stale_diagnostic, *kept)),
                     )
                 renderings.append(rendering)
     return tuple(renderings)

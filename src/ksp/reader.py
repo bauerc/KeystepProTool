@@ -481,8 +481,8 @@ def _check_step_active(
     if silent:
         diagnostics.append(
             Diagnostic(
-                Code.POOLED_NOTE_UNFLAGGED,
-                f"{len(silent)} pooled note(s) have no step-active flag and do not sound on "
+                Code.DISABLED_STEP_OFF,
+                f"{len(silent)} disabled note(s), step turned off, so they do not play on "
                 f"the device (step(s) {sorted({n.step for n in silent})})",
                 site=site,
                 subjects=len(silent),

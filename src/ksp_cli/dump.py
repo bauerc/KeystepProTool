@@ -13,7 +13,7 @@ from pathlib import Path
 from ksp.constants import SKIP_SEQUENCES
 from ksp.diagnostics import Collector, Report
 from ksp.drum_map import DEFAULT_CHROMATIC_LOW, DrumMap
-from ksp.model import NoteKind, Pattern, Project, Track
+from ksp.model import Note, NoteKind, Pattern, Project, Track
 from ksp.reader import load
 
 # The --drum-map grammar is shared with ksp2midi so both commands accept the
@@ -43,6 +43,19 @@ def _format_skip(skip: Sequence[int]) -> str:
     if not skip:
         return "never"
     return ",".join(str(s) for s in skip)
+
+
+def _disabled_marker(note: Note, last_step: int | None) -> str:
+    """Why this note will not play, or "" when it will.
+
+    Two mechanisms, both toggled the same way on the device, so both read as
+    "disabled" and name their reason rather than inventing separate words.
+    """
+    if not note.active:
+        return "  [DISABLED: step turned off]"
+    if last_step is not None and note.step > last_step:
+        return "  [DISABLED: past last step]"
+    return ""
 
 
 def _pattern_lines(pattern: Pattern, drum_map: DrumMap | None, *, verbose: bool) -> Iterator[str]:
@@ -76,9 +89,9 @@ def _pattern_lines(pattern: Pattern, drum_map: DrumMap | None, *, verbose: bool)
                     f"vel {note.velocity:>3}  gate {_format_gate(note.gate, note.gate_raw)}  "
                     f"shift {shift}  rand {note.randomness:>3}  "
                     f"seq {_format_skip(note.skip)}"
-                    # Only ever flagged when clear: a silent note is the
-                    # surprise, an audible one is the norm.
-                    f"{'' if note.active else '  [SILENT: no step-active flag]'}"
+                    # Only ever marked when the note will not play: that is
+                    # the surprise, an audible note is the norm.
+                    f"{_disabled_marker(note, steps)}"
                 )
     if verbose:
         # Inline, next to the notes they are about. Collapsed they would lose

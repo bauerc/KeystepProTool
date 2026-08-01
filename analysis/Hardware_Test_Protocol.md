@@ -22,7 +22,7 @@ and device behaviours from the completed captures that were never written down.
 > `40` and `39` latch; and two untouched exports are byte-identical.
 >
 > **Also settled, opportunistically rather than by a planned capture:** notes past a pattern's
-> declared last step are **retained, not stale** — see the O1 ledger row below and spec §4
+> declared last step are **disabled, not stale** — see the O1 ledger row below and spec §4
 > ("Audibility has three gates, not two"). This does **not** answer T5.8, which is about the
 > 16 / 32 / 48 / 64 skip *mask*; that capture is still needed.
 
@@ -584,7 +584,7 @@ captures still owe are in [`Capture_Ledger_Gaps.md`](./Capture_Ledger_Gaps.md).
 
 | Test ID | Date | Displayed value / setting | Stored value | Notes |
 |---|---|---|---|---|
-| O1 | 2026-07-31 | `initial_project` Tr1 pat 9, Last Step 48 → 64 → 48 | `123_115_9` = 47 | ✅ **done.** Flagged pooled notes out to step 63. At 48 they are invisible and silent; at 64 they appear and play; back at 48 the step-64 light goes out and they stop. **Notes past the last step are retained, not stale.** Not a planned capture — observed while investigating a `ksp2midi` warning. Does **not** answer T5.8. |
+| O1 | 2026-07-31 | `initial_project` Tr1 pat 9, Last Step 48 → 64 → 48 | `123_115_9` = 47 | ✅ **done.** Step-active pooled notes out to step 63. **In the saved project they are disabled and do not play** — that is the file's own state. Raising Last Step to 64 enables them (they appear and sound); lowering it back to 48 disables them again. So **notes past the last step are disabled, not stale.** The toggle was a diagnostic action, not the file's configuration. Not a planned capture — observed while investigating a `ksp2midi` warning. Does **not** answer T5.8. |
 | T2.* | | gate = | | one row per detent |
 | T2.y | | drum gate = | | same table as melodic? |
 | T4.5 | | melodic step 5 toggled off | | **did beat 5 sound?** |

@@ -123,7 +123,7 @@ wrote out/project_9_track1_pattern3.mid
 | `--default-gate STEPS` | Length used where a gate encoding is not measured (default 0.5) |
 | `--drum-channel N` | MIDI channel for drum lanes (default 10) |
 | `--include-stale` | Export both note sets of a pattern that holds both |
-| `--include-inactive` | Export pooled notes whose step-active flag is clear (the device does not play them) |
+| `--include-disabled` | Export notes whose step is turned off (the device does not play them) |
 | `--no-swing` | Place every step on a flat grid |
 | `--dry-run` | Report what would be written, and write nothing |
 | `--force` | Overwrite an existing output file |

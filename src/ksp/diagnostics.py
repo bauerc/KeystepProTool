@@ -39,17 +39,17 @@ class Code(StrEnum):
     TRAILING_POOL_VALUES = "trailing-pool-values"
     DRUM_LANE_OUT_OF_RANGE = "drum-lane-out-of-range"
     FLAG_WITHOUT_NOTE = "flag-without-note"
-    POOLED_NOTE_UNFLAGGED = "pooled-note-unflagged"
+    DISABLED_STEP_OFF = "disabled-step-off"
 
     # --- drum map ---
     DRUM_MAP_ASSUMED = "drum-map-assumed"
     DRUM_MAP_DUPLICATE = "drum-map-duplicate"
 
     # --- export ---
-    INACTIVE_NOTES_OMITTED = "inactive-notes-omitted"
+    DISABLED_NOT_EXPORTED = "disabled-not-exported"
     STALE_NOTE_SET = "stale-note-set"
     SWING_UNVERIFIED = "swing-unverified"
-    NOTE_PAST_PATTERN_LENGTH = "note-past-pattern-length"
+    DISABLED_PAST_LAST_STEP = "disabled-past-last-step"
     GATE_SHORTENED = "gate-shortened"
     GATE_ENCODING_UNMEASURED = "gate-encoding-unmeasured"
     TIME_SHIFT_NOT_APPLIED = "time-shift-not-applied"
@@ -99,9 +99,8 @@ SUMMARIES: Mapping[Code, Summary] = {
         "than that the file is damaged",
         subject="step",
     ),
-    Code.POOLED_NOTE_UNFLAGGED: Summary(
-        "{sites} hold pooled notes with no step-active flag ({subjects}); "
-        "they do not sound on the device",
+    Code.DISABLED_STEP_OFF: Summary(
+        "{sites} hold disabled notes ({subjects}, step turned off); they do not play on the device",
     ),
     Code.DRUM_MAP_ASSUMED: Summary(
         "drum lanes were resolved through an assumed map; the KeyStep Pro drum map is a device "
@@ -110,9 +109,9 @@ SUMMARIES: Mapping[Code, Summary] = {
     Code.DRUM_MAP_DUPLICATE: Summary(
         "{subjects} are mapped from more than one drum lane; reverse lookup will use the lowest",
     ),
-    Code.INACTIVE_NOTES_OMITTED: Summary(
-        "{subjects} across {sites} have no step-active flag and do not sound on the device; "
-        "omitted. Pass include_inactive to export them anyway",
+    Code.DISABLED_NOT_EXPORTED: Summary(
+        "{subjects} across {sites} are disabled (step turned off) and were not exported; "
+        "--include-disabled exports them",
     ),
     Code.STALE_NOTE_SET: Summary(
         "{sites} hold notes in both parameter sets; only the set parameter 86 bit 6 calls live "
@@ -122,9 +121,9 @@ SUMMARIES: Mapping[Code, Summary] = {
         "{sites} carry swing; exported with the standard swing interpretation, "
         "which is not measured against the device",
     ),
-    Code.NOTE_PAST_PATTERN_LENGTH: Summary(
-        "{subjects} across {sites} sit past the declared pattern length and would not play on "
-        "the device; exported anyway",
+    Code.DISABLED_PAST_LAST_STEP: Summary(
+        "{subjects} across {sites} are disabled (past the last step) and do not play on the "
+        "device; exported anyway",
     ),
     Code.GATE_SHORTENED: Summary(
         "{sites} hold notes whose gate ran past the end of the pattern; they were shortened to it",
