@@ -184,3 +184,11 @@ uv run mypy            # types
 
 Tests marked `hardware` need a physical KeyStep Pro and are skipped in CI
 (`uv run pytest -m "not hardware"`).
+
+Tests marked `slow` are the whole-file round-trip sweeps: five 3.5 MB samples
+proving one property apiece. CI runs them; `scripts/validate.sh` does not
+(`-m "not slow and not hardware"`), so **a green `validate.sh` is not full
+round-trip coverage** -- run `uv run pytest -m "not hardware"` before pushing.
+One instance of each sweep stays unmarked so a byte-level regression still
+fails locally; `test_round_trip_is_byte_identical[initial_project.KeyStepPro]`
+is the foundational guard and must never be marked `slow`.

@@ -15,7 +15,7 @@ untouched. See ``analysis/Format_Corrections_Issue.md`` findings 4 and 5.
 
 import pytest
 
-from ksp import constants, lenient_json
+from ksp import constants
 from ksp.model import NoteKind
 from ksp.reader import load
 
@@ -88,13 +88,15 @@ def test_the_false_alarms_are_gone(initial_project) -> None:  # type: ignore[no-
 
 
 @pytest.mark.parametrize("name", PROJECTS)
-def test_every_flagged_drum_step_has_a_pooled_note(project_files_dir, name: str) -> None:  # type: ignore[no-untyped-def]
+def test_every_flagged_drum_step_has_a_pooled_note(  # type: ignore[no-untyped-def]
+    project_files_dir, load_sample, name: str
+) -> None:
     """Finding 5's invariant: `52` is a subset of the pool, never a superset.
 
     A superset is what the truncated scan manufactured. The converse stays
     false by design -- many pooled notes carry no flag, which is D1.
     """
-    raw = lenient_json.load_path(project_files_dir / name)
+    raw = load_sample(name)
     project = load(project_files_dir / name)
     for pattern in project.tracks[0].patterns:
         pooled = {(n.pitch, n.step) for n in pattern.notes if n.kind is NoteKind.DRUM}
@@ -123,13 +125,13 @@ def _decode_flags(raw, pattern: int) -> set[tuple[int, int]]:  # type: ignore[no
 
 
 @pytest.mark.parametrize("name", PROJECTS)
-def test_no_melodic_slot_holds_data_after_a_sentinel(project_files_dir, name: str) -> None:  # type: ignore[no-untyped-def]
+def test_no_melodic_slot_holds_data_after_a_sentinel(load_sample, name: str) -> None:  # type: ignore[no-untyped-def]
     """Why the melodic scan may keep stopping at the first ``127``.
 
     If this ever fails, the melodic set has holes too and its scan needs the
     same treatment as the drum one.
     """
-    raw = lenient_json.load_path(project_files_dir / name)
+    raw = load_sample(name)
     for item_id in constants.TRACK_ITEM_IDS:
         for pattern in range(1, constants.PATTERNS_PER_TRACK + 1):
             for slot in range(1, constants.SLOTS_BY_ITEM[item_id] + 1):
@@ -145,13 +147,13 @@ def test_no_melodic_slot_holds_data_after_a_sentinel(project_files_dir, name: st
                         pytest.fail(f"{name}: {key} = {value} sits after a sentinel")
 
 
-def test_the_drum_pool_really_does_hold_holes(project_files_dir) -> None:  # type: ignore[no-untyped-def]
+def test_the_drum_pool_really_does_hold_holes(load_sample) -> None:  # type: ignore[no-untyped-def]
     """The other half of the asymmetry, asserted directly.
 
     Without this, a future change could make both scans stop at the first
     sentinel again and only this file's note counts would notice.
     """
-    raw = lenient_json.load_path(project_files_dir / "initial_project.KeyStepPro")
+    raw = load_sample("initial_project.KeyStepPro")
     item_id = constants.DRUM_TRACK_ITEM_ID
     holes = 0
     for pattern in (5, 9):
@@ -197,8 +199,8 @@ SPEC_EXAMPLES = {
 
 
 @pytest.mark.parametrize("name", sorted(SPEC_EXAMPLES))
-def test_the_spec_quotes_values_the_files_actually_hold(project_files_dir, name: str) -> None:  # type: ignore[no-untyped-def]
-    raw = lenient_json.load_path(project_files_dir / name)
+def test_the_spec_quotes_values_the_files_actually_hold(load_sample, name: str) -> None:  # type: ignore[no-untyped-def]
+    raw = load_sample(name)
     for key, expected in SPEC_EXAMPLES[name].items():
         assert raw.get(key) == expected, f"spec section 4 says {key} = {expected}"
 
