@@ -9,6 +9,10 @@ Warnings go to stderr and the summary to stdout, so a shell pipeline can take
 the summary while a human still sees everything the export was unsure about --
 and the file is written either way, because a gate length we cannot decode is
 a caveat, not a failure.
+
+Warnings are collapsed to one line per kind by default and listed in full
+under ``--verbose``; ``--quiet`` suppresses the stdout summary only, never the
+caveats.
 """
 
 import argparse
@@ -18,6 +22,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from ksp.constants import DEFAULT_GATE_LENGTH
+from ksp.diagnostics import Report
 from ksp.midi_export import (
     DEFAULT_STEPS_PER_BEAT,
     DEFAULT_TICKS_PER_BEAT,
@@ -30,6 +35,7 @@ from ksp.midi_export import (
 from ksp.model import Project
 from ksp.reader import load
 from ksp_cli.drum_map_option import CONFIG_PATH, DRUM_MAP_HELP, resolve_drum_map
+from ksp_cli.reporting import add_verbose_option, print_report
 
 PROG = "ksp2midi"
 
@@ -134,6 +140,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--force", action="store_true", help="overwrite the output file if it already exists"
     )
     parser.add_argument("--quiet", action="store_true", help="suppress the summary on stdout")
+    add_verbose_option(parser)
     return parser
 
 
@@ -245,19 +252,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"{PROG}: {exc}", file=sys.stderr)
             return 1
 
-    for warning in _warnings(planned):
-        print(f"{PROG}: warning: {warning}", file=sys.stderr)
+    print_report(_report(planned), prog=PROG, verbose=args.verbose)
     if not args.quiet:
         print("\n".join(_summary(result, path, args.dry_run) for result, path in planned))
     return 0
 
 
-def _warnings(planned: Sequence[tuple[ExportResult, Path]]) -> list[str]:
-    """Every file's warnings, each said once however many files repeat it."""
-    seen: dict[str, None] = {}
+def _report(planned: Sequence[tuple[ExportResult, Path]]) -> Report:
+    """Every file's diagnostics, each said once however many files repeat it."""
+    merged = Report()
     for result, _ in planned:
-        seen.update(dict.fromkeys(result.warnings))
-    return list(seen)
+        merged = merged.merge(result.diagnostics)
+    return merged
 
 
 if __name__ == "__main__":  # pragma: no cover
