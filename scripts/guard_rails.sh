@@ -34,6 +34,11 @@ if [[ "$COMMAND_ARGS" =~ "git reset --hard" && "$COMMAND_ARGS" =~ "origin/" ]]; 
     exit 2
 fi
 
+if [[ "$COMMAND_ARGS" =~ "git commit" && "$COMMAND_ARGS" =~ "--no-verify" || "$COMMAND_ARGS" =~ "git commit" && "$COMMAND_ARGS" =~ " -n" || "$COMMAND_ARGS" =~ "git push" && "$COMMAND_ARGS" =~ "--no-verify" || "$COMMAND_ARGS" =~ "git push" && "$COMMAND_ARGS" =~ " -n" ]]; then
+    echo "❌ SECURITY DENIED: Git verification bypass flags (-n / --no-verify) are prohibited."
+    exit 2
+fi
+
 # ------------------------------------------------------------------------------
 # 3. BLOCK DANGEROUS SYSTEM COMMANDS
 # ------------------------------------------------------------------------------
