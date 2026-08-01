@@ -23,6 +23,7 @@ import os
 import re
 import tempfile
 from collections.abc import Mapping
+from json.encoder import encode_basestring_ascii as _escape
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,9 @@ _TRAILING_COMMA = re.compile(r",(\s*[}\]])")
 #: numeric key. Everything else in the file is an integer parameter -- even
 #: project names, which are stored as character codes.
 LEADING_KEYS = ("device", "version")
+
+# A tuple, not ``int | str``: the union form rebuilds a UnionType per call.
+_INT_OR_STR = (int, str)
 
 
 def strip_trailing_commas(text: str) -> str:
@@ -83,9 +87,17 @@ def dumps(obj: Mapping[str, int | str]) -> str:
     """
     lines = []
     for k, v in obj.items():
-        if isinstance(v, bool) or not isinstance(v, int | str):
+        # ``_escape`` is what ``json.dumps`` reaches for anyway, minus the
+        # encoder set-up. Keys keep it: one holding a quote would break.
+        if v.__class__ is int:
+            value = repr(v)
+        elif isinstance(v, str):
+            value = _escape(v)
+        elif isinstance(v, bool) or not isinstance(v, _INT_OR_STR):
             raise TypeError(f"{k} holds {type(v).__name__}, expected int or str")
-        lines.append(f"\t{json.dumps(k)}: {json.dumps(v)}")
+        else:
+            value = json.dumps(v)  # an int subclass may override __repr__
+        lines.append(f"\t{_escape(k)}: {value}")
 
     return "{\n" + ",\n".join(lines) + ("\n}" if lines else "}")
 

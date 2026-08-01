@@ -4,7 +4,7 @@ Byte-for-byte, with one deliberate exception: the writer omits the trailing
 comma, so its output is strict JSON. Protocol test T6.2 established MCC does
 not need it. Everything else -- 153,497 lines, key order, tab indentation, no
 final newline, value formatting -- must still match exactly, which is what
-these tests compare against ``sample_bytes_strict``.
+these tests compare against.
 
 Nothing downstream is trustworthy without this. M4 puts a written file on the
 hardware and M5 generates one from MIDI; if the writer drifts from what MIDI
@@ -17,32 +17,56 @@ these tests see is ours. See ROADMAP.md M3 and spec section 2.
 
 import hashlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
-from conftest import without_trailing_comma
+from conftest import SAMPLE_NAMES, without_trailing_comma
 from ksp import lenient_json
 from ksp.constants import P_SEQ_PITCH
 from ksp.keys import key
 
+#: The sample every sweep keeps always-on: the only one carrying both string
+#: values, since ``Default`` has no ``version`` key.
+FOUNDATIONAL = "initial_project.KeyStepPro"
 
-def test_round_trip_is_byte_identical(sample_bytes_strict: bytes) -> None:
+
+def every_sample(argname: str = "name") -> pytest.MarkDecorator:
+    """All five samples, with everything but :data:`FOUNDATIONAL` marked slow.
+
+    CI does not filter ``slow``, so the other four still run there.
+    """
+    return pytest.mark.parametrize(
+        argname,
+        [
+            pytest.param(name, marks=() if name == FOUNDATIONAL else (pytest.mark.slow,))
+            for name in SAMPLE_NAMES
+        ],
+    )
+
+
+@every_sample()
+def test_round_trip_is_byte_identical(name: str, project_files_dir: Path) -> None:
     """The milestone, on every sample: parse and re-emit changes nothing."""
-    reloaded = lenient_json.loads(sample_bytes_strict.decode())
-    assert lenient_json.dumps(reloaded).encode() == sample_bytes_strict
+    expected = without_trailing_comma((project_files_dir / name).read_bytes())
+    assert lenient_json.dumps(lenient_json.loads(expected.decode())).encode() == expected
 
 
-def test_output_differs_from_mcc_by_exactly_the_trailing_comma(sample_bytes: bytes) -> None:
+@every_sample()
+def test_output_differs_from_mcc_by_exactly_the_trailing_comma(
+    name: str, project_files_dir: Path
+) -> None:
     """The bound on how far we deviate from MCC: one byte, and it is the comma.
 
     T6.2 tested the comma alone. Anything else drifting is a bug, and this
-    fails on it rather than letting ``sample_bytes_strict`` absorb it.
+    fails on it rather than letting the stripped baseline absorb it.
     """
-    emitted = lenient_json.dumps(lenient_json.loads(sample_bytes.decode())).encode()
+    original = (project_files_dir / name).read_bytes()
+    emitted = lenient_json.dumps(lenient_json.loads(original.decode())).encode()
 
-    assert len(sample_bytes) - len(emitted) == 1
-    assert emitted[:-2] == sample_bytes[:-3]
+    assert len(original) - len(emitted) == 1
+    assert emitted[:-2] == original[:-3]
     assert emitted[-2:] == b"\n}"
 
 
@@ -54,13 +78,18 @@ def test_round_trip_md5_matches(project_files_dir: Path) -> None:
     assert hashlib.md5(emitted).hexdigest() == hashlib.md5(expected).hexdigest()
 
 
+@every_sample()
 def test_dump_path_writes_identical_bytes(
-    sample_name: str, sample_bytes_strict: bytes, project_files_dir: Path, tmp_path: Path
+    name: str,
+    load_sample: Callable[[str], dict[str, int | str]],
+    project_files_dir: Path,
+    tmp_path: Path,
 ) -> None:
     """Through the filesystem, where a platform could translate newlines."""
-    destination = tmp_path / sample_name
-    lenient_json.dump_path(lenient_json.load_path(project_files_dir / sample_name), destination)
-    assert destination.read_bytes() == sample_bytes_strict
+    destination = tmp_path / name
+    lenient_json.dump_path(load_sample(name), destination)
+    expected = without_trailing_comma((project_files_dir / name).read_bytes())
+    assert destination.read_bytes() == expected
 
 
 def test_dump_path_replaces_an_existing_file_and_leaves_no_debris(tmp_path: Path) -> None:
@@ -74,9 +103,10 @@ def test_dump_path_replaces_an_existing_file_and_leaves_no_debris(tmp_path: Path
     assert list(tmp_path.iterdir()) == [destination]
 
 
-def test_dumps_is_idempotent(project_files_dir: Path) -> None:
+@pytest.mark.slow
+def test_dumps_is_idempotent(load_sample: Callable[[str], dict[str, int | str]]) -> None:
     """A second pass through the writer is a no-op."""
-    once = lenient_json.dumps(lenient_json.load_path(project_files_dir / "project_5.KeyStepPro"))
+    once = lenient_json.dumps(load_sample("project_5.KeyStepPro"))
     assert lenient_json.dumps(lenient_json.loads(once)) == once
 
 
@@ -93,9 +123,16 @@ def test_dumps_of_an_empty_mapping() -> None:
     assert lenient_json.dumps({}) == "{\n}"
 
 
-def test_dumps_is_strict_json(project_files_dir: Path) -> None:
+def test_a_small_mapping_is_strict_json() -> None:
+    """The always-on half of what T6.2 bought; the whole-file case is slow."""
+    project: dict[str, int | str] = {"device": "KeyStepPro", "120_37": 3, "126_99_2": 20}
+    assert json.loads(lenient_json.dumps(project)) == project
+
+
+@pytest.mark.slow
+def test_dumps_is_strict_json(load_sample: Callable[[str], dict[str, int | str]]) -> None:
     """What T6.2 bought: output a stock parser accepts, and MCC still does."""
-    project = lenient_json.load_path(project_files_dir / "user_empty_project.KeyStepPro")
+    project = load_sample("user_empty_project.KeyStepPro")
     emitted = lenient_json.dumps(project)
 
     assert json.loads(emitted) == project
@@ -109,16 +146,19 @@ def test_dumps_rejects_values_the_firmware_has_never_seen(value: object) -> None
         lenient_json.dumps({"120_37": value})  # type: ignore[dict-item]
 
 
-def test_canonical_restores_mcc_key_order(sample_name: str, sample_bytes_strict: bytes) -> None:
+@every_sample()
+def test_canonical_restores_mcc_key_order(
+    name: str, load_sample: Callable[[str], dict[str, int | str]], project_files_dir: Path
+) -> None:
     """Shuffled keys sort back to the order MCC wrote them in.
 
     Reversing is enough to break every rule at once: ``device`` and
     ``version`` end up last and the numeric keys run backwards.
     """
-    project = lenient_json.loads(sample_bytes_strict.decode())
-    reversed_keys = dict(reversed(list(project.items())))
+    reversed_keys = dict(reversed(list(load_sample(name).items())))
+    expected = without_trailing_comma((project_files_dir / name).read_bytes())
 
-    assert lenient_json.dumps(lenient_json.canonical(reversed_keys)).encode() == sample_bytes_strict
+    assert lenient_json.dumps(lenient_json.canonical(reversed_keys)).encode() == expected
 
 
 def test_canonical_sorts_numeric_keys_as_strings() -> None:
@@ -127,20 +167,24 @@ def test_canonical_sorts_numeric_keys_as_strings() -> None:
     assert list(ordered) == ["126_99_13", "126_99_16", "126_99_2"]
 
 
-def test_canonical_places_an_injected_version_second(project_files_dir: Path) -> None:
+def test_canonical_places_an_injected_version_second(
+    load_sample: Callable[[str], dict[str, int | str]],
+) -> None:
     """M5's case: the factory template has no ``version`` and needs one.
 
     Plain assignment appends it at the end of the dict, which is a key order
     no file MCC wrote has ever had.
     """
-    template = lenient_json.load_path(project_files_dir / "Default.KeyStepPro")
+    template = load_sample("Default.KeyStepPro")
     template["version"] = "2.5.20"
     assert list(template)[-1] == "version"
 
     assert list(lenient_json.canonical(template))[:2] == ["device", "version"]
 
 
-def test_a_single_value_edit_changes_exactly_one_line(project_files_dir: Path) -> None:
+def test_a_single_value_edit_changes_exactly_one_line(
+    load_sample: Callable[[str], dict[str, int | str]], project_files_dir: Path
+) -> None:
     """The desk half of M4: one changed value is one changed line.
 
     Track 3's first note is C2 (48) in ``project_5``, hardware-confirmed in
@@ -149,7 +193,7 @@ def test_a_single_value_edit_changes_exactly_one_line(project_files_dir: Path) -
     """
     path = project_files_dir / "project_5.KeyStepPro"
     original = without_trailing_comma(path.read_bytes()).decode()
-    project = lenient_json.loads(original)
+    project = load_sample("project_5.KeyStepPro")
 
     pitch_key = key(125, P_SEQ_PITCH, 1, 1, 1)
     assert project[pitch_key] == 48

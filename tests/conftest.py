@@ -4,9 +4,12 @@ Tests resolve repository data through these rather than hardcoding paths, so
 that moving sample files is a one-line change here.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+
+from ksp import lenient_json
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -46,13 +49,13 @@ def fixtures_dir() -> Path:
     return Path(__file__).resolve().parent / "fixtures"
 
 
-@pytest.fixture(params=SAMPLE_NAMES)
+@pytest.fixture(params=SAMPLE_NAMES, scope="session")
 def sample_name(request: pytest.FixtureRequest) -> str:
     """Each sample project in turn."""
     return str(request.param)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def sample_bytes(sample_name: str, project_files_dir: Path) -> bytes:
     """The sample's bytes exactly as MCC wrote them."""
     path = project_files_dir / sample_name
@@ -72,7 +75,29 @@ def without_trailing_comma(data: bytes) -> bytes:
     return data[:-3] + b"\n}"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def sample_bytes_strict(sample_bytes: bytes) -> bytes:
     """The sample as this writer emits it. See :func:`without_trailing_comma`."""
     return without_trailing_comma(sample_bytes)
+
+
+@pytest.fixture(scope="session")
+def _parsed_samples() -> dict[str, dict[str, int | str]]:
+    return {}
+
+
+@pytest.fixture
+def load_sample(
+    _parsed_samples: dict[str, dict[str, int | str]], project_files_dir: Path
+) -> Callable[[str], dict[str, int | str]]:
+    """Parse a sample once per session, returning a fresh copy each call.
+
+    The copy is the point: tests mutate what they are given.
+    """
+
+    def load(name: str) -> dict[str, int | str]:
+        if name not in _parsed_samples:
+            _parsed_samples[name] = lenient_json.load_path(project_files_dir / name)
+        return dict(_parsed_samples[name])
+
+    return load

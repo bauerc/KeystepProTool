@@ -10,12 +10,12 @@ discipline ``decode_gate`` already enforces.
 """
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from ksp import constants
-from ksp.lenient_json import load_path
 from ksp.reader import load
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
@@ -41,15 +41,19 @@ def project_path(request: pytest.FixtureRequest, project_files_dir: Path) -> Pat
     return project_files_dir / str(request.param)
 
 
-def test_global_swing_is_neutral(project_path: Path) -> None:
+def test_global_swing_is_neutral(
+    project_path: Path, load_sample: Callable[[str], dict[str, int | str]]
+) -> None:
     """74 reads 50% -- straight -- in every sample project."""
-    raw = load_path(project_path)
+    raw = load_sample(project_path.name)
     assert raw[f"{constants.ITEM_PROJECT}_{constants.P_GLOBAL_SWING}"] == 50
 
 
-def test_pattern_swing_is_neutral(project_path: Path) -> None:
+def test_pattern_swing_is_neutral(
+    project_path: Path, load_sample: Callable[[str], dict[str, int | str]]
+) -> None:
     """97 and 114 read 25 -- zero offset -- in every pattern of every track."""
-    raw = load_path(project_path)
+    raw = load_sample(project_path.name)
     for item in constants.TRACK_ITEM_IDS:
         for param in (constants.P_SEQ_SWING, constants.P_DRUM_SWING):
             for pattern in range(1, constants.PATTERNS_PER_TRACK + 1):
