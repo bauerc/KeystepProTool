@@ -62,6 +62,8 @@ Every test below is one capture. A capture is:
 5. **Save it as** `project_files/captures/<test-id>.KeyStepPro`, using the test ID verbatim.
 6. **Log it** in the ledger at the bottom of this file: test ID, displayed value, date, anything
    that felt off.
+7. **Tick the test's checkbox** at the top of its section. That is the signal the capture exists and
+   is ready to be read.
 
 ### The export route
 
@@ -190,7 +192,9 @@ extend those drum results to the melodic parameter set, which nothing has measur
 **T4.5 is the highest-value remaining capture in this document** — not because it is likely to
 surprise, but because shipped code already assumes its answer.
 
-### T4.5 — Melodic step-off ⬜ not yet run
+### T4.5 — Melodic step-off
+
+- [ ] not yet run
 
 **3 captures.** The melodic counterpart to D1, which tested drums only.
 
@@ -212,7 +216,9 @@ surprise, but because shipped code already assumes its answer.
 - **If falsified:** `ExportOptions.include_inactive` must stop applying to melodic notes, and
   the reader's melodic `active` decode becomes informational only.
 
-### T4.6 — Melodic pool overflow ⬜ not yet run
+### T4.6 — Melodic pool overflow
+
+- [ ] not yet run
 
 **1 capture.** D3 established that a *drum* pool spills into chunk 2 at 64 events. Nothing shows
 that a melodic one does, and no sample file has more than 64 melodic notes in a pattern.
@@ -241,6 +247,13 @@ that a melodic one does, and no sample file has more than 64 melodic notes in a 
 converted pattern *sound* like the source material rather than merely contain the right notes.
 
 ### T5.1–T5.5 — The `99` bitfield
+
+- [ ] T5.1 step size — one capture per setting, tick when all are done
+- [ ] T5.2 triplet on
+- [ ] T5.3 polyrhythm on
+- [ ] T5.4 swing offset on
+- [ ] T5.5 playback direction — one capture per setting
+- [ ] drum-side repeat on `116`
 
 `99` is "Pattern Seq triplet state, swing offset state, polyrythm state, step size, playback
 direction in a bitfield", with the dictionary's own comment placing **playback direction at bits
@@ -279,6 +292,8 @@ depends on the answer.
 
 ### T5.6 — Root note and scale
 
+- [ ] not yet run
+
 - **Resolves:** `107` (root note) and `108` (scale), which are 0 in every sample file, and the
   user-scale parameters `101`–`106`.
 - **Device:** from the baseline. Set a non-default root note, export. Set a non-default scale, export.
@@ -290,6 +305,8 @@ depends on the answer.
   into pure lookup data, like the gate table.
 
 ### T5.7 — Pattern chaining
+
+- [ ] not yet run
 
 - **Resolves:** how patterns chain, which is the mechanism M6 needs for source material longer
   than 64 steps. Scene parameter `84` is documented as "16 pattern in a chain (value between 0 and
@@ -305,6 +322,8 @@ depends on the answer.
   one place the item ordering is not the obvious one.
 
 ### T5.8 — What the four step-skip sequences are
+
+- [ ] not yet run
 
 > **Not answered by ledger row O1.** O1 found that notes past the *declared last step* (`98` /
 > `115`) are retained and become audible when the pattern is lengthened. That is the pattern
@@ -343,6 +362,8 @@ depends on the answer.
 
 ### T6.1 — The `project_5` drum time-shift conflict
 
+- [ ] not yet run
+
 - **Resolves:** the one documented discrepancy in the corpus.
   `analysis/project_5_description.txt` states Time Shift **−1 for both kick hits**;
   `project_5.KeyStepPro` stores `120` = 48 and 50, which decode to **−1 and +1** against the
@@ -361,6 +382,8 @@ depends on the answer.
   conflict deliberately so it cannot quietly disappear.
 
 ### T6.2 — Is the trailing comma required?
+
+- [ ] not yet run
 
 - **Resolves:** a standing write-fidelity requirement. `.KeyStepPro` files have a trailing comma
   before the closing brace, which is why `json.loads` rejects them. MCC parses with
@@ -407,6 +430,8 @@ zero observational data on it.
 
 ### T7.1 — Time Shift range
 
+- [ ] not yet run
+
 - **Resolves:** `D_min` and `D_max`. **Run this first** — it decides whether the rest of the tier is
   worth doing. If the range is only ±4, Time Shift spans roughly ±4 % of a step and is useless as a
   quantization target, so M5 would snap to the grid and report the loss instead of pretending to
@@ -424,6 +449,8 @@ zero observational data on it.
 
 ### T7.2 — Time Shift linearity
 
+- [ ] not yet run
+
 - **Resolves:** whether display → stored stays 1:1 across the whole range, which is only known
   today over `project_5`'s ±4 window.
 - **Device:** from the baseline. Track 2, pattern 1. Place notes on **steps 1, 3, 5, 7, 9, 11, 13** and set
@@ -440,6 +467,8 @@ zero observational data on it.
 
 ### T7.3 — Drum Time Shift
 
+- [ ] not yet run
+
 - **Resolves:** whether `120` shares the melodic centre of 49 and the same range. Also supersedes
   T6.1's fallback branch.
 - **Device:** from the baseline. Track 1 in drum mode, an untouched pattern. Place a Kick at beat 1. Set
@@ -454,6 +483,8 @@ zero observational data on it.
 
 ### T7.4 — Global swing alone
 
+- [ ] not yet run
+
 - **Resolves:** what `74` stores, and how the device displays it. The KeyStep Pro manual gives the
   swing range as 50 %–75 %, and `74` reads 50 in every sample file, so it is probably the percentage
   directly — but nothing has ever tested it.
@@ -467,6 +498,8 @@ zero observational data on it.
   signed in both directions and the −25 % end of MCC's label is real.
 
 ### T7.5 — Per-pattern swing alone
+
+- [ ] not yet run
 
 - **Resolves:** the single most consequential question in this tier. MCC labels `97` / `114`
   *"swing (%) (an offset of 25 is applied to be send by MIDI) (−25 % to +25 %)"* — a **signed
@@ -486,6 +519,8 @@ zero observational data on it.
 
 ### T7.6 — Global and per-pattern together
 
+- [ ] not yet run
+
 - **Resolves:** which of the three candidates governs the effective swing: `74` alone,
   `74 + (97 − 25)`, or `97 − 25` overriding `74` when the `99` flag is set.
 - **Device:** from T7.5's max capture, now **also** move the global Swing to a non-default value
@@ -500,6 +535,8 @@ zero observational data on it.
 
 ### T7.7 — Drum swing spot-check
 
+- [ ] not yet run
+
 - **Resolves:** whether `114` behaves like `97`.
 - **Device:** from the baseline. Track 1 in drum mode. Set per-pattern swing to maximum. Export.
 - **Capture:** `T7-swing-drum.KeyStepPro`
@@ -508,6 +545,8 @@ zero observational data on it.
 - **Falsified if:** it does not — then drum swing needs its own sweep.
 
 ### T7.8 — Randomness control
+
+- [ ] not yet run
 
 - **Resolves:** whether `113` is play-probability or timing jitter. **This gates Tier 8 entirely.**
   A fresh note defaults to randomness 100, and if that means "randomise timing by 100" then every
@@ -566,6 +605,13 @@ Different from a capture. A recording is:
 | R5 | 30 | 1/4 | swing max **and** shift max together | do they add, or interact? |
 | R6 | 30 | 1/4 | repeat of R1, fresh session | reproducibility |
 
+- [ ] R1 — 30 BPM, 1/4, shift sweep
+- [ ] R2 — 120 BPM, 1/4
+- [ ] R3 — 30 BPM, 1/16
+- [ ] R4 — 30 BPM, swing sweep
+- [ ] R5 — swing and shift together
+- [ ] R6 — repeat of R1
+
 **Start at 30 BPM with 1/4-note steps.** That makes a step 2000 ms, so even a very fine shift unit
 is tens of milliseconds — comfortably above MIDI jitter. At 120 BPM with 1/16 steps a step is
 125 ms and a fine unit would be around a millisecond, which is at or below the noise floor. **The
@@ -607,7 +653,6 @@ answered and folded into the spec on 2026-08-01.
 |---|---|---|---|---|
 | O1 | 2026-07-31 | `initial_project` Tr1 pat 9, Last Step 48 → 64 → 48 | `123_115_9` = 47 | ✅ **done.** Step-active pooled notes out to step 63. **In the saved project they are disabled and do not play** — that is the file's own state. Raising Last Step to 64 enables them (they appear and sound); lowering it back to 48 disables them again. So **notes past the last step are disabled, not stale.** The toggle was a diagnostic action, not the file's configuration. Not a planned capture — observed while investigating a `ksp2midi` warning. Does **not** answer T5.8. |
 | D25 | 2026-08-01 | one note, Gate display **5.25** | `124_110_1_1_1` = 36 | ✅ **done.** Closes the gate ladder's one derived rung. Diffs to eight keys against `B0-baseline`; predicted and observed agree. Folded into spec §6.1 and `gate_ladder.txt` provenance. |
-
 | T4.5 | | melodic step 5 toggled off | | **did beat 5 sound?** |
 | T4.6 | | >64 melodic notes | | did `48` spill to slot 2? ceiling reached at: |
 | T5.* | | `99` field = | | one row per setting |
