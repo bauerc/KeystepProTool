@@ -461,7 +461,11 @@ def _check_step_active(
     # Drum flags are per lane, so compare (lane, step) pairs -- a union over
     # lanes would hide a flag whose lane holds nothing.
     if kind is NoteKind.SEQ:
-        orphaned = sorted(step + 1 for step in active if step + 1 not in {n.step for n in notes})
+        # Built once, as in the drum branch below: inside the comprehension's
+        # condition it would be rebuilt for every flagged step, making the scan
+        # cost |active| * |notes| rather than |active| + |notes|.
+        held_steps = {n.step for n in notes}
+        orphaned = sorted(step + 1 for step in active if step + 1 not in held_steps)
     else:
         held = {(n.pitch, n.step) for n in notes}
         orphaned = sorted({step + 1 for lane, step in active if (lane, step + 1) not in held})

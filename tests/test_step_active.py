@@ -16,9 +16,10 @@ from dataclasses import replace
 import pytest
 
 from ksp import constants
+from ksp.diagnostics import Code
 from ksp.midi_export import ExportOptions, render_pattern
-from ksp.model import NoteKind
-from ksp.reader import load
+from ksp.model import Note, NoteKind
+from ksp.reader import _check_step_active, load
 
 # --- The parameter 52 packing ---------------------------------------------
 #
@@ -232,3 +233,55 @@ def test_a_pattern_within_its_length_is_untouched(project_files_dir) -> None:  #
     rendering = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM)
     assert len(rendering.notes) == len(pattern.notes_of(NoteKind.DRUM))
     assert not any("past the last step" in w for w in rendering.warnings)
+
+
+# --- The flag-without-note cross-check -------------------------------------
+#
+# Every flagged step having a pooled note is an invariant, so no sample project
+# produces this diagnostic and the corpus alone leaves the scan's non-empty
+# result untested. These build the violation directly.
+
+
+def _seq_note(step: int, index: int = 1) -> Note:
+    """A minimal audible melodic note at *step*, which is 1-based."""
+    return Note(
+        kind=NoteKind.SEQ,
+        slot=1,
+        index=index,
+        step=step,
+        pitch=60,
+        velocity=100,
+        gate_raw=0,
+        gate=1.0,
+        time_shift=0,
+        randomness=0,
+        skip=(),
+    )
+
+
+def test_a_flagged_step_backed_by_a_note_is_not_reported() -> None:
+    """``active`` is 0-based and ``Note.step`` is 1-based -- the check has to
+    bridge that, so an off-by-one here would invent orphans for every step."""
+    notes = [_seq_note(1), _seq_note(5, index=2)]
+    diagnostics = _check_step_active(1, notes, frozenset({0, 4}), kind=NoteKind.SEQ)
+
+    assert not [d for d in diagnostics if d.code is Code.FLAG_WITHOUT_NOTE]
+
+
+def test_flags_without_notes_are_reported_in_sorted_step_order() -> None:
+    """The scan is |active| + |notes| work, not |active| * |notes| -- the set of
+    held steps is built once rather than per flagged step."""
+    notes = [_seq_note(1)]
+    diagnostics = _check_step_active(1, notes, frozenset({0, 8, 3}), kind=NoteKind.SEQ)
+
+    reported = [d for d in diagnostics if d.code is Code.FLAG_WITHOUT_NOTE]
+    assert len(reported) == 1
+    assert "step(s) [4, 9]" in reported[0].detail
+    assert reported[0].subjects == 2
+
+
+def test_no_flags_at_all_reports_nothing() -> None:
+    notes = [_seq_note(1)]
+    diagnostics = _check_step_active(1, notes, frozenset(), kind=NoteKind.SEQ)
+
+    assert not [d for d in diagnostics if d.code is Code.FLAG_WITHOUT_NOTE]
