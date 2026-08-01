@@ -69,8 +69,10 @@ command never crashes on invocation. `midi2ksp` is still unclaimed.
 - A drum note's `117` is a **lane index (0–23)**, not a pitch. The lane→note map is a global
   device setting absent from the file; `ksp.drum_map` holds it as configuration and every consumer
   states which map it assumed.
-- **Gate, time shift and swing encodings are unmeasured** (M7, needs hardware). Stay on the grid,
-  write a default gate, warn — a guessed encoding produces files that load fine and play wrong.
+- **Gate is measured** (spec §6.1): an index, `stored = detent − 1`, 128 rungs, 0.0625–64 steps,
+  drum ladder identical. `tests/test_gate_ladder.py` holds `GATE_TABLE` against the transcription.
+- **Time shift and swing encodings are still unmeasured** (M7, needs hardware). Stay on the grid
+  and warn — a guessed encoding produces files that load fine and play wrong.
 
 Keep the unknowns user-visible: each is an `ExportOptions` field with a documented default, never
 a buried constant, and anything the export decides for itself is reported as a warning.

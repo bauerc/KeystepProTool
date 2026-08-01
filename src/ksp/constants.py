@@ -1,8 +1,8 @@
 """Item IDs, parameter IDs and encodings from the KeyStep Pro format spec.
 
 Every constant here traces to a table in ``analysis/KeyStepPro_Format_Spec.md``.
-Nothing is inferred or invented -- where the encoding is not yet known (gate
-length above the measured points) this module says so rather than guessing.
+Nothing is inferred or invented -- where the encoding is not yet known (time
+shift range and unit) this module says so rather than guessing.
 """
 
 from typing import Final
@@ -182,26 +182,70 @@ def time_shift_fraction(shift: int) -> float | None:
 #: as. 15 (all four) is the default. Spec section 5.
 SKIP_SEQUENCES: Final = (16, 32, 48, 64)
 
-#: Gate length is non-linear and only partly measured. These six points are
-#: hardware-confirmed; everything else is unknown and this module refuses to
-#: interpolate. Resolving the rest is milestone M7 -- a wrong gate table
-#: produces files that load cleanly and play with wrong note durations, which
-#: is the worst available failure mode because nothing errors.
-GATE_TABLE: Final = {7: 0.5, 11: 1.0, 19: 2.0, 27: 3.0, 29: 3.5, 31: 4.0}
+#: Gate length is an **index**, not a curve: ``stored = encoder detent - 1``.
+#: Measured 2026-07-31, capture ``T2-gate-table``, protocol tier 2; the full
+#: transcription is ``analysis/gate_display_sweep.txt`` and the reading is spec
+#: section 6.1. The earlier ``8*g + 3`` / ``4*g`` piecewise fit was six
+#: scattered samples of a linear index mistaken for a non-linear encoding, and
+#: is superseded.
+#:
+#: All the non-linearity lives in the *display*, which walks five runs of
+#: constant increment and closes exactly on stored 127. Each entry is the
+#: previous one plus its run's increment, starting from 0:
+#:
+#:     count  increment   display span   stored
+#:         8      1/16    0.0625 -> 0.5    0-7
+#:        20      1/8     0.625  -> 3      8-27
+#:        20      1/4     3.25   -> 8      28-47
+#:        48      1/2     8.5    -> 32     48-95
+#:        32      1       33     -> 64     96-127
+#:
+#: Provenance, which must not be lost: stored 0-35 and 37-63 were transcribed
+#: detent by detent (T2.1), stored 63/64/79/95/96/126/127 probed directly
+#: (T2.2), and stored 36 is *derived* -- its sweep note was over-turned by one,
+#: so 5.25 is read off the confirmed 0.25 run between measured 35 = 5 and
+#: 37 = 5.5. Everything from 65 up is enumerated from the increment rule and
+#: count-verified by the exact closure on 127. The drum ladder (``118``) is the
+#: same table, spot-checked at five points (T2.3).
+GATE_RUNS: Final = ((8, 0.0625), (20, 0.125), (20, 0.25), (48, 0.5), (32, 1.0))
+
+
+def _build_gate_table() -> dict[int, float]:
+    """Enumerate the ladder. Every increment is an exact binary fraction, so
+    the running total is exact in float and needs no rounding."""
+    table: dict[int, float] = {}
+    value = 0.0
+    for count, increment in GATE_RUNS:
+        for _ in range(count):
+            value += increment
+            table[len(table)] = value
+    return table
+
+
+#: stored 0-127 -> gate length in steps. Complete: every legal 7-bit value has
+#: a measured length, so nothing is interpolated and nothing is guessed.
+GATE_TABLE: Final = _build_gate_table()
 
 # The displayed gate is a length in **steps**: project_5 documents the note
 # placed on beat 9 and tied through beat 12 -- four steps -- as gate 4. That is
 # what lets M2 turn a gate into a MIDI note duration.
 
-#: A freshly placed note stores gate 7, i.e. half a step (spec section 6).
-#: This is the fallback wherever an encoding is not in ``GATE_TABLE``: the
-#: device's own default is the one length we can use without inventing one.
+#: A freshly placed note stores gate 7, i.e. half a step (spec section 6.1).
+#: The ladder is complete, so this is no longer a fallback for unmeasured
+#: encodings -- it is what a writer puts on a note the caller said nothing
+#: about, and what the export falls back to for a value off the ladder.
 DEFAULT_GATE_STORED: Final = 7
 DEFAULT_GATE_LENGTH: Final = GATE_TABLE[DEFAULT_GATE_STORED]
 
 
 def decode_gate(stored: int) -> float | None:
-    """Return the displayed gate length, or ``None`` if it is not yet known."""
+    """Return the gate length in steps, or ``None`` if *stored* is off the
+    ladder.
+
+    Every legal 7-bit value decodes. ``None`` now means corrupt input -- a
+    value outside 0-127 -- not an unmeasured encoding, and callers still handle
+    it rather than substituting a length the file never asked for.
+    """
     return GATE_TABLE.get(stored)
 
 

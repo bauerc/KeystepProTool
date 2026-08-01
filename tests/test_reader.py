@@ -28,14 +28,26 @@ class TestEncodings:
     def test_known_gate_values_decode(self, stored: int, expected: float) -> None:
         assert constants.decode_gate(stored) == expected
 
-    @pytest.mark.parametrize("stored", [0, 2, 8, 15, 23, 40, 127])
-    def test_unmeasured_gate_values_are_not_guessed(self, stored: int) -> None:
-        """Interpolating would produce files that play wrong and never error.
+    @pytest.mark.parametrize(
+        ("stored", "expected"),
+        [(0, 0.0625), (2, 0.1875), (8, 0.625), (15, 1.5), (28, 3.25), (48, 8.5), (127, 64.0)],
+    )
+    def test_the_rest_of_the_ladder_decodes(self, stored: int, expected: float) -> None:
+        """One value from each of the five display runs, plus both extremes.
 
-        Gate is non-linear -- it fits 8g+3 up to gate 3 and then compresses --
-        so a plausible formula is exactly the trap. Unknown stays unknown
-        until the M7 hardware sweep measures it.
+        These were the "unmeasured" values before the tier 2 sweep; stored 2 in
+        particular is ``initial_project``'s drum gate, the long-standing
+        ``?(2)``. ``tests/test_gate_ladder.py`` checks all 128 against the
+        transcription -- these pin the run boundaries readably.
         """
+        assert constants.decode_gate(stored) == expected
+
+    @pytest.mark.parametrize("stored", [-1, 128, 255])
+    def test_a_gate_off_the_ladder_is_not_guessed(self, stored: int) -> None:
+        """The ladder covers every legal 7-bit value, so anything outside it is
+        corrupt input. Rounding it to the nearest rung would produce a file
+        that loads cleanly and plays wrong, which is the failure mode with no
+        symptom."""
         assert constants.decode_gate(stored) is None
 
     @pytest.mark.parametrize(

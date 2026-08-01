@@ -70,9 +70,9 @@ used. The default is Arturia's: chromatic from MIDI note 36. Override it per run
 
 or turn resolution off entirely with `--drum-map none` to see bare lane numbers.
 
-A gate printed as `?(2)` means that encoding has not been measured on the hardware yet. Only six
-gate values are confirmed, and the tool prints the raw number rather than guessing at the rest.
-See M7 in the roadmap.
+Gates print as a length in steps, from 0.0625 up to 64. All 128 encoder positions are measured
+(spec §6.1), so a gate printed as `?(200)` means the file holds a value outside 0–127 — the tool
+prints the raw number rather than rounding it to the nearest real one.
 
 ## `ksp2midi`
 
@@ -118,22 +118,23 @@ wrote out/project_9_track1_pattern3.mid
 | `--track N` / `--pattern N` | Export only one track or pattern |
 | `--steps-per-beat N` | Step size (default 4, i.e. 1/16 steps) |
 | `--drum-map SPEC` | Same grammar and config file as `ksp-dump` (default `chromatic:36`) |
-| `--default-gate STEPS` | Length used where a gate encoding is not measured (default 0.5) |
+| `--default-gate STEPS` | Length used where a gate value is outside the measured 0–127 ladder (default 0.5) |
 | `--include-stale` | Export both note sets of a pattern that holds both |
 | `--no-swing` | Place every step on a flat grid |
 | `--dry-run` | Report what would be written, and write nothing |
 | `--force` | Overwrite an existing output file |
 
-Anything the export had to decide for itself is printed to stderr as a warning, because three
+Anything the export had to decide for itself is printed to stderr as a warning, because two
 things it needs are not in the project file:
 
 - **Step size** is stored in a bitfield we have not decoded, so `--steps-per-beat` supplies it.
 - **The drum map** is a device-global setting, not project data. The export names the map it
   assumed every time. Unlike `ksp-dump`, `--drum-map none` is refused: a MIDI file has to name a
   note for every lane, so there is no honest way to leave a lane unresolved.
-- **Gate lengths** are only measured at six points (M7). Anything else is exported at the length
-  a freshly placed note has, and warned about — never interpolated. `--default-gate` names that
-  fallback explicitly if you have measured your own.
+
+**Gate lengths** used to be a third. The full 128-rung ladder is now measured, so every gate a
+real file can hold converts directly into a note duration. `--default-gate` remains for a value
+outside 0–127, which is warned about rather than interpolated.
 
 Where a pattern holds both a melodic and a drum note set, only the one the track's mode flag
 (parameter `86` bit 6) says the device plays is exported — the other is leftovers from before the

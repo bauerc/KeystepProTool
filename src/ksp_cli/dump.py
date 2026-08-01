@@ -23,16 +23,21 @@ from ksp_cli.drum_map_option import CONFIG_PATH, parse_drum_map, resolve_drum_ma
 __all__ = ["CONFIG_PATH", "format_project", "main", "parse_drum_map", "resolve_drum_map"]
 
 
-def _format_gate(gate: float | None, raw: int) -> str:
-    """Show the displayed gate length, or the raw value when it is unknown.
+#: Widest gate the ladder prints, ``0.0625``. Fixed so the columns after gate
+#: stay aligned across a pattern.
+_GATE_WIDTH = 6
 
-    Only six gate encodings are hardware-confirmed. Printing an interpolated
-    guess would be worse than printing the raw number, because it would look
-    authoritative. ``?`` marks the ones still to be measured (roadmap M7).
+
+def _format_gate(gate: float | None, raw: int) -> str:
+    """Show the gate length in steps, or the raw value when it does not decode.
+
+    The ladder covers every legal value, so ``?`` now means the file holds a
+    gate outside 0-127. Printing the raw number beats printing the nearest
+    rung, which would look authoritative and be wrong.
     """
     if gate is None:
         return f"?({raw})"
-    return f"{gate:g}".rjust(4)
+    return f"{gate:g}".rjust(_GATE_WIDTH)
 
 
 def _format_skip(skip: Sequence[int]) -> str:
