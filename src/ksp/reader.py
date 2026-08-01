@@ -14,6 +14,16 @@ So the device does not store a step grid of note data. It stores an event list
 plus a separate per-step activity array. Reading it with a single index space
 produces values that look almost right, which is worse than values that look
 wrong. Spec section 4.
+
+The two parameter sets are also scanned by **different rules**, which is not a
+typo. Spec section 4's "packed contiguously from index 1, with no gaps" is a
+rule for *writers*; only the melodic set is observably compacted. The drum
+array is a pool: deleting a note empties its entry and leaves later ones in
+place, so a ``127`` marks an empty *entry*, not the end of the list. Melodic
+therefore stops at the first sentinel and drum skips past it. Reading the drum
+set with the melodic rule discards live notes -- 43 of them in
+``initial_project`` alone -- and then reports their step-active flags as notes
+the file has lost.
 """
 
 from collections.abc import Sequence
@@ -328,10 +338,17 @@ def _read_slot(
     notes: list[Note] = []
     warnings: list[str] = []
     for i, step in enumerate(note_step):
-        if step is None or step == constants.SENTINEL:
-            # Note lists are packed contiguously from index 1, so the first
-            # sentinel ends the list. Anything past it is stale data from an
-            # earlier edit and must not be reported as a playing note.
+        if step is None:  # ran off the end of the stored array
+            break
+        if step == constants.SENTINEL:
+            if drum:
+                # The drum array is a pool with holes, not a compacted list:
+                # deleting a note empties its entry and leaves the ones after
+                # it where they are. Skip the hole and keep scanning, or the
+                # rest of the pattern is silently discarded.
+                continue
+            # Melodic lists really are compacted, so the first sentinel ends
+            # the list and anything past it is stale from an earlier edit.
             trailing = [v for v in note_step[i + 1 :] if v is not None and v != constants.SENTINEL]
             if trailing:
                 warnings.append(
@@ -408,9 +425,13 @@ def _check_step_active(
 
     The two are not redundant -- the device plays the flags, so a pooled note
     whose flag is clear is silent (capture D1). Two things are worth saying:
-    a flag with no note behind it, which would mean a misread index space,
-    and pooled notes that will not sound, which is the case that used to
-    become phantom MIDI.
+    a flag with no note behind it, and pooled notes that will not sound, which
+    is the case that used to become phantom MIDI.
+
+    Every flagged step having a pooled note is an *invariant*, verified across
+    all five sample files. So a violation says our decode is wrong, not that
+    the file is damaged -- which is exactly how it presented before the drum
+    pool scan learned to skip holes.
     """
     warnings: list[str] = []
 
@@ -424,7 +445,8 @@ def _check_step_active(
     if orphaned:
         warnings.append(
             f"pattern {pattern} ({kind.value}): step(s) {orphaned} are flagged active but hold "
-            f"no note. The device plays the flags, so these are notes the file has lost"
+            f"no note. Every flagged step should have a pooled note, so this means the note "
+            f"pool was decoded wrongly rather than that the file is damaged"
         )
 
     silent = [n for n in notes if not n.active]
