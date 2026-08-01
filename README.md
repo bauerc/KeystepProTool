@@ -8,8 +8,9 @@ plan is in [`ROADMAP.md`](./ROADMAP.md).
 ## Status
 
 Milestones 1, 1.5, 2 and 3 of 9 are done: reading and inspecting project files, the drum map,
-exporting projects as MIDI, and writing a project file back out byte-for-byte. Converting *from*
-MIDI (M5) is next.
+exporting projects as MIDI, and writing a project file back out byte-for-byte — bar the trailing
+comma, which the hardware confirmed MIDI Control Center does not need, so output is strict JSON.
+Converting *from* MIDI (M5) is next.
 
 ## Install
 
