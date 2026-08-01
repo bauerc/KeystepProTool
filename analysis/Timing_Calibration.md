@@ -24,10 +24,15 @@ milliseconds one unit of either is worth. Until that is measured:
 - **M2 (`ksp2midi`)** can only write notes hard on the grid, discarding the groove.
 - **M5 (`midi2ksp`)** can only quantize hard to the grid, discarding it in the other direction.
 
-This is the same class of problem as the gate length table (spec §6) and is governed by the same
+This was the same class of problem as the gate length table (spec §6.1) and is governed by the same
 rule: **a wrong timing constant produces files that load cleanly and play wrong**, with nothing
 to signal the error. So this document measures rather than infers, and the code refuses to
 interpolate until the measurements exist.
+
+Gate has since been resolved, and how is worth carrying over: the six scattered points looked like
+a non-linear curve and invited a formula, but they were really six samples of an **index** —
+`stored = detent − 1`. The lesson for shift and swing is that a sparse sample of a monotonic
+encoder tells you almost nothing about the encoding until you have a *consecutive* run of it.
 
 ---
 
@@ -47,7 +52,7 @@ Arturia's own forum confirms the hardware has no per-step slide.
 
 The closest available behaviour is a **gate of one step or longer**, which overlaps the next
 note so that an *external* monophonic synth applies its own portamento. That is gate length
-(`110` / `118`), covered by the existing M7 sweep, not a separate parameter.
+(`110` / `118`), now measured (spec §6.1), not a separate parameter.
 
 ### 1.2 Swing is present but completely unexercised
 
@@ -263,7 +268,7 @@ Controls the protocol must apply:
   channel alongside the test track, and take every measurement as a *difference* between the two.
   Latency and drift cancel exactly.
 - **Gate affects note-off only**, so it cannot contaminate onset measurements. That is why the
-  outstanding gate table (spec §6) can be captured in the same session for free.
+  gate table was captured in the same session for free (spec §6.1, tier 2 — now done).
 - **Track 1 in DRUM mode uses the parallel parameter set** (`120` shift, `114` swing), so drum and
   melodic parameters must be swept separately. This also resolves, as a byproduct, the recorded
   discrepancy where `project_5_description.txt` gives Time Shift −1 for both kicks while the file
@@ -285,7 +290,7 @@ All test IDs refer to [`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md)
 | 6 | `99` / `116` bit layout — step size, triplet, polyrhythm, direction | **T5.1–T5.5** (already planned) | `t_step`, hence everything here |
 | 7 | Time Shift unit `U`, and which of models A/B/C | **Tier 8**, recordings R1–R3 | accurate placement both directions |
 | 8 | Do swing and shift add, or interact? | **Tier 8**, recording R5 | the M5 fitting algorithm |
-| 9 | Gate table above 3.0 (spec §6, pre-existing) | **Tier 2** (already planned) | note durations |
+| ~~9~~ | ~~Gate table above 3.0~~ — **resolved**: the encoding is an index, `stored = detent − 1`, 128 entries (spec §6.1) | Tier 2 ✔ | note durations |
 
 ### Two loose ends this investigation turned up
 

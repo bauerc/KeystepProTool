@@ -35,14 +35,19 @@ noted. The stored value is already in the spec; what is missing is what the devi
 
 | # | ***Question*** | Stored value (from the file) | Your answer |
 |---|---|---|---|
-| 2.1 | ***When you placed the fresh note for T1.1, what gate length did the display show?*** | `110` = 7 | ,5|
 | 2.2 | ***What ARP octave did the display show before and after you changed it in T3.4?*** | `100` field at bits 4–6 went 1 → 2 | The ARP Octave is NOT a display value on the device UI. It is a selection on the physical keys starting on the second physical octave. The default value was 0 (the C#3 key). I held the SHIFT button on the device and hit the D3 key to select ARP Octave +1 as marked on the device physically. The device has 5 values for ARP Octave, -1 0 +1 +2 +3|
 | 2.3 | ***In D4, what step counts did the display show — for the lane you shortened, and for the others?*** | `51` = 11 and 15 | Step Count for the short one was marked as 12. The rest were marked as 16. To get this behaviour I had to select Poly mode in Track 1 Drum mode. This was done by holding the SHIFT key and pressing what would E2 key. The Seq/Drum Mode options are Mono and Poly. Mono would be on the D#2 key|
 | 2.4 | ***In D2, what were the four pitches of the chord you played?*** | `109` = 48, 52, 55, 59 | C2, E2, G2, B2|
+| 2.5 | ***Place one note with the Gate display reading `5.25` and export.*** Not a recall question — a 30-second capture. | `110` should store **36** | |
 
-**Why 2.1 and 2.3 are worth answering.** Both test a decoding assumption. If T1.1's display read
-`0.5`, that confirms the gate table's bottom entry from a second direction. If D4's display read
-`12` and `16`, that confirms `51` is 0-based — which the spec currently states as an inference.
+**Why 2.3 is worth answering.** It tests a decoding assumption: if D4's display read `12` and
+`16`, that confirms `51` is 0-based — which the spec currently states as an inference. (The old
+2.1 asked what gate the T1.1 fresh note displayed; it read `0.5`, which confirms the gate ladder's
+`7 → 0.5` entry from a second session. Folded into spec §6.1 and removed.)
+
+**2.5 is the one gap the gate sweep left.** Every other entry in the 128-value ladder is either
+transcribed or pinned by a boundary probe; stored `36` is derived because that note was
+over-turned by one detent during the sweep. One note closes it.
 
 ---
 
@@ -75,3 +80,6 @@ Recorded here so nobody re-runs them looking for a blank:
 - **D1** — beat 5 did not sound with its step-active flag clear. This is the finding the whole
   step-active change rests on.
 - **D3** — the device showed a 192-note limit error once three lanes held 64 notes each.
+- **T2** — the gate ladder: `stored = detent − 1`, 128 entries, 0.0625–64 steps, drum identical.
+  The 64 transcribed displays are in `gate_display_sweep.txt`; only stored `36` is outstanding
+  (2.5 above).

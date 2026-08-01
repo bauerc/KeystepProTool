@@ -67,8 +67,9 @@ class Note:
     velocity: int
     gate_raw: int
     gate: float | None
-    """Displayed gate length, or ``None`` where the encoding is not yet
-    measured. See ``constants.GATE_TABLE`` and roadmap M7."""
+    """Gate length in steps. The ladder covers all of 0-127, so this is
+    ``None`` only for a ``gate_raw`` outside that range, i.e. a corrupt file.
+    See ``constants.GATE_TABLE``."""
 
     time_shift: int
     """Signed, already offset from the stored centre of 49."""

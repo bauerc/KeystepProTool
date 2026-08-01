@@ -25,7 +25,7 @@ from ksp.midi_export import (
     render_pattern,
     render_project,
 )
-from ksp.model import NoteKind, Project
+from ksp.model import NoteKind, Pattern, Project
 from ksp.reader import load
 
 TICKS_PER_STEP = 120  # the 480/4 default: 1/16 steps at 480 ticks per beat
@@ -221,16 +221,34 @@ def test_the_file_lasts_as_long_as_its_patterns(project_9: Project) -> None:
     assert export_project(project_9).midi.length == pytest.approx(4.0)
 
 
-def test_an_unmeasured_gate_falls_back_to_the_device_default_and_says_so(
+def _drum_gates_off_the_ladder(pattern: Pattern, raw: int = 200) -> Pattern:
+    """Corrupt every drum gate in *pattern*.
+
+    The ladder covers all of 0-127 (spec 6.1), so no sample project can
+    exercise the fallback any more -- the only way in is a value the device
+    could not have written.
+    """
+    notes = tuple(
+        replace(note, gate_raw=raw, gate=None) if note.kind is NoteKind.DRUM else note
+        for note in pattern.notes
+    )
+    return replace(pattern, notes=notes)
+
+
+def test_a_gate_off_the_ladder_falls_back_to_the_device_default_and_says_so(
     project_files_dir: Path,
 ) -> None:
-    """initial_project holds a gate encoding of 2, which is not in the table.
+    """Rounding an undecodable gate to the nearest rung would produce a file
+    that loads cleanly and plays wrong, so the export uses the length a freshly
+    placed note has and warns."""
+    pattern = load(project_files_dir / "initial_project.KeyStepPro").track(1).pattern(1)
+    rendering = render_pattern(
+        _drum_gates_off_the_ladder(pattern), track_number=1, kind=NoteKind.DRUM
+    )
 
-    Interpolating it would produce a file that loads cleanly and plays wrong,
-    so the export uses the length a freshly placed note has and warns.
-    """
-    result = export_project(load(project_files_dir / "initial_project.KeyStepPro"))
-    assert any("gate encoding 2 is not measured" in w for w in result.warnings)
+    assert rendering.notes
+    assert any("gate encoding 200 is off the 0-127 ladder" in w for w in rendering.warnings)
+    assert all(n.duration_ticks == round(0.5 * TICKS_PER_STEP) for n in rendering.notes)
 
 
 def test_reader_warnings_survive_into_the_export(project_files_dir: Path) -> None:
@@ -429,25 +447,20 @@ class TestRenderLayer:
         assert len(played(midi, "Track 3")) == 10
 
 
-def test_an_unmeasured_gate_uses_the_length_the_caller_supplies(project_files_dir: Path) -> None:
-    """``default_gate`` names the fallback instead of burying it in the code.
+def test_the_fallback_length_is_the_caller_s_to_name(project_files_dir: Path) -> None:
+    """``default_gate`` names the fallback instead of burying it in the code,
+    and it only ever applies to gates that did not decode -- a measured one is
+    never overridden."""
+    real = load(project_files_dir / "initial_project.KeyStepPro").track(1).pattern(1)
+    corrupt = _drum_gates_off_the_ladder(real)
+    options = ExportOptions(default_gate=1.0)
 
-    The default is still the device's own, so the number is never invented --
-    but a user who has measured their own can say so.
-    """
-    pattern = load(project_files_dir / "initial_project.KeyStepPro").track(1).pattern(1)
+    measured = render_pattern(real, track_number=1, kind=NoteKind.DRUM, options=options)
+    doubled = render_pattern(corrupt, track_number=1, kind=NoteKind.DRUM, options=options)
 
-    default = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM)
-    doubled = render_pattern(
-        pattern, track_number=1, kind=NoteKind.DRUM, options=ExportOptions(default_gate=1.0)
-    )
-
-    unmeasured = [i for i, n in enumerate(pattern.notes_of(NoteKind.DRUM)) if n.gate is None]
-    assert unmeasured, "initial_project should hold at least one unmeasured gate"
-    for index in unmeasured:
-        assert default.notes[index].duration_ticks == round(0.5 * TICKS_PER_STEP)
-        assert doubled.notes[index].duration_ticks == TICKS_PER_STEP
-    assert any("0.5-step default" in w for w in default.warnings)
+    # Every gate in the real pattern decodes now, so --default-gate moves nothing.
+    assert not any("default length" in w for w in measured.warnings)
+    assert all(n.duration_ticks == TICKS_PER_STEP for n in doubled.notes)
     assert any("1-step default" in w for w in doubled.warnings)
 
 

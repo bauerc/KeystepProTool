@@ -51,7 +51,7 @@ class Code(StrEnum):
     SWING_UNVERIFIED = "swing-unverified"
     DISABLED_PAST_LAST_STEP = "disabled-past-last-step"
     GATE_SHORTENED = "gate-shortened"
-    GATE_ENCODING_UNMEASURED = "gate-encoding-unmeasured"
+    GATE_OFF_LADDER = "gate-off-ladder"
     TIME_SHIFT_NOT_APPLIED = "time-shift-not-applied"
     STEP_SKIP_SINGLE_PASS = "step-skip-single-pass"
     DRUM_LANE_DROPPED = "drum-lane-dropped"
@@ -128,8 +128,8 @@ SUMMARIES: Mapping[Code, Summary] = {
     Code.GATE_SHORTENED: Summary(
         "{sites} hold notes whose gate ran past the end of the pattern; they were shortened to it",
     ),
-    Code.GATE_ENCODING_UNMEASURED: Summary(
-        "{subjects} carry a gate encoding that is not measured (roadmap M7); "
+    Code.GATE_OFF_LADDER: Summary(
+        "{subjects} are off the 0-127 gate ladder and cannot be decoded; "
         "exported at the default length",
         subject="encoding",
     ),

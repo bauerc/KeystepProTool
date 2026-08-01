@@ -64,13 +64,15 @@ def test_every_kind_survives_collapsing(
     argv = [str(project_files_dir / NOISY), "-o", str(tmp_path / "out.mid"), "--dry-run"]
     assert export_main(argv) == 0
     default = capsys.readouterr().err
+    # Not gate: the tier 2 sweep measured the full ladder, so every value in
+    # this file now decodes and that warning correctly no longer fires.
     for phrase in (
         "disabled (step turned off)",
         "drum lanes resolved through",
-        "gate encoding 2 is not measured",
         "past the last step of 48",
         "different total lengths",
         "16/32/48/64",
+        "--include-stale exports both",
     ):
         assert phrase in default, phrase
 

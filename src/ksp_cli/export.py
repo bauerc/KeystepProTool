@@ -105,7 +105,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_GATE_LENGTH,
         metavar="STEPS",
         help=(
-            "note length in steps for a gate encoding that is not measured "
+            "note length in steps for a gate value outside the measured 0-127 ladder "
             "(default: %(default)s, the length a freshly placed note has on the device)"
         ),
     )

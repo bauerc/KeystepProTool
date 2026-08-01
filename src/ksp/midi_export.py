@@ -11,8 +11,8 @@ layout, and there are two:
 * **Split** -- one file per non-empty (track, pattern), each starting at tick 0.
   No layout is invented at all; the caller reassembles them.
 
-Three quantities the file does not tell us have to be supplied from outside,
-and each is an :class:`ExportOptions` field rather than a buried literal:
+Two quantities the file does not tell us have to be supplied from outside, and
+each is an :class:`ExportOptions` field rather than a buried literal:
 
 * **Step size.** Held in the undecoded bitfield ``99``/``116`` (spec 3.3).
   Defaults to 1/16.
@@ -20,9 +20,10 @@ and each is an :class:`ExportOptions` field rather than a buried literal:
   the project file (spec 3.2.1), so a :class:`ksp.drum_map.DrumMap` is supplied
   and named in the output. MIDI has no way to express an unresolved lane, so
   unlike ``ksp-dump`` this cannot fall back to printing the lane number.
-* **Gate length.** Only six encodings are hardware-confirmed (spec 6).
-  Anything else is exported at ``default_gate`` and warned about, never
-  interpolated -- see :mod:`ksp.constants`.
+
+Gate length used to be a third; the ladder is now measured in full (spec 6.1),
+so ``default_gate`` only covers a value off the 0-127 ladder -- corrupt input,
+which is still warned about rather than rounded to the nearest rung.
 
 The work is in three layers, so the M8/M9 Swift port translates arithmetic
 rather than a MIDI library:
@@ -74,9 +75,9 @@ class ExportOptions:
     drum_map: DrumMap = field(default_factory=DrumMap.chromatic)
     drum_channel: int = DRUM_CHANNEL
     default_gate: float = constants.DEFAULT_GATE_LENGTH
-    """Length in steps for a gate encoding that is not in the measured table.
-    Defaults to the length a freshly placed note has on the device, which is
-    the one value available without inventing an encoding (spec 6, M7)."""
+    """Length in steps for a gate value off the 0-127 ladder. Every legal value
+    decodes (spec 6.1), so this only fires on a corrupt file; it defaults to the
+    length a freshly placed note has on the device."""
 
     apply_swing: bool = True
     """Swing percent is decoded, but its *timing* meaning is the standard
@@ -366,9 +367,9 @@ def _render_note(
     if gate is None:
         gate = options.default_gate
         collector.add(
-            Code.GATE_ENCODING_UNMEASURED,
-            f"gate encoding {note.gate_raw} is not measured (roadmap M7); exported at "
-            f"the {gate:g}-step default length",
+            Code.GATE_OFF_LADDER,
+            f"gate encoding {note.gate_raw} is off the 0-127 ladder and cannot be decoded; "
+            f"exported at the {gate:g}-step default length",
         )
     return RenderedNote(
         tick=tick,
