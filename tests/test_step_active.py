@@ -1,0 +1,184 @@
+"""Step-active decoding, and the notes it stops the export from inventing.
+
+The device plays the step-active flags, not the note pool: capture D1 toggled
+a drum step off without deleting its note, the pooled entry survived
+byte-for-byte, and the step did not sound. See
+``analysis/Hardware_Test_Protocol.md`` tier 4.
+
+The captures themselves are not in the repository (``project_files/captures/``
+is gitignored), so the hardware result is pinned here through the committed
+``initial_project``, which contains the same situation in real user material,
+plus direct tests of the packing arithmetic.
+"""
+
+from dataclasses import replace
+
+import pytest
+
+from ksp import constants
+from ksp.midi_export import ExportOptions, render_pattern
+from ksp.model import NoteKind
+from ksp.reader import load
+
+# --- The parameter 52 packing ---------------------------------------------
+#
+# Flattened [lane][part], lane-major, 7 bits per entry, 10 entries per lane.
+# Worked through by hand from D1/D3 and cross-checked on initial_project.
+
+
+@pytest.mark.parametrize(
+    ("lane", "step", "expected"),
+    [
+        # Lane 0 starts at flat 0, so its first entry is i2=1, i3=1.
+        (0, 0, (1, 1, 0)),
+        (0, 4, (1, 1, 4)),
+        (0, 6, (1, 1, 6)),
+        # Step 7 rolls into the lane's second part, not a second bit-width.
+        (0, 7, (1, 2, 0)),
+        (0, 63, (1, 10, 0)),
+        # Lane 1 begins 10 entries later.
+        (1, 0, (1, 11, 0)),
+        # Lane 6 sits at flat 60..69, which straddles the 64-entry chunk edge.
+        (6, 27, (1, 64, 6)),
+        (6, 28, (2, 1, 0)),
+        # The last lane stays inside the four chunks the file provides:
+        # flat = 23*10 + 9 = 239, i.e. chunk 4 entry 48.
+        (23, 63, (4, 48, 0)),
+    ],
+)
+def test_drum_step_active_indices(lane: int, step: int, expected: tuple[int, int, int]) -> None:
+    assert constants.drum_step_active_indices(lane, step) == expected
+
+
+def test_drum_step_active_indices_are_unique() -> None:
+    """No two (lane, step) pairs may share a bit, or flags would collide."""
+    seen = {
+        constants.drum_step_active_indices(lane, step)
+        for lane in range(constants.DRUM_LANE_COUNT)
+        for step in range(constants.MAX_STEPS)
+    }
+    assert len(seen) == constants.DRUM_LANE_COUNT * constants.MAX_STEPS
+
+
+def test_drum_step_active_stays_within_the_file_arrays() -> None:
+    """Every bit must land in an index the file actually has."""
+    for lane in range(constants.DRUM_LANE_COUNT):
+        for step in range(constants.MAX_STEPS):
+            i2, i3, bit = constants.drum_step_active_indices(lane, step)
+            assert 1 <= i2 <= constants.SLOTS_BY_ITEM[constants.DRUM_TRACK_ITEM_ID]
+            assert 1 <= i3 <= constants.MAX_STEPS
+            assert 0 <= bit < constants.DRUM_STEP_ACTIVE_BITS_PER_ENTRY
+
+
+# --- The decode, against real user material -------------------------------
+
+
+@pytest.fixture(scope="module")
+def initial_project(project_files_dir):  # type: ignore[no-untyped-def]
+    return load(project_files_dir / "initial_project.KeyStepPro")
+
+
+def _drum_notes(project, pattern_number: int):  # type: ignore[no-untyped-def]
+    pattern = project.tracks[0].patterns[pattern_number - 1]
+    return [n for n in pattern.notes if n.kind is NoteKind.DRUM]
+
+
+def test_pattern_1_lane_0_is_fully_flagged(initial_project) -> None:  # type: ignore[no-untyped-def]
+    """The kick on steps 1, 5, 9, 13 is what `52` reads 17, 34 for.
+
+    Under the superseded 8-bits-per-entry reading this decoded to steps
+    1, 5, 10, 14 and disagreed with the pool -- which is what flagged the
+    packing as wrong in the first place.
+    """
+    lane_0 = [n for n in _drum_notes(initial_project, 1) if n.pitch == 0]
+    assert sorted(n.step for n in lane_0) == [1, 5, 9, 13]
+    assert all(n.active for n in lane_0)
+
+
+def test_pattern_1_lane_17_is_only_half_flagged(initial_project) -> None:  # type: ignore[no-untyped-def]
+    """Eight pooled notes, four of them silent.
+
+    This is the D1 situation in material nobody authored for a test: the
+    pool holds every other step, the flags hold only half of those, and the
+    device plays the flags.
+    """
+    lane_17 = [n for n in _drum_notes(initial_project, 1) if n.pitch == 17]
+    assert sorted(n.step for n in lane_17) == [1, 3, 5, 7, 9, 11, 13, 15]
+    assert sorted(n.step for n in lane_17 if n.active) == [3, 7, 13, 15]
+
+
+def test_pattern_3_holds_wholly_unflagged_lanes(initial_project) -> None:  # type: ignore[no-untyped-def]
+    """Lanes 0 and 19 have notes and no flags at all -- none of them sound."""
+    notes = _drum_notes(initial_project, 3)
+    for lane in (0, 19):
+        in_lane = [n for n in notes if n.pitch == lane]
+        assert in_lane, f"lane {lane} should hold pooled notes"
+        assert not any(n.active for n in in_lane)
+
+    # Lane 7 in the same pattern is fully flagged, so this is not a pattern
+    # where the decode simply failed.
+    lane_7 = [n for n in notes if n.pitch == 7]
+    assert lane_7 and all(n.active for n in lane_7)
+
+
+def test_reader_warns_about_silent_notes(initial_project) -> None:  # type: ignore[no-untyped-def]
+    pattern = initial_project.tracks[0].patterns[2]
+    assert any("do not sound on the device" in w for w in pattern.warnings)
+
+
+def test_melodic_notes_are_flagged(initial_project) -> None:  # type: ignore[no-untyped-def]
+    """`48` and the melodic pool agree everywhere we have data."""
+    pattern = initial_project.tracks[0].patterns[0]
+    seq = [n for n in pattern.notes if n.kind is NoteKind.SEQ]
+    assert seq and all(n.active for n in seq)
+
+
+def test_empty_project_has_no_flags(project_files_dir) -> None:  # type: ignore[no-untyped-def]
+    project = load(project_files_dir / "user_empty_project.KeyStepPro")
+    assert not any(pattern.notes for track in project.tracks for pattern in track.patterns)
+
+
+# --- The export consequence -----------------------------------------------
+
+
+def test_export_omits_silent_notes_by_default(initial_project) -> None:  # type: ignore[no-untyped-def]
+    pattern = initial_project.tracks[0].patterns[2]
+    rendering = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM)
+
+    pooled = [n for n in pattern.notes if n.kind is NoteKind.DRUM]
+    audible = [n for n in pooled if n.active]
+    assert len(audible) < len(pooled), "this pattern is the interesting case"
+    assert len(rendering.notes) == len(audible)
+    assert any("omitted" in w for w in rendering.warnings)
+
+
+def test_include_inactive_restores_them(initial_project) -> None:  # type: ignore[no-untyped-def]
+    pattern = initial_project.tracks[0].patterns[2]
+    options = ExportOptions(include_inactive=True)
+    rendering = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM, options=options)
+
+    pooled = [n for n in pattern.notes if n.kind is NoteKind.DRUM]
+    assert len(rendering.notes) == len(pooled)
+    # The reader still reports that these notes are silent; what must not
+    # appear is the export saying it dropped them.
+    assert not any("omitted" in w for w in rendering.warnings)
+
+
+def test_a_silent_note_does_not_stretch_the_pattern(initial_project) -> None:  # type: ignore[no-untyped-def]
+    """An omitted note must not widen the rendering it was omitted from.
+
+    Otherwise a pattern ends with silence whose length is set by a note the
+    device never plays.
+    """
+    pattern = initial_project.tracks[0].patterns[2]
+    notes = tuple(
+        replace(n, step=constants.MAX_STEPS, active=False) if i == 0 else n
+        for i, n in enumerate(pattern.notes)
+    )
+    stretched = replace(pattern, notes=notes)
+
+    default = render_pattern(stretched, track_number=1, kind=NoteKind.DRUM)
+    including = render_pattern(
+        stretched, track_number=1, kind=NoteKind.DRUM, options=ExportOptions(include_inactive=True)
+    )
+    assert default.length_ticks < including.length_ticks

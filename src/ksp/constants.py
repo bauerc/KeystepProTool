@@ -26,10 +26,18 @@ DRUM_TRACK_ITEM_ID: Final = 123
 PATTERNS_PER_TRACK: Final = 16
 MAX_STEPS: Final = 64
 
-#: Polyphony slots per track. Track 1 has four addressable slots but the
-#: fourth is zero-filled in every sample project rather than sentinel-filled,
-#: i.e. the firmware never initialises it. See ``reader.slot_is_initialised``.
+#: Pool chunks per track -- *not* polyphony voices. idx2 splits one flat note
+#: pool into blocks of MAX_STEPS entries, so real capacity is 3 x 64 = 192
+#: events per pattern, which the device enforces with an on-screen error
+#: (capture D3). Chords live inside one chunk as consecutive ordinals sharing
+#: a step (capture D2), so there is no 3- or 4-note ceiling. Track 1's fourth
+#: chunk is zero-filled rather than sentinel-filled and stays untouched even
+#: when a fourth chord voice is added, i.e. the firmware never uses it. See
+#: ``reader.slot_is_initialised``.
 SLOTS_BY_ITEM: Final = {123: 4, 124: 3, 125: 3, 126: 3}
+
+#: Usable pool capacity, ignoring Track 1's phantom fourth chunk.
+POOL_CAPACITY: Final = 3 * MAX_STEPS
 
 # --- Project / global parameters (spec section 3.4) ------------------------
 
@@ -85,7 +93,7 @@ P_SEQ_RANDOMNESS: Final = 113
 # --- Drum note parameters, item 123 only (spec section 3.2) ---------------
 
 P_DRUM_POLY_STEP_COUNT: Final = 51
-P_DRUM_STEP_ACTIVE: Final = 52  # packing not fully decoded, see reader
+P_DRUM_STEP_ACTIVE: Final = 52  # flattened lane-major bit array, see below
 P_DRUM_STEP_SKIP: Final = 53  # note-indexed, unlike the melodic 49
 P_DRUM_NOTE_STEP: Final = 54  # note-indexed, 0-based step
 P_DRUM_PITCH: Final = 117  # drum lane index, 0-based (0 = kick)
@@ -108,6 +116,31 @@ DRUM_LANE_COUNT: Final = 24
 #: Track-level, not per-pattern, which matches the device's Drum button.
 P_TRACK_MODE_BITS: Final = 86
 DRUM_MODE_BIT: Final = 6
+
+# --- The drum step-active bit array (parameter 52) -------------------------
+# Neither step-indexed nor note-indexed: a flattened [lane][part] bit array,
+# lane-major, whose two trailing indices are storage geometry rather than
+# lane and step. Decoded from captures D1 and D3 and cross-checked against
+# initial_project, where it explains the 17, 34 that the earlier
+# 8-bits-per-entry reading could not. See spec section 4.
+
+#: Steps per stored entry. Seven, not eight -- the values are 7-bit like every
+#: other field in the format.
+DRUM_STEP_ACTIVE_BITS_PER_ENTRY: Final = 7
+
+#: Entries per lane: 10 x 7 = 70, enough to cover all 64 steps.
+DRUM_STEP_ACTIVE_PARTS_PER_LANE: Final = 10
+
+
+def drum_step_active_indices(lane: int, step: int) -> tuple[int, int, int]:
+    """Locate the step-active bit for *lane* (0-based) at *step* (0-based).
+
+    Returns the two 1-based file indices and the 0-based bit position, i.e.
+    the bit lives in ``123_52_<pattern>_<i2>_<i3>`` at ``1 << bit``.
+    """
+    flat = lane * DRUM_STEP_ACTIVE_PARTS_PER_LANE + step // DRUM_STEP_ACTIVE_BITS_PER_ENTRY
+    return flat // MAX_STEPS + 1, flat % MAX_STEPS + 1, step % DRUM_STEP_ACTIVE_BITS_PER_ENTRY
+
 
 # --- Device global parameters (spec section 3.4) ---------------------------
 # Recorded for documentation and the eventual SysEx path. These are addressed

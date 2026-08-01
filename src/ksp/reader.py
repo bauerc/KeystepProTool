@@ -220,18 +220,81 @@ def _swing(raw: dict[str, Any], item_id: int, param: int, pattern: int) -> int:
 def _read_note_lists(
     raw: dict[str, Any], item_id: int, pattern: int, *, kind: NoteKind
 ) -> tuple[tuple[Note, ...], list[str]]:
-    """Decode every polyphony slot of one pattern for one parameter set."""
+    """Decode every pool chunk of one pattern for one parameter set.
+
+    The step-active flags are pattern-wide, so they are decoded once here and
+    handed to each chunk rather than re-read per chunk or per note.
+    """
+    active = _read_step_active(raw, item_id, pattern, kind=kind)
+
     notes: list[Note] = []
     warnings: list[str] = []
     for slot in range(1, constants.SLOTS_BY_ITEM[item_id] + 1):
-        slot_notes, slot_warnings = _read_slot(raw, item_id, pattern, slot, kind=kind)
+        slot_notes, slot_warnings = _read_slot(
+            raw, item_id, pattern, slot, kind=kind, active=active
+        )
         notes.extend(slot_notes)
         warnings.extend(slot_warnings)
+
+    warnings.extend(_check_step_active(pattern, notes, active, kind=kind))
     return tuple(notes), warnings
 
 
+def _read_step_active(
+    raw: dict[str, Any], item_id: int, pattern: int, *, kind: NoteKind
+) -> frozenset[Any]:
+    """Decode which steps the device will actually play, 0-based.
+
+    Melodic (``48``) is one entry per step and lives wholly in chunk 1 in
+    every file observed, so the result is a set of steps. Drum (``52``) is
+    per lane, so the result is a set of ``(lane, step)`` pairs -- see
+    ``constants.drum_step_active_indices`` for the packing.
+    """
+    if kind is NoteKind.SEQ:
+        flags = read_array(
+            raw, item_id, constants.P_SEQ_STEP_ACTIVE, pattern, 1, length=constants.MAX_STEPS
+        )
+        return frozenset(step for step, value in enumerate(flags) if value == 1)
+
+    # Read the flat array once and unpack, rather than locating each bit
+    # individually -- the same 256 entries back every one of the 24 x 64
+    # lane/step questions.
+    flat: list[int | None] = []
+    for chunk in range(1, constants.SLOTS_BY_ITEM[item_id] + 1):
+        flat.extend(
+            read_array(
+                raw,
+                item_id,
+                constants.P_DRUM_STEP_ACTIVE,
+                pattern,
+                chunk,
+                length=constants.MAX_STEPS,
+            )
+        )
+
+    pairs: set[tuple[int, int]] = set()
+    for offset, value in enumerate(flat):
+        if not value:
+            continue
+        lane, part = divmod(offset, constants.DRUM_STEP_ACTIVE_PARTS_PER_LANE)
+        if lane >= constants.DRUM_LANE_COUNT:
+            continue
+        base = part * constants.DRUM_STEP_ACTIVE_BITS_PER_ENTRY
+        for bit in range(constants.DRUM_STEP_ACTIVE_BITS_PER_ENTRY):
+            step = base + bit
+            if step < constants.MAX_STEPS and value >> bit & 1:
+                pairs.add((lane, step))
+    return frozenset(pairs)
+
+
 def _read_slot(
-    raw: dict[str, Any], item_id: int, pattern: int, slot: int, *, kind: NoteKind
+    raw: dict[str, Any],
+    item_id: int,
+    pattern: int,
+    slot: int,
+    *,
+    kind: NoteKind,
+    active: frozenset[Any],
 ) -> tuple[list[Note], list[str]]:
     drum = kind is NoteKind.DRUM
     if drum:
@@ -279,13 +342,17 @@ def _read_slot(
 
         skip_index = i if drum else step
         skip_mask = skip[skip_index]
+        value = _required(pitch[i])
+        # For drums the flags are per lane, so the note's own value selects
+        # the row; melodic flags are a single per-step array.
         notes.append(
             Note(
                 kind=kind,
                 slot=slot,
                 index=i + 1,
                 step=step + 1,
-                pitch=_required(pitch[i]),
+                active=(value, step) in active if drum else step in active,
+                pitch=value,
                 velocity=_required(velocity[i]),
                 gate_raw=_required(gate[i]),
                 gate=constants.decode_gate(_required(gate[i])),
@@ -306,8 +373,6 @@ def _read_slot(
                 f"pattern {pattern} slot {slot}: drum lane(s) {out_of_range} are outside "
                 f"0-{constants.DRUM_LANE_COUNT - 1}"
             )
-    else:
-        warnings.extend(_check_step_active(raw, item_id, pattern, slot, notes))
     return notes, warnings
 
 
@@ -337,33 +402,38 @@ def slot_is_initialised(
 
 
 def _check_step_active(
-    raw: dict[str, Any], item_id: int, pattern: int, slot: int, notes: list[Note]
+    pattern: int, notes: list[Note], active: frozenset[Any], *, kind: NoteKind
 ) -> list[str]:
-    """Cross-check the note list against the redundant step-active array.
+    """Cross-check the note list against the step-active flags.
 
-    Parameter 48 marks which steps are active and duplicates information the
-    note list already carries. Comparing them is close to free and catches a
-    misread index space immediately, so it runs on every slot.
-
-    The drum equivalent (parameter 52, a packed bitmask) is deliberately not
-    checked. Its 8-steps-per-index packing reproduces exactly on the two
-    hardware-confirmed projects but does not account for the values in
-    ``initial_project``, which is real user material rather than throwaway
-    data -- so the packing is not understood well enough to raise warnings
-    from. Notes come from the note list, which is the authoritative source.
+    The two are not redundant -- the device plays the flags, so a pooled note
+    whose flag is clear is silent (capture D1). Two things are worth saying:
+    a flag with no note behind it, which would mean a misread index space,
+    and pooled notes that will not sound, which is the case that used to
+    become phantom MIDI.
     """
-    active = read_array(
-        raw, item_id, constants.P_SEQ_STEP_ACTIVE, pattern, slot, length=constants.MAX_STEPS
-    )
-    from_flags = {i + 1 for i, v in enumerate(active) if v == 1}
-    from_notes = {n.step for n in notes}
-    if from_flags == from_notes:
-        return []
-    return [
-        f"pattern {pattern} slot {slot}: step-active flags disagree with the note list "
-        f"(only in flags: {sorted(from_flags - from_notes)}, "
-        f"only in notes: {sorted(from_notes - from_flags)})"
-    ]
+    warnings: list[str] = []
+
+    # Drum flags are per lane, so compare (lane, step) pairs -- a union over
+    # lanes would hide a flag whose lane holds nothing.
+    if kind is NoteKind.SEQ:
+        orphaned = sorted(step + 1 for step in active if step + 1 not in {n.step for n in notes})
+    else:
+        held = {(n.pitch, n.step) for n in notes}
+        orphaned = sorted({step + 1 for lane, step in active if (lane, step + 1) not in held})
+    if orphaned:
+        warnings.append(
+            f"pattern {pattern} ({kind.value}): step(s) {orphaned} are flagged active but hold "
+            f"no note. The device plays the flags, so these are notes the file has lost"
+        )
+
+    silent = [n for n in notes if not n.active]
+    if silent:
+        warnings.append(
+            f"pattern {pattern} ({kind.value}): {len(silent)} pooled note(s) have no step-active "
+            f"flag and do not sound on the device (step(s) {sorted({n.step for n in silent})})"
+        )
+    return warnings
 
 
 def _required(value: int | None) -> int:

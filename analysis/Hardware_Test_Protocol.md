@@ -5,20 +5,33 @@ setting known values on the device, exporting them, and diffing.
 
 **Audience:** a human at the device, and an agent re-reading this later to interpret the captures.
 
-**Companion document:** [`Format_Corrections_Issue.md`](./Format_Corrections_Issue.md). Read its
-summary table before starting. Several questions the format spec and `ROADMAP.md` still list as
-open — the packing of `52`, the poly-slot count, the step-active warnings — were resolved at the
-desk from MCC's parameter dictionary and are **not** in this document. Do not spend device time
-on them.
+**Companion documents:**
+[`Format_Corrections_Issue.md`](./Format_Corrections_Issue.md) — read its summary table before
+starting. [`Capture_Ledger_Gaps.md`](./Capture_Ledger_Gaps.md) — the handful of displayed values
+and device behaviours from the completed captures that were never written down.
+
+> **This document contains only unfinished work.** B0 and tiers 1, 2, 3 and 4 have been run (19
+> captures, in `project_files/captures/`, which is gitignored). Their procedures have been
+> **deleted** from this file so that everything still here is something to do. What they found is
+> in [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md), which is the authoritative
+> record — not here.
+>
+> Briefly, so nobody re-runs them: drum mode is `86` bit 6 and `100` never moves; a pooled note
+> whose step-active bit is clear does not sound; `idx2` is a 64-entry pool chunk rather than a
+> polyphony voice, with a hardware-enforced 192-event ceiling; `52` is a lane-major 7-bit array;
+> `40` and `39` latch; two untouched exports are byte-identical; and **gate is an index** —
+> `stored = detent − 1`, 128 entries, 0.0625–64 steps, drum identical (spec §6.1).
+
+**The baseline every test below starts from** is `B0-baseline.KeyStepPro` — an initialised,
+untouched project, already captured. Where a test says "from the baseline", start by loading or
+re-initialising to that state; do not re-derive it.
 
 **What is genuinely unknown and needs the device:**
 
 | Question | Blocks | Tier |
 |---|---|---|
-| ~~The gate length table (`110` / `118`)~~ — **resolved**, one entry left to close | M7, and correct note durations in M5/M6 | 2 |
-| Which bit of `100` is drum mode | M6 | 3 |
-| Whether an unflagged pooled drum note sounds | M6 correctness | 4 |
-| Real poly and drum-lane limits | M6 | 4 |
+| Whether melodic step-off behaves like drum step-off | M5/M6 export correctness | 4 |
+| Whether a melodic pool spills into slot 2 like a drum pool | M6 | 4 |
 | The `99` / `116` bitfield layout | M6 | 5 |
 | Pattern chaining beyond 64 steps (`84`) | M6 | 5 |
 | Time Shift range and linearity (`112` / `120`) | M7; whether shift is usable at all | 7 |
@@ -64,8 +77,10 @@ Every test below is one capture. A capture is:
 ### Batched sweep captures
 
 **The one-change rule above applies to captures that are read by diffing.** A *sweep* capture is
-not read that way, and holding it to the same rule is what made Tier 2 unrunnable: one export per
-encoder detent is ~128 sync-and-save cycles through MCC.
+not read that way, and holding it to the same rule is what made the gate sweep — the former Tier 2,
+now complete (spec §6.1) — unrunnable for months: one export per encoder detent is ~128
+sync-and-save cycles through MCC. Batching collapsed it to a single capture, and **Tier 7's shift
+sweep should be run the same way.**
 
 One export contains every pattern of every track, and every note's parameter has its own key —
 `124_110_<pattern>_1_<ordinal>`. So one export can carry hundreds of independent readings, read
@@ -76,14 +91,25 @@ directly by key rather than by diff. That is allowed when:
 - a **note map** — which step carries which intended value — is written down *at capture time*,
   in the ledger or a companion data file. Without it the capture is unreadable afterwards.
 
-Two rules that are not optional:
+Three rules that are not optional:
 
 - **Pair by `50` (or `54` for drums), never by note ordinal.** Note ordinal and step number are
   different index spaces (spec §4) and the pool is in creation order. Read
   `124_50_<p>_1_<k>` to learn which step note `k` sits on, and sort by that. Getting this wrong
   silently permutes the whole table into something that still looks plausible.
+- **Sweep a contiguous run of detents, not scattered samples.** Tier 2's six scattered gate points
+  looked like a non-linear curve for months; a run of 64 consecutive ones showed in minutes that
+  the encoding was a plain index. A sparse sample of a monotonic encoder tells you almost nothing.
 - **Export after each pattern is filled** (`-wip1`, `-wip2`, …). A sweep capture is an hour of
   device work; a mishap should cost one pattern, not the session.
+
+Two things to design against, both of which bit Tier 2:
+
+- **A note you forget to set keeps its fresh-note default**, which is indistinguishable from a
+  deliberate value. Build in a check that catches it — for a ramp, that the stored values are a
+  gapless run.
+- **Over-turning the encoder by one detent** produces a gap plus an adjacent duplicate. The repair
+  is one extra note at the missing value, not a redo.
 
 ### Diffing
 
@@ -94,7 +120,7 @@ No tooling needs to exist first. This is enough:
 from ksp import lenient_json
 
 BASE = "project_files/captures/B0-baseline.KeyStepPro"
-CAP  = "project_files/captures/T2-gate-04.KeyStepPro"
+CAP  = "project_files/captures/T7-shift-min.KeyStepPro"
 
 a = lenient_json.load_path(BASE)
 b = lenient_json.load_path(CAP)
@@ -120,371 +146,56 @@ the current assumption · what falsifies it · what to do if falsified.**
 
 ---
 
-## B0 — Baselines
-
-**2 captures.** Everything downstream is a diff against these, so the noise floor has to be
-measured before any signal is trusted.
-
-### B0.1 — Fresh project
-
-- **Resolves:** what an initialised, untouched project looks like from *this* device and *this*
-  MCC version, as opposed to the checked-in `user_empty_project.KeyStepPro`.
-- **Device:** initialise a new empty project. Change nothing at all.
-- **Capture:** `B0-baseline.KeyStepPro`
-- **Diff against:** `project_files/user_empty_project.KeyStepPro`
-- **Expect:** no differences, or differences only in project-level keys (`120_*`).
-- **If it differs elsewhere:** stop and record what moved. Something about the device state is
-  not what the existing samples assume, and every later capture inherits that.
-
-### B0.2 — Null capture
-
-- **Resolves:** which keys drift on their own. This is the false-positive floor.
-- **Device:** touch nothing. Export B0.1 a second time.
-- **Capture:** `B0-baseline-repeat.KeyStepPro`
-- **Diff against:** `B0-baseline.KeyStepPro`
-- **Expect:** byte-identical, or a difference only in `version`.
-- **If keys move:** those keys are noise. **Write them down here** and treat them as ignorable in
-  every later diff. Skipping this test means mistaking that drift for a result later on.
-
-> B0.2 also settles a small M3 question for free: if two untouched exports are byte-identical,
-> MCC's writer is deterministic and the round-trip target is well defined.
-
----
-
-## Tier 1 — M4, write-path sanity
-
-**4 captures.** Cheap, fast, and they give M4 ("change one note in a real project, load it in MCC,
-push to the device") the ground truth it needs. Each is a single edit on **Track 2, pattern 1**,
-which no sample file uses — so the diff is against a genuinely blank slate.
-
-Run them cumulatively: each starts from the previous capture.
-
-### T1.1 — Place a note
-
-- **Resolves:** every key the device writes when a note comes into existence. This is the complete
-  set a writer must produce, and there is currently no capture that isolates it.
-- **Device:** from B0.1. Track 2, pattern 1. Place one note, pitch **C3 (60)**, at **beat 1**.
-  Leave Velocity, Gate, Time Shift, Randomness and Step Skip at whatever they default to.
-- **Capture:** `T1-note-place.KeyStepPro`
-- **Diff against:** `B0-baseline.KeyStepPro`
-- **Keys:** `124_50_1_1_1`, `124_109_1_1_1`, `124_110_1_1_1`, `124_111_1_1_1`, `124_112_1_1_1`,
-  `124_113_1_1_1`, `124_48_1_1_1`, `124_40_1`, `124_39`
-- **Confirms if:** `50` → 0, `109` → 60, `110` → 7, `111` → 100, `112` → 49, `113` → 100,
-  `48` → 1, `40` → 3. These are the documented fresh-note defaults (spec §6) and the
-  `Default.KeyStepPro` per-pattern defaults, so they should agree.
-- **Falsified if:** any other key moves, or `40` does not go to 3.
-- **If falsified:** the extra keys are part of note creation and a writer must set them too.
-  Record them — this is exactly the kind of omission that produces a file MCC loads and the
-  device plays wrong.
-
-### T1.2 — Change its pitch
-
-- **Resolves:** that pitch is `109` alone and nothing shadows it.
-- **Device:** from T1.1. Change that note's pitch to **E3 (64)**. Nothing else.
-- **Capture:** `T1-note-pitch.KeyStepPro`
-- **Diff against:** `T1-note-place.KeyStepPro`
-- **Confirms if:** exactly one key moves, `124_109_1_1_1`: 60 → 64.
-- **Falsified if:** more than one key moves.
-
-### T1.3 — Change its velocity
-
-- **Resolves:** that velocity is stored directly, 0–127, with no scaling (spec §8 corrects an
-  earlier claim of 16 discrete levels — this confirms the correction on the device).
-- **Device:** from T1.2. Set Velocity to **127**, the value that is ambiguous with the sentinel.
-- **Capture:** `T1-note-velocity.KeyStepPro`
-- **Diff against:** `T1-note-pitch.KeyStepPro`
-- **Confirms if:** exactly one key moves, `124_111_1_1_1` → 127, and the note still reads as
-  present (`124_50_1_1_1` unchanged at 0).
-- **Falsified if:** the note vanishes from the file, or `111` lands on something other than 127.
-- **Why 127 specifically:** it is the one velocity that a reader inferring existence from velocity
-  would get wrong. Spec §4 says never do that; this capture is the evidence.
-
-### T1.4 — Delete it
-
-- **Resolves:** what deletion leaves behind — whether the pool entry is cleared to `127` or the
-  parameters linger.
-- **Device:** from T1.3. Delete the note. Leave the pattern otherwise untouched.
-- **Capture:** `T1-note-delete.KeyStepPro`
-- **Diff against:** `T1-note-place.KeyStepPro` **and** `B0-baseline.KeyStepPro`
-- **Confirms if:** the diff against B0 is empty — deletion fully reverses creation.
-- **Falsified if:** residue remains (e.g. `109` keeps 64 while `50` returns to 127, or `40`
-  stays 3).
-- **Either way this is a finding.** Residue tells us what a writer may safely leave behind, and
-  whether `40` alone can mark a pattern empty. Both matter for M5's template-and-overwrite.
-
----
-
-## Tier 2 — M7, the gate length table
-
-**1 capture. Run and confirmed** — see the ledger. This tier used to be the long pole at ~20
-captures; it is documented here in full because the *method* generalises to every other sweep in
-this file, and because the result rests on checks a later reader has to be able to re-run.
-
-### What the sweep established
-
-**`stored = detent index − 1`.** The stored gate value is simply the **0-based position in the
-encoder's ladder**. All of the non-linearity that spec §6.1 struggled with lives in the *display*,
-not in the encoding. The old `8·g + 3` / `4·g` piecewise fit was an artefact of reading six
-scattered points as if they described the encoding.
-
-The display ladder is five constant-increment runs, and it closes exactly on the 7-bit boundary:
-
-| Increment | Display span | Stored | Count |
-|---|---|---|---|
-| 1/16 | 0.0625 → 0.5 | 0–7 | 8 |
-| 1/8 | 0.625 → 3 | 8–27 | 20 |
-| 1/4 | 3.25 → 8 | 28–47 | 20 |
-| 1/2 | 8.5 → 32 | 48–95 | 48 |
-| 1 | 33 → 64 | 96–127 | 32 |
-| | | | **128** |
-
-**128 detents, stored 0–127, display 0.0625 → 64**, and the drum ladder (`118`) is identical. The
-displayed values are exact binary fractions of a step rendered to two decimals with
-**round-half-to-even** — `0.625` shows as `0.62` but `0.875` shows as `0.88`. Record what the
-display literally shows; the exact fraction is the derived quantity, not the transcription.
-
-This also resolves the long-standing `?(2)`: `initial_project`'s drum gate stored `2` is detent 3,
-gate **0.1875** (displayed `0.19`). The old T2.x, which existed only to chase that value, is gone.
-
-The full ladder lives in `analysis/gate_display_sweep.txt`, one displayed value per line in detent
-order, so line *n* is stored *n − 1*.
-
-### T2.1 — The melodic ramp
-
-- **Resolves:** `stored = detent − 1` across 64 consecutive positions rather than six scattered
-  ones, and measures the 1/16, 1/8 and 1/4 runs outright.
-- **Device:** from B0.1. **Track 2, pattern 1** — one note per step, steps 1–64, gate ascending
-  **one detent per step** from the encoder minimum. Nothing else touched.
-- **Write down every displayed value as you go**, in detent order, lowest first, into
-  `analysis/gate_display_sweep.txt` under `melodic`. This is the half that exists nowhere else.
-- **Capture:** `T2-gate-table.KeyStepPro`
-- **Keys:** `124_110_1_1_<ordinal>`, paired via `124_50_1_1_<ordinal>`.
-- **Confirms if:** the stored values, **sorted by step**, are exactly `0..63` — no gaps, no
-  repeats, `stored == step` throughout.
-- **Falsified if:** a gap, a repeat, or a non-monotonic value appears.
-  - A **gap with an adjacent repeat** means a detent was over-turned while setting that note. The
-    repair is one extra note at the missing value in a spare pattern — not a redo.
-  - A **repeat with no gap** would mean encoder hysteresis or a display-only detent. That is a
-    real finding: record it, do not smooth it.
-- **A note you forget to set keeps the fresh-note default of stored `7`** (gate 0.5), which is
-  indistinguishable from a deliberate value. The `0..63` check is the only thing that catches it.
-
-### T2.2 — Boundary probes
-
-Everything above detent 64 is enumerated from the increment rule rather than transcribed detent by
-detent. These eight notes make that span pass/fail. **Track 2, pattern 2**; drive the encoder to
-each target display and record what the display actually reads.
-
-| Step | Drive display to | Expect stored | What it proves |
-|---|---|---|---|
-| 1 | **64** (encoder maximum) | **127** | the ladder closes exactly on the 7-bit boundary |
-| 2 | one detent below max | 126, display **63** | the top run increments by 1 |
-| 3 | **33** | **96** | the 1/2 → 1 boundary |
-| 4 | one detent below 33 | 95, display **32 — not 32.5** | falsifier for the boundary position |
-| 5 | **24** | 79 | interior sample of the 48-long 1/2 run |
-| 6 | **16.5** | **64** | first detent past the transcribed range |
-| 7 | **16** | 63 | re-measures detent 64 at a different pattern and step |
-| 8 | **0.06** (encoder minimum) | **0** | the bottom of the ladder |
-
-- **Capture:** same file as T2.1.
-- **Keys:** `124_110_2_1_<ordinal>`, paired via `124_50_2_1_<ordinal>`.
-- **Confirms if:** every stored value matches, **and** step 4 displays `32`.
-- **Falsified if:** the maximum is not 127. Then the enumerated span is wrong somewhere, and *only
-  then* is a full detent-by-detent transcription of 16.5 → 64 justified — one more filled pattern,
-  still no extra export.
-- **Why the endpoint carries most of the weight:** any miscount anywhere between 16 and 64 shifts
-  the maximum off 127. The interior samples exist only to catch a pair of compensating errors.
-- **Also confirm the encoder stops at 64** — turn past it and check the display does not move.
-
-### T2.3 — Drum mirror
-
-- **Resolves:** whether `118` shares the `110` ladder. Replaces the old five-capture T2.y with five
-  notes in the same export.
-- **Device:** Track 1 in drum mode, an untouched pattern. Five Kicks on steps 1–5 driven to
-  **0.06, 0.5, 4, 16, 64**.
-- **Keys:** `123_118_<p>_1_<ordinal>`, paired via `123_54_<p>_1_<ordinal>`.
-- **Confirms if:** stored values are **0, 7, 31, 63, 127**.
-- **Falsified if:** any differ. Only that outcome justifies repeating T2.1's layout on Track 1 and
-  filling the `drum` section of `gate_display_sweep.txt`.
-
-### T2.4 — Reading the capture
-
-```python
-# uv run python - <<'EOF'
-from ksp.lenient_json import load_path
-
-p = load_path("project_files/captures/T2-gate-table.KeyStepPro")
-
-def notes(item, pattern, p_step, p_gate):
-    """(step, stored) pairs, sorted by step. Never trust ordinal order."""
-    out = []
-    for k in range(1, 65):
-        step = p.get(f"{item}_{p_step}_{pattern}_1_{k}")
-        if step is None or step == 127:      # 127 is the empty sentinel
-            continue
-        out.append((step, p[f"{item}_{p_gate}_{pattern}_1_{k}"]))
-    return sorted(out)
-
-ramp = notes(124, 1, 50, 110)
-assert [s for s, _ in ramp] == list(range(64)), "missing or duplicated steps"
-print("stored == step:", all(s == g for s, g in ramp))
-print("mismatches:", [(s, g) for s, g in ramp if s != g])
-print("probes:", notes(124, 2, 50, 110))
-print("drum: ", notes(123, 1, 54, 118))
-# EOF
-```
-
-`tools/gate_table.py` is referenced by `gate_display_sweep.txt` but does not exist and is not
-required — the snippet above is the whole reading procedure.
-
-### What is measured and what is derived
-
-The distinction matters, and must survive into any code that consumes the table.
-
-- **Measured** — stored `0–35` and `37–63` (T2.1); `0, 63, 64, 79, 95, 96, 126, 127` (T2.2); the
-  five drum points (T2.3).
-- **Derived** — stored `36`, and stored `65–78`, `80–94`, `97–125`.
-
-Stored `36` (gate 5.25) is derived because the T2.1 note on step 36 was over-turned by one detent
-and stored 37, duplicating its neighbour. It sits inside a run whose increment is confirmed by
-directly measured values on **both** sides (stored 35 = 5.0, stored 37 = 5.5), and its displayed
-value *was* transcribed — only the stored pairing is positional. **One extra note at display 5.25
-closes it**, and until then it is the single weakest entry in the table.
-
-The remaining derived entries come from the increment rule observed at the device, enumerated and
-count-verified: any miscount would move the maximum off stored 127, and it does not.
-
-**Spec §6.1's "do not invent a formula" warning still stands, and this is not a violation of it.**
-The warning is against *fitting a curve to sparse points* — which is exactly what the old
-`8·g + 3` reading was. What is recorded here is 64 consecutive transcribed values, a stated
-increment rule, and an arithmetic closure that any error would break. A later reader should not
-apply the warning to this table and re-run 128 captures; they should close stored `36` and stop.
-
----
-
-## Tier 3 — M6, the drum-mode bit
-
-**4 captures.** The only remaining blocker on M6. Parameter `100` is documented as
-"Pattern Seq ARP/Drum mode, ARP type, ARP octave in a bitfield" with the dictionary's own comment
-placing ARP octave at bits 4–6. It reads **26** (`0b0011010`) in every pattern of all five sample
-files — including patterns that are unambiguously melodic and ones that are unambiguously drum —
-so nothing in the current corpus distinguishes the modes.
-
-This matters because `initial_project` Track 1 pattern 1 holds a real 64-note melody *and* a real
-12-note drum pattern. A reader cannot tell which plays; a writer cannot set the flag.
-
-### T3.1 — Track 1 in sequencer mode
-
-- **Device:** from B0.1. Put Track 1 in its **sequencer** mode. Place one note at beat 1 so the
-  pattern is non-empty. Nothing else.
-- **Capture:** `T3-track1-seq.KeyStepPro`
-- **Diff against:** `B0-baseline.KeyStepPro`
-- **Keys:** `123_100_<pattern>`, and anything else that moves.
-
-### T3.2 — Track 1 in drum mode
-
-- **Device:** from T3.1. Switch Track 1 to **drum** mode. Change nothing else — in particular do
-  not place a drum hit yet.
-- **Capture:** `T3-track1-drum.KeyStepPro`
-- **Diff against:** `T3-track1-seq.KeyStepPro`
-- **Confirms if:** `123_100_<pattern>` changes, and the changed bit is consistent across patterns.
-- **Falsified if:** `100` does not move.
-- **If `100` does not move:** the mode is stored somewhere else entirely. Widen the diff to every
-  key that changed and look first at the per-track scalars (`123_39`, `85`, `86`, `59`, `60`), then
-  at the project item `120_*`, then at the scene item `121_*`. It is also possible the mode is a
-  *global* device setting rather than a project one, in which case it lives under
-  `deviceGlobalParametersId: 65` and is **not in the project file at all** — which would be a
-  significant finding, because it would mean a converter cannot set it and must document that the
-  user has to switch the track by hand.
-
-### T3.3 / T3.4 — Separate the mode bit from the ARP bits
-
-- **Resolves:** which bit is mode, given that `100` also carries ARP type and ARP octave and a
-  single-capture diff cannot separate fields that move together.
-- **Device:** from T3.1 (sequencer mode). Engage the **arpeggiator** mode on Track 2, export. Then change the
-  **ARP octave** by one, export.
-- **Captures:** `T3-arp-on.KeyStepPro`, `T3-arp-octave.KeyStepPro`
-- **Confirms if:** the ARP captures move bits 4–6 (octave, per the dictionary's comment) and
-  the ARP-type bits, leaving the bit that T3.2 moved untouched.
-- **Falsified if:** the ARP captures move the same bit as the mode change.
-- **If falsified:** `100` is more entangled than a simple bitfield and needs a truth table — run
-  the four combinations of {seq, drum} × {ARP off, ARP on} and solve. Four more captures.
-
----
-
-## Tier 4 — M6, step-active semantics and real limits
-
-**8 captures.** D1 is the highest-value single test in this document.
-
-### D1 — Does an unflagged pooled drum note sound?
-
-- **Resolves:** whether `52` (step active) or the note pool is authoritative — finding 5 of the
-  companion issue. The file evidence is one-directional and strong: across all five sample files,
-  every step flagged in `52` has a matching pooled note, and never the reverse. But that is device
-  behaviour inferred from file state, and this test observes the behaviour directly.
-- **Device:** from B0.1. Track 1 in drum mode, untouched pattern. Place a Kick at beat 1 and one
-  at beat 5. Export (`D1-two-hits`). Then **toggle step 5 off without deleting the note** — use
-  whatever control deactivates a step rather than clears it. Export (`D1-step-off`).
-  **Then listen: play the pattern and note whether beat 5 sounds.** Write the answer in the ledger.
-- **Captures:** `D1-two-hits.KeyStepPro`, `D1-step-off.KeyStepPro`
-- **Keys:** `123_52_<pattern>_1_1` (lane 0, part 0 — steps 1–7), `123_54_<pattern>_1_1` and
-  `_1_2`, `123_117/118/119/120/121_<pattern>_1_*`
-- **Confirms if:** `52` goes from 17 (`0b0010001`, steps 1 and 5) to 1 (step 1 only), the pool
-  entry for the beat-5 note **survives unchanged**, and beat 5 **does not sound**.
-- **Falsified if:** the pool entry is cleared alongside the flag (then the two are equivalent and
-  either can be read), or the note still sounds with its flag clear (then `52` is not what we
-  think and the whole decode needs revisiting).
-- **Why it matters:** if confirmed, `ksp-dump` and the M2 MIDI export are currently reporting
-  notes that do not play — `initial_project` pattern 3 lane 19 has 16 pooled notes with no flags
-  at all. Exporting those to MIDI would produce audio the device never makes.
-- **Also record:** whether the device UI shows the step as containing anything after toggling.
-
-### D2 — Poly slot ceiling
-
-- **Resolves:** what happens to a 4-note chord. MCC's descriptors address note parameters at slots
-  `[1, 2, 3]` only, on every track including Track 1 — so the answer should be that the fourth
-  note has nowhere to go. `ROADMAP.md` M6 currently says "poly slots cap at 3 (4 on Track 1)",
-  which the dictionary contradicts.
-- **Device:** from B0.1. Track 3, pattern 1. Place a **3-note chord** at beat 1, export. Then add
-  a **4th note** to the same beat, export. Repeat both on **Track 1** in sequencer mode.
-- **Captures:** `D2-chord3-tr3`, `D2-chord4-tr3`, `D2-chord3-tr1`, `D2-chord4-tr1`
-- **Keys:** `125_50_1_<1..4>_1`, `125_109_1_<1..4>_1`, and the `123_*` equivalents
-- **Confirms if:** the 3-note chord fills slots 1–3, and the 4th note is refused — the device
-  declines the input, or replaces an existing voice. Slot 4 keys stay zero.
-- **Falsified if:** anything lands in slot 4.
-- **If falsified:** slot 4 *is* addressable and the dictionary's descriptor list is incomplete.
-  That would be worth knowing precisely — capture what slot 4 holds and whether it survives a
-  round trip back to the device.
-- **Note whether the two tracks behave the same.** Track 1 is structurally different and the
-  existing spec assumed it had an extra voice.
-
-### D3 — Drum polyphony
-
-- **Resolves:** whether the drum note pool ever uses slots 2 and 3. It never does in any sample
-  file — all drum notes across all five files sit in slot 1 — but the descriptors say slots 1–3
-  are addressable, and 64 pool entries is not many for a 24-lane, 64-step pattern.
-- **Device:** from B0.1. Track 1 in drum mode. Fill one pattern with **more than 64 drum hits**
-  spread across several lanes — the fastest route is several lanes at every step. Export.
-- **Capture:** `D3-drum-overflow.KeyStepPro`
-- **Keys:** `123_54_<pattern>_2_*` and `123_54_<pattern>_3_*`
-- **Confirms if:** hits beyond 64 appear in slot 2, giving a 192-entry pool as the descriptors
-  imply.
-- **Falsified if:** the device refuses hits past 64, or overwrites.
-- **Why it matters:** M6 must know the real per-pattern drum capacity before it can decide what
-  to do with a dense MIDI file.
-
-### D4 — Per-lane step count
-
-- **Resolves:** that `51` is a *per-lane* step count (finding 6). Every sample file holds a uniform
-  15 across all 24 lanes, so nothing yet demonstrates lanes can differ.
-- **Device:** from B0.1. Track 1 in drum mode. Set **one lane** to a step count different from the
-  rest — e.g. lane 1 (kick) to 12 steps while the others stay at 16. Export.
-- **Capture:** `D4-lane-steplength.KeyStepPro`
-- **Keys:** `123_51_<pattern>_1_<1..24>`
-- **Confirms if:** entry 1 goes to 11 (0-based) and entries 2–24 stay 15.
-- **Falsified if:** all 24 entries move together, or a different key changes.
-- **If all move together:** it is a per-pattern value stored redundantly, and the "poly step count"
-  name means something else. Either way this is one capture and it settles it.
+## Tier 4 — M6, step-active semantics on the melodic side
+
+**3 captures.** D1–D4 are done and removed; what they established is in spec §4. Both tests here
+extend those drum results to the melodic parameter set, which nothing has measured.
+
+**T4.5 is the highest-value remaining capture in this document** — not because it is likely to
+surprise, but because shipped code already assumes its answer.
+
+### T4.5 — Melodic step-off ⬜ not yet run
+
+**3 captures.** The melodic counterpart to D1, which tested drums only.
+
+- **Resolves:** whether `48` behaves like `52` — i.e. whether a melodic note left in the pool
+  with its step-active flag clear is silent. The reader and MIDI export now drop such notes on
+  *both* parameter sets, but only the drum half is measured. The melodic half rests on D1 plus
+  the fact that `48` and the note list agree in every file we have, which is suggestive, not
+  proof.
+- **Device:** from the baseline. Track 2, pattern 1. Place notes at **beat 1** and **beat 5**, export.
+  Then **toggle step 5 off without deleting the note** — the same control D1 used, not a clear —
+  export. **Then listen: play the pattern and note whether beat 5 sounds.**
+- **Captures:** `T4-melodic-two-notes.KeyStepPro`, `T4-melodic-step-off.KeyStepPro`
+- **Keys:** `124_48_1_1_5`, and `124_50_1_1_<1..2>` plus `124_109_1_1_<1..2>` to show the pool
+  is untouched
+- **Confirms if:** `124_48_1_1_5` goes 1 → 0, the pool entry survives unchanged, and beat 5
+  does not sound — exactly D1's shape.
+- **Falsified if:** the pool entry is cleared alongside the flag (then melodic deletion and
+  deactivation are the same operation), or the note still sounds with its flag clear.
+- **If falsified:** `ExportOptions.include_inactive` must stop applying to melodic notes, and
+  the reader's melodic `active` decode becomes informational only.
+
+### T4.6 — Melodic pool overflow ⬜ not yet run
+
+**1 capture.** D3 established that a *drum* pool spills into chunk 2 at 64 events. Nothing shows
+that a melodic one does, and no sample file has more than 64 melodic notes in a pattern.
+
+- **Resolves:** whether melodic notes chunk the way drum notes do, and — the part that matters
+  for code — **whether `48` stays wholly in slot 1 or follows the chunking**. The reader
+  currently reads melodic step-active from slot 1 only and treats it as pattern-wide; that is
+  the one assumption in the change with no capture behind it.
+- **Device:** from the baseline. Track 2, pattern 1, 64 steps. Enter **more than 64 notes** — chords on
+  every step is the fastest route. Export. Note whether the device refuses any, and at what count.
+- **Capture:** `T4-melodic-overflow.KeyStepPro`
+- **Keys:** `124_50_1_2_*` and `124_109_1_2_*` (did the pool spill?), `124_48_1_1_*` and
+  `124_48_1_2_*` (did the flags spill?)
+- **Confirms if:** events past 64 appear in slot 2, and `124_48_1_2_*` stays all-zero with every
+  flag still in slot 1.
+- **Falsified if:** `48` slot 2 is populated — then step-active is chunked alongside the pool and
+  the reader must read all chunks, not just the first.
+- **Also record the ceiling.** If the device errors, note the number and whether it matches the
+  192 that D3 produced for drums.
 
 ---
 
@@ -504,7 +215,7 @@ Known values: `Default.KeyStepPro` holds `99` = **20** (`0b0010100`) on every pa
 pattern 1 and Track 3 pattern 1, and 20 elsewhere — so bit 2 (value 4) is the one that varies in
 real material. Note the seq and drum defaults already differ by exactly that bit.
 
-- **Device:** from B0.1, Track 2 pattern 1. Change **one field at a time**, returning to default
+- **Device:** from the baseline, Track 2 pattern 1. Change **one field at a time**, returning to default
   between captures: step size, triplet on, polyrhythm on, swing offset on, playback direction
   through each of its settings.
 - **Captures:** `T5-99-stepsize-<value>`, `T5-99-triplet`, `T5-99-polyrhythm`,
@@ -523,7 +234,7 @@ real material. Note the seq and drum defaults already differ by exactly that bit
 
 - **Resolves:** `107` (root note) and `108` (scale), which are 0 in every sample file, and the
   user-scale parameters `101`–`106`.
-- **Device:** from B0.1. Set a non-default root note, export. Set a non-default scale, export.
+- **Device:** from the baseline. Set a non-default root note, export. Set a non-default scale, export.
 - **Captures:** `T5-rootnote`, `T5-scale`
 - **Keys:** `124_107_1`, `124_108_1`
 - **Confirms if:** each moves independently and the scale value indexes the device's scale list in
@@ -537,7 +248,7 @@ real material. Note the seq and drum defaults already differ by exactly that bit
   than 64 steps. Scene parameter `84` is documented as "16 pattern in a chain (value between 0 and
   15 if defined, otherwise 127)" and reads **127 across all 16 entries of all 5 tracks in every
   sample file** — so no sample has ever used a chain.
-- **Device:** from B0.1. Build a chain of **3 patterns** on Track 2 within scene 1. Export.
+- **Device:** from the baseline. Build a chain of **3 patterns** on Track 2 within scene 1. Export.
 - **Capture:** `T5-chain-3.KeyStepPro`
 - **Keys:** `121_84_1_2_<1..16>` (scene 1, track 2), and `121_83_*` (current pattern per track)
 - **Confirms if:** the first three entries hold 0-based pattern numbers and the rest stay 127.
@@ -556,7 +267,7 @@ real material. Note the seq and drum defaults already differ by exactly that bit
   (`49` = 5 and 12). Under the pages reading those notes could never sound, which contradicts a
   hardware-confirmed description. Under the repeats reading every mask is meaningful at any
   pattern length. The file cannot settle it; only the device can.
-- **Device:** from B0.1. Track 2, pattern 1, length **16 steps**. Four notes at beats 1, 5, 9, 13
+- **Device:** from the baseline. Track 2, pattern 1, length **16 steps**. Four notes at beats 1, 5, 9, 13
   on four different pitches. Set their skip masks to 16-only, 32-only, 48-only and 64-only
   respectively. Export, then **play the pattern and listen through at least eight loops**.
 - **Capture:** `T5-skip-16step.KeyStepPro`
@@ -638,10 +349,10 @@ zero observational data on it.
   worth doing. If the range is only ±4, Time Shift spans roughly ±4 % of a step and is useless as a
   quantization target, so M5 would snap to the grid and report the loss instead of pretending to
   represent it. If it is ±49, shift covers the entire gap between steps.
-- **Device:** from B0.1. Track 2, pattern 1. Place one note at beat 1. Turn Time Shift **all the way
+- **Device:** from the baseline. Track 2, pattern 1. Place one note at beat 1. Turn Time Shift **all the way
   down** until the display stops moving, export. Then **all the way up**, export.
 - **Captures:** `T7-shift-min.KeyStepPro`, `T7-shift-max.KeyStepPro`
-- **Diff against:** `T1-note-place.KeyStepPro` (or B0.1 plus the note)
+- **Diff against:** `T1-note-place.KeyStepPro` (or the baseline plus the note)
 - **Keys:** `124_112_1_1_1` only
 - **Confirms if:** exactly one key moves per capture, and the two stored values sit symmetrically
   about 49.
@@ -653,7 +364,7 @@ zero observational data on it.
 
 - **Resolves:** whether display → stored stays 1:1 across the whole range, which is only known
   today over `project_5`'s ±4 window.
-- **Device:** from B0.1. Track 2, pattern 1. Place notes on **steps 1, 3, 5, 7, 9, 11, 13** and set
+- **Device:** from the baseline. Track 2, pattern 1. Place notes on **steps 1, 3, 5, 7, 9, 11, 13** and set
   each to a different Time Shift spread across the range found in T7.1 — both extremes, both
   half-way points, ±1, and 0. One capture holds the whole curve.
 - **Capture:** `T7-shift-linearity.KeyStepPro`
@@ -669,7 +380,7 @@ zero observational data on it.
 
 - **Resolves:** whether `120` shares the melodic centre of 49 and the same range. Also supersedes
   T6.1's fallback branch.
-- **Device:** from B0.1. Track 1 in drum mode, an untouched pattern. Place a Kick at beat 1. Set
+- **Device:** from the baseline. Track 1 in drum mode, an untouched pattern. Place a Kick at beat 1. Set
   Time Shift to **minimum, −1, 0, +1, maximum**, exporting at each. Five captures.
 - **Captures:** `T7-drumshift-<display>.KeyStepPro` — `min`, `m1`, `0`, `p1`, `max`
 - **Keys:** `123_120_<pattern>_1_1`
@@ -684,7 +395,7 @@ zero observational data on it.
 - **Resolves:** what `74` stores, and how the device displays it. The KeyStep Pro manual gives the
   swing range as 50 %–75 %, and `74` reads 50 in every sample file, so it is probably the percentage
   directly — but nothing has ever tested it.
-- **Device:** from B0.1. Change **only** the global Swing encoder. Export at three settings: the
+- **Device:** from the baseline. Change **only** the global Swing encoder. Export at three settings: the
   minimum, something near the middle, and the maximum. Touch no per-pattern swing.
 - **Captures:** `T7-swing-global-<display>.KeyStepPro`
 - **Keys:** `120_74`, and **watch whether `97` / `114` move too** — they should not.
@@ -700,7 +411,7 @@ zero observational data on it.
   offset**. But `src/ksp/reader.py::_swing` reads it as an **absolute percentage** (`stored + 25`,
   so the default 25 → 50 %). Both readings agree when the global is 50, which is why every sample
   file hides the difference and no test catches it.
-- **Device:** from B0.1, global swing left at its default. On **Track 2, pattern 1 only**, set the
+- **Device:** from the baseline, global swing left at its default. On **Track 2, pattern 1 only**, set the
   per-pattern swing (SHIFT + Swing encoder) to its maximum. Export. Then its minimum. Export.
 - **Captures:** `T7-swing-pattern-max.KeyStepPro`, `T7-swing-pattern-min.KeyStepPro`
 - **Keys:** `124_97_1`; also check `124_97_2` and `125_97_1` are untouched, so the scope really is
@@ -728,7 +439,7 @@ zero observational data on it.
 ### T7.7 — Drum swing spot-check
 
 - **Resolves:** whether `114` behaves like `97`.
-- **Device:** from B0.1. Track 1 in drum mode. Set per-pattern swing to maximum. Export.
+- **Device:** from the baseline. Track 1 in drum mode. Set per-pattern swing to maximum. Export.
 - **Capture:** `T7-swing-drum.KeyStepPro`
 - **Keys:** `123_114_<pattern>`, `123_116_<pattern>`
 - **Confirms if:** it mirrors T7.5 with the drum parameter pair.
@@ -739,7 +450,7 @@ zero observational data on it.
 - **Resolves:** whether `113` is play-probability or timing jitter. **This gates Tier 8 entirely.**
   A fresh note defaults to randomness 100, and if that means "randomise timing by 100" then every
   timing measurement in this document is measuring noise.
-- **Device:** from B0.1. Track 2, pattern 1, four notes at beats 1, 5, 9, 13, all at default
+- **Device:** from the baseline. Track 2, pattern 1, four notes at beats 1, 5, 9, 13, all at default
   randomness. Play the pattern for a minute and **listen**: do notes ever fail to sound, and does
   the timing wander? Then set randomness to its **minimum** on all four and listen again. Export
   both.
@@ -826,25 +537,13 @@ cleanly and plays with wrong timing, and nothing errors.
 
 Fill in as you go. This table is the record; the `.KeyStepPro` files are the evidence.
 
+Rows for the completed tiers have been removed along with their procedures. The few values those
+captures still owe are in [`Capture_Ledger_Gaps.md`](./Capture_Ledger_Gaps.md).
+
 | Test ID | Date | Displayed value / setting | Stored value | Notes |
 |---|---|---|---|---|
-| B0.1 | | — | | |
-| B0.2 | | — | | keys that drift on their own: |
-| T1.1 | | fresh note, C3 @ beat 1 | | |
-| T1.2 | | pitch E3 | | |
-| T1.3 | | velocity 127 | | |
-| T1.4 | | deleted | | residue? |
-| T2.1 | 2026-07-31 | 64-note ramp, detents 1–64 | stored 0–63 | ✔ `stored == step` except step 36 → 37 (over-turned by one detent); stored 36 undermeasured, display 5.25 |
-| T2.2 | 2026-07-31 | 64 / 63 / 33 / 32 / 24 / 16.5 / 16 / 0.06 | 127 126 96 95 79 64 63 0 | ✔ all eight as predicted; ladder closes exactly on 127 |
-| T2.3 | 2026-07-31 | drum 0.06 / 0.5 / 4 / 16 / 64 | 0 7 31 63 127 | ✔ drum mirrors melodic |
-| T3.1 | | track 1 seq mode | | |
-| T3.2 | | track 1 drum mode | | bit that moved: |
-| T3.3 | | ARP on | | |
-| T3.4 | | ARP octave +1 | | |
-| D1 | | step 5 toggled off | | **did beat 5 sound?** No |
-| D2 | | 3- then 4-note chord | | 4th note went where? |
-| D3 | | >64 drum hits | | slot 2 used? Error message on keyboard showed up saying 192 note limit hit when 3 lanes were filled with 64 notes in a single pattern |
-| D4 | | lane 1 = 12 steps | | |
+| T4.5 | | melodic step 5 toggled off | | **did beat 5 sound?** |
+| T4.6 | | >64 melodic notes | | did `48` spill to slot 2? ceiling reached at: |
 | T5.* | | `99` field = | | one row per setting |
 | T5.6 | | root note / scale | | |
 | T5.7 | | 3-pattern chain | | |
@@ -868,36 +567,35 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 
 ## Effort summary
 
-| Tier | Captures | Resolves | Milestone |
+Remaining work only. B0 and tiers 1, 2, 3 and 4 are complete and are not listed.
+
+| Tier | Captures left | Resolves | Milestone |
 |---|---|---|---|
-| B0 | 2 | noise floor | all |
-| 1 | 4 | write-path key set | M4 |
-| 2 | **1** ✔ done | gate table | M7 |
-| 3 | 4 | drum-mode bit | M6 |
-| 4 | 8 | step-active semantics, real limits | M6 |
+| 4 | 3 | melodic step-active and pool chunking | M6, M5 |
 | 5 | ~14 | pattern scalars, chaining, step-skip semantics | M6, M2 |
 | 6 | 2 | standing caveats | M3 |
 | 7 | ~13 | Time Shift range, swing semantics | M7, M5 |
 | 8 | ~6 recordings | what a Time Shift unit is worth in time | M2, M5 |
-| | **~54** | | |
+| | **~38 left** of ~57 | | |
 
-Tiers are ordered by value per capture and each is independently useful — stopping after any tier
-leaves a coherent result rather than a half-finished one. B0 is not optional; everything else is.
+Each tier is independently useful — stopping after any one leaves a coherent result rather than a
+half-finished one.
 
-If time is short, the ranking is **B0 → D1 → Tier 3 → T7.1 → Tier 1 → rest of Tier 7 →
-Tier 4 rest → Tier 6 → Tier 5 → Tier 8**. Tier 2 no longer appears: it was the most expensive tier
-in this document and is now one capture, already taken.
+**Remaining ranking: T4.5 → T7.1 → rest of Tier 7 → T4.6 → Tier 6 → Tier 5 → Tier 8.**
 
-**Tier 7's shift sweep has the same shape as Tier 2 did** — T7.2 already batches seven shift values
-into one capture, but T7.1 and T7.3 are still written as one export per value. Both fold into a
-single batched capture under the rules above. Do that before running them.
-
-- **D1 and Tier 3** are the two places where the current code is arguably *wrong* rather than merely
-  incomplete.
+- **T4.5 leads** because it is the one open question that the *shipped* code already depends on:
+  the export drops inactive melodic notes on the strength of D1's drum result plus a corpus where
+  `48` never disagrees with the pool. Three captures make that measured instead of inferred.
 - **T7.1 is two captures and jumps the queue** because it is a go/no-go: if the Time Shift range is
   only ±4, the rest of Tier 7's shift work and most of Tier 8 are not worth running at all.
-- **T7.5 is the third place the code may be wrong** — `reader._swing` and MCC's own field label
+- **T7.5 is the other place the code may be wrong** — `reader._swing` and MCC's own field label
   disagree about whether per-pattern swing is absolute or a signed offset, and no existing test can
   tell, because every sample file is swing-neutral.
 - **Tier 8 is last** because it is the only tier needing a recording rig rather than just the device
   and MCC, and because Tier 7 supplies the range it sweeps.
+
+This ordering has a track record. The previous version put D1 and Tier 3 first as "the two places
+where the current code is arguably wrong", and both were: D1 found the export emitting silent
+notes, and Tier 3 confirmed the mode flag. D2 then overturned the polyphony-slot model, which
+nothing had flagged as doubtful — so the ranking is a guide, not a guarantee, and a capture that
+merely confirms is still worth its five minutes.

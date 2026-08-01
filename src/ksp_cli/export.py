@@ -112,6 +112,14 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--include-inactive",
+        action="store_true",
+        help=(
+            "export pooled notes whose step-active flag is clear; the device does not play "
+            "them, so they are omitted by default"
+        ),
+    )
+    parser.add_argument(
         "--no-swing",
         action="store_false",
         dest="apply_swing",
@@ -195,6 +203,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             default_gate=args.default_gate,
             apply_swing=args.apply_swing,
             include_stale=args.include_stale,
+            include_inactive=args.include_inactive,
         )
     except ValueError as exc:
         print(f"{PROG}: {exc}", file=sys.stderr)

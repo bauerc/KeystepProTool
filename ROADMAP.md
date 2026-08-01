@@ -64,12 +64,14 @@ be checked against the identical files.
 
 - **Tempo is decoded** — parameters `70`–`72` are little-endian 7-bit chunks holding BPM × 100.
   Confirmed against the hardware readout via the two empty baselines.
-- **Track 1's fourth polyphony slot is zero-filled, not sentinel-filled**, in every pattern of
-  every sample. Read naively, an *empty* project decodes as 2,048 phantom notes. The `!= 127`
-  existence rule needs the zero-fill exception alongside it (spec §4).
+- **Track 1's fourth slot is zero-filled, not sentinel-filled**, in every pattern of every
+  sample. Read naively, an *empty* project decodes as 2,048 phantom notes. The `!= 127`
+  existence rule needs the zero-fill exception alongside it (spec §4). Capture D2 later showed
+  the slot is a phantom outright — a 4th chord voice does not go there.
 - **Parameter `100` does not identify drum mode** — it reads 26 everywhere. Usually harmless,
   because the unused parameter set is sentinel-filled, but `initial_project` Track 1 pattern 1
-  holds a real melody *and* real drums, so the reader reports both. M6 must isolate the real bit.
+  holds a real melody *and* real drums, so the reader reports both. Resolved since: the flag is
+  `86` bit 6, confirmed at the device by capture `T3-track1-drum`.
 - **The drum step-active bitmask (`52`) is not fully decoded.** Its packing fits both
   hardware-confirmed projects but not real user material. Harmless for reading — the note list is
   authoritative — but it blocks writing, so M5/M6 depend on it.
@@ -112,10 +114,9 @@ Export, then capture the MIDI output while it plays once. Step *n* fires exactly
 the captured pitch *is* the note for lane *n−1*: all 24 mappings from one capture, and the
 lane encoding cross-checks against `123_117_*` in the export.
 
-One hit per step rather than 24 at once because Track 1 has only 4 poly slots. **The same export
-is also the discriminating case for the undecoded `52` packing** — 24 lanes across 24
-consecutive steps is exactly the "vary lanes, hold steps constant" case `initial_project`
-demands — so capture it in the same session as M7's remaining timing work (tiers 7–8).
+One hit per step rather than 24 at once keeps each step's note unambiguous in the captured MIDI.
+(The `52` packing this test was also meant to discriminate is now decoded from captures D1 and
+D3 — see spec §4 — so this export only has to resolve the drum map.)
 
 **Test D2**, five minutes and no capture: change the Drum Map, export again, expect a
 byte-identical file. Turns "not project state" from an inference into an asserted fact.
@@ -204,6 +205,10 @@ nothing downstream can be trusted.
 
 **Test:** `md5` comparison. Pure desk work, no hardware, no MIDI involved.
 
+**The target is known to be reachable.** Capture B0.2 exported an untouched project twice and the
+two files are **byte-identical**, so MCC's writer is deterministic and there is no drift to chase.
+Any difference this milestone sees is ours.
+
 **Also settle here:** whether MCC accepts strict JSON without the trailing comma. Export one file
 without it and try loading. If it works, drop the comma-preservation requirement permanently.
 
@@ -251,14 +256,18 @@ patterns longer than 64 steps split across pattern slots.
 
 **Watch for:**
 - Track 1 in DRUM mode uses a completely different parameter set (spec §3.2), and the mode
-  bitfield must match what you write. **M1 found that parameter `100` does not currently
-  distinguish the modes** — isolating the real bit is part of this milestone.
-- The drum step-active bitmask `52` must be written consistently with the note list, and **its
-  packing is not yet decoded** (spec §5). Reading does not need it; writing does.
+  bitfield must match what you write. The flag is **`86` bit 6**, hardware-confirmed by capture
+  `T3-track1-drum` as a one-key diff; `100` never moves.
+- Both step-active arrays must be written consistently with the note list, because **the device
+  plays the flags, not the pool** (capture D1). A pooled note whose flag is clear is silent. The
+  drum bitmask `52` is now decoded — 7 bits per entry, lane-major, 10 entries per lane (spec §4).
 - Anything over 64 steps must be split and chained, never silently truncated.
-- Poly slots cap at 3 (4 on Track 1) — decide and document what happens to a 5-note chord.
-  Track 1's fourth slot is zero-filled in every known file and may not be usable at all; do not
-  assume it works without testing on the device.
+- `idx2` is a **64-entry pool chunk, not a polyphony voice** (captures D2, D3). Chords sit in one
+  chunk as consecutive ordinals sharing a step, so there is no 3- or 4-note ceiling. The real
+  limit is **192 events per pattern**, which the firmware enforces with an on-screen error. The
+  open question is what a writer should do when source material exceeds it — split across
+  patterns, or drop and warn. Track 1's slot 4 stays zero-filled even when a 4th chord voice is
+  added; never write there.
 
 ---
 
