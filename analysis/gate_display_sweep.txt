@@ -38,11 +38,15 @@
 # PROVENANCE -- do not lose this distinction:
 #   measured  stored 0-35, 37-63   (T2.1, transcribed detent by detent)
 #   measured  stored 63,64,79,95,96,126,127 and 0   (T2.2 boundary probes)
-#   derived   stored 36            (T2.1 note over-turned one detent; display
-#                                   was transcribed, stored pairing is
-#                                   positional. Bracketed by measured 35=5 and
-#                                   37=5.5 in a confirmed 0.25 run. ONE extra
-#                                   note at display 5.25 closes it.)
+#   measured  stored 36            (was derived: the T2.1 note was over-turned
+#                                   one detent, so the display was transcribed
+#                                   but the stored pairing was positional.
+#                                   CLOSED 2026-08-01 by capture
+#                                   project_files/captures/D25-gate-capture.KeyStepPro
+#                                   -- one note at display 5.25, diffing to
+#                                   eight keys against B0-baseline, with
+#                                   124_110_1_1_1 = 36. Predicted and observed
+#                                   agree; the value below is unchanged.)
 #   derived   stored 65-78, 80-94, 97-125   (enumerated from the observed
 #                                   increment rule, count-verified: any
 #                                   miscount would move the maximum off 127,
@@ -87,7 +91,7 @@ melodic
 4.5
 4.75
 5
-# next value is derived, not transcribed -- see PROVENANCE
+# next value confirmed by D25-gate-capture, not by this sweep -- see PROVENANCE
 5.25
 5.5
 5.75

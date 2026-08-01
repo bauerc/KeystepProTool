@@ -318,10 +318,10 @@ rather than scattered samples.
 - **Gate table** (`110` / `118`) — **measured and shipped** (protocol tier 2, capture
   `T2-gate-table`). The encoding is an index: `stored = detent − 1`, 128 entries, gate 0.0625–64
   steps, drum identical. `ksp.constants.GATE_TABLE` holds all 128 and `tests/test_gate_ladder.py`
-  ties it to `analysis/gate_display_sweep.txt`. One entry remains *derived* rather than
-  transcribed — stored `36` (gate 5.25), whose sweep note was over-turned by a detent. It sits
-  inside a confirmed 0.25 run between measured neighbours, so it is not in doubt, but a single
-  note at display 5.25 on the next capture closes it.
+  ties it to `analysis/gate_display_sweep.txt`. The sweep's one derived entry — stored `36`
+  (gate 5.25), whose note had been over-turned by a detent — is now **closed** by capture
+  `D25-gate-capture`: one note at display 5.25 stores `110` = 36, as predicted. No transcribed
+  rung rests on interpolation.
 - **Time shift range and linearity** (`112` / `120`) — the centre of 49 is confirmed but nothing
   establishes the range; `project_5`'s ±4 may not be the limit. Protocol T7.1–T7.3.
 - **Swing semantics** (`74`, `97` / `114`) — **never exercised in any sample file**, so it cannot be

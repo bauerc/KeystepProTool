@@ -161,6 +161,13 @@ keys use **`paramId`**. Confusing the two is an easy mistake.
 | `112` | Seq note time shift | **note** | offset, **centre = 49** |
 | `113` | Seq note randomness | **note** | 0–100 |
 
+**`109` is a raw MIDI note number, and the device's own note names are C3 = 60.** Capture
+`D2-chord4-tr3` stores 48, 52, 55, 59 for a chord the operator played and named **C2, E2, G2,
+B2**; `D25-gate-capture`'s single note stores 48 and is likewise C2. So the device labels an
+octave one lower than the C4 = 60 convention, and a display transcription reading "C2" means
+MIDI 48, not 36. This affects **transcriptions only** — no conversion is applied to `109` itself,
+and the drum set's `117` is a lane index rather than a pitch (§3.2).
+
 ### 3.2 Drum — item 123 (Track 1) only
 
 | paramId | Arturia's name | Indexed by |
@@ -192,6 +199,19 @@ of the 24 lanes. Every sample file holds a uniform 15 across all lanes, which le
 capture `D4-lane-steplength` sets one lane to a different length and only that lane's entry
 moves (`123_51_1_1_1` → 11, entries 2–24 unchanged at 15). So drum lanes really can run at
 different lengths, and a writer must set all 24.
+
+**0-based is measured, not inferred.** The operator's display read **12** for the shortened lane
+and **16** for the others, against stored 11 and 15. Stored = displayed − 1, on the same footing
+as `98`.
+
+**Independent lane lengths require drum *Poly* mode**, which the same capture also switched on:
+`D4-lane-steplength` moves **two** pattern scalars, `123_51_1_1_1` 15 → 11 **and `123_116_1`
+16 → 20** — bit 2. In *Mono* mode all 24 lanes share one length. On the device the mode is
+SHIFT + E2 (Poly) / SHIFT + D#2 (Mono); it is not on the display.
+
+> **A writer must set `116` bit 2 whenever it writes a non-uniform `51`.** Per-lane lengths
+> without the bit produce a file that loads clean and plays wrong — the same silent-failure mode
+> as a guessed time shift encoding. See §5 for what bit 2 is and is not pinned to.
 
 ### 3.2.1 The drum map — 24 lanes, and it is **not in the project file**
 
@@ -232,8 +252,8 @@ Two points still need the hardware, recorded as **Test D1** in the roadmap:
 |---|---|
 | `97` / `114` | Seq / DRUM swing % — stored with a **+25 offset** (±25% → 0…50) |
 | `98` / `115` | Seq / DRUM step count — **0-based** (15 = 16 steps) |
-| `99` / `116` | Bitfield: triplet, swing offset, polyrhythm, step size, playback direction |
-| `100` | Bitfield. Dictionary says ARP/Drum mode, ARP type, ARP octave; only **ARP octave (bits 4–6)** is hardware-confirmed. Drum mode is `86` bit 6, not here |
+| `99` / `116` | Bitfield: triplet, swing offset, polyrhythm, step size, playback direction. Only **`116` bit 2** is measured — drum Mono/Poly, i.e. per-lane step lengths (§3.2, §5). The rest is unallocated |
+| `100` | Bitfield. Dictionary says ARP/Drum mode, ARP type, ARP octave; only **ARP octave (bits 4–6)** is hardware-confirmed, as `stored = octave + 1` (§5). Drum mode is `86` bit 6, not here |
 | `107` / `108` | Root note / scale |
 | `40` | Pattern data state: `0` in the factory template, `2` initialised but empty, `3` holds data. **A latch** — see below |
 | `20`–`23`, `25`–`28` | Program Change (Seq / Drum), MSB/LSB split |
@@ -353,11 +373,19 @@ Polyphony is expressed inside a chunk, as **consecutive note ordinals sharing th
 (or `54`) value**. Hardware-confirmed by capture `D2-chord4-tr3` / `D2-chord4-tr1`: a four-note
 chord is accepted on both Track 3 and Track 1, and lands in **slot 1, ordinals 1–4**, all with
 `50` = 0, while slots 2 and 3 stay entirely sentinel-filled. There is no three-voice ceiling,
-and Track 1 has no extra voice.
+and Track 1 has no extra voice. The device gave **no feedback at all** on the fourth voice — it
+simply took it, which is what settles that the ceiling was never there. (Building a chord on the
+device needs **Step Edit** mode; that is data entry, not format — see the test protocol.)
 
 Notes reach slot 2 only when slot 1's 64 entries are full. `D3-drum-overflow` fills a drum
 pattern past capacity: the events land 64 in slot 1, 64 in slot 2, 64 in slot 3, and the device
 then displays a **192-note limit** error. So the ceiling is real and the firmware enforces it.
+
+**At the ceiling the device refuses the next hit — it does not overwrite.** The operator confirms
+the 193rd hit was rejected outright, with the error shown immediately and no existing event
+disturbed. So there is no "oldest note wins" recycling to emulate: a writer handed more than 192
+events per pattern must either **reject the source** or **drop the overflow and warn**, and
+either way the file it emits stays a faithful prefix rather than a scrambled pool.
 
 > **Track 1's fourth slot is zero-filled, not sentinel-filled.** In all 16 patterns of all five
 > sample projects — including both empty baselines and real user material — `123_50_*_4_*` and
@@ -393,6 +421,21 @@ the device.
 
 This is not hypothetical. In `initial_project`, pattern 3 lanes 0 and 19 hold 20 pooled drum
 notes with no flags at all, and pattern 1 lane 17 holds 8 of which only 4 are flagged.
+
+**The device itself cannot show you the difference**, which is why the corpus is full of these.
+Asked directly whether the UI distinguished "step off, note still stored" from "step empty" after
+the D1 toggle, the operator reports it showed **nothing** — the step button's lamp *is* the
+step-active bit and there is no second indicator behind it. Two consequences worth stating
+because they are not guessable from the file:
+
+- **A stored note cannot be overwritten by playing over it.** Entering a new pitch and pressing
+  an unlit step re-lights the *old* note; the new pitch does not replace it.
+- **ERASE + the step button is the only way to actually clear one.** Toggling a step off is a
+  mute, not a delete, in the UI exactly as in the file.
+
+So a pooled-but-unflagged note is the normal residue of ordinary playing, not a sign of a damaged
+file — and a converter that silently drops them is discarding material the owner can still hear
+by tapping one button.
 
 ### Why a note might not play
 
@@ -607,10 +650,43 @@ comment: `T3-arp-octave` moves `124_100_1` from 26 to 42, i.e. that field from 1
 the arpeggiator on and off leaves `100` untouched, so ARP on/off is not stored there either.
 Note the scope difference: `86` is per-track, `100` is per-pattern.
 
+**The ARP octave has no display, and that is the whole encoding.** It is chosen by holding SHIFT
+and striking one of five keys on the second physical octave, which are silkscreened with the
+values — there is no screen readout to reconcile against. The range is five detents and the
+default is 0, at C#3:
+
+| Displayed / silkscreened | −1 | 0 | +1 | +2 | +3 |
+|---|---|---|---|---|---|
+| Stored in `100` bits 4–6 | 0 | **1** | 2 | 3 | 4 |
+
+`T3-arp-octave` is the +1 move: default 0 → +1, stored 1 → 2. **`stored = octave + 1`**, so the
+field is a plain unsigned offset with 0 as the floor rather than a signed value. Two of the five
+rungs are measured and the remaining three follow from the range and the constant step; a
+converter reporting ARP octave must state the offset it applied, since it cannot echo a screen.
+
 This resolves the ambiguity that made the reader report `PatternMode.BOTH`. **`initial_project`
 Track 1 pattern 1 holds both** a real 64-step melody and a real 12-note drum pattern; bit 6 is
 set, so the drums are live and the melody is leftovers. The reader still reports every note and
 warns — it resolves the *mode*, it does not discard data.
+
+### Partly resolved: `116` bit 2 is drum Mono/Poly
+
+The `99` / `116` bitfield is otherwise unallocated, but one bit is now measured.
+`D4-lane-steplength` was taken to pin `51`, and it moves a second scalar nobody diffed for:
+**`123_116_1` 16 → 20**, bit 2, set at the same moment the operator switched Track 1's drum
+mode from Mono to Poly to give lanes independent lengths. That matches the dictionary's own
+*polyrythm state* among the field's named contents.
+
+So for the **drum** side: **bit 2 clear = Mono, all 24 lanes share one length; bit 2 set = Poly,
+`51` is honoured per lane.** §3.2 states the writer's obligation.
+
+**What is not pinned.** The capture moved the mode and a lane length together, so bit 2 is
+established as "the thing that makes lanes independent" and not, strictly, as a bit named
+polyrhythm in general. And it does **not** transfer to the melodic side by symmetry: `Default`
+holds `99` = 20 with bit 2 **already set** on every pattern while `116` = 16 has it clear, so the
+two halves cannot both mean "polyrhythm off by default". Either the bit means something else in
+`99`, or its sense is inverted, or the defaults simply differ. Tier 5 resolves that; until it
+does, treat only `116` bit 2 as known.
 
 ---
 
@@ -675,10 +751,15 @@ errors. That warning is against fitting a curve to sparse points, which is what 
 transcribed directly, the rest enumerated from an observed increment rule and count-verified by
 the exact closure at stored 127.
 
-**One entry is still derived: stored `36` (gate 5.25).** The sweep note on that detent was
-over-turned by one and stored 37. It sits between directly measured neighbours (35 = 5.0,
-37 = 5.5) inside a confirmed 0.25 run, so the value is not in doubt — but it is the one entry a
-future capture should close, with a single note at display 5.25.
+**Stored `36` (gate 5.25) is now measured too.** It was the sweep's one derived rung — that note
+had been over-turned by a detent and stored 37 — and capture `D25-gate-capture.KeyStepPro` closes
+it: a single note placed with the Gate display reading **5.25**, diffing against `B0-baseline` to
+eight keys on Track 2, with `124_110_1_1_1` = **36**. Predicted and observed agree, so no
+transcribed rung of the ladder rests on interpolation any more.
+
+(The stored 65–78, 80–94 and 97–125 spans remain *enumerated* from the increment rule rather than
+transcribed. That is a different and weaker provenance class, count-verified only by the exact
+closure at 127, and it is not upgraded by this capture.)
 
 This also resolves the long-standing `?(2)`: `initial_project`'s drum gate stored `2` is detent 3,
 gate **0.1875**.

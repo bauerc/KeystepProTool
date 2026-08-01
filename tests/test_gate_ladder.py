@@ -27,6 +27,13 @@ SWEEP_FILE = "gate_display_sweep.txt"
 #: self-consistent, but not while it still reproduces these.
 PRE_SWEEP_POINTS = {7: 0.5, 11: 1.0, 19: 2.0, 27: 3.0, 29: 3.5, 31: 4.0}
 
+#: Stored 36 was the sweep's one derived rung -- that note had been over-turned
+#: by a detent, so its display was transcribed but its stored pairing was
+#: positional. Capture D25-gate-capture closed it: one note at display 5.25,
+#: storing 124_110_1_1_1 = 36. Same role as the points above, from a capture
+#: taken after the sweep rather than before it.
+POST_SWEEP_POINTS = {36: 5.25}
+
 
 def read_sweep(analysis_dir: Path) -> dict[str, list[str]]:
     """Parse the sweep into ``{"melodic": [...], "drum": [...]}``.
@@ -82,6 +89,11 @@ def test_every_transcribed_detent_matches_the_table(sweep: dict[str, list[str]])
 
 @pytest.mark.parametrize(("stored", "expected"), sorted(PRE_SWEEP_POINTS.items()))
 def test_the_points_known_before_the_sweep_still_hold(stored: int, expected: float) -> None:
+    assert constants.GATE_TABLE[stored] == expected
+
+
+@pytest.mark.parametrize(("stored", "expected"), sorted(POST_SWEEP_POINTS.items()))
+def test_the_points_measured_after_the_sweep_hold(stored: int, expected: float) -> None:
     assert constants.GATE_TABLE[stored] == expected
 
 

@@ -202,9 +202,9 @@ SKIP_SEQUENCES: Final = (16, 32, 48, 64)
 #:
 #: Provenance, which must not be lost: stored 0-35 and 37-63 were transcribed
 #: detent by detent (T2.1), stored 63/64/79/95/96/126/127 probed directly
-#: (T2.2), and stored 36 is *derived* -- its sweep note was over-turned by one,
-#: so 5.25 is read off the confirmed 0.25 run between measured 35 = 5 and
-#: 37 = 5.5. Everything from 65 up is enumerated from the increment rule and
+#: (T2.2), and stored 36 -- once derived, because its sweep note was over-turned
+#: by a detent -- was pinned by capture D25-gate-capture, one note at display
+#: 5.25. Everything from 65 up is enumerated from the increment rule and
 #: count-verified by the exact closure on 127. The drum ladder (``118``) is the
 #: same table, spot-checked at five points (T2.3).
 GATE_RUNS: Final = ((8, 0.0625), (20, 0.125), (20, 0.25), (48, 0.5), (32, 1.0))
