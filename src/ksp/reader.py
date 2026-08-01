@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from ksp import constants, lenient_json
+from ksp.diagnostics import Code, Collector, Diagnostic, Site
 from ksp.keys import get_int, read_array
 from ksp.model import Note, NoteKind, Pattern, PatternMode, Project, Track
 
@@ -45,7 +46,7 @@ def load(path: Path | str) -> Project:
 
 def read_project(raw: dict[str, Any], source_name: str = "") -> Project:
     """Decode an already-parsed project dict."""
-    warnings: list[str] = []
+    collector = Collector()
 
     device = raw.get("device")
     if not isinstance(device, str):
@@ -56,7 +57,10 @@ def read_project(raw: dict[str, Any], source_name: str = "") -> Project:
         # The factory Default.KeyStepPro omits it; user saves carry it. Worth
         # surfacing because M5 has to inject it when using the factory file as
         # a template.
-        warnings.append("no 'version' key (factory template rather than a saved project)")
+        collector.add(
+            Code.NO_VERSION_KEY,
+            "no 'version' key (factory template rather than a saved project)",
+        )
     elif not isinstance(version, str):
         raise ValueError(f"'version' holds {type(version).__name__}, expected str")
 
@@ -76,7 +80,7 @@ def read_project(raw: dict[str, Any], source_name: str = "") -> Project:
         + 1,
         tracks=tracks,
         source_name=source_name,
-        warnings=tuple(warnings),
+        diagnostics=collector.report(),
     )
 
 
@@ -140,16 +144,18 @@ def _read_pattern(
     that silently discarded real user data would hide exactly the surprises
     this milestone exists to find.
     """
-    warnings: list[str] = []
+    collector = Collector()
+    site = Site(pattern=pattern)
 
-    seq_notes, seq_warnings = _read_note_lists(raw, item_id, pattern, kind=NoteKind.SEQ)
+    seq_notes, seq_diagnostics = _read_note_lists(raw, item_id, pattern, kind=NoteKind.SEQ)
     drum_notes: tuple[Note, ...] = ()
-    drum_warnings: list[str] = []
+    drum_diagnostics: list[Diagnostic] = []
     if item_id == constants.DRUM_TRACK_ITEM_ID:
-        drum_notes, drum_warnings = _read_note_lists(raw, item_id, pattern, kind=NoteKind.DRUM)
+        drum_notes, drum_diagnostics = _read_note_lists(raw, item_id, pattern, kind=NoteKind.DRUM)
 
     notes = seq_notes + drum_notes
-    warnings += seq_warnings + drum_warnings
+    collector.extend(seq_diagnostics)
+    collector.extend(drum_diagnostics)
 
     if seq_notes and drum_notes:
         # Both sets hold notes, so the mode flag decides. The other set is
@@ -160,21 +166,27 @@ def _read_pattern(
             if drum_mode
             else (f"drum ({len(drum_notes)})", f"melodic ({len(seq_notes)})")
         )
-        warnings.append(
-            f"pattern {pattern} holds both melodic ({len(seq_notes)}) and drum "
-            f"({len(drum_notes)}) notes; parameter 86 bit 6 says {live} plays and "
-            f"{stale} is stale. Both are reported"
+        collector.add(
+            Code.MIXED_NOTE_SETS,
+            f"holds both melodic ({len(seq_notes)}) and drum ({len(drum_notes)}) notes; "
+            f"parameter 86 bit 6 says {live} plays and {stale} is stale. Both are reported",
+            site=site,
         )
     elif drum_notes:
         mode = PatternMode.DRUM
         if not drum_mode:
-            warnings.append(f"pattern {pattern} holds drum notes but parameter 86 bit 6 is clear")
+            collector.add(
+                Code.DRUM_MODE_FLAG_DISAGREES,
+                "holds drum notes but parameter 86 bit 6 is clear",
+                site=site,
+            )
     elif seq_notes:
         mode = PatternMode.SEQ
         if drum_mode:
-            warnings.append(
-                f"pattern {pattern} holds only melodic notes but parameter 86 bit 6 "
-                f"says the track is in drum mode"
+            collector.add(
+                Code.DRUM_MODE_FLAG_DISAGREES,
+                "holds only melodic notes but parameter 86 bit 6 says the track is in drum mode",
+                site=site,
             )
     else:
         mode = PatternMode.EMPTY
@@ -184,8 +196,10 @@ def _read_pattern(
         == constants.PATTERN_HAS_DATA
     )
     if notes and not has_data:
-        warnings.append(
-            f"pattern {pattern} holds {len(notes)} notes but parameter 40 says it has no data"
+        collector.add(
+            Code.HAS_DATA_FLAG_DISAGREES,
+            f"holds {len(notes)} notes but parameter 40 says it has no data",
+            site=site,
         )
 
     is_drum_track = item_id == constants.DRUM_TRACK_ITEM_ID
@@ -204,7 +218,7 @@ def _read_pattern(
             _swing(raw, item_id, constants.P_DRUM_SWING, pattern) if is_drum_track else None
         ),
         notes=notes,
-        warnings=tuple(warnings),
+        diagnostics=collector.report(),
     )
 
 
@@ -229,7 +243,7 @@ def _swing(raw: dict[str, Any], item_id: int, param: int, pattern: int) -> int:
 
 def _read_note_lists(
     raw: dict[str, Any], item_id: int, pattern: int, *, kind: NoteKind
-) -> tuple[tuple[Note, ...], list[str]]:
+) -> tuple[tuple[Note, ...], list[Diagnostic]]:
     """Decode every pool chunk of one pattern for one parameter set.
 
     The step-active flags are pattern-wide, so they are decoded once here and
@@ -238,16 +252,16 @@ def _read_note_lists(
     active = _read_step_active(raw, item_id, pattern, kind=kind)
 
     notes: list[Note] = []
-    warnings: list[str] = []
+    diagnostics: list[Diagnostic] = []
     for slot in range(1, constants.SLOTS_BY_ITEM[item_id] + 1):
-        slot_notes, slot_warnings = _read_slot(
+        slot_notes, slot_diagnostics = _read_slot(
             raw, item_id, pattern, slot, kind=kind, active=active
         )
         notes.extend(slot_notes)
-        warnings.extend(slot_warnings)
+        diagnostics.extend(slot_diagnostics)
 
-    warnings.extend(_check_step_active(pattern, notes, active, kind=kind))
-    return tuple(notes), warnings
+    diagnostics.extend(_check_step_active(pattern, notes, active, kind=kind))
+    return tuple(notes), diagnostics
 
 
 def _read_step_active(
@@ -305,7 +319,7 @@ def _read_slot(
     *,
     kind: NoteKind,
     active: frozenset[Any],
-) -> tuple[list[Note], list[str]]:
+) -> tuple[list[Note], list[Diagnostic]]:
     drum = kind is NoteKind.DRUM
     if drum:
         p_step, p_pitch = constants.P_DRUM_NOTE_STEP, constants.P_DRUM_PITCH
@@ -336,7 +350,7 @@ def _read_slot(
     skip = column(constants.P_DRUM_STEP_SKIP if drum else constants.P_SEQ_STEP_SKIP)
 
     notes: list[Note] = []
-    warnings: list[str] = []
+    diagnostics: list[Diagnostic] = []
     for i, step in enumerate(note_step):
         if step is None:  # ran off the end of the stored array
             break
@@ -351,9 +365,13 @@ def _read_slot(
             # the list and anything past it is stale from an earlier edit.
             trailing = [v for v in note_step[i + 1 :] if v is not None and v != constants.SENTINEL]
             if trailing:
-                warnings.append(
-                    f"pattern {pattern} slot {slot}: {len(trailing)} value(s) after the "
-                    f"end of the note list were ignored"
+                diagnostics.append(
+                    Diagnostic(
+                        Code.TRAILING_POOL_VALUES,
+                        f"{len(trailing)} value(s) after the end of the note list were ignored",
+                        site=Site(pattern=pattern, slot=slot),
+                        subjects=len(trailing),
+                    )
                 )
             break
 
@@ -386,11 +404,15 @@ def _read_slot(
         # some note anyway.
         out_of_range = sorted({n.pitch for n in notes if n.pitch >= constants.DRUM_LANE_COUNT})
         if out_of_range:
-            warnings.append(
-                f"pattern {pattern} slot {slot}: drum lane(s) {out_of_range} are outside "
-                f"0-{constants.DRUM_LANE_COUNT - 1}"
+            diagnostics.append(
+                Diagnostic(
+                    Code.DRUM_LANE_OUT_OF_RANGE,
+                    f"drum lane(s) {out_of_range} are outside 0-{constants.DRUM_LANE_COUNT - 1}",
+                    site=Site(pattern=pattern, slot=slot),
+                    subjects=len(out_of_range),
+                )
             )
-    return notes, warnings
+    return notes, diagnostics
 
 
 def slot_is_initialised(
@@ -420,7 +442,7 @@ def slot_is_initialised(
 
 def _check_step_active(
     pattern: int, notes: list[Note], active: frozenset[Any], *, kind: NoteKind
-) -> list[str]:
+) -> list[Diagnostic]:
     """Cross-check the note list against the step-active flags.
 
     The two are not redundant -- the device plays the flags, so a pooled note
@@ -433,7 +455,8 @@ def _check_step_active(
     the file is damaged -- which is exactly how it presented before the drum
     pool scan learned to skip holes.
     """
-    warnings: list[str] = []
+    diagnostics: list[Diagnostic] = []
+    site = Site(pattern=pattern, kind=kind.value)
 
     # Drum flags are per lane, so compare (lane, step) pairs -- a union over
     # lanes would hide a flag whose lane holds nothing.
@@ -443,19 +466,29 @@ def _check_step_active(
         held = {(n.pitch, n.step) for n in notes}
         orphaned = sorted({step + 1 for lane, step in active if (lane, step + 1) not in held})
     if orphaned:
-        warnings.append(
-            f"pattern {pattern} ({kind.value}): step(s) {orphaned} are flagged active but hold "
-            f"no note. Every flagged step should have a pooled note, so this means the note "
-            f"pool was decoded wrongly rather than that the file is damaged"
+        diagnostics.append(
+            Diagnostic(
+                Code.FLAG_WITHOUT_NOTE,
+                f"step(s) {orphaned} are flagged active but hold no note. Every flagged step "
+                f"should have a pooled note, so this means the note pool was decoded wrongly "
+                f"rather than that the file is damaged",
+                site=site,
+                subjects=len(orphaned),
+            )
         )
 
     silent = [n for n in notes if not n.active]
     if silent:
-        warnings.append(
-            f"pattern {pattern} ({kind.value}): {len(silent)} pooled note(s) have no step-active "
-            f"flag and do not sound on the device (step(s) {sorted({n.step for n in silent})})"
+        diagnostics.append(
+            Diagnostic(
+                Code.POOLED_NOTE_UNFLAGGED,
+                f"{len(silent)} pooled note(s) have no step-active flag and do not sound on "
+                f"the device (step(s) {sorted({n.step for n in silent})})",
+                site=site,
+                subjects=len(silent),
+            )
         )
-    return warnings
+    return diagnostics
 
 
 def _required(value: int | None) -> int:

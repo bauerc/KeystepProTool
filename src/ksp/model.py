@@ -9,11 +9,12 @@ The model is intentionally read-only. Mutation belongs to M3+, once there is a
 byte-identical round-trip proving that what we write back is what MCC expects.
 """
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
 from ksp.constants import note_name
+from ksp.diagnostics import EMPTY_REPORT, Report
 from ksp.drum_map import DrumMap
 
 
@@ -147,10 +148,15 @@ class Pattern:
     drum_step_count: int | None
     drum_swing_percent: int | None
     notes: tuple[Note, ...]
-    warnings: tuple[str, ...] = ()
+    diagnostics: Report = EMPTY_REPORT
     """Inconsistencies found while decoding. Reported, never silently fixed --
     a reader that quietly repairs its input hides exactly the surprises this
     milestone exists to find."""
+
+    @property
+    def warnings(self) -> tuple[str, ...]:
+        """Every diagnostic in full, for callers that just want the text."""
+        return self.diagnostics.messages
 
     @property
     def is_empty(self) -> bool:
@@ -170,6 +176,7 @@ class Pattern:
             "drum_swing_percent": self.drum_swing_percent,
             "notes": [n.to_dict(drum_map) for n in self.notes],
             "warnings": list(self.warnings),
+            "diagnostics": self.diagnostics.to_list(),
         }
 
 
@@ -218,7 +225,11 @@ class Project:
     current_scene: int
     tracks: tuple[Track, ...]
     source_name: str = ""
-    warnings: tuple[str, ...] = field(default=())
+    diagnostics: Report = EMPTY_REPORT
+
+    @property
+    def warnings(self) -> tuple[str, ...]:
+        return self.diagnostics.messages
 
     def track(self, number: int) -> Track:
         """Return track *number*, counting from 1."""
@@ -247,6 +258,7 @@ class Project:
             "global_swing_percent": self.global_swing_percent,
             "current_scene": self.current_scene,
             "warnings": list(self.warnings),
+            "diagnostics": self.diagnostics.to_list(),
         }
         if drum_map is not None:
             # Named at the top level because every resolved drum note below

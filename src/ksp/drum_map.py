@@ -38,10 +38,11 @@ with the manual), and whether chromatic mode maps lane *i* to ``low + i`` or
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Final
 
 from ksp.constants import DRUM_LANE_COUNT, note_name
+from ksp.diagnostics import EMPTY_REPORT, Code, Collector, Report
 
 #: Arturia's documented default. The Custom defaults in ``KeyStepPro.json``
 #: are 36..59, i.e. a chromatic run from here, and the manual agrees.
@@ -123,9 +124,13 @@ class DrumMap:
 
     notes: tuple[int, ...]
     name: str = "chromatic-36"
-    warnings: tuple[str, ...] = field(default=())
+    diagnostics: Report = EMPTY_REPORT
     """Non-fatal oddities, e.g. a custom map that sends two lanes to the same
     note. Reported, never silently repaired."""
+
+    @property
+    def warnings(self) -> tuple[str, ...]:
+        return self.diagnostics.messages
 
     def __post_init__(self) -> None:
         if len(self.notes) != DRUM_LANE_COUNT:
@@ -137,20 +142,19 @@ class DrumMap:
                 raise ValueError(f"lane {lane} maps to note {note}, outside {MIN_NOTE}-{MAX_NOTE}")
 
         duplicates = sorted({n for n in self.notes if self.notes.count(n) > 1})
-        if duplicates and not self.warnings:
+        if duplicates and not self.diagnostics:
             # The hardware permits this, so it is not an error -- but it makes
             # note -> lane lossy, and a converter silently picking one lane is
             # exactly the kind of quiet wrong answer this project avoids.
-            object.__setattr__(
-                self,
-                "warnings",
-                tuple(
-                    f"note {n} is mapped from lanes "
-                    f"{[i for i, v in enumerate(self.notes) if v == n]}; "
-                    f"reverse lookup will use the lowest"
-                    for n in duplicates
-                ),
-            )
+            collector = Collector()
+            for note in duplicates:
+                collector.add(
+                    Code.DRUM_MAP_DUPLICATE,
+                    f"note {note} is mapped from lanes "
+                    f"{[i for i, v in enumerate(self.notes) if v == note]}; "
+                    f"reverse lookup will use the lowest",
+                )
+            object.__setattr__(self, "diagnostics", collector.report())
 
     @classmethod
     def chromatic(cls, low: int = DEFAULT_CHROMATIC_LOW) -> DrumMap:
