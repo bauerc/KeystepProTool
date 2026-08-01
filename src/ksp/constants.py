@@ -184,7 +184,7 @@ SKIP_SEQUENCES: Final = (16, 32, 48, 64)
 
 #: Gate length is an **index**, not a curve: ``stored = encoder detent - 1``.
 #: Measured 2026-07-31, capture ``T2-gate-table``, protocol tier 2; the full
-#: transcription is ``analysis/gate_display_sweep.txt`` and the reading is spec
+#: transcription is ``analysis/gate_ladder.txt`` and the reading is spec
 #: section 6.1. The earlier ``8*g + 3`` / ``4*g`` piecewise fit was six
 #: scattered samples of a linear index mistaken for a non-linear encoding, and
 #: is superseded.

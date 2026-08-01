@@ -318,7 +318,7 @@ rather than scattered samples.
 - **Gate table** (`110` / `118`) — **measured and shipped** (protocol tier 2, capture
   `T2-gate-table`). The encoding is an index: `stored = detent − 1`, 128 entries, gate 0.0625–64
   steps, drum identical. `ksp.constants.GATE_TABLE` holds all 128 and `tests/test_gate_ladder.py`
-  ties it to `analysis/gate_display_sweep.txt`. The sweep's one derived entry — stored `36`
+  ties it to `analysis/gate_ladder.txt`. The sweep's one derived entry — stored `36`
   (gate 5.25), whose note had been over-turned by a detent — is now **closed** by capture
   `D25-gate-capture`: one note at display 5.25 stores `110` = 36, as predicted. No transcribed
   rung rests on interpolation.
