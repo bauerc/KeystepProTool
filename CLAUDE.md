@@ -30,6 +30,10 @@ CI installs with `uv sync --locked`, so commit lockfile changes alongside depend
 Tests marked `hardware` need the physical device and are deselected everywhere automated:
 **green CI ≠ verified on hardware**.
 
+Run `pre-commit install` **only from the main checkout**, never from `.claude/worktrees/*`:
+worktrees share `.git/hooks`, and the generated hook hard-codes the installing `.venv`'s absolute
+path, so installing from a worktree blocks commits repo-wide once that worktree is deleted.
+
 ## Architecture
 
 `src/` layout, strict one-way dependency:
