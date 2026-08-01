@@ -302,7 +302,8 @@ shows what `48` does once a melodic pool spills past 64 events.
 
 Consequences for writing files:
 
-1. Notes must be packed **contiguously from index 1**, with no gaps.
+1. Notes should be packed **contiguously from index 1**, with no gaps. **This is a rule for
+   writers only** — see "The `127` sentinel" below. A reader must not assume it.
 2. Every written note needs its step recorded in `50` / `54`.
 3. `48` / `52` (step active) must be kept consistent with the note list. They are **not**
    merely redundant with it: the firmware plays the flags, so a pooled note whose flag is clear
@@ -316,6 +317,22 @@ velocity `127` is genuinely ambiguous in isolation.
 
 > **The authoritative existence test is `paramId 50` (or `54` for drums) `!= 127`.**
 > Never infer note presence from velocity.
+
+**`127` marks an empty *entry*, not the end of the list — and the two parameter sets differ.**
+The drum array is a pool with holes: deleting a note empties its entry and leaves the later ones
+where they are. The melodic array is genuinely compacted — verified across all five sample files,
+no slot holds a non-`127` value after an interior `127`.
+
+So the scan rules are asymmetric, and a reader that applies rule 1 to the drum set destroys data.
+`initial_project` Track 1 pattern 5 slot 1 has holes at entries 28–29 and 35, with five lane-12
+notes at entries 30–34 and four lane-17 notes at 36–39 behind them; pattern 9 has holes at
+entries 22–24 and 28. Stopping at the first sentinel drops **43 live notes** across the two
+patterns, and then reports their step-active flags as orphans.
+
+> **The check that settles it:** scanning the whole pool takes flags-without-a-note to **exactly
+> zero** on every pattern of every sample file, while leaving the pooled-but-unflagged notes
+> (capture D1) untouched. Every flagged step having a pooled note is an invariant, so a violation
+> means the pool was decoded wrongly — not that the file is damaged.
 
 ### `idx2` is a pool chunk, not a voice — and the zero-fill trap
 
@@ -364,6 +381,29 @@ and only the step-active bit clears — and the step does not sound on the devic
 
 This is not hypothetical. In `initial_project`, pattern 3 lanes 0 and 19 hold 20 pooled drum
 notes with no flags at all, and pattern 1 lane 17 holds 8 of which only 4 are flagged.
+
+### Audibility has three gates, not two
+
+The step count is the third, and it gates the other two rather than being redundant with them.
+A note sounds only if **all three** hold:
+
+1. it is in the pool — `50` / `54` `!= 127`;
+2. its step-active bit is set — `48` / `52`;
+3. **its step is within the pattern's declared length** — `98` melodic, `115` drum.
+
+**Hardware-observed** on `initial_project` Track 1 pattern 9. `123_115_9` = 47, i.e. a 48-step
+drum pattern, and the pattern holds flagged pooled notes out to step 63. With Last Step at 48
+those steps show nothing on the device and do not sound. Setting Last Step to 64 makes them
+appear and play; setting it back to 48 silences them again, with the step-64 light going out.
+
+> **Notes past the last step are retained, not stale.** Shortening a pattern hides them without
+> deleting anything, and lengthening it brings them back intact. A writer must therefore preserve
+> them, and a reader must not treat "past the declared length" as evidence that an entry is
+> leftover junk. `ksp2midi` exports them and warns, which loses nothing and says so.
+
+**This is not the step-skip question.** The 16 / 32 / 48 / 64 *mask* (`49` / `53`, "repeats or
+pages?" in §5) is a separate mechanism and is still unresolved — protocol **T5.8** decides it.
+The observation above is about the pattern's declared length only.
 
 ---
 

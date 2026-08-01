@@ -20,6 +20,11 @@ and device behaviours from the completed captures that were never written down.
 > whose step-active bit is clear does not sound; `idx2` is a 64-entry pool chunk rather than a
 > polyphony voice, with a hardware-enforced 192-event ceiling; `52` is a lane-major 7-bit array;
 > `40` and `39` latch; and two untouched exports are byte-identical.
+>
+> **Also settled, opportunistically rather than by a planned capture:** notes past a pattern's
+> declared last step are **retained, not stale** — see the O1 ledger row below and spec §4
+> ("Audibility has three gates, not two"). This does **not** answer T5.8, which is about the
+> 16 / 32 / 48 / 64 skip *mask*; that capture is still needed.
 
 **The baseline every test below starts from** is `B0-baseline.KeyStepPro` — an initialised,
 untouched project, already captured. Where a test says "from the baseline", start by loading or
@@ -290,6 +295,11 @@ real material. Note the seq and drum defaults already differ by exactly that bit
   one place the item ordering is not the obvious one.
 
 ### T5.8 — What the four step-skip sequences are
+
+> **Not answered by ledger row O1.** O1 found that notes past the *declared last step* (`98` /
+> `115`) are retained and become audible when the pattern is lengthened. That is the pattern
+> length, a different mechanism from the per-note skip mask `49` / `53` this test is about. The
+> two are easy to conflate at the device because both change which steps light up.
 
 - **Resolves:** whether 16 / 32 / 48 / 64 are four **repeats** of a pattern shorter than 64 steps
   or four **pages** of a 64-step one. This blocks `ksp2midi --passes` (issue #22), which cannot be
@@ -574,6 +584,7 @@ captures still owe are in [`Capture_Ledger_Gaps.md`](./Capture_Ledger_Gaps.md).
 
 | Test ID | Date | Displayed value / setting | Stored value | Notes |
 |---|---|---|---|---|
+| O1 | 2026-07-31 | `initial_project` Tr1 pat 9, Last Step 48 → 64 → 48 | `123_115_9` = 47 | ✅ **done.** Flagged pooled notes out to step 63. At 48 they are invisible and silent; at 64 they appear and play; back at 48 the step-64 light goes out and they stop. **Notes past the last step are retained, not stale.** Not a planned capture — observed while investigating a `ksp2midi` warning. Does **not** answer T5.8. |
 | T2.* | | gate = | | one row per detent |
 | T2.y | | drum gate = | | same table as melodic? |
 | T4.5 | | melodic step 5 toggled off | | **did beat 5 sound?** |
