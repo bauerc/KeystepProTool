@@ -1,16 +1,5 @@
 # Gate ladder as displayed, one row per encoder detent, lowest first.
-# stored = row index - 1.
-#
-# Captured 2026-07-31 (T2-gate-table.KeyStepPro); stored 36 pinned 2026-08-01
-# (D25-gate-capture.KeyStepPro). Values are the device's 2-decimal rendering,
-# not the exact gate length -- the reading, the run structure and the full
-# provenance are in KeyStepPro_Format_Spec.md section 6.1.
-#
-# Format: a "melodic" or "drum" line opens a section. Every following row is
-#   <displayed value>  <measured|enumerated>
-# in detent order. Blank lines and # lines are ignored.
-
-melodic
+# stored = row index - 1. Rows: <displayed value>  <measured|enumerated>.
 0.06    measured
 0.12    measured
 0.19    measured
@@ -139,7 +128,3 @@ melodic
 62      enumerated
 63      measured
 64      measured
-
-# Empty by design: T2.3 spot-checked drum stored 0, 7, 31, 63, 127 and found the
-# melodic ladder exactly. Fill only if a drum gate ever disagrees with it.
-drum
