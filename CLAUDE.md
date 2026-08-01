@@ -55,7 +55,9 @@ command never crashes on invocation. `midi2ksp` is still unclaimed.
 - Flat JSON, ~153,495 integer entries; all structure lives in key names
   `<itemId>_<paramId>[_i1][_i2][_i3]`.
 - **Not strict JSON** — trailing comma, tab indentation, no final newline. `json.loads` rejects
-  it; loading and re-emitting must preserve those bytes.
+  what MCC writes, so the reader must tolerate the comma. The **writer omits it** (T6.2 put a
+  commaless file on the device), so its output is strict JSON and one byte shorter than MCC's;
+  every other byte must still match. Nothing else in the dialect is optional.
 - Key set is **fixed**: template-and-overwrite from `Default.KeyStepPro`, never add or remove
   keys. The factory default lacks the `version` key user projects have — inject it.
 - **Two index spaces** — the top source of bugs. `48`/`49` are step-indexed; `50` and `109`–`113`

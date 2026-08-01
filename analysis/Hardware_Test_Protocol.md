@@ -358,7 +358,7 @@ depends on the answer.
 
 ## Tier 6 — Re-checks
 
-**2 captures.** Cheap, and each removes a standing caveat.
+**1 capture left** of 2. Cheap, and each removes a standing caveat. T6.2 is done.
 
 ### T6.1 — The `project_5` drum time-shift conflict
 
@@ -381,34 +381,32 @@ depends on the answer.
 - Either way, update `tests/fixtures/project_5.expected.json`, which currently asserts the
   conflict deliberately so it cannot quietly disappear.
 
-### T6.2 — Is the trailing comma required?
+### T6.2 — Is the trailing comma required? ✅ **done** (2026-08-01)
 
-- [ ] not yet run
+- [x] run 2026-08-01 — **the comma is not required.**
 
-- **Resolves:** a standing write-fidelity requirement. `.KeyStepPro` files have a trailing comma
+- **Resolved:** a standing write-fidelity requirement. `.KeyStepPro` files have a trailing comma
   before the closing brace, which is why `json.loads` rejects them. MCC parses with
-  Boost.PropertyTree, which tolerates it — but nothing establishes that it *requires* it.
-- **Device:** none. This is a desk test, listed here because it belongs with the other
-  MCC-behaviour checks.
-- **Method:** produce the candidate — everything byte-identical except the comma — with the
-  writer's own flag:
-
-  ```sh
-  uv run python -c "
-  from ksp import lenient_json
-  d = lenient_json.load_path('project_files/user_empty_project.KeyStepPro')
-  lenient_json.dump_path(d, 'strict.KeyStepPro', trailing_comma=False)"
-  ```
-
-  Drop it in `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/`, restart MCC, and see
-  whether it appears in the Project Browser and loads.
-- **Confirms if:** it loads. Then comma preservation can be dropped from the write-fidelity rules
-  permanently — flip `trailing_comma`'s default and drop the round-trip test's comma assertion.
-- **Falsified if:** it does not appear or fails to load. Then the comma is mandatory and M3's
-  byte-identical round-trip is the right target rather than a nicety.
-- **Status:** still open. M3 shipped assuming the comma is required, which is the safe direction:
-  it is what MCC writes, so a file carrying it cannot be wrong. This test only decides whether the
-  requirement can be *relaxed*, so it no longer blocks anything.
+  Boost.PropertyTree, which tolerates it — nothing established that it *required* it, and it does
+  not.
+- **Device:** the candidate was written as `B0baseline-commaless.KeyStepPro` into
+  `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/`. It appeared in the Project
+  Browser, loaded, **and transferred to the KeyStep Pro** — one step further than this test
+  needed.
+- **Provenance of the candidate.** Derived from `B0-baseline.KeyStepPro`
+  (md5 `64b34737c68da9375ec7e1324e98936a`), so it differs from a known-good hardware export by
+  **one byte**: 3,517,714 against 3,517,715, `diff` showing the single line `"126_99_9": 20,` →
+  `"126_99_9": 20`. That is what makes this a clean result — nothing else varied.
+- **Consequence, applied.** The writer emits strict JSON unconditionally; there is no flag.
+  `ksp.lenient_json.dumps` no longer writes the comma, and `tests/test_round_trip.py` compares
+  against MCC's bytes minus that one byte via the `sample_bytes_strict` fixture.
+  `test_output_differs_from_mcc_by_exactly_the_trailing_comma` pins the deviation at one byte so
+  nothing else can drift in behind it.
+- **Scope — do not over-claim.** This tested the comma and nothing else. Tab indentation, MCC's
+  key order, the absent final newline, the fixed key set and the `version` key are all still
+  untested and remain mandatory. The **reader** must also still accept the comma: every
+  `.KeyStepPro` file that exists has one, and `tests/test_format_invariants.py` asserts that of
+  the checked-in exports.
 
 ---
 
@@ -660,7 +658,7 @@ answered and folded into the spec on 2026-08-01.
 | T5.7 | | 3-pattern chain | | |
 | T5.8 | | 16-step pattern, one note per skip mask | | **repeats or pages?** which notes sounded: |
 | T6.1 | | project_5 kick time shifts | | −1/+1 or −1/−1? |
-| T6.2 | | no trailing comma | | loaded? |
+| T6.2 | 2026-08-01 | `B0baseline-commaless.KeyStepPro`, one byte off `B0-baseline` | n/a — file-level test | ✅ **done. The comma is not required.** Loaded in MCC *and* transferred to the device. The candidate differed from a known-good export by exactly the final `,` (3,517,714 B vs 3,517,715 B), so nothing else was in play. Writer now emits strict JSON with no flag; M3's round-trip target is MCC's bytes minus that byte. Tests the comma **only** — indentation, key order, absent final newline and the fixed key set are untouched by this result. |
 | T7.1 | | shift min / max displayed | | **the range — run first** |
 | T7.2 | | shift per step: | | one row per note |
 | T7.3 | | drum shift = | | matches melodic? |
@@ -684,10 +682,10 @@ Remaining work only. B0 and tiers 1, 2, 3 and 4 are complete and are not listed.
 |---|---|---|---|
 | 4 | 3 | melodic step-active and pool chunking | M6, M5 |
 | 5 | ~13 | pattern scalars, chaining, step-skip semantics | M6, M2 |
-| 6 | 2 | standing caveats | M3 |
+| 6 | 1 | standing caveats (T6.2 done) | M3 |
 | 7 | ~13 | Time Shift range, swing semantics | M7, M5 |
 | 8 | ~6 recordings | what a Time Shift unit is worth in time | M2, M5 |
-| | **~37 left** of ~57 | | |
+| | **~36 left** of ~57 | | |
 
 Each tier is independently useful — stopping after any one leaves a coherent result rather than a
 half-finished one.

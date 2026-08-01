@@ -1,4 +1,10 @@
-"""M3 -- load a project file, re-emit it, get the identical bytes back.
+"""M3 -- load a project file, re-emit it, get MCC's bytes back.
+
+Byte-for-byte, with one deliberate exception: the writer omits the trailing
+comma, so its output is strict JSON. Protocol test T6.2 established MCC does
+not need it. Everything else -- 153,497 lines, key order, tab indentation, no
+final newline, value formatting -- must still match exactly, which is what
+these tests compare against ``sample_bytes_strict``.
 
 Nothing downstream is trustworthy without this. M4 puts a written file on the
 hardware and M5 generates one from MIDI; if the writer drifts from what MIDI
@@ -15,32 +21,46 @@ from pathlib import Path
 
 import pytest
 
+from conftest import without_trailing_comma
 from ksp import lenient_json
 from ksp.constants import P_SEQ_PITCH
 from ksp.keys import key
 
 
-def test_round_trip_is_byte_identical(sample_bytes: bytes) -> None:
+def test_round_trip_is_byte_identical(sample_bytes_strict: bytes) -> None:
     """The milestone, on every sample: parse and re-emit changes nothing."""
-    reloaded = lenient_json.loads(sample_bytes.decode())
-    assert lenient_json.dumps(reloaded).encode() == sample_bytes
+    reloaded = lenient_json.loads(sample_bytes_strict.decode())
+    assert lenient_json.dumps(reloaded).encode() == sample_bytes_strict
+
+
+def test_output_differs_from_mcc_by_exactly_the_trailing_comma(sample_bytes: bytes) -> None:
+    """The bound on how far we deviate from MCC: one byte, and it is the comma.
+
+    T6.2 tested the comma alone. Anything else drifting is a bug, and this
+    fails on it rather than letting ``sample_bytes_strict`` absorb it.
+    """
+    emitted = lenient_json.dumps(lenient_json.loads(sample_bytes.decode())).encode()
+
+    assert len(sample_bytes) - len(emitted) == 1
+    assert emitted[:-2] == sample_bytes[:-3]
+    assert emitted[-2:] == b"\n}"
 
 
 def test_round_trip_md5_matches(project_files_dir: Path) -> None:
     """The hash comparison issue #5 names, on the file it names."""
     path = project_files_dir / "Default.KeyStepPro"
-    original = path.read_bytes()
+    expected = without_trailing_comma(path.read_bytes())
     emitted = lenient_json.dumps(lenient_json.load_path(path)).encode()
-    assert hashlib.md5(emitted).hexdigest() == hashlib.md5(original).hexdigest()
+    assert hashlib.md5(emitted).hexdigest() == hashlib.md5(expected).hexdigest()
 
 
 def test_dump_path_writes_identical_bytes(
-    sample_name: str, sample_bytes: bytes, project_files_dir: Path, tmp_path: Path
+    sample_name: str, sample_bytes_strict: bytes, project_files_dir: Path, tmp_path: Path
 ) -> None:
     """Through the filesystem, where a platform could translate newlines."""
     destination = tmp_path / sample_name
     lenient_json.dump_path(lenient_json.load_path(project_files_dir / sample_name), destination)
-    assert destination.read_bytes() == sample_bytes
+    assert destination.read_bytes() == sample_bytes_strict
 
 
 def test_dump_path_replaces_an_existing_file_and_leaves_no_debris(tmp_path: Path) -> None:
@@ -50,7 +70,7 @@ def test_dump_path_replaces_an_existing_file_and_leaves_no_debris(tmp_path: Path
 
     lenient_json.dump_path({"device": "KeyStepPro", "120_37": 3}, destination)
 
-    assert destination.read_text() == '{\n\t"device": "KeyStepPro",\n\t"120_37": 3,\n}'
+    assert destination.read_text() == '{\n\t"device": "KeyStepPro",\n\t"120_37": 3\n}'
     assert list(tmp_path.iterdir()) == [destination]
 
 
@@ -61,31 +81,25 @@ def test_dumps_is_idempotent(project_files_dir: Path) -> None:
 
 
 def test_dumps_shape() -> None:
-    """Tab indent, ``": "`` separator, trailing comma, no final newline."""
+    """Tab indent, ``": "`` separator, no trailing comma, no final newline."""
     text = lenient_json.dumps({"device": "KeyStepPro", "120_101": 127})
 
-    assert text == '{\n\t"device": "KeyStepPro",\n\t"120_101": 127,\n}'
+    assert text == '{\n\t"device": "KeyStepPro",\n\t"120_101": 127\n}'
     assert not text.endswith("\n")
 
 
 def test_dumps_of_an_empty_mapping() -> None:
-    """No entries means no comma to trail."""
+    """No entries, so nothing between the braces."""
     assert lenient_json.dumps({}) == "{\n}"
 
 
-def test_dumps_without_trailing_comma_is_strict_json(project_files_dir: Path) -> None:
-    """The T6.2 candidate: one byte lighter, and ``json.loads`` accepts it.
-
-    Whether MCC does is the open question -- it needs the application, not a
-    test. Until it is answered the comma stays on by default.
-    """
+def test_dumps_is_strict_json(project_files_dir: Path) -> None:
+    """What T6.2 bought: output a stock parser accepts, and MCC still does."""
     project = lenient_json.load_path(project_files_dir / "user_empty_project.KeyStepPro")
-    lenient = lenient_json.dumps(project)
-    strict = lenient_json.dumps(project, trailing_comma=False)
+    emitted = lenient_json.dumps(project)
 
-    assert strict == lenient[:-3] + "\n}"
-    assert json.loads(strict) == project
-    assert lenient_json.loads(strict) == project
+    assert json.loads(emitted) == project
+    assert lenient_json.loads(emitted) == project
 
 
 @pytest.mark.parametrize("value", [1.0, None, True, {"nested": 1}, [1]])
@@ -95,16 +109,16 @@ def test_dumps_rejects_values_the_firmware_has_never_seen(value: object) -> None
         lenient_json.dumps({"120_37": value})  # type: ignore[dict-item]
 
 
-def test_canonical_restores_mcc_key_order(sample_name: str, sample_bytes: bytes) -> None:
+def test_canonical_restores_mcc_key_order(sample_name: str, sample_bytes_strict: bytes) -> None:
     """Shuffled keys sort back to the order MCC wrote them in.
 
     Reversing is enough to break every rule at once: ``device`` and
     ``version`` end up last and the numeric keys run backwards.
     """
-    project = lenient_json.loads(sample_bytes.decode())
+    project = lenient_json.loads(sample_bytes_strict.decode())
     reversed_keys = dict(reversed(list(project.items())))
 
-    assert lenient_json.dumps(lenient_json.canonical(reversed_keys)).encode() == sample_bytes
+    assert lenient_json.dumps(lenient_json.canonical(reversed_keys)).encode() == sample_bytes_strict
 
 
 def test_canonical_sorts_numeric_keys_as_strings() -> None:
@@ -134,7 +148,7 @@ def test_a_single_value_edit_changes_exactly_one_line(project_files_dir: Path) -
     disturb any of the other 153,496 lines.
     """
     path = project_files_dir / "project_5.KeyStepPro"
-    original = path.read_text()
+    original = without_trailing_comma(path.read_bytes()).decode()
     project = lenient_json.loads(original)
 
     pitch_key = key(125, P_SEQ_PITCH, 1, 1, 1)

@@ -204,9 +204,10 @@ no time. Each KeyStep Pro track becomes a MIDI track; Track 1's drum set becomes
 ### M3 — Byte-identical round-trip ✅ **done**
 **Artifact:** load `Default.KeyStepPro`, re-emit unchanged, assert byte-identical output.
 
-**Why it stands alone:** locks down write fidelity — tab indentation, the trailing comma, the
-`version` key (spec §2) — before any real mutation exists to confuse the picture. If this fails,
-nothing downstream can be trusted.
+**Why it stands alone:** locks down write fidelity — tab indentation, key order, the `version` key
+(spec §2) — before any real mutation exists to confuse the picture. If this fails, nothing
+downstream can be trusted. (The trailing comma was a fourth until T6.2 showed MCC does not need
+it; see below.)
 
 **Test:** `md5` comparison. Pure desk work, no hardware, no MIDI involved.
 
@@ -239,11 +240,18 @@ file until M5.
 - **One changed value is one changed line**, asserted against `project_5`. That is the desk half
   of M4, so what M4 has to prove on the device is narrowed to key *addressing* alone.
 
-**Still open, and no longer blocking: protocol T6.2** — whether MCC accepts strict JSON without
-the trailing comma. It needs the application, not a test, so it could not be settled here. M3
-shipped assuming the comma is required, which is the safe direction: it is what MCC writes, so a
-file carrying it cannot be wrong. `dumps(..., trailing_comma=False)` produces the candidate file
-in one command whenever MCC is open.
+**Settled afterwards: protocol T6.2 (2026-08-01) — MCC does not need the trailing comma.** M3
+shipped re-emitting it, which was the safe direction: it is what MCC writes, so a file carrying it
+cannot be wrong. The test then showed the requirement can be dropped. A candidate differing from a
+known-good export by exactly that one byte loaded in MCC and transferred to the device, so
+`dumps` now emits strict JSON and there is no flag to choose otherwise.
+
+The round-trip target moved with it: MCC's bytes **minus that one byte**, via the
+`sample_bytes_strict` fixture, plus `test_output_differs_from_mcc_by_exactly_the_trailing_comma`
+to hold the deviation at one byte. The milestone is not weakened — key order, tab indentation, the
+absent final newline and all 153,497 lines are still asserted exactly. Nothing else in the write
+rules has been shown optional, and the reader still accepts the comma because every file that
+exists has one.
 
 ---
 
