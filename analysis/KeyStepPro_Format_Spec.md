@@ -302,7 +302,8 @@ shows what `48` does once a melodic pool spills past 64 events.
 
 Consequences for writing files:
 
-1. Notes must be packed **contiguously from index 1**, with no gaps.
+1. Notes should be packed **contiguously from index 1**, with no gaps. **This is a rule for
+   writers only** — see "The `127` sentinel" below. A reader must not assume it.
 2. Every written note needs its step recorded in `50` / `54`.
 3. `48` / `52` (step active) must be kept consistent with the note list. They are **not**
    merely redundant with it: the firmware plays the flags, so a pooled note whose flag is clear
@@ -316,6 +317,22 @@ velocity `127` is genuinely ambiguous in isolation.
 
 > **The authoritative existence test is `paramId 50` (or `54` for drums) `!= 127`.**
 > Never infer note presence from velocity.
+
+**`127` marks an empty *entry*, not the end of the list — and the two parameter sets differ.**
+The drum array is a pool with holes: deleting a note empties its entry and leaves the later ones
+where they are. The melodic array is genuinely compacted — verified across all five sample files,
+no slot holds a non-`127` value after an interior `127`.
+
+So the scan rules are asymmetric, and a reader that applies rule 1 to the drum set destroys data.
+`initial_project` Track 1 pattern 5 slot 1 has holes at entries 28–29 and 35, with five lane-12
+notes at entries 30–34 and four lane-17 notes at 36–39 behind them; pattern 9 has holes at
+entries 22–24 and 28. Stopping at the first sentinel drops **43 live notes** across the two
+patterns, and then reports their step-active flags as orphans.
+
+> **The check that settles it:** scanning the whole pool takes flags-without-a-note to **exactly
+> zero** on every pattern of every sample file, while leaving the pooled-but-unflagged notes
+> (capture D1) untouched. Every flagged step having a pooled note is an invariant, so a violation
+> means the pool was decoded wrongly — not that the file is damaged.
 
 ### `idx2` is a pool chunk, not a voice — and the zero-fill trap
 
@@ -353,9 +370,12 @@ other track. A writer must never place events there.
 
 ### Pooled does not mean audible
 
-A note can sit in the pool, fully formed, and still be silent. `D1-two-hits` / `D1-step-off`
-toggle a drum step off **without deleting its note**: the pooled entry survives byte-for-byte
-and only the step-active bit clears — and the step does not sound on the device.
+A note can sit in the pool, fully formed, and still not play. **"Why a note might not play" below
+lists every reason;** this section is the evidence for the commonest one, row 2.
+
+`D1-two-hits` / `D1-step-off` toggle a drum step off **without deleting its note**: the pooled
+entry survives byte-for-byte and only the step-active bit clears — and the step does not sound on
+the device.
 
 > **Existence and audibility are different tests.** `50` / `54` `!= 127` says a note *exists*.
 > Whether it *plays* additionally requires its **step-active bit** (`48` melodic, `52` drum) to
@@ -364,6 +384,70 @@ and only the step-active bit clears — and the step does not sound on the devic
 
 This is not hypothetical. In `initial_project`, pattern 3 lanes 0 and 19 hold 20 pooled drum
 notes with no flags at all, and pattern 1 lane 17 holds 8 of which only 4 are flagged.
+
+### Why a note might not play
+
+Existence and audibility are different tests, and there is more than one way to fail the second.
+**This table is the complete list.** Everything below it is the evidence.
+
+| # | Why it does not play | Key in the file | Example, from a committed file | Undo on the device | Confidence |
+|---|---|---|---|---|---|
+| 1 | The pool entry is empty — there is no note | `<item>_50_<pat>_<slot>_<ord>`, `54` for drums | `123_54_9_1_22` = `127` — a **hole**, not the end: ordinals 21 and 25 hold steps 42 and 44 | n/a, nothing is stored | Certain |
+| 2 | **Disabled: step turned off** | drum `123_52_<pat>_<slot>_<idx>`, one **bit**; melodic `<item>_48_<pat>_1_<step>`, one entry | `123_52_9_1_1` = `0` → lane 0 step 5 is off. Contrast `123_52_9_1_2` = `2` = `0b0000010` → lane 0 step 9 is on. **No melodic example exists** — see below | Re-light the step; the note returns intact | **Hardware** (D1), drums only |
+| 3 | **Disabled: past the last step** | `<item>_98_<pat>` melodic, `123_115_<pat>` drum, 0-based | `123_115_9` = `47` → 48 steps, while `123_54_9_1_45` = `56` → step 57 | Raise Last Step | **Hardware** (O1) |
+| 4 | Velocity 0 | `<item>_111_<pat>_<slot>_<ord>`, `119` for drums | **None in the corpus** — no note in any committed file has velocity 0 | Raise the velocity | Inferred, never tested |
+| 5 | Skipped on this pass | melodic `<item>_49_<pat>_<slot>_<step>` (**step**-indexed), drum `123_53_...` (**note**-indexed) | `125_49_1_1_5` = `5` = `0b0101` → plays on 16 and 48 only; `15` is the default "always" | Set the mask to all four | ⚠ **Unresolved** — repeats or pages? **T5.8** |
+| 6 | Lost to randomness | `<item>_113_<pat>_<slot>_<ord>`, `121` for drums | `125_113_1_1_1` = `10`, against a fresh note's default of `100` | Set randomness to always | ⚠ **Unresolved** — probability or timing jitter? **T7.8** |
+
+Row 2's drum key needs the packing from "A third layout" above, because one entry holds seven
+steps of one lane. Worked through for the disabled kick at step 5 of `initial_project` pattern 9 —
+lane 0, 0-based step 4:
+
+```
+flat = lane * 10 + step // 7   = 0 * 10 + 4 // 7 = 0
+key  = 123_52_9_<flat//64 + 1>_<flat%64 + 1>     = 123_52_9_1_1   -> 0 = 0b0000000
+bit  = step % 7 = 4                              -> (0 >> 4) & 1  = 0   step is OFF
+```
+
+**Two of these six have no example in any committed file**, and that is a finding rather than an
+omission. No melodic note anywhere in the corpus has its `48` bit clear, which is why row 2's
+melodic half rests on the drum result plus agreement between `48` and the note list — protocol
+**T4.5** is the capture that settles it, and it is the highest-value one outstanding. No note
+anywhere has velocity 0, so row 4 is inference from MIDI convention alone.
+
+Rows **2 and 3 are what "disabled" means** — one state, two mechanisms, both toggled the same way
+on the device, and the only two the tools report under that word. Say "disabled (step turned
+off)" or "disabled (past the last step)"; never "silent", "inactive" or "lost".
+
+Rows 5 and 6 differ in kind: they are properties of a *pass*, not of the note's stored state, so
+the same note can sound on one loop and not the next. Neither is decodable at the desk. Until
+T5.8 and T7.8 run, `ksp2midi` renders one pass and includes every note whatever its mask.
+
+Row 1 is not a disabled note at all — it is the absence of one. Note also that `127` marks an
+empty *entry*, not the end of the list; see "The `127` sentinel" above, because reading it as a
+terminator silently discards live notes.
+
+#### Evidence for row 3 — the last step
+
+**Hardware-observed** on `initial_project` Track 1 pattern 9. `123_115_9` = 47, i.e. a 48-step
+drum pattern, and the pattern holds pooled, step-active notes out to step 63.
+
+**In the project's saved state those notes are disabled and do not play** — that is the file's
+own configuration and the correct behaviour. The observation was made by deliberately raising
+Last Step to 64, at which point they appear and sound; lowering it back to 48 disables them
+again, with the step-64 light going out. The toggle was a diagnostic action, not the file's state.
+
+> **Notes past the last step are disabled, not stale.** Being past the last step is one of the
+> two ways a note is disabled — the other is its step being turned off — and both are toggled the
+> same way on the device. So shortening a pattern disables those notes without deleting anything,
+> and lengthening it enables them again, intact. A writer must therefore preserve them, and a
+> reader must not treat "past the declared length" as evidence that an entry is leftover junk.
+> `ksp2midi` drops them by default, the same as any other disabled note, and says how many;
+> `--include-disabled` exports them.
+
+**This is not the step-skip question.** The 16 / 32 / 48 / 64 *mask* (`49` / `53`, "repeats or
+pages?" in §5) is a separate mechanism and is still unresolved — protocol **T5.8** decides it.
+The observation above is about the pattern's declared length only.
 
 ---
 

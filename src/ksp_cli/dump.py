@@ -11,14 +11,16 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from ksp.constants import SKIP_SEQUENCES
+from ksp.diagnostics import Collector, Report
 from ksp.drum_map import DEFAULT_CHROMATIC_LOW, DrumMap
-from ksp.model import NoteKind, Pattern, Project, Track
+from ksp.model import Note, NoteKind, Pattern, Project, Track
 from ksp.reader import load
 
 # The --drum-map grammar is shared with ksp2midi so both commands accept the
 # same syntax and the same config file. CONFIG_PATH stays a name in this
 # module so tests can point it somewhere harmless.
 from ksp_cli.drum_map_option import CONFIG_PATH, parse_drum_map, resolve_drum_map
+from ksp_cli.reporting import add_verbose_option
 
 __all__ = ["CONFIG_PATH", "format_project", "main", "parse_drum_map", "resolve_drum_map"]
 
@@ -48,7 +50,20 @@ def _format_skip(skip: Sequence[int]) -> str:
     return ",".join(str(s) for s in skip)
 
 
-def _pattern_lines(pattern: Pattern, drum_map: DrumMap | None) -> Iterator[str]:
+def _disabled_marker(note: Note, last_step: int | None) -> str:
+    """Why this note will not play, or "" when it will.
+
+    Two mechanisms, both toggled the same way on the device, so both read as
+    "disabled" and name their reason rather than inventing separate words.
+    """
+    if not note.active:
+        return "  [DISABLED: step turned off]"
+    if last_step is not None and note.step > last_step:
+        return "  [DISABLED: past last step]"
+    return ""
+
+
+def _pattern_lines(pattern: Pattern, drum_map: DrumMap | None, *, verbose: bool) -> Iterator[str]:
     yield f"    Pattern {pattern.number:<2} [{pattern.mode.value}]"
 
     # A pattern's melodic and drum sets each have their own step count and
@@ -79,26 +94,45 @@ def _pattern_lines(pattern: Pattern, drum_map: DrumMap | None) -> Iterator[str]:
                     f"vel {note.velocity:>3}  gate {_format_gate(note.gate, note.gate_raw)}  "
                     f"shift {shift}  rand {note.randomness:>3}  "
                     f"seq {_format_skip(note.skip)}"
-                    # Only ever flagged when clear: a silent note is the
-                    # surprise, an audible one is the norm.
-                    f"{'' if note.active else '  [SILENT: no step-active flag]'}"
+                    # Only ever marked when the note will not play: that is
+                    # the surprise, an audible note is the norm.
+                    f"{_disabled_marker(note, steps)}"
                 )
-    for warning in pattern.warnings:
-        yield f"      ! {warning}"
+    if verbose:
+        # Inline, next to the notes they are about. Collapsed they would lose
+        # the one thing a tree dump is for: where the problem is.
+        for warning in pattern.warnings:
+            yield f"      ! {warning}"
 
 
-def _track_lines(track: Track, *, show_all: bool, drum_map: DrumMap | None) -> Iterator[str]:
+def _track_lines(
+    track: Track, *, show_all: bool, drum_map: DrumMap | None, verbose: bool
+) -> Iterator[str]:
     patterns = [p for p in track.patterns if show_all or not p.is_empty]
     if not patterns:
         return
     mode = "  [drum mode]" if track.drum_mode else ""
     yield f"  Track {track.number} (item {track.item_id}){mode}"
     for pattern in patterns:
-        yield from _pattern_lines(pattern, drum_map)
+        yield from _pattern_lines(pattern, drum_map, verbose=verbose)
+
+
+def project_report(project: Project) -> Report:
+    """Every diagnostic in the project, stamped with the track it came from."""
+    collector = Collector()
+    collector.extend(project.diagnostics)
+    for track in project.tracks:
+        for pattern in track.patterns:
+            collector.extend(d.at(track=track.number) for d in pattern.diagnostics)
+    return collector.report()
 
 
 def format_project(
-    project: Project, *, show_all: bool = False, drum_map: DrumMap | None = None
+    project: Project,
+    *,
+    show_all: bool = False,
+    drum_map: DrumMap | None = None,
+    verbose: bool = False,
 ) -> str:
     """Render a project as an indented tree: tracks -> patterns -> notes."""
     lines = [
@@ -107,17 +141,30 @@ def format_project(
         f"  tempo {project.tempo_bpm:g} BPM   swing {project.global_swing_percent}%   "
         f"scene {project.current_scene}",
     ]
-    lines.extend(f"  ! {w}" for w in project.warnings)
+    if verbose:
+        lines.extend(f"  ! {w}" for w in project.warnings)
     lines.append("")
 
     body = [
         line
         for track in project.tracks
-        for line in _track_lines(track, show_all=show_all, drum_map=drum_map)
+        for line in _track_lines(track, show_all=show_all, drum_map=drum_map, verbose=verbose)
     ]
     if not body:
         body = ["  (no patterns hold notes)"]
     lines.extend(body)
+
+    if not verbose:
+        # One block at the end rather than a line beside every pattern: the
+        # notes are what the dump is for, and the same finding recurs in a
+        # dozen patterns.
+        report = project_report(project)
+        if report:
+            lines.append("")
+            lines.extend(f"  ! {line}" for line in report.render())
+            note = report.note()
+            if note is not None:
+                lines.append(f"  ({note})")
     return "\n".join(lines)
 
 
@@ -155,6 +202,7 @@ def _build_parser() -> argparse.ArgumentParser:
             f"always an assumption (default: chromatic:{DEFAULT_CHROMATIC_LOW})"
         ),
     )
+    add_verbose_option(parser)
     return parser
 
 
@@ -165,10 +213,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         drum_map = resolve_drum_map(args.drum_map, CONFIG_PATH)
     except json.JSONDecodeError as exc:  # a ValueError, so it must come first
         print(f"ksp-dump: drum map: {CONFIG_PATH}: {exc}", file=sys.stderr)
-        return 1
+        return 2
     except (OSError, ValueError) as exc:
         print(f"ksp-dump: drum map: {exc}", file=sys.stderr)
-        return 1
+        return 2
 
     try:
         project = load(args.path)
@@ -184,7 +232,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.as_json:
         print(json.dumps(project.to_dict(drum_map), indent=2))
     else:
-        print(format_project(project, show_all=args.all, drum_map=drum_map))
+        print(format_project(project, show_all=args.all, drum_map=drum_map, verbose=args.verbose))
     return 0
 
 

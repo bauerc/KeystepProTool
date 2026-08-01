@@ -53,6 +53,7 @@ project_5.KeyStepPro
 | `--pattern N` | Show only pattern 1–16 |
 | `--json` | Emit the decoded model as JSON instead of a tree |
 | `--drum-map SPEC` | `chromatic:N`, `custom:a,b,c,...` or `none` (default `chromatic:36`) |
+| `-v`, `--verbose` | List every diagnostic inline, instead of one summary line per kind |
 
 `seq` on a note line is the note's step skip — which of the four 16/32/48/64 sequences it plays
 in.
@@ -117,12 +118,17 @@ wrote out/project_9_track1_pattern3.mid
 | `--split` | One file per non-empty (track, pattern), named `<stem>_track{N}_pattern{P}.mid` |
 | `--track N` / `--pattern N` | Export only one track or pattern |
 | `--steps-per-beat N` | Step size (default 4, i.e. 1/16 steps) |
+| `--ticks-per-beat N` | MIDI resolution (default 480) |
 | `--drum-map SPEC` | Same grammar and config file as `ksp-dump` (default `chromatic:36`) |
 | `--default-gate STEPS` | Length used where a gate value is outside the measured 0–127 ladder (default 0.5) |
+| `--drum-channel N` | MIDI channel for drum lanes (default 10) |
 | `--include-stale` | Export both note sets of a pattern that holds both |
+| `--include-disabled` | Export disabled notes — step turned off, or past the pattern's last step (the device plays neither) |
 | `--no-swing` | Place every step on a flat grid |
 | `--dry-run` | Report what would be written, and write nothing |
 | `--force` | Overwrite an existing output file |
+| `--quiet` | Suppress the stdout summary. Warnings still go to stderr |
+| `-v`, `--verbose` | List every warning, instead of one summary line per kind |
 
 Anything the export had to decide for itself is printed to stderr as a warning, because two
 things it needs are not in the project file:
@@ -143,6 +149,23 @@ track was switched over, and exporting it would put notes in the file that no ha
 
 Note **time shift is not applied**: how much time one shift unit is worth has never been
 measured, so the export leaves the grid alone and says so.
+
+### Reading the warnings
+
+A real project raises the same finding in a dozen patterns, so warnings are grouped by kind and
+counted:
+
+```
+$ ksp2midi initial_project.KeyStepPro --dry-run
+ksp2midi: warning: 10 patterns hold pooled notes with no step-active flag (116 notes); they do not sound on the device
+ksp2midi: warning: drum lanes resolved through the chromatic from 36 (assumed - not in file) map on channel 10; ...
+ksp2midi: 27 warnings collapsed into 9 kinds; --verbose for detail
+```
+
+`--verbose` lists every instance with the track and pattern it came from. The collapsed view
+never hides a *kind* of problem — only repeats of one — so it is safe to read first and reach for
+`--verbose` when a line is worth chasing. `--quiet` suppresses the stdout summary and nothing
+else; caveats always reach stderr.
 
 **Step skip is not expanded either.** A note can be set to play on only some of the four
 16/32/48/64 sequences; the export renders a single pass and includes every note whatever its mask,

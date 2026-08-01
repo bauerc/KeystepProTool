@@ -38,13 +38,14 @@ Nothing here reads or writes a path: the caller gets a ``mido.MidiFile`` and
 decides where it goes.
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Final
 
 import mido
 
 from ksp import constants
+from ksp.diagnostics import EMPTY_REPORT, Code, Collector, Diagnostic, Report, Site
 from ksp.drum_map import DEFAULT_DRUM_CHANNEL, DrumMap
 from ksp.model import Note, NoteKind, Pattern, Project
 
@@ -88,12 +89,13 @@ class ExportOptions:
     parameter 86 bit 6 says the device plays. Off by default: the point of a
     MIDI export is to hear what the hardware does."""
 
-    include_inactive: bool = False
-    """Export pooled notes whose step-active flag is clear. Off by default for
-    the same reason as *include_stale*: the device does not play them (capture
-    D1), so exporting them invents audio. Turn it on to see everything the
-    file holds, e.g. to recover an edit that was deactivated rather than
-    deleted."""
+    include_disabled: bool = False
+    """Export disabled notes -- both kinds: step turned off, and past the
+    pattern's last step. Off by default for the same reason as *include_stale*:
+    the device plays neither, so exporting them invents audio the hardware
+    never makes. A user who turned a step off wants it gone from the MIDI too.
+    Turn it on to see everything the file holds, e.g. to recover an edit that
+    was disabled rather than deleted."""
 
     def __post_init__(self) -> None:
         if self.steps_per_beat < 1:
@@ -135,7 +137,11 @@ class Rendering:
     pattern_number: int
     notes: tuple[RenderedNote, ...]
     length_ticks: int
-    warnings: tuple[str, ...] = ()
+    diagnostics: Report = EMPTY_REPORT
+
+    @property
+    def warnings(self) -> tuple[str, ...]:
+        return self.diagnostics.messages
 
     @property
     def midi_track_name(self) -> str:
@@ -160,7 +166,11 @@ class Arrangement:
     length_ticks: int
     pattern_numbers: tuple[int, ...]
     track_numbers: tuple[int, ...]
-    warnings: tuple[str, ...] = ()
+    diagnostics: Report = EMPTY_REPORT
+
+    @property
+    def warnings(self) -> tuple[str, ...]:
+        return self.diagnostics.messages
 
     @property
     def note_count(self) -> int:
@@ -175,39 +185,19 @@ class ExportResult:
     note_count: int
     pattern_numbers: tuple[int, ...]
     track_names: tuple[str, ...]
-    warnings: tuple[str, ...]
+    diagnostics: Report
     track_numbers: tuple[int, ...] = ()
     """KeyStep Pro track numbers in this file -- what a split export names its
     files after. ``track_names`` holds the MIDI track names, which are not the
     same thing once Track 1's drum set becomes a track of its own."""
 
     @property
+    def warnings(self) -> tuple[str, ...]:
+        return self.diagnostics.messages
+
+    @property
     def is_empty(self) -> bool:
         return self.note_count == 0
-
-
-@dataclass
-class _Warnings:
-    """Deduplicating, order-preserving warning collector.
-
-    One misread gate encoding usually affects dozens of notes; repeating the
-    same line dozens of times would bury the ones that only happened once.
-    """
-
-    _lines: list[str] = field(default_factory=list)
-    _seen: set[str] = field(default_factory=set)
-
-    def add(self, line: str) -> None:
-        if line not in self._seen:
-            self._seen.add(line)
-            self._lines.append(line)
-
-    def extend(self, lines: Iterable[str]) -> None:
-        for line in lines:
-            self.add(line)
-
-    def tuple(self) -> tuple[str, ...]:
-        return tuple(self._lines)
 
 
 def declared_step_count(pattern: Pattern, kind: NoteKind) -> int:
@@ -229,8 +219,8 @@ def step_count(pattern: Pattern, kind: NoteKind, notes: Sequence[Note] | None = 
     *notes* defaults to every note of *kind*; pass the subset actually being
     exported so a note that is omitted does not stretch the pattern.
     """
-    # A note past the declared count does not play on the device, but dropping
-    # it silently would hide a real disagreement in the file.
+    # Only reachable with include_disabled, which keeps notes past the last
+    # step; the pattern is widened so they still land where the file puts them.
     if notes is None:
         notes = pattern.notes_of(kind)
     return max(declared_step_count(pattern, kind), max((n.step for n in notes), default=0))
@@ -246,21 +236,48 @@ def render_pattern(
     tests assert against.
     """
     options = options or ExportOptions()
-    warnings = _Warnings()
+    collector = Collector()
+    site = Site(track=track_number, pattern=pattern.number, kind=kind.value)
     ticks_per_step = options.ticks_per_step
 
     # Filter before measuring: a note the device does not play must not
-    # stretch the pattern it sits in.
+    # stretch the pattern it sits in. Both ways of being disabled are dropped
+    # together -- the user turned these off, so the default export is what the
+    # device plays, not everything the file holds.
+    last = declared_step_count(pattern, kind)
     playable = pattern.notes_of(kind)
-    if not options.include_inactive:
-        silent = [n for n in playable if not n.active]
-        if silent:
-            warnings.add(
-                f"track {track_number} pattern {pattern.number} ({kind.value}): {len(silent)} "
-                f"pooled note(s) have no step-active flag and do not sound on the device; "
-                f"omitted. Pass include_inactive to export them anyway"
+    step_off = [n for n in playable if not n.active]
+    past_last = [n for n in playable if n.active and n.step > last]
+    said_step_off = False
+
+    if options.include_disabled:
+        if step_off or past_last:
+            collector.add(
+                Code.DISABLED_EXPORTED,
+                f"{len(step_off) + len(past_last)} disabled note(s) were exported because "
+                f"--include-disabled is set; the device does not play them",
+                site=site,
+                subjects=len(step_off) + len(past_last),
             )
-            playable = tuple(n for n in playable if n.active)
+    else:
+        if step_off:
+            collector.add(
+                Code.DISABLED_NOT_EXPORTED,
+                f"{len(step_off)} disabled note(s), step turned off, were not exported; "
+                f"--include-disabled exports them",
+                site=site,
+                subjects=len(step_off),
+            )
+            said_step_off = True
+        if past_last:
+            collector.add(
+                Code.DISABLED_PAST_LAST_STEP,
+                f"{len(past_last)} disabled note(s), past the last step of {last}, were not "
+                f"exported; --include-disabled exports them",
+                site=site,
+                subjects=len(past_last),
+            )
+        playable = tuple(n for n in playable if n.active and n.step <= last)
 
     steps = step_count(pattern, kind, playable)
     length_ticks = steps * ticks_per_step
@@ -268,36 +285,40 @@ def render_pattern(
     channel = options.drum_channel if kind is NoteKind.DRUM else track_number - 1
 
     if kind is NoteKind.DRUM:
-        warnings.add(
+        collector.add(
+            Code.DRUM_MAP_ASSUMED,
             f"drum lanes resolved through the {options.drum_map.describe()} map on channel "
             f"{options.drum_channel + 1}; the KeyStep Pro drum map is a device global and is "
-            f"not stored in the project file (spec 3.2.1)"
+            f"not stored in the project file (spec 3.2.1)",
         )
-        warnings.extend(options.drum_map.warnings)
+        collector.extend(options.drum_map.diagnostics)
     if options.apply_swing and swing != 50:
-        warnings.add(
-            f"pattern {pattern.number} uses {swing}% swing; exported with the standard swing "
-            f"interpretation, which is not measured against the device"
-        )
-    if steps > declared_step_count(pattern, kind):
-        warnings.add(
-            f"track {track_number} pattern {pattern.number} ({kind.value}): note(s) sit past the "
-            f"declared {declared_step_count(pattern, kind)}-step length and would not play on "
-            f"the device; exported anyway"
+        collector.add(
+            Code.SWING_UNVERIFIED,
+            f"uses {swing}% swing; exported with the standard swing interpretation, "
+            f"which is not measured against the device",
+            site=Site(pattern=pattern.number),
         )
     # A pattern the reader could not fully resolve produces MIDI that is
-    # confidently wrong in a way the file itself will not reveal.
-    warnings.extend(f"track {track_number}: {line}" for line in pattern.warnings)
+    # confidently wrong in a way the file itself will not reveal. The reader's
+    # own step-off finding is dropped when the export has just said the same
+    # thing more usefully -- it names the flag that brings the notes back.
+    collector.extend(
+        d.at(track=track_number)
+        for d in pattern.diagnostics
+        if not (said_step_off and d.code is Code.DISABLED_STEP_OFF)
+    )
 
     notes: list[RenderedNote] = []
     for note in playable:
-        rendered = _render_note(note, kind, channel, swing, options, warnings)
+        rendered = _render_note(note, kind, channel, swing, options, collector)
         if rendered is None:
             continue
         if rendered.tick + rendered.duration_ticks > length_ticks:
-            warnings.add(
-                f"pattern {pattern.number}: note(s) whose gate ran past the end of the pattern "
-                f"were shortened to it"
+            collector.add(
+                Code.GATE_SHORTENED,
+                "note(s) whose gate ran past the end of the pattern were shortened to it",
+                site=Site(pattern=pattern.number),
             )
             rendered = replace(rendered, duration_ticks=max(1, length_ticks - rendered.tick))
         notes.append(rendered)
@@ -308,7 +329,7 @@ def render_pattern(
         pattern_number=pattern.number,
         notes=tuple(notes),
         length_ticks=length_ticks,
-        warnings=warnings.tuple(),
+        diagnostics=collector.report(),
     )
 
 
@@ -318,7 +339,7 @@ def _render_note(
     channel: int,
     swing: int,
     options: ExportOptions,
-    warnings: _Warnings,
+    collector: Collector,
 ) -> RenderedNote | None:
     ticks_per_step = options.ticks_per_step
     pitch = note.pitch
@@ -327,22 +348,25 @@ def _render_note(
         # 0-based lane index we think it is. The reader already warns; here
         # there is simply no note to emit, so the note is dropped loudly.
         if not options.drum_map.has_lane(note.pitch):
-            warnings.add(
+            collector.add(
+                Code.DRUM_LANE_DROPPED,
                 f"drum lane {note.pitch} is outside the device's "
-                f"0-{constants.DRUM_LANE_COUNT - 1} lanes and was dropped"
+                f"0-{constants.DRUM_LANE_COUNT - 1} lanes and was dropped",
             )
             return None
         pitch = options.drum_map.note_for_lane(note.pitch)
 
     if note.time_shift:
-        warnings.add(
+        collector.add(
+            Code.TIME_SHIFT_NOT_APPLIED,
             "note(s) carry a non-zero time shift; its timing encoding is not measured, "
-            "so the shift was not applied"
+            "so the shift was not applied",
         )
     if len(note.skip) != len(constants.SKIP_SEQUENCES):
-        warnings.add(
+        collector.add(
+            Code.STEP_SKIP_SINGLE_PASS,
             "note(s) are set to play on only some of the 16/32/48/64 sequences; the export "
-            "renders one pass of each pattern and includes them all"
+            "renders one pass of each pattern and includes them all",
         )
 
     tick = (note.step - 1) * ticks_per_step
@@ -352,9 +376,10 @@ def _render_note(
     gate = note.gate
     if gate is None:
         gate = options.default_gate
-        warnings.add(
+        collector.add(
+            Code.GATE_OFF_LADDER,
             f"gate encoding {note.gate_raw} is off the 0-127 ladder and cannot be decoded; "
-            f"exported at the {gate:g}-step default length"
+            f"exported at the {gate:g}-step default length",
         )
     return RenderedNote(
         tick=tick,
@@ -380,9 +405,9 @@ def arrange(renderings: Sequence[Rendering]) -> Arrangement:
     A pattern occupies the longest length any track gives it, so tracks of
     unequal length stay aligned at every pattern boundary instead of drifting.
     """
-    warnings = _Warnings()
+    collector = Collector()
     for rendering in renderings:
-        warnings.extend(rendering.warnings)
+        collector.extend(rendering.diagnostics)
 
     lengths: dict[int, int] = {}
     for rendering in renderings:
@@ -404,9 +429,9 @@ def arrange(renderings: Sequence[Rendering]) -> Arrangement:
             replace(n, tick=n.tick + offset) for n in rendering.notes
         )
 
-    _warn_on_unequal_tracks(renderings, warnings)
+    _warn_on_unequal_tracks(renderings, collector)
     tracks = tuple(
-        ArrangedTrack(name=name, notes=_resolve_overlaps(notes, warnings))
+        ArrangedTrack(name=name, notes=_resolve_overlaps(notes, collector))
         for name, notes in groups.items()
         if notes
     )
@@ -415,11 +440,11 @@ def arrange(renderings: Sequence[Rendering]) -> Arrangement:
         length_ticks=cursor,
         pattern_numbers=tuple(sorted(offsets)),
         track_numbers=tuple(sorted({r.track_number for r in renderings})),
-        warnings=warnings.tuple(),
+        diagnostics=collector.report(),
     )
 
 
-def _warn_on_unequal_tracks(renderings: Sequence[Rendering], warnings: _Warnings) -> None:
+def _warn_on_unequal_tracks(renderings: Sequence[Rendering], collector: Collector) -> None:
     """Say so when the tracks do not add up to the same length.
 
     This export restarts every track at each pattern boundary; the device
@@ -435,13 +460,14 @@ def _warn_on_unequal_tracks(renderings: Sequence[Rendering], warnings: _Warnings
     lengths = {track: sum(patterns.values()) for track, patterns in totals.items()}
     if len(set(lengths.values())) > 1:
         summary = ", ".join(f"track {t}: {n} ticks" for t, n in sorted(lengths.items()))
-        warnings.add(
+        collector.add(
+            Code.TRACK_LENGTHS_DIFFER,
             f"tracks hold different total lengths ({summary}); this export aligns pattern N "
-            f"across tracks, but the device loops each track on its own, so they drift apart"
+            f"across tracks, but the device loops each track on its own, so they drift apart",
         )
 
 
-def _resolve_overlaps(notes: list[RenderedNote], warnings: _Warnings) -> tuple[RenderedNote, ...]:
+def _resolve_overlaps(notes: list[RenderedNote], collector: Collector) -> tuple[RenderedNote, ...]:
     """Stop a long gate from swallowing the next note of the same pitch."""
     # Two note-ons for one pitch with one note-off between them hangs in most
     # DAWs. The device retriggers, so the earlier note is shortened instead.
@@ -455,9 +481,10 @@ def _resolve_overlaps(notes: list[RenderedNote], warnings: _Warnings) -> tuple[R
             earlier = resolved[index]
             if earlier.tick + earlier.duration_ticks > note.tick:
                 resolved[index] = replace(earlier, duration_ticks=max(1, note.tick - earlier.tick))
-                warnings.add(
+                collector.add(
+                    Code.OVERLAPS_RESOLVED,
                     "overlapping note(s) of the same pitch were shortened so each has its "
-                    "own note-off"
+                    "own note-off",
                 )
         previous[key] = len(resolved)
         resolved.append(note)
@@ -572,7 +599,7 @@ def render_project(project: Project, options: ExportOptions | None = None) -> tu
         for pattern in track.patterns:
             populated = [k for k in (NoteKind.SEQ, NoteKind.DRUM) if pattern.notes_of(k)]
             kinds = populated
-            stale_warning: str | None = None
+            stale_diagnostic: Diagnostic | None = None
             if len(populated) > 1 and not options.include_stale:
                 # Only when both sets hold notes does the flag have to decide.
                 # A pattern holding just one set is exported whatever the flag
@@ -580,17 +607,31 @@ def render_project(project: Project, options: ExportOptions | None = None) -> tu
                 # dropping real user data over it would be worse.
                 kinds = [live]
                 stale = next(k for k in populated if k is not live)
-                stale_warning = (
-                    f"track {track.number} pattern {pattern.number}: both note sets hold "
-                    f"notes; parameter 86 bit 6 says {live.value} plays, so the "
-                    f"{stale.value} set was not exported (--include-stale exports both)"
+                # Carries the counts the reader's own line has, so that line
+                # can be dropped below without losing anything.
+                stale_diagnostic = Diagnostic(
+                    Code.STALE_NOTE_SET,
+                    f"holds both melodic ({len(pattern.notes_of(NoteKind.SEQ))}) and drum "
+                    f"({len(pattern.notes_of(NoteKind.DRUM))}) notes; parameter 86 bit 6 says "
+                    f"{live.value} plays, so the {stale.value} set was not exported "
+                    f"(--include-stale exports both)",
+                    site=Site(track=track.number, pattern=pattern.number),
                 )
             for kind in kinds:
                 rendering = render_pattern(
                     pattern, track_number=track.number, kind=kind, options=options
                 )
-                if stale_warning is not None:
-                    rendering = replace(rendering, warnings=(stale_warning, *rendering.warnings))
+                if stale_diagnostic is not None:
+                    # The reader says the same pattern holds both sets. This
+                    # says that *and* which flag brings the other one back, so
+                    # its duplicate is dropped rather than printed alongside.
+                    kept = tuple(
+                        d for d in rendering.diagnostics if d.code is not Code.MIXED_NOTE_SETS
+                    )
+                    rendering = replace(
+                        rendering,
+                        diagnostics=Report((stale_diagnostic, *kept)),
+                    )
                 renderings.append(rendering)
     return tuple(renderings)
 
@@ -606,6 +647,6 @@ def _result(arrangement: Arrangement, project: Project, options: ExportOptions) 
         note_count=arrangement.note_count,
         pattern_numbers=arrangement.pattern_numbers,
         track_names=tuple(t.name for t in arrangement.tracks),
-        warnings=arrangement.warnings,
+        diagnostics=arrangement.diagnostics,
         track_numbers=arrangement.track_numbers,
     )

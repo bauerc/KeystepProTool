@@ -21,6 +21,11 @@ and device behaviours from the completed captures that were never written down.
 > polyphony voice, with a hardware-enforced 192-event ceiling; `52` is a lane-major 7-bit array;
 > `40` and `39` latch; two untouched exports are byte-identical; and **gate is an index** —
 > `stored = detent − 1`, 128 entries, 0.0625–64 steps, drum identical (spec §6.1).
+>
+> **Also settled, opportunistically rather than by a planned capture:** notes past a pattern's
+> declared last step are **disabled, not stale** — see the O1 ledger row below and spec §4
+> ("Why a note might not play"). This does **not** answer T5.8, which is about the
+> 16 / 32 / 48 / 64 skip *mask*; that capture is still needed.
 
 **The baseline every test below starts from** is `B0-baseline.KeyStepPro` — an initialised,
 untouched project, already captured. Where a test says "from the baseline", start by loading or
@@ -258,6 +263,11 @@ real material. Note the seq and drum defaults already differ by exactly that bit
   one place the item ordering is not the obvious one.
 
 ### T5.8 — What the four step-skip sequences are
+
+> **Not answered by ledger row O1.** O1 found that notes past the *declared last step* (`98` /
+> `115`) are retained and become audible when the pattern is lengthened. That is the pattern
+> length, a different mechanism from the per-note skip mask `49` / `53` this test is about. The
+> two are easy to conflate at the device because both change which steps light up.
 
 - **Resolves:** whether 16 / 32 / 48 / 64 are four **repeats** of a pattern shorter than 64 steps
   or four **pages** of a 64-step one. This blocks `ksp2midi --passes` (issue #22), which cannot be
@@ -542,6 +552,8 @@ captures still owe are in [`Capture_Ledger_Gaps.md`](./Capture_Ledger_Gaps.md).
 
 | Test ID | Date | Displayed value / setting | Stored value | Notes |
 |---|---|---|---|---|
+| O1 | 2026-07-31 | `initial_project` Tr1 pat 9, Last Step 48 → 64 → 48 | `123_115_9` = 47 | ✅ **done.** Step-active pooled notes out to step 63. **In the saved project they are disabled and do not play** — that is the file's own state. Raising Last Step to 64 enables them (they appear and sound); lowering it back to 48 disables them again. So **notes past the last step are disabled, not stale.** The toggle was a diagnostic action, not the file's configuration. Not a planned capture — observed while investigating a `ksp2midi` warning. Does **not** answer T5.8. |
+
 | T4.5 | | melodic step 5 toggled off | | **did beat 5 sound?** |
 | T4.6 | | >64 melodic notes | | did `48` spill to slot 2? ceiling reached at: |
 | T5.* | | `99` field = | | one row per setting |

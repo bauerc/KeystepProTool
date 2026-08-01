@@ -12,6 +12,7 @@ from typing import Any
 import mido
 import pytest
 
+from ksp.diagnostics import Code
 from ksp.drum_map import DEFAULT_CHROMATIC_LOW, DrumMap
 from ksp.midi_export import (
     DRUM_CHANNEL,
@@ -252,8 +253,36 @@ def test_a_gate_off_the_ladder_falls_back_to_the_device_default_and_says_so(
 
 def test_reader_warnings_survive_into_the_export(project_files_dir: Path) -> None:
     """Anything the reader could not resolve makes a MIDI file that may lie."""
-    result = export_project(load(project_files_dir / "initial_project.KeyStepPro"))
+    project = load(project_files_dir / "initial_project.KeyStepPro")
+    result = export_project(project, ExportOptions(include_stale=True, include_disabled=True))
     assert any("holds both melodic" in w for w in result.warnings)
+    assert any("disabled note(s), step turned off" in w for w in result.warnings)
+
+
+def test_the_export_replaces_a_reader_line_rather_than_echoing_it(
+    project_files_dir: Path,
+) -> None:
+    """One finding, one line.
+
+    The export's versions of these two say what the reader's say *and* name
+    the flag that undoes them, so printing both would be pure repetition.
+    Each must still be said exactly once.
+    """
+    project = load(project_files_dir / "initial_project.KeyStepPro")
+    diagnostics = export_project(project).diagnostics
+
+    for reader_code, export_code in (
+        (Code.DISABLED_STEP_OFF, Code.DISABLED_NOT_EXPORTED),
+        (Code.MIXED_NOTE_SETS, Code.STALE_NOTE_SET),
+    ):
+        spoken_for = {d.site.pattern for d in diagnostics if d.code is export_code}
+        assert spoken_for, f"{export_code} should fire on initial_project"
+        clashes = {d.site.pattern for d in diagnostics if d.code is reader_code} & spoken_for
+        assert not clashes, f"{reader_code} repeated at pattern(s) {sorted(clashes)}"
+
+    # And the surviving line is the one that names the flag.
+    assert any("--include-stale exports both" in w for w in diagnostics.messages)
+    assert any("--include-disabled exports them" in w for w in diagnostics.messages)
 
 
 def test_only_the_set_the_device_plays_is_exported(project_files_dir: Path) -> None:

@@ -121,9 +121,9 @@ def test_pattern_3_holds_wholly_unflagged_lanes(initial_project) -> None:  # typ
     assert lane_7 and all(n.active for n in lane_7)
 
 
-def test_reader_warns_about_silent_notes(initial_project) -> None:  # type: ignore[no-untyped-def]
+def test_reader_warns_about_disabled_notes(initial_project) -> None:  # type: ignore[no-untyped-def]
     pattern = initial_project.tracks[0].patterns[2]
-    assert any("do not sound on the device" in w for w in pattern.warnings)
+    assert any("disabled note(s), step turned off" in w for w in pattern.warnings)
 
 
 def test_melodic_notes_are_flagged(initial_project) -> None:  # type: ignore[no-untyped-def]
@@ -141,7 +141,7 @@ def test_empty_project_has_no_flags(project_files_dir) -> None:  # type: ignore[
 # --- The export consequence -----------------------------------------------
 
 
-def test_export_omits_silent_notes_by_default(initial_project) -> None:  # type: ignore[no-untyped-def]
+def test_export_omits_disabled_notes_by_default(initial_project) -> None:  # type: ignore[no-untyped-def]
     pattern = initial_project.tracks[0].patterns[2]
     rendering = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM)
 
@@ -149,22 +149,22 @@ def test_export_omits_silent_notes_by_default(initial_project) -> None:  # type:
     audible = [n for n in pooled if n.active]
     assert len(audible) < len(pooled), "this pattern is the interesting case"
     assert len(rendering.notes) == len(audible)
-    assert any("omitted" in w for w in rendering.warnings)
+    assert any("were not exported" in w for w in rendering.warnings)
 
 
-def test_include_inactive_restores_them(initial_project) -> None:  # type: ignore[no-untyped-def]
+def test_include_disabled_restores_them(initial_project) -> None:  # type: ignore[no-untyped-def]
     pattern = initial_project.tracks[0].patterns[2]
-    options = ExportOptions(include_inactive=True)
+    options = ExportOptions(include_disabled=True)
     rendering = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM, options=options)
 
     pooled = [n for n in pattern.notes if n.kind is NoteKind.DRUM]
     assert len(rendering.notes) == len(pooled)
-    # The reader still reports that these notes are silent; what must not
+    # The reader still reports that these notes are disabled; what must not
     # appear is the export saying it dropped them.
-    assert not any("omitted" in w for w in rendering.warnings)
+    assert not any("were not exported" in w for w in rendering.warnings)
 
 
-def test_a_silent_note_does_not_stretch_the_pattern(initial_project) -> None:  # type: ignore[no-untyped-def]
+def test_a_disabled_note_does_not_stretch_the_pattern(initial_project) -> None:  # type: ignore[no-untyped-def]
     """An omitted note must not widen the rendering it was omitted from.
 
     Otherwise a pattern ends with silence whose length is set by a note the
@@ -179,6 +179,56 @@ def test_a_silent_note_does_not_stretch_the_pattern(initial_project) -> None:  #
 
     default = render_pattern(stretched, track_number=1, kind=NoteKind.DRUM)
     including = render_pattern(
-        stretched, track_number=1, kind=NoteKind.DRUM, options=ExportOptions(include_inactive=True)
+        stretched, track_number=1, kind=NoteKind.DRUM, options=ExportOptions(include_disabled=True)
     )
     assert default.length_ticks < including.length_ticks
+
+
+# --- Past the last step is the other way to be disabled --------------------
+
+
+def test_notes_past_the_last_step_are_dropped_by_default(initial_project) -> None:  # type: ignore[no-untyped-def]
+    """initial_project Track 1 pattern 9 is 48 steps and holds notes to 63.
+
+    The user shortened the pattern, which is how the device disables a step.
+    Exporting those notes anyway would put material in the MIDI that the
+    hardware does not play, which is the same mistake as ignoring the
+    step-active flag.
+    """
+    pattern = initial_project.tracks[0].patterns[8]
+    last = pattern.drum_step_count
+    assert last == 48, "the fixture must still be the shortened pattern"
+    assert any(n.step > last for n in pattern.notes_of(NoteKind.DRUM)), (
+        "and still hold notes past it"
+    )
+
+    rendering = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM)
+    ticks_per_step = ExportOptions().ticks_per_step
+    assert all(n.tick // ticks_per_step < last for n in rendering.notes)
+    # The pattern is its declared length, not stretched to reach a note that
+    # does not sound.
+    assert rendering.length_ticks == last * ticks_per_step
+    assert any("past the last step of 48" in w for w in rendering.warnings)
+    assert any("--include-disabled" in w for w in rendering.warnings)
+
+
+def test_include_disabled_restores_notes_past_the_last_step(initial_project) -> None:  # type: ignore[no-untyped-def]
+    """One flag covers both ways of being disabled."""
+    pattern = initial_project.tracks[0].patterns[8]
+    options = ExportOptions(include_disabled=True)
+    rendering = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM, options=options)
+
+    pooled = pattern.notes_of(NoteKind.DRUM)
+    assert len(rendering.notes) == len(pooled)
+    # Widened so the recovered notes land where the file puts them.
+    assert rendering.length_ticks > pattern.drum_step_count * options.ticks_per_step
+    assert any("--include-disabled is set" in w for w in rendering.warnings)
+
+
+def test_a_pattern_within_its_length_is_untouched(project_files_dir) -> None:  # type: ignore[no-untyped-def]
+    """The filter must not fire on the hardware-confirmed reference project."""
+    project = load(project_files_dir / "project_5.KeyStepPro")
+    pattern = project.tracks[0].patterns[0]
+    rendering = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM)
+    assert len(rendering.notes) == len(pattern.notes_of(NoteKind.DRUM))
+    assert not any("past the last step" in w for w in rendering.warnings)

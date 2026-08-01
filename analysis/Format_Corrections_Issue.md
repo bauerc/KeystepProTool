@@ -19,19 +19,20 @@ The spec was written from the *field* list (`fields[]`, which gives names only).
 is the part that gives **shapes** — it declares, for every parameter, exactly which index ranges
 are addressable and what each index means. Reading it changes five conclusions.
 
-> **Status: this work order is complete, and the hardware agreed with it.** Every finding below
-> has since been confirmed at the device by the tier 1/3/4 captures and folded into the spec and
-> the code. It is kept as the record of how the conclusions were reached — the reasoning from
-> `bulkOperation` is what made the captures worth running, and it predicted them correctly.
+> **Status: every finding below is confirmed, but not all of them reached the code.** The tier
+> 1/3/4 captures agreed with all six. An earlier version of this header claimed the whole work
+> order was implemented; that was wrong, and it cost real time — finding 4 sat unapplied for long
+> enough that the reader kept discarding 43 notes while *this document explained exactly why*.
+> **Confirming a finding and applying it are separate columns.** The table below now tracks both.
 
-| # | Finding | Status |
-|---|---|---|
-| 1 | `48`/`49` are per-pattern, not per-slot | ✅ done — reader reads `48` from chunk 1 as pattern-wide |
-| 2 | Every track has **3** poly slots, Track 1 included | ✅ done, and sharpened: `idx2` is a 64-entry **pool chunk**, not a voice at all (capture D2) |
-| 3 | `52` (drum step active) is fully decoded | ✅ done — confirmed by D1/D3; lane-major, 7 bits per entry (spec §4) |
-| 4 | The drum note array is a **pool**, not a compacted list | ✅ done — D3 filled it to its 192-event ceiling |
-| 5 | `52` is authoritative for what sounds, not the note pool | ✅ **confirmed on hardware (D1)** — the step did not sound with its flag clear |
-| 6 | `51` is indexed by drum lane 1–24, not by step | ✅ done — confirmed by D4 |
+| # | Finding | Confirmed | In the code |
+|---|---|---|---|
+| 1 | `48`/`49` are per-pattern, not per-slot | ✅ | ✅ 83ef72f — reader reads `48` from chunk 1 as pattern-wide |
+| 2 | Every track has **3** poly slots, Track 1 included | ✅ D2 — `idx2` is a 64-entry **pool chunk**, not a voice at all | ❌ **open** — `SLOTS_BY_ITEM[123]` is still 4 and `slot_is_initialised` still guards the zero-filled phantom |
+| 3 | `52` (drum step active) is fully decoded | ✅ D1/D3 — lane-major, 7 bits per entry (spec §4) | ✅ 83ef72f |
+| 4 | The drum note array is a **pool**, not a compacted list | ✅ D3 filled it to its 192-event ceiling | ✅ — the scan now skips holes for drums and keeps `break` for melodic |
+| 5 | `52` is authoritative for what sounds, not the note pool | ✅ **D1** — the step did not sound with its flag clear | ✅ 83ef72f |
+| 6 | `51` is indexed by drum lane 1–24, not by step | ✅ D4 | ⚠️ constants only — nothing reads it, so per-lane lengths are not rendered |
 
 Findings 3 and 4 together cleared M5's blocker. M6's other blocker — the drum-mode bit — was
 *not* resolved here, and the hardware protocol settled it: it is `86` bit 6, not `100`.
