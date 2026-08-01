@@ -204,9 +204,10 @@ no time. Each KeyStep Pro track becomes a MIDI track; Track 1's drum set becomes
 ### M3 — Byte-identical round-trip ✅ **done**
 **Artifact:** load `Default.KeyStepPro`, re-emit unchanged, assert byte-identical output.
 
-**Why it stands alone:** locks down write fidelity — tab indentation, the trailing comma, the
-`version` key (spec §2) — before any real mutation exists to confuse the picture. If this fails,
-nothing downstream can be trusted.
+**Why it stands alone:** locks down write fidelity — tab indentation, key order, the `version` key
+(spec §2) — before any real mutation exists to confuse the picture. If this fails, nothing
+downstream can be trusted. (The trailing comma was a fourth until T6.2 showed MCC does not need
+it; see below.)
 
 **Test:** `md5` comparison. Pure desk work, no hardware, no MIDI involved.
 
@@ -239,11 +240,18 @@ file until M5.
 - **One changed value is one changed line**, asserted against `project_5`. That is the desk half
   of M4, so what M4 has to prove on the device is narrowed to key *addressing* alone.
 
-**Still open, and no longer blocking: protocol T6.2** — whether MCC accepts strict JSON without
-the trailing comma. It needs the application, not a test, so it could not be settled here. M3
-shipped assuming the comma is required, which is the safe direction: it is what MCC writes, so a
-file carrying it cannot be wrong. `dumps(..., trailing_comma=False)` produces the candidate file
-in one command whenever MCC is open.
+**Settled afterwards: protocol T6.2 (2026-08-01) — MCC does not need the trailing comma.** M3
+shipped re-emitting it, which was the safe direction: it is what MCC writes, so a file carrying it
+cannot be wrong. The test then showed the requirement can be dropped. A candidate differing from a
+known-good export by exactly that one byte loaded in MCC and transferred to the device, so
+`dumps` now emits strict JSON and there is no flag to choose otherwise.
+
+The round-trip target moved with it: MCC's bytes **minus that one byte**, via the
+`sample_bytes_strict` fixture, plus `test_output_differs_from_mcc_by_exactly_the_trailing_comma`
+to hold the deviation at one byte. The milestone is not weakened — key order, tab indentation, the
+absent final newline and all 153,497 lines are still asserted exactly. Nothing else in the write
+rules has been shown optional, and the reader still accepts the comma because every file that
+exists has one.
 
 ---
 
@@ -305,30 +313,35 @@ patterns longer than 64 steps split across pattern slots.
 ---
 
 ### M7 — Timing calibration
-**Artifact:** the measured constants for the three encodings that place a note in time — gate
-length, time shift, and swing — as data.
+**Artifact:** the measured constants for the encodings that place a note in time — gate length,
+time shift, swing — as data, plus the randomness reading the timing work rests on.
 
 **Why it is separate:** these are the encodings still unresolved (spec §6). Until measured, M2
-exports on the grid and warns, and M5/M6 write a default gate and warn. Gate is now done and turned
-out to fit a very clean rule — an index — but only once a *consecutive* run of detents was captured
-rather than scattered samples.
+exports on the grid and warns. Gate is done and turned out to fit a very clean rule — an index —
+but only once a *consecutive* run of detents was captured rather than scattered samples; that is
+the lesson the rest of the tier inherits.
 
-**Scope**, all resolved in one session because the device is already out:
+**Scope.** Gate is closed. The remainder resolves in one session because the device is already
+out, except tier 8, which needs a different rig:
 
-- **Gate table** (`110` / `118`) — **measured and shipped** (protocol tier 2, capture
-  `T2-gate-table`). The encoding is an index: `stored = detent − 1`, 128 entries, gate 0.0625–64
-  steps, drum identical. `ksp.constants.GATE_TABLE` holds all 128 and `tests/test_gate_ladder.py`
-  ties it to `analysis/gate_ladder.txt`. The sweep's one derived entry — stored `36`
-  (gate 5.25), whose note had been over-turned by a detent — is now **closed** by capture
-  `D25-gate-capture`: one note at display 5.25 stores `110` = 36, as predicted. No transcribed
-  rung rests on interpolation.
-- **Time shift range and linearity** (`112` / `120`) — the centre of 49 is confirmed but nothing
-  establishes the range; `project_5`'s ±4 may not be the limit. Protocol T7.1–T7.3.
-- **Swing semantics** (`74`, `97` / `114`) — **never exercised in any sample file**, so it cannot be
-  decoded at the desk at all. Protocol T7.4–T7.7, which also settles whether `reader._swing` is
-  right to read the per-pattern value as absolute rather than a signed offset.
-- **What one time-shift unit is worth in time** — needs a recording of the device's MIDI output
-  rather than an export, because the quantity is not in the file. Protocol tier 8.
+- **Gate table** (`110` / `118`) — ✅ **done** (issue #9). Protocol tier 2, captures
+  `T2-gate-table` and `D25-gate-capture`. The encoding is an index: `stored = detent − 1`, 128
+  entries, gate 0.0625–64 steps, drum identical. `ksp.constants.GATE_TABLE` holds all 128 and
+  `tests/test_gate_ladder.py` ties it to `analysis/gate_ladder.txt`. No transcribed rung rests on
+  interpolation. Spec §6.1 has the full record.
+- **Time shift range and linearity** (`112` / `120`) — **issue #42.** The centre of 49 is confirmed
+  but nothing establishes the range; `project_5`'s ±4 may not be the limit. Protocol T7.1–T7.3.
+  T7.1 is a **go/no-go that jumps the queue** — if the range really is ±4, most of this and of
+  tier 8 is not worth running. T7.3 also settles the `project_5` drum conflict (issue #15).
+- **Swing semantics** (`74`, `97` / `114`) — **issue #43.** **Never exercised in any sample file**,
+  so it cannot be decoded at the desk at all. Protocol T7.4–T7.7, which also settles whether
+  `reader._swing` is right to read the per-pattern value as absolute rather than a signed offset.
+- **Randomness** (`113`) — **issue #44.** Probability, or timing jitter? A fresh note defaults to
+  100; if that means jitter, every timing measurement in the protocol is measuring noise. Two
+  captures (T7.8), and they **gate tier 8 entirely**.
+- **What one time-shift unit is worth in time** — **issue #45.** Needs a recording of the device's
+  MIDI output rather than an export, because the quantity is not in the file. Protocol tier 8, run
+  after #42 supplies the range to sweep and #44 says whether the readings mean anything.
 
 See `analysis/Timing_Calibration.md` for the model and the arithmetic.
 

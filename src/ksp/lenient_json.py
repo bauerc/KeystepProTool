@@ -5,12 +5,17 @@ comma before a closing brace. ``json.loads`` does not, so every
 ``.KeyStepPro`` file in existence fails strict parsing. See
 ``analysis/KeyStepPro_Format_Spec.md`` section 2.
 
-The writer reproduces MCC's bytes exactly rather than merely producing valid
-JSON: tab indentation, the trailing comma, no final newline, and MCC's key
-order. ``tests/test_round_trip.py`` holds it to that against all five sample
-projects, which is the whole of milestone M3 -- M4 puts a written file on the
-hardware and M5 generates one from MIDI, and neither is trustworthy if the
-bytes drift.
+The writer reproduces MCC's bytes -- tab indentation, no final newline, MCC's
+key order -- with one deliberate exception: it omits the trailing comma, so its
+output is strict JSON. Protocol test T6.2 established that MCC does not need
+it; a file differing from a known-good export by that one byte loaded in MCC
+and transferred to the device. Nothing else about the dialect is optional,
+because nothing else has been tested.
+
+``tests/test_round_trip.py`` holds the writer to MCC's bytes (minus that comma)
+against all five sample projects, which is the whole of milestone M3 -- M4 puts
+a written file on the hardware and M5 generates one from MIDI, and neither is
+trustworthy if the bytes drift.
 """
 
 import json
@@ -69,22 +74,19 @@ def load_path(path: Path | str) -> dict[str, Any]:
     return loads(text)
 
 
-def dumps(obj: Mapping[str, int | str], *, trailing_comma: bool = True) -> str:
+def dumps(obj: Mapping[str, int | str]) -> str:
     """Serialise *obj* in MCC's dialect, in the mapping's own iteration order.
 
     Order is preserved rather than sorted so this stays a faithful dumper and
     the round-trip test proves something; putting keys in MCC's order is
     :func:`canonical`'s job, chosen explicitly by the caller.
 
-    ``trailing_comma=False`` produces strict JSON -- the candidate file for
-    protocol test T6.2, which asks whether MCC requires the comma at all.
-
     Raises:
         TypeError: for a value that is not an ``int`` or a ``str``. A float
             would serialise as ``1.0`` and a bool as ``true``, neither of
             which the firmware has ever been shown.
     """
-    parts = ["{\n"]
+    lines = []
     for k, v in obj.items():
         # ``json.dumps`` per key and per value costs two encoder set-ups on
         # every one of ~153,000 entries. ``_escape`` is the C helper it would
@@ -102,17 +104,12 @@ def dumps(obj: Mapping[str, int | str], *, trailing_comma: bool = True) -> str:
             # An int subclass, which may override __repr__. Encode it the slow
             # way so its bytes stay whatever they have always been.
             value = json.dumps(v)
-        parts.append(f"\t{_escape(k)}: {value},\n")
+        lines.append(f"\t{_escape(k)}: {value}")
 
-    if not trailing_comma and len(parts) > 1:
-        parts[-1] = parts[-1][:-2] + "\n"
-    parts.append("}")
-    return "".join(parts)
+    return "{\n" + ",\n".join(lines) + ("\n}" if lines else "}")
 
 
-def dump_path(
-    obj: Mapping[str, int | str], path: Path | str, *, trailing_comma: bool = True
-) -> None:
+def dump_path(obj: Mapping[str, int | str], path: Path | str) -> None:
     """Write *obj* to *path* as MCC would.
 
     Bytes rather than text, so no platform translates ``\\n`` into ``\\r\\n``
@@ -122,7 +119,7 @@ def dump_path(
     one would be found and parsed.
     """
     path = Path(path)
-    data = dumps(obj, trailing_comma=trailing_comma).encode("utf-8")
+    data = dumps(obj).encode("utf-8")
 
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name, suffix=".tmp")
     try:

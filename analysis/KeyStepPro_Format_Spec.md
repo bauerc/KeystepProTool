@@ -26,7 +26,8 @@ all five sample projects. Sections 4 and 6 in particular are enforced by
 ## 0. The short version
 
 - A `.KeyStepPro` file is one **flat JSON object** of ~153,495 integer entries plus 1–2 string keys.
-- It is **not strict JSON** — it has trailing commas.
+- It is **not strict JSON** — MCC writes a trailing comma, so a reader must tolerate one. A
+  *writer* need not emit it: T6.2 showed MCC loads a file without it (§2).
 - Its structure is encoded entirely in the **key names**: `<itemId>_<paramId>[_i1][_i2][_i3]`.
 - The complete parameter dictionary is **shipped by MCC on disk** — you do not need to guess it.
 - Within a track/pattern/slot, **some parameters are indexed by step and others by note ordinal**.
@@ -109,7 +110,7 @@ These are easy to get wrong and will produce files MCC rejects or misreads:
 
 | Rule | Detail |
 |---|---|
-| **Trailing comma** | There is a `,` before the final `}`. `json.loads` fails. Strip with `,(\s*[}\]])` → `\1`, or use a lenient/JSON5 parser. Re-emit it on write until proven unnecessary |
+| **Trailing comma** | **Read:** MCC writes a `,` before the final `}`, so `json.loads` fails on every file it produces. Strip with `,(\s*[}\]])` → `\1`, or use a lenient/JSON5 parser. **Write: not required** — protocol test T6.2 (2026-08-01) put a file identical to a known-good export apart from that one byte into MCC; it loaded and transferred to the device. `ksp.lenient_json.dumps` therefore emits strict JSON. This is the *only* rule in this table shown to be optional |
 | **Indentation** | Tab-indented |
 | **No final newline** | The file ends at `}`. A standard end-of-file fixer breaks byte identity |
 | **Line format** | Every line is exactly `\t"<key>": <value>,\n` — one tab, the key quoted, `": "` as the separator. Values are integers (0–247 across all samples) or the two strings below, each formatted exactly as `json.dumps` would. There are no floats, no booleans and no nesting anywhere |
@@ -122,7 +123,9 @@ firmware requires, because you always start from a complete file.
 
 Together these rules are enough: applying them to a parsed sample reproduces its bytes exactly.
 `ksp.lenient_json.dumps` / `canonical` implement them and `tests/test_round_trip.py` holds all
-five samples to byte identity (milestone M3). Project names are **not** an exception — they are
+five samples to byte identity (milestone M3) — save the trailing comma, which the writer
+deliberately omits on T6.2's evidence, so its output is one byte shorter than MCC's and is strict
+JSON. Every other byte still has to match. Project names are **not** an exception — they are
 stored as integer parameters, not JSON strings, so `device` and `version` are the only strings in
 the file and no sample contains a non-ASCII byte.
 

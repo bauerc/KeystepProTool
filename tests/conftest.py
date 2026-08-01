@@ -67,6 +67,24 @@ def sample_bytes(sample_name: str, project_files_dir: Path) -> bytes:
     return path.read_bytes()
 
 
+def without_trailing_comma(data: bytes) -> bytes:
+    """MCC's bytes minus the comma before the closing brace -- the M3 target.
+
+    Protocol test T6.2 showed MCC does not need that comma, so the writer omits
+    it and its output is strict JSON. Every other byte must still match, which
+    is what the round-trip tests compare against. Asserting the comma is there
+    to begin with keeps a mangled sample from silently becoming the baseline.
+    """
+    assert data.endswith(b",\n}"), "sample does not end with MCC's trailing comma"
+    return data[:-3] + b"\n}"
+
+
+@pytest.fixture(scope="session")
+def sample_bytes_strict(sample_bytes: bytes) -> bytes:
+    """The sample as this writer emits it. See :func:`without_trailing_comma`."""
+    return without_trailing_comma(sample_bytes)
+
+
 @pytest.fixture(scope="session")
 def _parsed_samples() -> dict[str, dict[str, int | str]]:
     """Backing store for :func:`load_sample`. Never handed to a test."""
