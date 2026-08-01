@@ -248,12 +248,12 @@ converted pattern *sound* like the source material rather than merely contain th
 
 ### T5.1–T5.5 — The `99` bitfield
 
-- [ ] T5.1 step size — one capture per setting, tick when all are done
-- [ ] T5.2 triplet on
-- [ ] T5.3 polyrhythm on
-- [ ] T5.4 swing offset on
-- [ ] T5.5 playback direction — one capture per setting
-- [ ] drum-side repeat on `116`
+- [x] T5.1 step size — one capture, one pattern per setting, Track 2, pattern 1 1/4, pattern 2 1/8, pattern 3 1/16, pattern 4 1/32
+- [x] T5.2 triplet on
+- [x] T5.3 monorhythm on
+- [x] T5.4 swing offset on
+- [x] T5.5 playback direction — one capture , one pattern per setting, Track 2 pattern 1 Fwd, pattern 2 Rand, pattern 3 Walk
+- [x] drum-side repeat on `116`
 
 `99` is "Pattern Seq triplet state, swing offset state, polyrythm state, step size, playback
 direction in a bitfield", with the dictionary's own comment placing **playback direction at bits
@@ -270,29 +270,29 @@ hold different step counts. So **`116` bit 2 = Mono/Poly**, and the drum half of
 needs to confirm the *remaining* fields. See spec §5 for the limits of that reading.
 
 **The bit 2 asymmetry is now the sharpest question here**, not a footnote: `99` = 20 has bit 2
-set by default while `116` = 16 has it clear. Both cannot mean "polyrhythm off by default". A
-capture that toggles polyrhythm on **Track 2** and watches `124_99_1` settles whether the two
+set by default while `116` = 16 has it clear. Polyrhythm is set to on by default for Sequence tracks. A
+capture that toggles polyrhythm off on **Track 2** and watches `124_99_1` settles whether the two
 halves share a layout at all — run it early, because the rest of the sweep's interpretation
-depends on the answer.
+depends on the answer. If setting Monorhythm to on on Track 2 swaps to the same measured value for Drums, definitively 16 means Mono and 20 mean Poly
 
-- **Device:** from the baseline, Track 2 pattern 1. Change **one field at a time**, returning to default
-  between captures: step size, triplet on, polyrhythm on, swing offset on, playback direction
+- **Device:** from the baseline, Track 2 pattern 1. Change **one field at a time** (except for step size), returning to default
+  between captures: step size, triplet on, polyrhythm on, swing offset on, playback direction, last step
   through each of its settings.
-- **Captures:** `T5-99-stepsize-<value>`, `T5-99-triplet`, `T5-99-polyrhythm`,
-  `T5-99-swingoffset`, `T5-99-direction-<name>`
+- **Captures:** `T5-99-stepsize`, `T5-99-triplet`, `T5-99-monorhythm`,
+  `T5-99-swingoffset`, `T5-99-direction`
 - **Keys:** `124_99_1`
 - **Confirms if:** playback direction occupies bits 5–6, and each other field maps to a
   contiguous bit range that accounts for the observed defaults of 20 and 16.
 - **Falsified if:** direction is elsewhere, or two fields share a bit.
 - **Record the displayed setting name for every capture** — the mapping from stored bits to the
   device's own labels is the deliverable, and it cannot be reconstructed from the file.
-- **Step size needs one capture per setting**, not one total, since it is a multi-bit field.
+- **Step size needs one capture**, since patterns appear to have distinct settings for this bit this saves time and exports
 - **Then repeat one capture on the drum side** (`116`, `123_116_<pattern>`) to check the layout is
   shared — bit 2 aside, which `D4` already settled. If seq and drum differ, both need sweeping.
 
 ### T5.6 — Root note and scale
 
-- [ ] not yet run
+- [x] not yet run
 
 - **Resolves:** `107` (root note) and `108` (scale), which are 0 in every sample file, and the
   user-scale parameters `101`–`106`.
@@ -651,10 +651,10 @@ answered and folded into the spec on 2026-08-01.
 |---|---|---|---|---|
 | O1 | 2026-07-31 | `initial_project` Tr1 pat 9, Last Step 48 → 64 → 48 | `123_115_9` = 47 | ✅ **done.** Step-active pooled notes out to step 63. **In the saved project they are disabled and do not play** — that is the file's own state. Raising Last Step to 64 enables them (they appear and sound); lowering it back to 48 disables them again. So **notes past the last step are disabled, not stale.** The toggle was a diagnostic action, not the file's configuration. Not a planned capture — observed while investigating a `ksp2midi` warning. Does **not** answer T5.8. |
 | D25 | 2026-08-01 | one note, Gate display **5.25** | `124_110_1_1_1` = 36 | ✅ **done.** Closes the gate ladder's one derived rung. Diffs to eight keys against `B0-baseline`; predicted and observed agree. Folded into spec §6.1 and `gate_ladder.txt` provenance. |
-| T4.5 | | melodic step 5 toggled off | | **did beat 5 sound?** |
-| T4.6 | | >64 melodic notes | | did `48` spill to slot 2? ceiling reached at: |
-| T5.* | | `99` field = | | one row per setting |
-| T5.6 | | root note / scale | | |
+| T4.5 | | melodic step 5 toggled off | | No |
+| T4.6 | | >64 melodic notes | | did `48` spill to slot 2? ceiling reached at: 192 notes. 4 chords per note until step 48. Filling step 49 was refused by the device (light would not turn on). Device displayed message of "16 notes limit in a step reached". I then tested more deeply on Track 2 Pattern 2 by setting 16 notes per step. 17th notes were refused with the 16 note limit message. I filled in 12 steps. Trying to fill in the 13th step (this was in step edit mode with overdub button on) produced the 192 limit message per pattern previously seen. The export file is T4-melodic-overflow-v2 |
+| T5.* | | `99` field = | | one row per setting. For the triplet, I added more data to the export. On Track 3 Pattern 1 through 4, I changed the step size/time division number. There are 4 entires all with triplet set, 1/4 1/8 1/16 and 1/32 in that order. I figured this was worth investigating independent of the triplet being set on just Track 2 Pattern one in case there was other stacking concerns. Swing offset on the device defaults to 50% and increments by 1% each turn of the knob and finishes at 75%. The value in the export is 75%. For the drum truck, I avoided completely your suggestion because it fucking sucks. Its clear patterns dictate these values. Not tracks. For the drum track I created 11 patterns as follows: 1 - setting defaults, 2 - Seq Pattern Direction Rand, 3 - Seq Pattern direction Walk, 4 - Time Division 1/4, 5 - Time Division 1/8, 6 - Time Divison 1/16, 7 - Time Division 1/32, 8 - Time Division 1/4 Triplet,9 - Time Division 1/8 Triplet,10 - Time Division 1/16 Triplet,11 - Time Division 1/32 Triplet.|
+| T5.6 | | root note / scale | | For scale, display is Chrom, Major, Minor, Dorian, Mixo, H.Min, Blues, Root, User 1, User 2. I set up the track so Track 1 in Drum mode and Track 2 have 10 patterns following that order. Of note, the Root option didn't seem to take or store anything by just pressing it. On the Rootnote export, the option is stored on Track 3 Pattern 1 and the selection was Scale Pattern Minor and the Root Note selected was D2|
 | T5.7 | | 3-pattern chain | | |
 | T5.8 | | 16-step pattern, one note per skip mask | | **repeats or pages?** which notes sounded: |
 | T6.1 | | project_5 kick time shifts | | −1/+1 or −1/−1? |
