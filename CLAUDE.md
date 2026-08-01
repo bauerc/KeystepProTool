@@ -81,12 +81,12 @@ the milestone implementing them lands, so an installed command never crashes on 
   the drum scan skips sentinels and the melodic one stops at the first. Spec §4 rule 1 ("packed
   contiguously") is a rule for *writers*. Applying it on read discarded 43 live notes in
   `initial_project` and then blamed the file for losing them.
-- Audibility has **three** gates: pooled (`50`/`54`), step turned on (`48`/`52`), **and** within
-  the pattern's declared length (`98`/`115`). A note failing either of the last two is
-  **disabled** — one word, two mechanisms, both toggled the same way on the device. Disabled is
-  not stale: shortening a pattern disables notes without deleting them and lengthening it enables
-  them again, confirmed on hardware. Say "disabled (step turned off)" or "disabled (past the last
-  step)"; never "silent", "inactive" or "lost".
+- **Existence ≠ audibility, and there is more than one way to fail.** Spec §4 "Why a note might
+  not play" is the complete list; read it before adding a warning about a note that does not
+  sound. Two of the six are what **"disabled"** means — step turned off (`48`/`52`) and past the
+  last step (`98`/`115`) — one state, two mechanisms, both toggled the same way on the device.
+  Disabled is not stale: shortening a pattern disables notes without deleting them. Say "disabled
+  (step turned off)" or "disabled (past the last step)"; never "silent", "inactive" or "lost".
 - Track 1 (item `123`) carries a whole second parameter set for DRUM mode. The mode flag is
   **`86` bit 6** (per-track), not the `100` bitfield the spec originally named — `100` reads 26
   everywhere. A writer must set `86` to match whichever set it writes.

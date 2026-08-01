@@ -370,9 +370,12 @@ other track. A writer must never place events there.
 
 ### Pooled does not mean audible
 
-A note can sit in the pool, fully formed, and still be silent. `D1-two-hits` / `D1-step-off`
-toggle a drum step off **without deleting its note**: the pooled entry survives byte-for-byte
-and only the step-active bit clears — and the step does not sound on the device.
+A note can sit in the pool, fully formed, and still not play. **"Why a note might not play" below
+lists every reason;** this section is the evidence for the commonest one, row 2.
+
+`D1-two-hits` / `D1-step-off` toggle a drum step off **without deleting its note**: the pooled
+entry survives byte-for-byte and only the step-active bit clears — and the step does not sound on
+the device.
 
 > **Existence and audibility are different tests.** `50` / `54` `!= 127` says a note *exists*.
 > Whether it *plays* additionally requires its **step-active bit** (`48` melodic, `52` drum) to
@@ -382,14 +385,33 @@ and only the step-active bit clears — and the step does not sound on the devic
 This is not hypothetical. In `initial_project`, pattern 3 lanes 0 and 19 hold 20 pooled drum
 notes with no flags at all, and pattern 1 lane 17 holds 8 of which only 4 are flagged.
 
-### Audibility has three gates, not two
+### Why a note might not play
 
-The step count is the third, and it gates the other two rather than being redundant with them.
-A note sounds only if **all three** hold:
+Existence and audibility are different tests, and there is more than one way to fail the second.
+**This table is the complete list.** Everything below it is the evidence.
 
-1. it is in the pool — `50` / `54` `!= 127`;
-2. its step-active bit is set — `48` / `52`;
-3. **its step is within the pattern's declared length** — `98` melodic, `115` drum.
+| # | Why it does not play | Where that lives | Undo on the device | Confidence |
+|---|---|---|---|---|
+| 1 | The pool entry is empty — there is no note | `50` / `54` = `127` | n/a, nothing is stored | Certain |
+| 2 | **Disabled: step turned off** | `48` melodic / `52` drum, bit clear | Re-light the step; the note returns intact | **Hardware** (D1) |
+| 3 | **Disabled: past the last step** | step > `98` melodic / `115` drum | Raise Last Step | **Hardware** (O1) |
+| 4 | Velocity 0 | `111` / `119` = 0 | Raise the velocity | Inferred from files, never tested |
+| 5 | Skipped on this pass | `49` / `53` mask ≠ 15 | Set the mask to all four | ⚠ **Unresolved** — repeats or pages? **T5.8** |
+| 6 | Lost to randomness | `113` / `121` | Set randomness to always | ⚠ **Unresolved** — probability or timing jitter? **T7.8** |
+
+Rows **2 and 3 are what "disabled" means** — one state, two mechanisms, both toggled the same way
+on the device, and the only two the tools report under that word. Say "disabled (step turned
+off)" or "disabled (past the last step)"; never "silent", "inactive" or "lost".
+
+Rows 5 and 6 differ in kind: they are properties of a *pass*, not of the note's stored state, so
+the same note can sound on one loop and not the next. Neither is decodable at the desk. Until
+T5.8 and T7.8 run, `ksp2midi` renders one pass and includes every note whatever its mask.
+
+Row 1 is not a disabled note at all — it is the absence of one. Note also that `127` marks an
+empty *entry*, not the end of the list; see "The `127` sentinel" above, because reading it as a
+terminator silently discards live notes.
+
+#### Evidence for row 3 — the last step
 
 **Hardware-observed** on `initial_project` Track 1 pattern 9. `123_115_9` = 47, i.e. a 48-step
 drum pattern, and the pattern holds pooled, step-active notes out to step 63.

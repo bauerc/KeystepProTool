@@ -23,7 +23,7 @@ and device behaviours from the completed captures that were never written down.
 >
 > **Also settled, opportunistically rather than by a planned capture:** notes past a pattern's
 > declared last step are **disabled, not stale** — see the O1 ledger row below and spec §4
-> ("Audibility has three gates, not two"). This does **not** answer T5.8, which is about the
+> ("Why a note might not play"). This does **not** answer T5.8, which is about the
 > 16 / 32 / 48 / 64 skip *mask*; that capture is still needed.
 
 **The baseline every test below starts from** is `B0-baseline.KeyStepPro` — an initialised,
