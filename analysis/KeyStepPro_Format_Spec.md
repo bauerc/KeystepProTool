@@ -713,7 +713,7 @@ absolute percentage; the two agree only because the global is always 50 here.
 ### 6.1 Gate length
 
 **Measured, 2026-07-31.** Capture `T2-gate-table.KeyStepPro`, protocol tier 2; the full ladder is
-in `analysis/gate_display_sweep.txt`.
+in `analysis/gate_ladder.txt`.
 
 **The encoding is an index, not a curve.** `stored = detent index − 1` — the stored value is the
 0-based position in the encoder's ladder. Every bit of the non-linearity lives in the *display*.
@@ -790,7 +790,7 @@ direction and a separate session.
 **Implemented.** `ksp.constants.GATE_TABLE` now enumerates all 128 rungs from the five runs above,
 and `decode_gate` reserves `?(raw)` for a value outside 0–127. The measured/derived provenance is
 carried in the code comment, and `tests/test_gate_ladder.py` checks the enumeration against every
-line of `analysis/gate_display_sweep.txt` — so the table cannot drift from the transcription
+line of `analysis/gate_ladder.txt` — so the table cannot drift from the transcription
 without a test failing.
 
 ---
