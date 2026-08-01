@@ -462,9 +462,9 @@ file's value and keep the conflict asserted, so it cannot quietly disappear.
 The *centre* of `112` / `120` is confirmed, so a stored value decodes to a signed shift. What a
 shift of ±1 is worth **in time** is not known — presumably a fraction of a step, but nothing
 measures it. M2's MIDI export therefore places every note on the flat grid and warns rather than
-picking a scale. Worth capturing in the same hardware session as the gate sweep (§6): place one
-note, step its time shift through its range, export at each setting, and time the result against
-an unshifted note.
+picking a scale. Protocol tiers 7 and 8: place one note per shift value across a pattern, export
+once — the batched method that made tier 2 a single capture — and time the result against an
+unshifted note.
 
 ### Resolved: the drum step-active bitmask (`52`)
 
@@ -523,14 +523,15 @@ warns — it resolves the *mode*, it does not discard data.
 
 ## 6. Open questions: the timing encodings
 
-Three encodings remain unmeasured, and all three displace a note in time. They are collected here
-because one hardware session resolves all of them — see
+Two encodings remain unmeasured, and both displace a note in time. They are collected here
+because one hardware session resolves them — see
 [`Timing_Calibration.md`](./Timing_Calibration.md) for the model and
-[`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md) tiers 2, 7 and 8 for the captures.
+[`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md) tiers 7 and 8 for the captures. Gate
+length is **resolved** (§6.1) and kept in the table for contrast.
 
 | Encoding | Parameters | State | Captures |
 |---|---|---|---|
-| Gate length | `110` / `118` | six points measured, rest unknown | Tier 2 |
+| Gate length | `110` / `118` | **measured** — 128-entry ladder, one derived entry | Tier 2 ✔ |
 | Time shift range and linearity | `112` / `120` | centre 49 confirmed; range unknown | T7.1–T7.3 |
 | Time shift unit (ticks? ms?) | `112` / `120` | wholly unknown | Tier 8 |
 | Swing semantics | `74`, `97` / `114` | **never exercised** in any sample file | T7.4–T7.7 |
@@ -542,34 +543,52 @@ absolute percentage; the two agree only because the global is always 50 here.
 
 ### 6.1 Gate length
 
-Gate (`110` / `118`) is **not linear** and is not yet fully decoded. Observed
-display → stored values, all hardware-confirmed:
+**Measured, 2026-07-31.** Capture `T2-gate-table.KeyStepPro`, protocol tier 2; the full ladder is
+in `analysis/gate_display_sweep.txt`.
 
-| Displayed gate | Stored |
-|---|---|
-| 0.5 | 7 |
-| 1 | 11 |
-| 2 | 19 |
-| 3 | 27 |
-| 3.5 | 29 |
-| 4 | 31 |
+**The encoding is an index, not a curve.** `stored = detent index − 1` — the stored value is the
+0-based position in the encoder's ladder. Every bit of the non-linearity lives in the *display*.
+The earlier `stored = 8·g + 3` / `4·g` piecewise reading was an artefact of fitting six scattered
+points as though they described the encoding; it is superseded.
+
+The display ladder is five constant-increment runs, closing exactly on the 7-bit boundary:
+
+| Increment | Display span | Stored | Count |
+|---|---|---|---|
+| 1/16 | 0.0625 → 0.5 | 0–7 | 8 |
+| 1/8 | 0.625 → 3 | 8–27 | 20 |
+| 1/4 | 3.25 → 8 | 28–47 | 20 |
+| 1/2 | 8.5 → 32 | 48–95 | 48 |
+| 1 | 33 → 64 | 96–127 | 32 |
+| | | | **128** |
+
+**128 detents, stored 0–127, gate 0.0625 → 64 steps.** `118` (drum) uses the identical ladder,
+spot-checked at five points. The six previously known values (`0.5→7`, `1→11`, `2→19`, `3→27`,
+`3.5→29`, `4→31`) all reproduce, and were the evidence that identified the index relation.
+
+**Displayed values are exact binary fractions of a step, rendered to two decimals with
+round-half-to-even** — `0.625` shows as `0.62`, `0.875` as `0.88`. A converter must use the exact
+fraction; the two-decimal form is a display artefact and is wrong by up to 4 % at the bottom of
+the range.
 
 **The displayed gate is a length in steps.** `project_5_description.txt` documents a note placed
 on beat 9 and tied through beat 12 — four steps — as gate 4, and the file stores `110` = 31 for
-it. So once the table is complete, a gate converts directly into a note duration; M2's MIDI
-export relies on this.
+it. So a gate converts directly into a note duration; M2's MIDI export relies on this.
 
-Up to gate 3 this fits `stored = 8·g + 3` exactly. Above 3 it compresses to roughly `4·g`.
-Two independent captures both produced `4 → 31`, so the deviation is real rather than a
-misreading.
+**Do not invent a formula for this.** A converter using a plausible-but-wrong gate table produces
+files that load fine and play with wrong note durations — the worst kind of bug, because nothing
+errors. That warning is against fitting a curve to sparse points, which is what the superseded
+`8·g + 3` reading did. It is not an objection to the ladder above: 64 consecutive detents were
+transcribed directly, the rest enumerated from an observed increment rule and count-verified by
+the exact closure at stored 127.
 
-**Do not invent a formula for this.** A converter using a plausible-but-wrong gate table
-produces files that load fine and play with wrong note durations — the worst kind of bug,
-because nothing errors.
+**One entry is still derived: stored `36` (gate 5.25).** The sweep note on that detent was
+over-turned by one and stored 37. It sits between directly measured neighbours (35 = 5.0,
+37 = 5.5) inside a confirmed 0.25 run, so the value is not in doubt — but it is the one entry a
+future capture should close, with a single note at display 5.25.
 
-**To resolve:** on the hardware, place a single note, step its gate through every selectable
-value, and export at each setting. Diff to build the table. Roughly 10–15 captures. Gate is
-pure lookup data once measured.
+This also resolves the long-standing `?(2)`: `initial_project`'s drum gate stored `2` is detent 3,
+gate **0.1875**.
 
 **Default gate is `7` (0.5).** A freshly placed note stores `7`, confirmed by `project_9`'s
 untouched notes and by `initial_project`. Alongside it, a fresh note's other defaults are
@@ -591,9 +610,13 @@ no more:
 | `40` | `3` | pattern holds data |
 
 Deleting that note returns all of them to sentinel **except `40`**, which latches at 3 (§3.3).
+That capture's display read `0.5`, which confirms the ladder's `7 → 0.5` entry from a second
+direction and a separate session.
 
-The M1 reader decodes only the six measured points and prints anything else as `?(raw)` rather
-than interpolating. `initial_project` contains at least one such value (`2`).
+`ksp.constants.GATE_TABLE` still holds only the original six points and `decode_gate` still prints
+anything else as `?(raw)`. **Extending it to the full 128 entries is M7's remaining work** — this
+section is the source data for that change, and the measured/derived distinction above must survive
+into the code comment.
 
 ---
 

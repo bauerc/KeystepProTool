@@ -10,7 +10,7 @@ setting known values on the device, exporting them, and diffing.
 starting. [`Capture_Ledger_Gaps.md`](./Capture_Ledger_Gaps.md) — the handful of displayed values
 and device behaviours from the completed captures that were never written down.
 
-> **This document contains only unfinished work.** B0 and tiers 1, 3 and 4 have been run (18
+> **This document contains only unfinished work.** B0 and tiers 1, 2, 3 and 4 have been run (19
 > captures, in `project_files/captures/`, which is gitignored). Their procedures have been
 > **deleted** from this file so that everything still here is something to do. What they found is
 > in [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md), which is the authoritative
@@ -19,7 +19,8 @@ and device behaviours from the completed captures that were never written down.
 > Briefly, so nobody re-runs them: drum mode is `86` bit 6 and `100` never moves; a pooled note
 > whose step-active bit is clear does not sound; `idx2` is a 64-entry pool chunk rather than a
 > polyphony voice, with a hardware-enforced 192-event ceiling; `52` is a lane-major 7-bit array;
-> `40` and `39` latch; and two untouched exports are byte-identical.
+> `40` and `39` latch; two untouched exports are byte-identical; and **gate is an index** —
+> `stored = detent − 1`, 128 entries, 0.0625–64 steps, drum identical (spec §6.1).
 
 **The baseline every test below starts from** is `B0-baseline.KeyStepPro` — an initialised,
 untouched project, already captured. Where a test says "from the baseline", start by loading or
@@ -29,7 +30,6 @@ re-initialising to that state; do not re-derive it.
 
 | Question | Blocks | Tier |
 |---|---|---|
-| The gate length table (`110` / `118`) | M7, and correct note durations in M5/M6 | 2 |
 | Whether melodic step-off behaves like drum step-off | M5/M6 export correctness | 4 |
 | Whether a melodic pool spills into slot 2 like a drum pool | M6 | 4 |
 | The `99` / `116` bitfield layout | M6 | 5 |
@@ -74,6 +74,43 @@ Every test below is one capture. A capture is:
 - Captures are data, not source. Once written they get the same treatment as
   `project_files/*.KeyStepPro` — never reformatted, re-indented, or given a final newline.
 
+### Batched sweep captures
+
+**The one-change rule above applies to captures that are read by diffing.** A *sweep* capture is
+not read that way, and holding it to the same rule is what made the gate sweep — the former Tier 2,
+now complete (spec §6.1) — unrunnable for months: one export per encoder detent is ~128
+sync-and-save cycles through MCC. Batching collapsed it to a single capture, and **Tier 7's shift
+sweep should be run the same way.**
+
+One export contains every pattern of every track, and every note's parameter has its own key —
+`124_110_<pattern>_1_<ordinal>`. So one export can carry hundreds of independent readings, read
+directly by key rather than by diff. That is allowed when:
+
+- **one parameter** is swept, and nothing else on the device is touched;
+- **each value sits on a distinct note**, so no two changes share a key;
+- a **note map** — which step carries which intended value — is written down *at capture time*,
+  in the ledger or a companion data file. Without it the capture is unreadable afterwards.
+
+Three rules that are not optional:
+
+- **Pair by `50` (or `54` for drums), never by note ordinal.** Note ordinal and step number are
+  different index spaces (spec §4) and the pool is in creation order. Read
+  `124_50_<p>_1_<k>` to learn which step note `k` sits on, and sort by that. Getting this wrong
+  silently permutes the whole table into something that still looks plausible.
+- **Sweep a contiguous run of detents, not scattered samples.** Tier 2's six scattered gate points
+  looked like a non-linear curve for months; a run of 64 consecutive ones showed in minutes that
+  the encoding was a plain index. A sparse sample of a monotonic encoder tells you almost nothing.
+- **Export after each pattern is filled** (`-wip1`, `-wip2`, …). A sweep capture is an hour of
+  device work; a mishap should cost one pattern, not the session.
+
+Two things to design against, both of which bit Tier 2:
+
+- **A note you forget to set keeps its fresh-note default**, which is indistinguishable from a
+  deliberate value. Build in a check that catches it — for a ramp, that the stored values are a
+  gapless run.
+- **Over-turning the encoder by one detent** produces a gap plus an adjacent duplicate. The repair
+  is one extra note at the missing value, not a redo.
+
 ### Diffing
 
 No tooling needs to exist first. This is enough:
@@ -83,7 +120,7 @@ No tooling needs to exist first. This is enough:
 from ksp import lenient_json
 
 BASE = "project_files/captures/B0-baseline.KeyStepPro"
-CAP  = "project_files/captures/T2-gate-04.KeyStepPro"
+CAP  = "project_files/captures/T7-shift-min.KeyStepPro"
 
 a = lenient_json.load_path(BASE)
 b = lenient_json.load_path(CAP)
@@ -106,75 +143,6 @@ read, but nothing here waits on it.
 
 Each test states: **what it resolves · device steps · capture name · keys to diff · what confirms
 the current assumption · what falsifies it · what to do if falsified.**
-
----
-
-## Tier 2 — M7, the gate length table
-
-**~20 captures.** The long pole, and the only tier that is pure lookup data. Spec §6 has six
-hardware-confirmed points and explicitly warns against inventing a formula for the rest, because
-a wrong table produces files that load fine and play with wrong note durations, with nothing to
-signal the error.
-
-| Displayed | Stored |
-|---|---|
-| 0.5 | 7 |
-| 1 | 11 |
-| 2 | 19 |
-| 3 | 27 |
-| 3.5 | 29 |
-| 4 | 31 |
-
-Below 3 this fits `stored = 8·g + 3`; above 3 it compresses to roughly `4·g`. Two independent
-captures gave `4 → 31`, so the break is real. `initial_project` also contains a stored `2`, which
-is *below* the 0.5 point — so the range extends further down than any documented capture reaches.
-
-### T2.1–T2.n — Melodic gate sweep
-
-- **Resolves:** the full `110` table.
-- **Device:** from the baseline. Track 2, pattern 1. Place one note at beat 1, any pitch. Then step Gate
-  from its **minimum to its maximum, one detent at a time**, exporting at every single value.
-  Change nothing else, ever.
-- **Capture:** `T2-gate-<display>.KeyStepPro`, where `<display>` is the displayed value with the
-  decimal point replaced by `p` — `T2-gate-0p5`, `T2-gate-1`, `T2-gate-3p5`. If the display shows
-  something non-numeric at the extremes (e.g. a tie or hold indication), name it literally:
-  `T2-gate-tie`.
-- **Diff against:** the previous capture in the sweep.
-- **Keys:** `124_110_1_1_1` only.
-- **Confirms if:** exactly one key moves per capture, and the six known points reproduce. Those
-  six are a built-in check that the procedure is being followed — **if a known point disagrees,
-  stop and re-read the display rather than recording it.**
-- **Falsified if:** two displayed values map to one stored value, or the sequence is not monotonic.
-- **If falsified:** capture both directions (sweep up, then down) — a non-monotonic or
-  hysteretic encoder reading is a different problem from a non-linear table, and the fix is
-  different.
-- **Note the count.** However many detents there are is how many captures this is. Record the
-  minimum and maximum displayed values in the ledger; the range itself is currently unknown, and
-  the stored `2` in `initial_project` says the bottom is lower than 0.5.
-
-### T2.x — Where does the stored `2` come from?
-
-- **Resolves:** the one unmeasured value that exists in real user material.
-  `initial_project` Track 1 pattern 1 has a drum note with `118` = 2, which `ksp-dump` prints as
-  `?(2)`.
-- **Device:** during the sweep, when the stored value reaches 2, note the displayed value.
-- **Confirms if:** 2 appears in the sweep at all.
-- **If it does not appear:** 2 may only be reachable on the drum track, or via a control other
-  than the Gate encoder (a tie, a very short trigger). Try T2.y before concluding it is unreachable.
-
-### T2.y — Drum gate spot-check
-
-- **Resolves:** whether `118` (drum) uses the same table as `110` (melodic), or a different one.
-  Nothing currently establishes this — spec §6 assumes one table for both.
-- **Device:** from the baseline. Track 1 in drum mode, an untouched pattern. Place a Kick at beat 1. Set
-  Gate to each of **0.5, 1, 2, 4** and the minimum, exporting at each. Five captures.
-- **Capture:** `T2-drumgate-<display>.KeyStepPro`
-- **Keys:** `123_118_<pattern>_1_1`
-- **Confirms if:** the stored values match the melodic table at the same displayed values.
-- **Falsified if:** they differ at any point.
-- **If falsified:** the drum table needs its own full sweep — repeat T2.1–T2.n on the drum track.
-  Budget another ~20 captures. Better to discover this from five captures than after writing the
-  converter.
 
 ---
 
@@ -574,8 +542,6 @@ captures still owe are in [`Capture_Ledger_Gaps.md`](./Capture_Ledger_Gaps.md).
 
 | Test ID | Date | Displayed value / setting | Stored value | Notes |
 |---|---|---|---|---|
-| T2.* | | gate = | | one row per detent |
-| T2.y | | drum gate = | | same table as melodic? |
 | T4.5 | | melodic step 5 toggled off | | **did beat 5 sound?** |
 | T4.6 | | >64 melodic notes | | did `48` spill to slot 2? ceiling reached at: |
 | T5.* | | `99` field = | | one row per setting |
@@ -601,22 +567,21 @@ captures still owe are in [`Capture_Ledger_Gaps.md`](./Capture_Ledger_Gaps.md).
 
 ## Effort summary
 
-Remaining work only. B0 and tiers 1 and 3 are complete and are not listed.
+Remaining work only. B0 and tiers 1, 2, 3 and 4 are complete and are not listed.
 
 | Tier | Captures left | Resolves | Milestone |
 |---|---|---|---|
-| 2 | ~20 | gate table | M7 |
 | 4 | 3 | melodic step-active and pool chunking | M6, M5 |
 | 5 | ~14 | pattern scalars, chaining, step-skip semantics | M6, M2 |
 | 6 | 2 | standing caveats | M3 |
 | 7 | ~13 | Time Shift range, swing semantics | M7, M5 |
 | 8 | ~6 recordings | what a Time Shift unit is worth in time | M2, M5 |
-| | **~58 left** of ~76 | | |
+| | **~38 left** of ~57 | | |
 
 Each tier is independently useful — stopping after any one leaves a coherent result rather than a
 half-finished one.
 
-**Remaining ranking: T4.5 → T7.1 → Tier 2 → rest of Tier 7 → T4.6 → Tier 6 → Tier 5 → Tier 8.**
+**Remaining ranking: T4.5 → T7.1 → rest of Tier 7 → T4.6 → Tier 6 → Tier 5 → Tier 8.**
 
 - **T4.5 leads** because it is the one open question that the *shipped* code already depends on:
   the export drops inactive melodic notes on the strength of D1's drum result plus a corpus where
