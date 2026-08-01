@@ -1,0 +1,151 @@
+"""M3 -- load a project file, re-emit it, get the identical bytes back.
+
+Nothing downstream is trustworthy without this. M4 puts a written file on the
+hardware and M5 generates one from MIDI; if the writer drifts from what MIDI
+Control Center produces, both fail in ways that look like format bugs.
+
+Capture B0.2 exported an untouched project twice and got identical files, so
+MCC's writer is deterministic and there is no drift to chase -- any difference
+these tests see is ours. See ROADMAP.md M3 and spec section 2.
+"""
+
+import hashlib
+import json
+from pathlib import Path
+
+import pytest
+
+from ksp import lenient_json
+from ksp.constants import P_SEQ_PITCH
+from ksp.keys import key
+
+
+def test_round_trip_is_byte_identical(sample_bytes: bytes) -> None:
+    """The milestone, on every sample: parse and re-emit changes nothing."""
+    reloaded = lenient_json.loads(sample_bytes.decode())
+    assert lenient_json.dumps(reloaded).encode() == sample_bytes
+
+
+def test_round_trip_md5_matches(project_files_dir: Path) -> None:
+    """The hash comparison issue #5 names, on the file it names."""
+    path = project_files_dir / "Default.KeyStepPro"
+    original = path.read_bytes()
+    emitted = lenient_json.dumps(lenient_json.load_path(path)).encode()
+    assert hashlib.md5(emitted).hexdigest() == hashlib.md5(original).hexdigest()
+
+
+def test_dump_path_writes_identical_bytes(
+    sample_name: str, sample_bytes: bytes, project_files_dir: Path, tmp_path: Path
+) -> None:
+    """Through the filesystem, where a platform could translate newlines."""
+    destination = tmp_path / sample_name
+    lenient_json.dump_path(lenient_json.load_path(project_files_dir / sample_name), destination)
+    assert destination.read_bytes() == sample_bytes
+
+
+def test_dump_path_replaces_an_existing_file_and_leaves_no_debris(tmp_path: Path) -> None:
+    """The temp file is renamed into place, not left beside the result."""
+    destination = tmp_path / "out.KeyStepPro"
+    destination.write_text("stale")
+
+    lenient_json.dump_path({"device": "KeyStepPro", "120_37": 3}, destination)
+
+    assert destination.read_text() == '{\n\t"device": "KeyStepPro",\n\t"120_37": 3,\n}'
+    assert list(tmp_path.iterdir()) == [destination]
+
+
+def test_dumps_is_idempotent(project_files_dir: Path) -> None:
+    """A second pass through the writer is a no-op."""
+    once = lenient_json.dumps(lenient_json.load_path(project_files_dir / "project_5.KeyStepPro"))
+    assert lenient_json.dumps(lenient_json.loads(once)) == once
+
+
+def test_dumps_shape() -> None:
+    """Tab indent, ``": "`` separator, trailing comma, no final newline."""
+    text = lenient_json.dumps({"device": "KeyStepPro", "120_101": 127})
+
+    assert text == '{\n\t"device": "KeyStepPro",\n\t"120_101": 127,\n}'
+    assert not text.endswith("\n")
+
+
+def test_dumps_of_an_empty_mapping() -> None:
+    """No entries means no comma to trail."""
+    assert lenient_json.dumps({}) == "{\n}"
+
+
+def test_dumps_without_trailing_comma_is_strict_json(project_files_dir: Path) -> None:
+    """The T6.2 candidate: one byte lighter, and ``json.loads`` accepts it.
+
+    Whether MCC does is the open question -- it needs the application, not a
+    test. Until it is answered the comma stays on by default.
+    """
+    project = lenient_json.load_path(project_files_dir / "user_empty_project.KeyStepPro")
+    lenient = lenient_json.dumps(project)
+    strict = lenient_json.dumps(project, trailing_comma=False)
+
+    assert strict == lenient[:-3] + "\n}"
+    assert json.loads(strict) == project
+    assert lenient_json.loads(strict) == project
+
+
+@pytest.mark.parametrize("value", [1.0, None, True, {"nested": 1}, [1]])
+def test_dumps_rejects_values_the_firmware_has_never_seen(value: object) -> None:
+    """Only ints and strings. A float would emit ``1.0``, a bool ``true``."""
+    with pytest.raises(TypeError, match="120_37"):
+        lenient_json.dumps({"120_37": value})  # type: ignore[dict-item]
+
+
+def test_canonical_restores_mcc_key_order(sample_name: str, sample_bytes: bytes) -> None:
+    """Shuffled keys sort back to the order MCC wrote them in.
+
+    Reversing is enough to break every rule at once: ``device`` and
+    ``version`` end up last and the numeric keys run backwards.
+    """
+    project = lenient_json.loads(sample_bytes.decode())
+    reversed_keys = dict(reversed(list(project.items())))
+
+    assert lenient_json.dumps(lenient_json.canonical(reversed_keys)).encode() == sample_bytes
+
+
+def test_canonical_sorts_numeric_keys_as_strings() -> None:
+    """``126_99_16`` before ``126_99_2`` -- a numeric sort would disagree."""
+    ordered = lenient_json.canonical({"126_99_2": 20, "126_99_16": 20, "126_99_13": 20})
+    assert list(ordered) == ["126_99_13", "126_99_16", "126_99_2"]
+
+
+def test_canonical_places_an_injected_version_second(project_files_dir: Path) -> None:
+    """M5's case: the factory template has no ``version`` and needs one.
+
+    Plain assignment appends it at the end of the dict, which is a key order
+    no file MCC wrote has ever had.
+    """
+    template = lenient_json.load_path(project_files_dir / "Default.KeyStepPro")
+    template["version"] = "2.5.20"
+    assert list(template)[-1] == "version"
+
+    assert list(lenient_json.canonical(template))[:2] == ["device", "version"]
+
+
+def test_a_single_value_edit_changes_exactly_one_line(project_files_dir: Path) -> None:
+    """The desk half of M4: one changed value is one changed line.
+
+    Track 3's first note is C2 (48) in ``project_5``, hardware-confirmed in
+    ``analysis/project_5_description.txt``. Moving it up a semitone must not
+    disturb any of the other 153,496 lines.
+    """
+    path = project_files_dir / "project_5.KeyStepPro"
+    original = path.read_text()
+    project = lenient_json.loads(original)
+
+    pitch_key = key(125, P_SEQ_PITCH, 1, 1, 1)
+    assert project[pitch_key] == 48
+    project[pitch_key] = 49
+
+    changed = [
+        (before, after)
+        for before, after in zip(
+            original.split("\n"), lenient_json.dumps(project).split("\n"), strict=True
+        )
+        if before != after
+    ]
+    assert changed == [(f'\t"{pitch_key}": 48,', f'\t"{pitch_key}": 49,')]

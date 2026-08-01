@@ -325,15 +325,25 @@ real material. Note the seq and drum defaults already differ by exactly that bit
   Boost.PropertyTree, which tolerates it — but nothing establishes that it *requires* it.
 - **Device:** none. This is a desk test, listed here because it belongs with the other
   MCC-behaviour checks.
-- **Method:** take `user_empty_project.KeyStepPro`, remove the trailing comma, leave everything
-  else byte-identical, drop it in
-  `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/`, restart MCC, and see whether it
-  appears in the Project Browser and loads.
-- **Confirms if:** it loads. Then comma preservation can be dropped from the M3 requirements
-  permanently.
+- **Method:** produce the candidate — everything byte-identical except the comma — with the
+  writer's own flag:
+
+  ```sh
+  uv run python -c "
+  from ksp import lenient_json
+  d = lenient_json.load_path('project_files/user_empty_project.KeyStepPro')
+  lenient_json.dump_path(d, 'strict.KeyStepPro', trailing_comma=False)"
+  ```
+
+  Drop it in `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/`, restart MCC, and see
+  whether it appears in the Project Browser and loads.
+- **Confirms if:** it loads. Then comma preservation can be dropped from the write-fidelity rules
+  permanently — flip `trailing_comma`'s default and drop the round-trip test's comma assertion.
 - **Falsified if:** it does not appear or fails to load. Then the comma is mandatory and M3's
   byte-identical round-trip is the right target rather than a nicety.
-- **Do this before M3**, not after — it decides what M3 is trying to prove.
+- **Status:** still open. M3 shipped assuming the comma is required, which is the safe direction:
+  it is what MCC writes, so a file carrying it cannot be wrong. This test only decides whether the
+  requirement can be *relaxed*, so it no longer blocks anything.
 
 ---
 

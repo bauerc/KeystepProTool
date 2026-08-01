@@ -111,11 +111,20 @@ These are easy to get wrong and will produce files MCC rejects or misreads:
 |---|---|
 | **Trailing comma** | There is a `,` before the final `}`. `json.loads` fails. Strip with `,(\s*[}\]])` → `\1`, or use a lenient/JSON5 parser. Re-emit it on write until proven unnecessary |
 | **Indentation** | Tab-indented |
-| **`version` key** | User-saved projects have `"version": "2.5.20"` immediately after `"device"`. The factory `Default.KeyStepPro` **does not**. A converter starting from the factory default must inject it |
+| **No final newline** | The file ends at `}`. A standard end-of-file fixer breaks byte identity |
+| **Line format** | Every line is exactly `\t"<key>": <value>,\n` — one tab, the key quoted, `": "` as the separator. Values are integers (0–247 across all samples) or the two strings below, each formatted exactly as `json.dumps` would. There are no floats, no booleans and no nesting anywhere |
+| **Key order** | `device` first, then `version` if present, then every numeric key **sorted as a string**: `126_99_16` comes before `126_99_2`. A numeric sort produces a different file |
+| **`version` key** | User-saved projects have `"version": "2.5.20"` immediately after `"device"`. The factory `Default.KeyStepPro` **does not**. A converter starting from the factory default must inject it — and put it in position, because assigning it to a loaded dict appends it at the end |
 | **Fixed key set** | All observed files share an identical set of **153,495 numeric keys**. `Default.KeyStepPro` = 153,496 total (no `version`); user projects = 153,497. Never add or remove keys — only overwrite values |
 
 The fixed key set is a significant simplification: there is no risk of omitting a key the
 firmware requires, because you always start from a complete file.
+
+Together these rules are enough: applying them to a parsed sample reproduces its bytes exactly.
+`ksp.lenient_json.dumps` / `canonical` implement them and `tests/test_round_trip.py` holds all
+five samples to byte identity (milestone M3). Project names are **not** an exception — they are
+stored as integer parameters, not JSON strings, so `device` and `version` are the only strings in
+the file and no sample contains a non-ASCII byte.
 
 ### Item IDs
 

@@ -201,7 +201,7 @@ no time. Each KeyStep Pro track becomes a MIDI track; Track 1's drum set becomes
 
 ---
 
-### M3 — Byte-identical round-trip
+### M3 — Byte-identical round-trip ✅ **done**
 **Artifact:** load `Default.KeyStepPro`, re-emit unchanged, assert byte-identical output.
 
 **Why it stands alone:** locks down write fidelity — tab indentation, the trailing comma, the
@@ -214,8 +214,36 @@ nothing downstream can be trusted.
 two files are **byte-identical**, so MCC's writer is deterministic and there is no drift to chase.
 Any difference this milestone sees is ours.
 
-**Also settle here:** whether MCC accepts strict JSON without the trailing comma. Export one file
-without it and try loading. If it works, drop the comma-preservation requirement permanently.
+**Delivered:** `ksp.lenient_json.dumps` / `dump_path` / `canonical`, and
+`tests/test_round_trip.py`, which holds **all five** samples to byte identity rather than only the
+factory default. Writing lives in the same module as reading because the dialect is one thing.
+`dump_path` writes bytes to a temp file alongside the destination and renames it into place —
+these are 3.5 MB files whose destination is often MCC's Templates folder, where a half-written one
+would be found and parsed. No console entry point: nothing user-facing writes a `.KeyStepPro`
+file until M5.
+
+**What it turned up.**
+
+- **The rules were already sufficient.** Applying the documented write-fidelity rules to a parsed
+  sample reproduces its bytes on the first attempt, for every sample. There was no reverse
+  engineering left in this milestone — only pinning it down as tested code.
+- **Key order was undocumented, and it is not the obvious one.** MCC writes `device`, then
+  `version`, then every numeric key **sorted as a string**: `126_99_16` before `126_99_2`. Now
+  spec §2, and `canonical` implements it. This matters precisely once, but it matters: injecting
+  the `version` key M5 needs appends it to the *end* of a dict loaded from the factory template,
+  producing a key order no file MCC wrote has ever had.
+- **Only `device` and `version` are strings.** Project names are stored as integer parameters, so
+  there is no string escaping to reproduce and no sample holds a non-ASCII byte. The writer
+  rejects any other value type outright — a float would emit `1.0` and a bool `true`, neither of
+  which the firmware has been shown.
+- **One changed value is one changed line**, asserted against `project_5`. That is the desk half
+  of M4, so what M4 has to prove on the device is narrowed to key *addressing* alone.
+
+**Still open, and no longer blocking: protocol T6.2** — whether MCC accepts strict JSON without
+the trailing comma. It needs the application, not a test, so it could not be settled here. M3
+shipped assuming the comma is required, which is the safe direction: it is what MCC writes, so a
+file carrying it cannot be wrong. `dumps(..., trailing_comma=False)` produces the candidate file
+in one command whenever MCC is open.
 
 ---
 
@@ -337,8 +365,8 @@ it is worth building after M6 — see the caveat under **Stack**.
 |---|---|---|---|
 | M1 Reader | ✅ done | No | — |
 | M1.5 Drum map | ✅ done | Test D1 confirms the default | M1 |
-| M2 MIDI export | | No | M1, M1.5 |
-| M3 Round-trip | | No | M1 |
+| M2 MIDI export | ✅ done | No | M1, M1.5 |
+| M3 Round-trip | ✅ done | No | M1 |
 | M4 Mutation | | **Yes** | M3 |
 | M5 MVP convert | | No (desk-testable) | M3, drum `52` packing |
 | M6 Full convert | | No (desk-testable) | M5, M1.5 |

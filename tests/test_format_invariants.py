@@ -16,30 +16,12 @@ from pathlib import Path
 
 import pytest
 
-SAMPLE_NAMES = [
-    "Default.KeyStepPro",
-    "initial_project.KeyStepPro",
-    "project_5.KeyStepPro",
-    "project_9.KeyStepPro",
-    "user_empty_project.KeyStepPro",
-]
+from conftest import SAMPLE_NAMES
 
 #: ``Default.KeyStepPro`` is MCC's factory template and is the only sample
 #: without a ``version`` key -- spec section 2, and the reason M5 has to inject
 #: one when it uses the template as a baseline.
 NAMES_WITHOUT_VERSION = {"Default.KeyStepPro"}
-
-
-@pytest.fixture(params=SAMPLE_NAMES)
-def sample_name(request: pytest.FixtureRequest) -> str:
-    return str(request.param)
-
-
-@pytest.fixture
-def sample_bytes(sample_name: str, project_files_dir: Path) -> bytes:
-    path = project_files_dir / sample_name
-    assert path.is_file(), f"missing sample project: {path}"
-    return path.read_bytes()
 
 
 def test_sample_projects_are_present(project_files_dir: Path) -> None:
