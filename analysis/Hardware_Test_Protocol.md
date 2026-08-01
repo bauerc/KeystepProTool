@@ -7,8 +7,7 @@ setting known values on the device, exporting them, and diffing.
 
 **Companion documents:**
 [`Format_Corrections_Issue.md`](./Format_Corrections_Issue.md) — read its summary table before
-starting. [`Capture_Ledger_Gaps.md`](./Capture_Ledger_Gaps.md) — the handful of displayed values
-and device behaviours from the completed captures that were never written down.
+starting.
 
 > **This document contains only unfinished work.** B0 and tiers 1, 2, 3 and 4 have been run (19
 > captures, in `project_files/captures/`, which is gitignored). Their procedures have been
@@ -59,12 +58,44 @@ Every test below is one capture. A capture is:
 3. **Read the device display and write down what it says.** The stored value is what we are
    trying to learn, so the *displayed* value is the ground truth and only exists in your notes.
    This is the step that cannot be recovered later.
-4. **Export.** Same route you used to produce `project_5.KeyStepPro`: sync the project from the
-   KeyStep Pro into MIDI Control Center, then save it out of MCC as a `.KeyStepPro` file. Write
-   the route down in the ledger the first time so it is reproducible.
+4. **Export**, by the route below. It is fixed — every capture in the corpus used it.
 5. **Save it as** `project_files/captures/<test-id>.KeyStepPro`, using the test ID verbatim.
 6. **Log it** in the ledger at the bottom of this file: test ID, displayed value, date, anything
    that felt off.
+
+### The export route
+
+Recorded once so the captures are reproducible; this is the route behind every file in
+`project_files/captures/`.
+
+1. **On the device:** hold **SAVE** and press **PROJECT**, then click the encoder next to the
+   display to confirm. The corpus uses the **Project 2** slot throughout.
+2. **In MIDI Control Center:** select that project and click **Recall From**, which pulls it off
+   the device and writes it into MCC's template directory as
+   `…/Arturia/MIDI Control Center/Templates/KeyStepPro/<name>.KeyStepPro`.
+3. **Move it into the repo** under the test ID — `project_files/captures/<test-id>.KeyStepPro`.
+   `project_files/captures/move_template.sh` does this step.
+
+MCC's own Save As is not part of the route. Note that `project_files/captures/` is **gitignored**:
+the captures are local evidence, and the finding has to reach the spec to survive.
+
+### Device operating notes
+
+Things that are not on the display and are easy to lose between sessions. Each is needed to
+*perform* one of the tests below.
+
+- **Step Edit** (a physical button) is required to add notes to an existing step — that is how a
+  chord gets built. It is off by default and switches itself off when you change project and come
+  back.
+- **Drum Mono/Poly:** SHIFT + D#2 selects Mono, SHIFT + E2 selects Poly. Poly is what gives drum
+  lanes independent step counts, and it moves `116` bit 2 (spec §5).
+- **ARP octave** has no display readout at all. It is SHIFT plus one of five silkscreened keys on
+  the second physical octave, −1 / 0 / +1 / +2 / +3, with 0 at C#3.
+- **Erasing a note** is ERASE + the step button. Toggling a step off only mutes it; the note stays
+  in the pool and playing a new pitch onto the dark step re-lights the *old* note rather than
+  replacing it.
+- **The device names middle C as C3** (C2 = MIDI 48). Write displayed note names down as the
+  device shows them and convert later — do not pre-convert in your notes.
 
 ### Rules
 
@@ -220,6 +251,17 @@ Known values: `Default.KeyStepPro` holds `99` = **20** (`0b0010100`) on every pa
 pattern 1 and Track 3 pattern 1, and 20 elsewhere — so bit 2 (value 4) is the one that varies in
 real material. Note the seq and drum defaults already differ by exactly that bit.
 
+**One bit is already measured, on the drum side.** `D4-lane-steplength` moves `123_116_1`
+16 → 20 — bit 2 — at the moment Track 1's drum mode went Mono → Poly, which is what lets lanes
+hold different step counts. So **`116` bit 2 = Mono/Poly**, and the drum half of this test only
+needs to confirm the *remaining* fields. See spec §5 for the limits of that reading.
+
+**The bit 2 asymmetry is now the sharpest question here**, not a footnote: `99` = 20 has bit 2
+set by default while `116` = 16 has it clear. Both cannot mean "polyrhythm off by default". A
+capture that toggles polyrhythm on **Track 2** and watches `124_99_1` settles whether the two
+halves share a layout at all — run it early, because the rest of the sweep's interpretation
+depends on the answer.
+
 - **Device:** from the baseline, Track 2 pattern 1. Change **one field at a time**, returning to default
   between captures: step size, triplet on, polyrhythm on, swing offset on, playback direction
   through each of its settings.
@@ -233,7 +275,7 @@ real material. Note the seq and drum defaults already differ by exactly that bit
   device's own labels is the deliverable, and it cannot be reconstructed from the file.
 - **Step size needs one capture per setting**, not one total, since it is a multi-bit field.
 - **Then repeat one capture on the drum side** (`116`, `123_116_<pattern>`) to check the layout is
-  shared. If seq and drum differ, both need sweeping.
+  shared — bit 2 aside, which `D4` already settled. If seq and drum differ, both need sweeping.
 
 ### T5.6 — Root note and scale
 
@@ -547,12 +589,14 @@ cleanly and plays with wrong timing, and nothing errors.
 
 Fill in as you go. This table is the record; the `.KeyStepPro` files are the evidence.
 
-Rows for the completed tiers have been removed along with their procedures. The few values those
-captures still owe are in [`Capture_Ledger_Gaps.md`](./Capture_Ledger_Gaps.md).
+Rows for the completed tiers have been removed along with their procedures. The values those
+captures owed were collected in a separate gaps ledger, which is now **closed** — every row was
+answered and folded into the spec on 2026-08-01.
 
 | Test ID | Date | Displayed value / setting | Stored value | Notes |
 |---|---|---|---|---|
 | O1 | 2026-07-31 | `initial_project` Tr1 pat 9, Last Step 48 → 64 → 48 | `123_115_9` = 47 | ✅ **done.** Step-active pooled notes out to step 63. **In the saved project they are disabled and do not play** — that is the file's own state. Raising Last Step to 64 enables them (they appear and sound); lowering it back to 48 disables them again. So **notes past the last step are disabled, not stale.** The toggle was a diagnostic action, not the file's configuration. Not a planned capture — observed while investigating a `ksp2midi` warning. Does **not** answer T5.8. |
+| D25 | 2026-08-01 | one note, Gate display **5.25** | `124_110_1_1_1` = 36 | ✅ **done.** Closes the gate ladder's one derived rung. Diffs to eight keys against `B0-baseline`; predicted and observed agree. Folded into spec §6.1 and `gate_display_sweep.txt` provenance. |
 
 | T4.5 | | melodic step 5 toggled off | | **did beat 5 sound?** |
 | T4.6 | | >64 melodic notes | | did `48` spill to slot 2? ceiling reached at: |
@@ -584,11 +628,11 @@ Remaining work only. B0 and tiers 1, 2, 3 and 4 are complete and are not listed.
 | Tier | Captures left | Resolves | Milestone |
 |---|---|---|---|
 | 4 | 3 | melodic step-active and pool chunking | M6, M5 |
-| 5 | ~14 | pattern scalars, chaining, step-skip semantics | M6, M2 |
+| 5 | ~13 | pattern scalars, chaining, step-skip semantics | M6, M2 |
 | 6 | 2 | standing caveats | M3 |
 | 7 | ~13 | Time Shift range, swing semantics | M7, M5 |
 | 8 | ~6 recordings | what a Time Shift unit is worth in time | M2, M5 |
-| | **~38 left** of ~57 | | |
+| | **~37 left** of ~57 | | |
 
 Each tier is independently useful — stopping after any one leaves a coherent result rather than a
 half-finished one.
