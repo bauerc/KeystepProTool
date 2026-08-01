@@ -17,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: byte-level invariants and the M3 round-trip parametrise over all of them.
 SAMPLE_NAMES = [
     "Default.KeyStepPro",
+    "baseline.KeyStepPro",
     "initial_project.KeyStepPro",
     "project_5.KeyStepPro",
     "project_9.KeyStepPro",
@@ -40,6 +41,31 @@ def project_files_dir() -> Path:
 def analysis_dir() -> Path:
     """Format spec and the hardware-confirmed project descriptions."""
     return REPO_ROOT / "analysis"
+
+
+@pytest.fixture(scope="session")
+def captures_dir() -> Path:
+    """Hardware captures. Gitignored, so present only on the operator's machine."""
+    return REPO_ROOT / "project_files" / "captures"
+
+
+@pytest.fixture
+def require_capture(captures_dir: Path) -> Callable[[str], Path]:
+    """Resolve a capture by name, or skip.
+
+    Skipping rather than failing keeps ``-m hardware`` runnable on a fresh
+    clone: the file is genuinely absent there, and failing would conflate "not
+    captured yet" with "the capture disagrees". The protocol's checkbox is what
+    records that a capture was taken -- a green run is not.
+    """
+
+    def resolve(name: str) -> Path:
+        path = captures_dir / name
+        if not path.is_file():
+            pytest.skip(f"no {name}; see analysis/Hardware_Test_Protocol.md, tier M4")
+        return path
+
+    return resolve
 
 
 @pytest.fixture(scope="session")

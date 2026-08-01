@@ -121,6 +121,19 @@ These are easy to get wrong and will produce files MCC rejects or misreads:
 The fixed key set is a significant simplification: there is no risk of omitting a key the
 firmware requires, because you always start from a complete file.
 
+**These rules are now confirmed against the firmware, not just against MCC.** Protocol M4.1 and
+M4.2 built two files with `ksp.lenient_json` — one placing notes into an empty baseline, one
+overwriting a single pitch in `project_5` — loaded both in MCC, transferred them to the device,
+and read the results off its display. Both landed: the placed notes appeared and played, and the
+edited pitch read C#3 at the step addressed, with its unedited neighbours untouched. Re-exporting
+from the device returned the placement candidate with **zero keys changed**. So a file this writer
+produces is not merely accepted by MCC's parser (T6.2) — the device stores and replays it
+faithfully.
+
+The only keys a device round trip moves are its own bookkeeping: `39` latches 2 → 3 per item,
+alongside `40`, and `123_117_<pat>` normalises to 60 (§3.3). A converter should expect those and
+must not treat them as its own output drifting.
+
 Together these rules are enough: applying them to a parsed sample reproduces its bytes exactly.
 `ksp.lenient_json.dumps` / `canonical` implement them and `tests/test_round_trip.py` holds all
 five samples to byte identity (milestone M3) — save the trailing comma, which the writer
@@ -259,6 +272,7 @@ Two points still need the hardware, recorded as **Test D1** in the roadmap:
 | `100` | Bitfield. Dictionary says ARP/Drum mode, ARP type, ARP octave; only **ARP octave (bits 4–6)** is hardware-confirmed, as `stored = octave + 1` (§5). Drum mode is `86` bit 6, not here |
 | `107` / `108` | Root note / scale |
 | `40` | Pattern data state: `0` in the factory template, `2` initialised but empty, `3` holds data. **A latch** — see below |
+| `123_117_<pat>` | **Item 123 only, and distinct from the note-indexed `117`** — same paramId, one index instead of three. Meaning unknown; `60` in every file except `initial_project`, `project_5` and `project_9`, which hold `247` at pattern 1 only. **A device round trip normalises it to 60** (protocol M4.2), so `247` is something MCC writes and the firmware does not keep. It is the only non-latch key that moved in an M4 readback |
 | `20`–`23`, `25`–`28` | Program Change (Seq / Drum), MSB/LSB split |
 | `101`–`106` | User scales 1 and 2, each split MSB / MidSB / LSB |
 
@@ -341,6 +355,53 @@ Consequences for writing files:
    merely redundant with it: the firmware plays the flags, so a pooled note whose flag is clear
    is silent (see "Pooled does not mean audible" below).
 4. The tail of every array must be sentinel-filled.
+
+### What placing one melodic note costs
+
+**Measured, not derived.** `B0-baseline` → `T1-note-place` is the device's own diff after a human
+placed a single note on Track 2, pattern 1, step 1 — **8 keys**, and no others:
+
+| Key | Value | Indexed by |
+|---|---|---|
+| `<item>_50_<pat>_<slot>_<ord>` | step, **0-based** | note ordinal |
+| `<item>_109_<pat>_<slot>_<ord>` | pitch | note ordinal |
+| `<item>_110_<pat>_<slot>_<ord>` | gate — fresh **7** | note ordinal |
+| `<item>_111_<pat>_<slot>_<ord>` | velocity — fresh **100** | note ordinal |
+| `<item>_112_<pat>_<slot>_<ord>` | time shift — centre **49** | note ordinal |
+| `<item>_113_<pat>_<slot>_<ord>` | randomness — fresh **100** | note ordinal |
+| `<item>_48_<pat>_**1**_<step>` | **1** | **step**, slot 1 always |
+| `<item>_40_<pat>` | **3** | pattern |
+
+The four fresh-note defaults are confirmed by `T1-note-place`, `D25-gate-capture` and both D2
+chord captures independently, and live in `ksp.constants`.
+
+Two things a writer must not get wrong here:
+
+- **`49` (step skip) is not written.** An initialised project already holds `15` — "plays on all
+  four sequences" — at every step, which is why it never appears in the diff.
+- **`48` is step-indexed while the pool is note-indexed**, so the two run on different counters.
+  `D2-chord4-tr3` places four notes on step 1: ordinals 1–4 in the pool, and a **single** `48`
+  entry. Setting `48` by ordinal instead would light steps 1–4 — a file that decodes plausibly and
+  plays wrong.
+
+`ksp.mutate.place_note` implements exactly this set, and `tests/test_mutate.py` holds it to
+reproducing `T1-note-place` byte for byte from the committed `baseline.KeyStepPro`.
+
+> **The recipe is confirmed on *load*, not merely on save** — protocol M4.1. A file built by
+> `place_note` from the baseline was loaded in MCC, transferred to the device, and exported back:
+> the readback differs from the candidate by **zero keys**. So these 8 are not just what the
+> firmware writes when a human places a note, they are everything it needs to be handed one. The
+> same capture placed a second note with `48` deliberately clear; it stayed silent, which extends
+> T4.5 from a flag the device cleared to one we wrote.
+
+**Deleting** a note sends the six note parameters back to `127` and clears `48`, but leaves `40`
+at 3 — it latches, so an emptied pattern is not distinguishable from a full one by `40` alone.
+The `T1-note-delete` diff shows only *six* keys moving rather than seven because the preceding
+capture in that chain had already set velocity `111` to 127; nothing there says velocity is
+exempt.
+
+Both firmware ceilings are enforced on the device with an on-screen message: **192 events per
+pattern** and **16 notes per step** (capture `T4-melodic-overflow-v2`).
 
 ### The `127` sentinel
 

@@ -1,7 +1,9 @@
 # KeyStep Pro hardware capture protocol
 
 **Purpose:** resolve the format questions that cannot be answered from files already on disk, by
-setting known values on the device, exporting them, and diffing.
+setting known values on the device, exporting them, and diffing — and, for tier M4 alone, by
+running that loop backwards: writing a known value into a file, loading it, and reading the
+device's own export back out.
 
 **Audience:** a human at the device, and an agent re-reading this later to interpret the captures.
 
@@ -34,6 +36,7 @@ re-initialising to that state; do not re-derive it.
 
 | Question | Blocks | Tier |
 |---|---|---|
+| Whether a file we wrote loads, reaches the device, and lands its values where we addressed them | M4, and every write after it | M4 |
 | Whether melodic step-off behaves like drum step-off | M5/M6 export correctness | 4 |
 | Whether a melodic pool spills into slot 2 like a drum pool | M6 | 4 |
 | The `99` / `116` bitfield layout | M6 | 5 |
@@ -181,6 +184,108 @@ read, but nothing here waits on it.
 
 Each test states: **what it resolves · device steps · capture name · keys to diff · what confirms
 the current assumption · what falsifies it · what to do if falsified.**
+
+---
+
+## Tier M4 — the first write to the device
+
+**2 captures, one session.** Every other tier reads what the device stores. This one writes, and
+it is the only place our key addressing is checked against the firmware rather than against
+itself. It runs the loop backwards — file → MCC → device → display and ear, then back out through
+Recall From so the result is something a test can assert on.
+
+Milestone M4. PR #47 already showed MCC accepts a file this writer produced and transfers it to
+the device, so what is left is narrower: **does a value we wrote at an address we computed land on
+the note we meant, and does a note we created from nothing actually play?**
+
+### The import route
+
+The mirror of the export route above, and the only route these two tests use.
+
+1. **Generate the candidates at the desk**, before the session:
+
+   ```sh
+   uv run pytest -m hardware
+   ```
+
+   This writes `project_files/captures/M4-place.KeyStepPro` and `M4-pitch.KeyStepPro`, asserting
+   on the way out that they differ from their sources by exactly 14 and 1 keys. The readback
+   assertions skip until the captures below exist.
+
+2. **Copy into MCC's library**, which is world-writable and needs no `sudo`:
+
+   ```sh
+   cp project_files/captures/M4-*.KeyStepPro \
+      "/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/"
+   ```
+
+3. **Restart MCC**, find the project in the Project Browser, load it, and send it to the device.
+   The KeyStep Pro has 16 project slots and any of them will do.
+
+4. **Read the device, then export back** by the standard route, saving as the readback capture
+   named in each test.
+
+### M4.1 — A note we created from nothing plays
+
+- [x] run 2026-08-01 — **confirmed**
+
+- **Resolves:** whether the 8-key placement recipe is complete. It is what the device wrote when a
+  human placed a note (`B0-baseline` → `T1-note-place`), and `ksp.mutate.place_note` reproduces
+  that file byte for byte at the desk — but nothing establishes that the firmware needs no *more*
+  than those keys when it **loads** a file rather than builds one itself.
+- **Also resolves, on the side that matters:** T4.5 showed the device honours a step-active flag
+  **it** cleared. The second note here is identical to the first but for that one bit, so this
+  asks whether it honours a flag **we** cleared in a file it loaded — which is what `ksp2midi`'s
+  `include_disabled` and every M5/M6 write actually rely on.
+- **Device:** load `M4-place`, send it to the device, select Track 2, pattern 1, and **play it**.
+- **Candidate:** `M4-place.KeyStepPro` — generated, not exported. Two notes on Track 2 pattern 1,
+  both pitch 60 (**C3** on the device's naming), both at fresh-note defaults:
+
+  | | step | `48` | expected |
+  |---|---|---|---|
+  | ordinal 1 | 1 | set | **lit, and sounds** |
+  | ordinal 2 | 5 | clear | **dark, and silent — but still holds a note** |
+
+- **Capture:** `M4-place-readback.KeyStepPro`
+- **Keys:** `124_50_1_1_<1..2>` = 0, 4 · `124_109_1_1_<1..2>` = 60, 60 · `124_48_1_1_1` = 1 ·
+  `124_48_1_1_5` = 0 · `124_40_1` = 3
+- **Confirms if:** step 1 is lit and sounds, step 5 is dark and does not sound, pressing step 5
+  still shows a note at C3, and the readback carries both pool entries.
+- **Falsified if:** the project loads but Track 2 pattern 1 is empty (the recipe is missing a key
+  the firmware needs on load — diff the readback against the candidate to see what); or step 5
+  **sounds anyway**, which would mean the firmware treats a flag we wrote differently from one it
+  wrote, and `ExportOptions.include_disabled` is wrong on the melodic side.
+- **If falsified:** do not guess at the missing key. The readback diff names it.
+- **Record what the Project Browser calls it.** Unknown whether MCC lists the filename stem or the
+  project's own stored name, which is an integer-encoded parameter still holding whatever the
+  source project was called. Clear the T6.2 leftovers out of the Templates folder first so there is
+  only one plausible candidate. M5 needs this answer regardless.
+
+### M4.2 — A pitch we changed lands on the note we meant
+
+- [x] run 2026-08-01 — **confirmed**
+
+- **Resolves:** key addressing, end to end, in a busy real project rather than a one-note baseline.
+  A reader and a writer that share the same wrong idea of what `125_109_1_1_5` means round-trip
+  perfectly and still put the note in the wrong place; only the device can tell them apart.
+- **Device:** load `M4-pitch`, send it to the device, select Track 3, pattern 1, and read the note on
+  **step 5** off the display.
+- **Candidate:** `M4-pitch.KeyStepPro` — `project_5` with `125_109_1_1_5` changed **49 → 61**, one
+  key and one line. Ordinal 5 is chosen because its randomness is 100 (it always fires), its skip
+  mask plays it on the first pass, and **ordinals 6–8 share its old pitch** as a control.
+- **Capture:** `M4-pitch-readback.KeyStepPro`
+- **Keys:** `125_109_1_1_5` = 61, with `125_109_1_1_<6..8>` still 49
+- **Confirms if:** the display reads **C#3** on step 5, where `analysis/project_5_description.txt`
+  documents C#2, and steps 6–8 still read C#2. Root note and scale are both 0 in this project, so
+  nothing can quantise the reading.
+- **Falsified if:** step 5 still reads C#2 (the edit did not land), or a *different* step changed
+  (we addressed the wrong ordinal — note that ordinal and step are different index spaces, spec
+  §4), or the pitch is some third value.
+- **If falsified:** diff the candidate against `project_files/project_5.KeyStepPro` first. If that
+  is one line, the writer is fine and the fault is in addressing; repeat on `T1-note-place`, a
+  one-note project where the display reading cannot be ambiguous.
+- **Check the firmware version** before blaming the addressing: the sources carry
+  `"version": "2.5.20"`, and a device updated since may have been migrated by MCC on load.
 
 ---
 
@@ -649,6 +754,8 @@ answered and folded into the spec on 2026-08-01.
 
 | Test ID | Date | Displayed value / setting | Stored value | Notes |
 |---|---|---|---|---|
+| M4.1 | 2026-08-01 | Tr2 pat1: step 1 lit, step 5 placed and dark | `124_48_1_1_1` = 1, `124_48_1_1_5` = 0 | ✅ **done.** Loaded, transferred, and the device showed exactly what was written — one note on, one note placed. **The readback differs from the candidate by zero keys**: a full file → MCC → device → MCC → file round trip introduced no drift at all. So the 8-key placement recipe is complete on *load*, not just on save, and a cleared `48` we wrote is honoured the same as one the device cleared. |
+| M4.2 | 2026-08-01 | Tr3 pat1 step 5 displays **C#3** | `125_109_1_1_5` = 61 | ✅ **done.** Track 3 loaded with its notes intact and step 5 read C#3, against C#2 in `project_5_description.txt`. Key addressing is confirmed end to end. Readback differs from the candidate by **5 keys, none of them ours**: `122/124/125/126_39` latch 2 → 3, and `123_117_1` is normalised 247 → 60 (see spec §3.3). |
 | O1 | 2026-07-31 | `initial_project` Tr1 pat 9, Last Step 48 → 64 → 48 | `123_115_9` = 47 | ✅ **done.** Step-active pooled notes out to step 63. **In the saved project they are disabled and do not play** — that is the file's own state. Raising Last Step to 64 enables them (they appear and sound); lowering it back to 48 disables them again. So **notes past the last step are disabled, not stale.** The toggle was a diagnostic action, not the file's configuration. Not a planned capture — observed while investigating a `ksp2midi` warning. Does **not** answer T5.8. |
 | D25 | 2026-08-01 | one note, Gate display **5.25** | `124_110_1_1_1` = 36 | ✅ **done.** Closes the gate ladder's one derived rung. Diffs to eight keys against `B0-baseline`; predicted and observed agree. Folded into spec §6.1 and `gate_ladder.txt` provenance. |
 | T4.5 | | melodic step 5 toggled off | | No |
@@ -691,6 +798,10 @@ Each tier is independently useful — stopping after any one leaves a coherent r
 half-finished one.
 
 **Remaining ranking: T4.5 → T7.1 → rest of Tier 7 → T4.6 → Tier 6 → Tier 5 → Tier 8.**
+
+- **Tier M4 is done** and is left in this file as the record of the only file → device test there
+  is. It also settled T4.5 from the writer's side: the control note in M4.1 was one *we* cleared
+  in a file the device loaded, and it stayed silent.
 
 - **T4.5 leads** because it is the one open question that the *shipped* code already depends on:
   the export drops inactive melodic notes on the strength of D1's drum result plus a corpus where

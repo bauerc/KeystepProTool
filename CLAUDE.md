@@ -7,7 +7,8 @@ Guidance for Claude Code working in this repository.
 Converts Standard MIDI files ↔ Arturia KeyStep Pro `.KeyStepPro` project files. MIDI Control
 Center has no MIDI export for this device, so `ksp2midi` is the only one that exists — and there
 is no reference render to check against: **the hardware's live MIDI output is the sole ground
-truth**. Reading and MIDI export work; nothing writes `.KeyStepPro` files yet.
+truth**. Reading and MIDI export work; `ksp.mutate` places a note or overwrites one value in an
+existing project (M4). Nothing builds a project from MIDI until M5.
 
 - `analysis/KeyStepPro_Format_Spec.md` — authoritative format reference. **Read it before touching
   format code.** (`..._deprecated.md` is superseded conclusions; do not cite it.)
@@ -66,6 +67,10 @@ command never crashes on invocation. `midi2ksp` is still unclaimed.
 - **Existence ≠ audibility.** A note exists when `50 != 127` (`54` for drums); it *sounds* only if
   its step-active bit is set (`48` melodic, `52` drum — packed lane-major). Never infer a note
   from its velocity, and never infer emptiness from `40` (it latches).
+- **Placing a melodic note is 8 keys, not one** (spec §4): `50`, `109`–`113` by note ordinal, plus
+  `48` **by step, in slot 1**, plus `40` = 3. `49` is not written — it already reads 15. Four notes
+  on one step means four pool entries and *one* `48` bit. `ksp.mutate.place_note` is the only
+  thing that should be building that set.
 - Track 1 (item `123`) carries a second DRUM parameter set. The mode flag is **`86` bit 6**, not
   `100`. A writer must set `86` to match whichever set it writes.
 - A drum note's `117` is a **lane index (0–23)**, not a pitch. The lane→note map is a global

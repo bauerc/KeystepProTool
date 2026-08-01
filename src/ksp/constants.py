@@ -237,6 +237,20 @@ GATE_TABLE: Final = _build_gate_table()
 DEFAULT_GATE_STORED: Final = 7
 DEFAULT_GATE_LENGTH: Final = GATE_TABLE[DEFAULT_GATE_STORED]
 
+#: The other two values a freshly placed note carries. Measured, not assumed:
+#: captures T1-note-place, D25-gate-capture and both D2 chords agree on
+#: velocity 100 and randomness 100, alongside gate 7 and time shift
+#: TIME_SHIFT_CENTRE. Together these are what ksp.mutate.place_note writes when
+#: the caller says nothing.
+FRESH_VELOCITY: Final = 100
+FRESH_RANDOMNESS: Final = 100
+
+#: The firmware's two ceilings, both enforced with an on-screen message
+#: (capture T4-melodic-overflow-v2). POOL_CAPACITY above is the per-pattern
+#: one; this is the per-step limit that sits inside it, so a pattern can hold
+#: 192 events only if they are spread across at least 12 steps.
+MAX_NOTES_PER_STEP: Final = 16
+
 
 def decode_gate(stored: int) -> float | None:
     """Return the gate length in steps, or ``None`` if *stored* is off the
