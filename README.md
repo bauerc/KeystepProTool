@@ -10,7 +10,10 @@ plan is in [`ROADMAP.md`](./ROADMAP.md).
 Milestones 1, 1.5, 2 and 3 of 9 are done: reading and inspecting project files, the drum map,
 exporting projects as MIDI, and writing a project file back out byte-for-byte — bar the trailing
 comma, which the hardware confirmed MIDI Control Center does not need, so output is strict JSON.
-Converting *from* MIDI (M5) is next.
+
+Milestone 4 adds `ksp.mutate`, which places a note into an existing project or changes one value
+on a note already there. It is a library, not a command: nothing you can install on your `PATH`
+writes a `.KeyStepPro` file until M5, which is next.
 
 ## Install
 

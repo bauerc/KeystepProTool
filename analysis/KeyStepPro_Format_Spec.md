@@ -342,6 +342,46 @@ Consequences for writing files:
    is silent (see "Pooled does not mean audible" below).
 4. The tail of every array must be sentinel-filled.
 
+### What placing one melodic note costs
+
+**Measured, not derived.** `B0-baseline` → `T1-note-place` is the device's own diff after a human
+placed a single note on Track 2, pattern 1, step 1 — **8 keys**, and no others:
+
+| Key | Value | Indexed by |
+|---|---|---|
+| `<item>_50_<pat>_<slot>_<ord>` | step, **0-based** | note ordinal |
+| `<item>_109_<pat>_<slot>_<ord>` | pitch | note ordinal |
+| `<item>_110_<pat>_<slot>_<ord>` | gate — fresh **7** | note ordinal |
+| `<item>_111_<pat>_<slot>_<ord>` | velocity — fresh **100** | note ordinal |
+| `<item>_112_<pat>_<slot>_<ord>` | time shift — centre **49** | note ordinal |
+| `<item>_113_<pat>_<slot>_<ord>` | randomness — fresh **100** | note ordinal |
+| `<item>_48_<pat>_**1**_<step>` | **1** | **step**, slot 1 always |
+| `<item>_40_<pat>` | **3** | pattern |
+
+The four fresh-note defaults are confirmed by `T1-note-place`, `D25-gate-capture` and both D2
+chord captures independently, and live in `ksp.constants`.
+
+Two things a writer must not get wrong here:
+
+- **`49` (step skip) is not written.** An initialised project already holds `15` — "plays on all
+  four sequences" — at every step, which is why it never appears in the diff.
+- **`48` is step-indexed while the pool is note-indexed**, so the two run on different counters.
+  `D2-chord4-tr3` places four notes on step 1: ordinals 1–4 in the pool, and a **single** `48`
+  entry. Setting `48` by ordinal instead would light steps 1–4 — a file that decodes plausibly and
+  plays wrong.
+
+`ksp.mutate.place_note` implements exactly this set, and `tests/test_mutate.py` holds it to
+reproducing `T1-note-place` byte for byte from the committed `baseline.KeyStepPro`.
+
+**Deleting** a note sends the six note parameters back to `127` and clears `48`, but leaves `40`
+at 3 — it latches, so an emptied pattern is not distinguishable from a full one by `40` alone.
+The `T1-note-delete` diff shows only *six* keys moving rather than seven because the preceding
+capture in that chain had already set velocity `111` to 127; nothing there says velocity is
+exempt.
+
+Both firmware ceilings are enforced on the device with an on-screen message: **192 events per
+pattern** and **16 notes per step** (capture `T4-melodic-overflow-v2`).
+
 ### The `127` sentinel
 
 `127` marks "empty". But `127` is also a **legal velocity** (and a legal pitch), so

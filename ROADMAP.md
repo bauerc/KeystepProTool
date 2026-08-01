@@ -256,13 +256,50 @@ exists has one.
 ---
 
 ### M4 — Targeted mutation
-**Artifact:** change one note in a real project, load it in MCC, push to the device.
+**Artifact:** write a note into a real project from software, load it in MCC, push to the device.
 
 **Why it stands alone:** first write that reaches hardware. Confirms our key addressing is
 correct end to end rather than merely self-consistent.
 
-**Test:** change a single pitch, confirm on the KeyStep Pro's own display. Deliberately minimal —
-one changed value means an unambiguous diff.
+**The milestone as originally framed — "change a single pitch" — was not enough.** Changing one
+value on a note that already exists activates nothing: the note was already audible, so the edit
+proves addressing and says nothing about whether we can make the device play something we
+created. The write M5 depends on is **placement**, and placement is not a one-key edit.
+
+**Delivered:** `ksp.mutate` (`place_note`, `set_pitch`, `pitch_key`), `tests/test_mutate.py`, and
+`tests/test_hardware_mutation.py` — the repository's first `@pytest.mark.hardware` tests. No
+console entry point: the candidates come from a marker-gated test for the person at the device, so
+`midi2ksp` stays unclaimed and nothing an installed user can invoke writes a `.KeyStepPro` file.
+
+**The placement recipe, measured rather than inferred.** `B0-baseline` → `T1-note-place` is what
+the device wrote when a human placed one note, and it is **8 keys**: six note-indexed parameters
+(`50` step, `109` pitch, `110` gate, `111` velocity, `112` time shift, `113` randomness), the
+step-active flag `48`, and the pattern data-state latch `40`. Fresh-note defaults are gate 7,
+velocity 100, time shift 49 and randomness 100, agreed across four independent captures and now in
+`ksp.constants`.
+
+**Two traps the recipe has to avoid**, both visible in the captures:
+
+- **`49` (step skip) is not written.** An empty project already holds 15 — "plays on all four
+  sequences" — everywhere, which is why it never appears in the diff.
+- **`48` is step-indexed and lives in slot 1**, while the pool is note-indexed. The D2 chord
+  captures put four notes on step 1: four pool entries, **one** `48` bit. A writer that indexed
+  `48` by ordinal would light steps 1–3 and produce a file that decodes plausibly and plays wrong.
+
+**What it turned up before the device was touched.** The two replay tests are the milestone's real
+gate: `place_note` applied to `baseline.KeyStepPro` reproduces `T1-note-place` **byte for byte**,
+and `set_pitch` applied to that reproduces `T1-note-pitch`. Those are the device's own files, so
+key addressing is validated at the desk and a hardware session is only booked once they pass.
+`baseline.KeyStepPro` is committed for exactly this reason — it is byte-identical to the
+`B0-baseline` capture, so the 8-key result is CI-enforced rather than local to one machine.
+
+**Scope: melodic only.** A drum note's lane (`117`) is not a comparable write, because the drum
+step-active array `52` is indexed *by lane* — moving a lane moves its bit too. M6 owns that.
+
+**Two captures, one session** — protocol tier M4. M4.1 places two notes differing only in their
+`48` bit, so it also tests whether the firmware honours a cleared flag *we* wrote rather than one
+it wrote itself; M4.2 changes `project_5`'s Track 3 note 5 from C#2 to C#3, with ordinals 6–8 left
+at C#2 as a control against off-by-one addressing.
 
 **Needs hardware.**
 
@@ -380,7 +417,7 @@ it is worth building after M6 — see the caveat under **Stack**.
 | M1.5 Drum map | ✅ done | Test D1 confirms the default | M1 |
 | M2 MIDI export | ✅ done | No | M1, M1.5 |
 | M3 Round-trip | ✅ done | No | M1 |
-| M4 Mutation | | **Yes** | M3 |
+| M4 Mutation | code done, captures pending | **Yes** | M3 |
 | M5 MVP convert | | No (desk-testable) | M3, drum `52` packing |
 | M6 Full convert | | No (desk-testable) | M5, M1.5 |
 | M7 Timing calibration | | **Yes** | M3 |
