@@ -163,3 +163,46 @@ def test_the_drum_pool_really_does_hold_holes(project_files_dir) -> None:  # typ
             elif seen_sentinel and value is not None:
                 holes += 1
     assert holes, "initial_project patterns 5 and 9 are the corpus's only holed pools"
+
+
+# --- The spec's worked examples -------------------------------------------
+
+
+#: Every concrete key/value the spec quotes in section 4's "Why a note might
+#: not play" table. Pinned here so an edit to either the table or the reader
+#: cannot leave the authoritative reference quoting values that do not exist.
+#: CLAUDE.md tells the next reader to trust that document, so a stale example
+#: in it misleads more than no example would.
+SPEC_EXAMPLES = {
+    "initial_project.KeyStepPro": {
+        # Row 1: a hole, with live notes either side of it.
+        "123_54_9_1_21": 42,
+        "123_54_9_1_22": 127,
+        "123_54_9_1_25": 44,
+        # Row 2: lane 0 step 5 off, lane 0 step 9 on.
+        "123_52_9_1_1": 0,
+        "123_52_9_1_2": 2,
+        # Row 3: 48 steps declared, a note at step 57.
+        "123_115_9": 47,
+        "123_54_9_1_45": 56,
+    },
+    "project_5.KeyStepPro": {
+        # Row 5: a mask of {16, 48}, against the "always" default.
+        "125_49_1_1_5": 5,
+        "125_49_1_1_1": 15,
+        # Row 6: randomness below the fresh-note default of 100.
+        "125_113_1_1_1": 10,
+    },
+}
+
+
+@pytest.mark.parametrize("name", sorted(SPEC_EXAMPLES))
+def test_the_spec_quotes_values_the_files_actually_hold(project_files_dir, name: str) -> None:  # type: ignore[no-untyped-def]
+    raw = lenient_json.load_path(project_files_dir / name)
+    for key, expected in SPEC_EXAMPLES[name].items():
+        assert raw.get(key) == expected, f"spec section 4 says {key} = {expected}"
+
+
+def test_the_specs_worked_bit_arithmetic_lands_on_the_key_it_claims() -> None:
+    """Section 4 walks lane 0, 0-based step 4 through to `123_52_9_1_1` bit 4."""
+    assert constants.drum_step_active_indices(0, 4) == (1, 1, 4)

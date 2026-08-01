@@ -390,14 +390,30 @@ notes with no flags at all, and pattern 1 lane 17 holds 8 of which only 4 are fl
 Existence and audibility are different tests, and there is more than one way to fail the second.
 **This table is the complete list.** Everything below it is the evidence.
 
-| # | Why it does not play | Where that lives | Undo on the device | Confidence |
-|---|---|---|---|---|
-| 1 | The pool entry is empty — there is no note | `50` / `54` = `127` | n/a, nothing is stored | Certain |
-| 2 | **Disabled: step turned off** | `48` melodic / `52` drum, bit clear | Re-light the step; the note returns intact | **Hardware** (D1) |
-| 3 | **Disabled: past the last step** | step > `98` melodic / `115` drum | Raise Last Step | **Hardware** (O1) |
-| 4 | Velocity 0 | `111` / `119` = 0 | Raise the velocity | Inferred from files, never tested |
-| 5 | Skipped on this pass | `49` / `53` mask ≠ 15 | Set the mask to all four | ⚠ **Unresolved** — repeats or pages? **T5.8** |
-| 6 | Lost to randomness | `113` / `121` | Set randomness to always | ⚠ **Unresolved** — probability or timing jitter? **T7.8** |
+| # | Why it does not play | Key in the file | Example, from a committed file | Undo on the device | Confidence |
+|---|---|---|---|---|---|
+| 1 | The pool entry is empty — there is no note | `<item>_50_<pat>_<slot>_<ord>`, `54` for drums | `123_54_9_1_22` = `127` — a **hole**, not the end: ordinals 21 and 25 hold steps 42 and 44 | n/a, nothing is stored | Certain |
+| 2 | **Disabled: step turned off** | drum `123_52_<pat>_<slot>_<idx>`, one **bit**; melodic `<item>_48_<pat>_1_<step>`, one entry | `123_52_9_1_1` = `0` → lane 0 step 5 is off. Contrast `123_52_9_1_2` = `2` = `0b0000010` → lane 0 step 9 is on. **No melodic example exists** — see below | Re-light the step; the note returns intact | **Hardware** (D1), drums only |
+| 3 | **Disabled: past the last step** | `<item>_98_<pat>` melodic, `123_115_<pat>` drum, 0-based | `123_115_9` = `47` → 48 steps, while `123_54_9_1_45` = `56` → step 57 | Raise Last Step | **Hardware** (O1) |
+| 4 | Velocity 0 | `<item>_111_<pat>_<slot>_<ord>`, `119` for drums | **None in the corpus** — no note in any committed file has velocity 0 | Raise the velocity | Inferred, never tested |
+| 5 | Skipped on this pass | melodic `<item>_49_<pat>_<slot>_<step>` (**step**-indexed), drum `123_53_...` (**note**-indexed) | `125_49_1_1_5` = `5` = `0b0101` → plays on 16 and 48 only; `15` is the default "always" | Set the mask to all four | ⚠ **Unresolved** — repeats or pages? **T5.8** |
+| 6 | Lost to randomness | `<item>_113_<pat>_<slot>_<ord>`, `121` for drums | `125_113_1_1_1` = `10`, against a fresh note's default of `100` | Set randomness to always | ⚠ **Unresolved** — probability or timing jitter? **T7.8** |
+
+Row 2's drum key needs the packing from "A third layout" above, because one entry holds seven
+steps of one lane. Worked through for the disabled kick at step 5 of `initial_project` pattern 9 —
+lane 0, 0-based step 4:
+
+```
+flat = lane * 10 + step // 7   = 0 * 10 + 4 // 7 = 0
+key  = 123_52_9_<flat//64 + 1>_<flat%64 + 1>     = 123_52_9_1_1   -> 0 = 0b0000000
+bit  = step % 7 = 4                              -> (0 >> 4) & 1  = 0   step is OFF
+```
+
+**Two of these six have no example in any committed file**, and that is a finding rather than an
+omission. No melodic note anywhere in the corpus has its `48` bit clear, which is why row 2's
+melodic half rests on the drum result plus agreement between `48` and the note list — protocol
+**T4.5** is the capture that settles it, and it is the highest-value one outstanding. No note
+anywhere has velocity 0, so row 4 is inference from MIDI convention alone.
 
 Rows **2 and 3 are what "disabled" means** — one state, two mechanisms, both toggled the same way
 on the device, and the only two the tools report under that word. Say "disabled (step turned
