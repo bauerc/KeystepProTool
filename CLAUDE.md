@@ -38,6 +38,11 @@ CI (`.github/workflows/check.yml`) runs lint, format, typecheck and tests in one
 installs with `uv sync --locked`, so a stale `uv.lock` fails the build. Commit lockfile changes
 alongside dependency changes.
 
+Run `pre-commit install` **only from the main checkout**, never from `.claude/worktrees/*`.
+Worktrees share the main repo's `.git/hooks`, and the generated hook hard-codes the absolute
+path of whichever `.venv` installed it — installing from a worktree bakes that worktree's path
+in for everyone, then blocks all commits repo-wide once the worktree is deleted.
+
 Tests marked `hardware` need a physical KeyStep Pro and are deselected everywhere automated.
 **A green CI run does not mean a change is verified on the device.**
 
