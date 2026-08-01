@@ -15,7 +15,7 @@ on them.
 
 | Question | Blocks | Tier |
 |---|---|---|
-| The gate length table (`110` / `118`) | M7, and correct note durations in M5/M6 | 2 |
+| ~~The gate length table (`110` / `118`)~~ — **resolved**, one entry left to close | M7, and correct note durations in M5/M6 | 2 |
 | Which bit of `100` is drum mode | M6 | 3 |
 | Whether an unflagged pooled drum note sounds | M6 correctness | 4 |
 | Real poly and drum-lane limits | M6 | 4 |
@@ -60,6 +60,30 @@ Every test below is one capture. A capture is:
   carries stale pool entries that make diffs noisier.
 - Captures are data, not source. Once written they get the same treatment as
   `project_files/*.KeyStepPro` — never reformatted, re-indented, or given a final newline.
+
+### Batched sweep captures
+
+**The one-change rule above applies to captures that are read by diffing.** A *sweep* capture is
+not read that way, and holding it to the same rule is what made Tier 2 unrunnable: one export per
+encoder detent is ~128 sync-and-save cycles through MCC.
+
+One export contains every pattern of every track, and every note's parameter has its own key —
+`124_110_<pattern>_1_<ordinal>`. So one export can carry hundreds of independent readings, read
+directly by key rather than by diff. That is allowed when:
+
+- **one parameter** is swept, and nothing else on the device is touched;
+- **each value sits on a distinct note**, so no two changes share a key;
+- a **note map** — which step carries which intended value — is written down *at capture time*,
+  in the ledger or a companion data file. Without it the capture is unreadable afterwards.
+
+Two rules that are not optional:
+
+- **Pair by `50` (or `54` for drums), never by note ordinal.** Note ordinal and step number are
+  different index spaces (spec §4) and the pool is in creation order. Read
+  `124_50_<p>_1_<k>` to learn which step note `k` sits on, and sort by that. Getting this wrong
+  silently permutes the whole table into something that still looks plausible.
+- **Export after each pattern is filled** (`-wip1`, `-wip2`, …). A sweep capture is an hour of
+  device work; a mishap should cost one pattern, not the session.
 
 ### Diffing
 
@@ -192,70 +216,149 @@ Run them cumulatively: each starts from the previous capture.
 
 ## Tier 2 — M7, the gate length table
 
-**~20 captures.** The long pole, and the only tier that is pure lookup data. Spec §6 has six
-hardware-confirmed points and explicitly warns against inventing a formula for the rest, because
-a wrong table produces files that load fine and play with wrong note durations, with nothing to
-signal the error.
+**1 capture. Run and confirmed** — see the ledger. This tier used to be the long pole at ~20
+captures; it is documented here in full because the *method* generalises to every other sweep in
+this file, and because the result rests on checks a later reader has to be able to re-run.
 
-| Displayed | Stored |
-|---|---|
-| 0.5 | 7 |
-| 1 | 11 |
-| 2 | 19 |
-| 3 | 27 |
-| 3.5 | 29 |
-| 4 | 31 |
+### What the sweep established
 
-Below 3 this fits `stored = 8·g + 3`; above 3 it compresses to roughly `4·g`. Two independent
-captures gave `4 → 31`, so the break is real. `initial_project` also contains a stored `2`, which
-is *below* the 0.5 point — so the range extends further down than any documented capture reaches.
+**`stored = detent index − 1`.** The stored gate value is simply the **0-based position in the
+encoder's ladder**. All of the non-linearity that spec §6.1 struggled with lives in the *display*,
+not in the encoding. The old `8·g + 3` / `4·g` piecewise fit was an artefact of reading six
+scattered points as if they described the encoding.
 
-### T2.1–T2.n — Melodic gate sweep
+The display ladder is five constant-increment runs, and it closes exactly on the 7-bit boundary:
 
-- **Resolves:** the full `110` table.
-- **Device:** from B0.1. Track 2, pattern 1. Place one note at beat 1, any pitch. Then step Gate
-  from its **minimum to its maximum, one detent at a time**, exporting at every single value.
-  Change nothing else, ever.
-- **Capture:** `T2-gate-<display>.KeyStepPro`, where `<display>` is the displayed value with the
-  decimal point replaced by `p` — `T2-gate-0p5`, `T2-gate-1`, `T2-gate-3p5`. If the display shows
-  something non-numeric at the extremes (e.g. a tie or hold indication), name it literally:
-  `T2-gate-tie`.
-- **Diff against:** the previous capture in the sweep.
-- **Keys:** `124_110_1_1_1` only.
-- **Confirms if:** exactly one key moves per capture, and the six known points reproduce. Those
-  six are a built-in check that the procedure is being followed — **if a known point disagrees,
-  stop and re-read the display rather than recording it.**
-- **Falsified if:** two displayed values map to one stored value, or the sequence is not monotonic.
-- **If falsified:** capture both directions (sweep up, then down) — a non-monotonic or
-  hysteretic encoder reading is a different problem from a non-linear table, and the fix is
-  different.
-- **Note the count.** However many detents there are is how many captures this is. Record the
-  minimum and maximum displayed values in the ledger; the range itself is currently unknown, and
-  the stored `2` in `initial_project` says the bottom is lower than 0.5.
+| Increment | Display span | Stored | Count |
+|---|---|---|---|
+| 1/16 | 0.0625 → 0.5 | 0–7 | 8 |
+| 1/8 | 0.625 → 3 | 8–27 | 20 |
+| 1/4 | 3.25 → 8 | 28–47 | 20 |
+| 1/2 | 8.5 → 32 | 48–95 | 48 |
+| 1 | 33 → 64 | 96–127 | 32 |
+| | | | **128** |
 
-### T2.x — Where does the stored `2` come from?
+**128 detents, stored 0–127, display 0.0625 → 64**, and the drum ladder (`118`) is identical. The
+displayed values are exact binary fractions of a step rendered to two decimals with
+**round-half-to-even** — `0.625` shows as `0.62` but `0.875` shows as `0.88`. Record what the
+display literally shows; the exact fraction is the derived quantity, not the transcription.
 
-- **Resolves:** the one unmeasured value that exists in real user material.
-  `initial_project` Track 1 pattern 1 has a drum note with `118` = 2, which `ksp-dump` prints as
-  `?(2)`.
-- **Device:** during the sweep, when the stored value reaches 2, note the displayed value.
-- **Confirms if:** 2 appears in the sweep at all.
-- **If it does not appear:** 2 may only be reachable on the drum track, or via a control other
-  than the Gate encoder (a tie, a very short trigger). Try T2.y before concluding it is unreachable.
+This also resolves the long-standing `?(2)`: `initial_project`'s drum gate stored `2` is detent 3,
+gate **0.1875** (displayed `0.19`). The old T2.x, which existed only to chase that value, is gone.
 
-### T2.y — Drum gate spot-check
+The full ladder lives in `analysis/gate_display_sweep.txt`, one displayed value per line in detent
+order, so line *n* is stored *n − 1*.
 
-- **Resolves:** whether `118` (drum) uses the same table as `110` (melodic), or a different one.
-  Nothing currently establishes this — spec §6 assumes one table for both.
-- **Device:** from B0.1. Track 1 in drum mode, an untouched pattern. Place a Kick at beat 1. Set
-  Gate to each of **0.5, 1, 2, 4** and the minimum, exporting at each. Five captures.
-- **Capture:** `T2-drumgate-<display>.KeyStepPro`
-- **Keys:** `123_118_<pattern>_1_1`
-- **Confirms if:** the stored values match the melodic table at the same displayed values.
-- **Falsified if:** they differ at any point.
-- **If falsified:** the drum table needs its own full sweep — repeat T2.1–T2.n on the drum track.
-  Budget another ~20 captures. Better to discover this from five captures than after writing the
-  converter.
+### T2.1 — The melodic ramp
+
+- **Resolves:** `stored = detent − 1` across 64 consecutive positions rather than six scattered
+  ones, and measures the 1/16, 1/8 and 1/4 runs outright.
+- **Device:** from B0.1. **Track 2, pattern 1** — one note per step, steps 1–64, gate ascending
+  **one detent per step** from the encoder minimum. Nothing else touched.
+- **Write down every displayed value as you go**, in detent order, lowest first, into
+  `analysis/gate_display_sweep.txt` under `melodic`. This is the half that exists nowhere else.
+- **Capture:** `T2-gate-table.KeyStepPro`
+- **Keys:** `124_110_1_1_<ordinal>`, paired via `124_50_1_1_<ordinal>`.
+- **Confirms if:** the stored values, **sorted by step**, are exactly `0..63` — no gaps, no
+  repeats, `stored == step` throughout.
+- **Falsified if:** a gap, a repeat, or a non-monotonic value appears.
+  - A **gap with an adjacent repeat** means a detent was over-turned while setting that note. The
+    repair is one extra note at the missing value in a spare pattern — not a redo.
+  - A **repeat with no gap** would mean encoder hysteresis or a display-only detent. That is a
+    real finding: record it, do not smooth it.
+- **A note you forget to set keeps the fresh-note default of stored `7`** (gate 0.5), which is
+  indistinguishable from a deliberate value. The `0..63` check is the only thing that catches it.
+
+### T2.2 — Boundary probes
+
+Everything above detent 64 is enumerated from the increment rule rather than transcribed detent by
+detent. These eight notes make that span pass/fail. **Track 2, pattern 2**; drive the encoder to
+each target display and record what the display actually reads.
+
+| Step | Drive display to | Expect stored | What it proves |
+|---|---|---|---|
+| 1 | **64** (encoder maximum) | **127** | the ladder closes exactly on the 7-bit boundary |
+| 2 | one detent below max | 126, display **63** | the top run increments by 1 |
+| 3 | **33** | **96** | the 1/2 → 1 boundary |
+| 4 | one detent below 33 | 95, display **32 — not 32.5** | falsifier for the boundary position |
+| 5 | **24** | 79 | interior sample of the 48-long 1/2 run |
+| 6 | **16.5** | **64** | first detent past the transcribed range |
+| 7 | **16** | 63 | re-measures detent 64 at a different pattern and step |
+| 8 | **0.06** (encoder minimum) | **0** | the bottom of the ladder |
+
+- **Capture:** same file as T2.1.
+- **Keys:** `124_110_2_1_<ordinal>`, paired via `124_50_2_1_<ordinal>`.
+- **Confirms if:** every stored value matches, **and** step 4 displays `32`.
+- **Falsified if:** the maximum is not 127. Then the enumerated span is wrong somewhere, and *only
+  then* is a full detent-by-detent transcription of 16.5 → 64 justified — one more filled pattern,
+  still no extra export.
+- **Why the endpoint carries most of the weight:** any miscount anywhere between 16 and 64 shifts
+  the maximum off 127. The interior samples exist only to catch a pair of compensating errors.
+- **Also confirm the encoder stops at 64** — turn past it and check the display does not move.
+
+### T2.3 — Drum mirror
+
+- **Resolves:** whether `118` shares the `110` ladder. Replaces the old five-capture T2.y with five
+  notes in the same export.
+- **Device:** Track 1 in drum mode, an untouched pattern. Five Kicks on steps 1–5 driven to
+  **0.06, 0.5, 4, 16, 64**.
+- **Keys:** `123_118_<p>_1_<ordinal>`, paired via `123_54_<p>_1_<ordinal>`.
+- **Confirms if:** stored values are **0, 7, 31, 63, 127**.
+- **Falsified if:** any differ. Only that outcome justifies repeating T2.1's layout on Track 1 and
+  filling the `drum` section of `gate_display_sweep.txt`.
+
+### T2.4 — Reading the capture
+
+```python
+# uv run python - <<'EOF'
+from ksp.lenient_json import load_path
+
+p = load_path("project_files/captures/T2-gate-table.KeyStepPro")
+
+def notes(item, pattern, p_step, p_gate):
+    """(step, stored) pairs, sorted by step. Never trust ordinal order."""
+    out = []
+    for k in range(1, 65):
+        step = p.get(f"{item}_{p_step}_{pattern}_1_{k}")
+        if step is None or step == 127:      # 127 is the empty sentinel
+            continue
+        out.append((step, p[f"{item}_{p_gate}_{pattern}_1_{k}"]))
+    return sorted(out)
+
+ramp = notes(124, 1, 50, 110)
+assert [s for s, _ in ramp] == list(range(64)), "missing or duplicated steps"
+print("stored == step:", all(s == g for s, g in ramp))
+print("mismatches:", [(s, g) for s, g in ramp if s != g])
+print("probes:", notes(124, 2, 50, 110))
+print("drum: ", notes(123, 1, 54, 118))
+# EOF
+```
+
+`tools/gate_table.py` is referenced by `gate_display_sweep.txt` but does not exist and is not
+required — the snippet above is the whole reading procedure.
+
+### What is measured and what is derived
+
+The distinction matters, and must survive into any code that consumes the table.
+
+- **Measured** — stored `0–35` and `37–63` (T2.1); `0, 63, 64, 79, 95, 96, 126, 127` (T2.2); the
+  five drum points (T2.3).
+- **Derived** — stored `36`, and stored `65–78`, `80–94`, `97–125`.
+
+Stored `36` (gate 5.25) is derived because the T2.1 note on step 36 was over-turned by one detent
+and stored 37, duplicating its neighbour. It sits inside a run whose increment is confirmed by
+directly measured values on **both** sides (stored 35 = 5.0, stored 37 = 5.5), and its displayed
+value *was* transcribed — only the stored pairing is positional. **One extra note at display 5.25
+closes it**, and until then it is the single weakest entry in the table.
+
+The remaining derived entries come from the increment rule observed at the device, enumerated and
+count-verified: any miscount would move the maximum off stored 127, and it does not.
+
+**Spec §6.1's "do not invent a formula" warning still stands, and this is not a violation of it.**
+The warning is against *fitting a curve to sparse points* — which is exactly what the old
+`8·g + 3` reading was. What is recorded here is 64 consecutive transcribed values, a stated
+increment rule, and an arithmetic closure that any error would break. A later reader should not
+apply the warning to this table and re-run 128 captures; they should close stored `36` and stop.
 
 ---
 
@@ -731,8 +834,9 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 | T1.2 | | pitch E3 | | |
 | T1.3 | | velocity 127 | | |
 | T1.4 | | deleted | | residue? |
-| T2.* | | gate = | | one row per detent |
-| T2.y | | drum gate = | | same table as melodic? |
+| T2.1 | 2026-07-31 | 64-note ramp, detents 1–64 | stored 0–63 | ✔ `stored == step` except step 36 → 37 (over-turned by one detent); stored 36 undermeasured, display 5.25 |
+| T2.2 | 2026-07-31 | 64 / 63 / 33 / 32 / 24 / 16.5 / 16 / 0.06 | 127 126 96 95 79 64 63 0 | ✔ all eight as predicted; ladder closes exactly on 127 |
+| T2.3 | 2026-07-31 | drum 0.06 / 0.5 / 4 / 16 / 64 | 0 7 31 63 127 | ✔ drum mirrors melodic |
 | T3.1 | | track 1 seq mode | | |
 | T3.2 | | track 1 drum mode | | bit that moved: |
 | T3.3 | | ARP on | | |
@@ -768,20 +872,25 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 |---|---|---|---|
 | B0 | 2 | noise floor | all |
 | 1 | 4 | write-path key set | M4 |
-| 2 | ~20 | gate table | M7 |
+| 2 | **1** ✔ done | gate table | M7 |
 | 3 | 4 | drum-mode bit | M6 |
 | 4 | 8 | step-active semantics, real limits | M6 |
 | 5 | ~14 | pattern scalars, chaining, step-skip semantics | M6, M2 |
 | 6 | 2 | standing caveats | M3 |
 | 7 | ~13 | Time Shift range, swing semantics | M7, M5 |
 | 8 | ~6 recordings | what a Time Shift unit is worth in time | M2, M5 |
-| | **~73** | | |
+| | **~54** | | |
 
 Tiers are ordered by value per capture and each is independently useful — stopping after any tier
 leaves a coherent result rather than a half-finished one. B0 is not optional; everything else is.
 
-If time is short, the ranking is **B0 → D1 → Tier 3 → T7.1 → Tier 2 → Tier 1 → rest of Tier 7 →
-Tier 4 rest → Tier 6 → Tier 5 → Tier 8**.
+If time is short, the ranking is **B0 → D1 → Tier 3 → T7.1 → Tier 1 → rest of Tier 7 →
+Tier 4 rest → Tier 6 → Tier 5 → Tier 8**. Tier 2 no longer appears: it was the most expensive tier
+in this document and is now one capture, already taken.
+
+**Tier 7's shift sweep has the same shape as Tier 2 did** — T7.2 already batches seven shift values
+into one capture, but T7.1 and T7.3 are still written as one export per value. Both fold into a
+single batched capture under the rules above. Do that before running them.
 
 - **D1 and Tier 3** are the two places where the current code is arguably *wrong* rather than merely
   incomplete.

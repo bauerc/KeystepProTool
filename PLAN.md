@@ -197,6 +197,11 @@ Every documented value reproduces. The dictionary is trustworthy.
 
 ### The one unresolved encoding: gate length
 
+> **Superseded 2026-07-31 — see spec §6.1.** The conclusion below is wrong and is kept as a record
+> of how. Gate is an **index**: `stored = detent − 1`, 128 entries, 0.0625–64 steps. The six points
+> were six samples of a linear index behind a non-linear *display*; fitting a piecewise curve to
+> them was the error, and it took a consecutive run of detents to see it.
+
 Gate (`110` / `118`) is **not** linear. Observed (display → stored):
 `0.5→7`, `1→11`, `2→19`, `3→27`, `3.5→29`, `4→31`.
 It is `8·g + 3` up to gate 3, then compresses to ~`4·g` above it. Two independent captures
@@ -350,9 +355,8 @@ installed. This keeps the tool honest against future MCC updates rather than har
 2. **Regression against ground truth** — parse `project_files/project_5.KeyStepPro` and assert the
    decoded model matches `analysis/project_5_description.txt` (the table in §5 becomes the test
    fixture). Same for `project_9` against `project_9_tests.txt`.
-3. **Gate-table sweep** *(needed before gate support ships)* — on the hardware, place one note and
-   step its gate through every selectable value, exporting at each; build the display→stored table
-   from the diffs. Roughly 10–15 captures.
+3. ~~**Gate-table sweep**~~ — **done 2026-07-31** in a single capture (`T2-gate-table`), by placing
+   64 notes on one pattern rather than exporting per detent. Result in spec §6.1.
 4. **Strict-JSON tolerance test** — export one file without the trailing comma, import into MCC,
    confirm it loads. If it does, drop the comma-preservation requirement.
 5. **End-to-end** — convert a simple 16-step MIDI clip, drop the result into

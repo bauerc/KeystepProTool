@@ -115,7 +115,7 @@ lane encoding cross-checks against `123_117_*` in the export.
 One hit per step rather than 24 at once because Track 1 has only 4 poly slots. **The same export
 is also the discriminating case for the undecoded `52` packing** — 24 lanes across 24
 consecutive steps is exactly the "vary lanes, hold steps constant" case `initial_project`
-demands — so capture it in the same session as M7's gate sweep.
+demands — so capture it in the same session as M7's remaining timing work (tiers 7–8).
 
 **Test D2**, five minutes and no capture: change the Drum Map, export again, expect a
 byte-identical file. Turns "not project state" from an inference into an asserted fact.
@@ -190,7 +190,8 @@ no time. Each KeyStep Pro track becomes a MIDI track; Track 1's drum set becomes
   Each is an explicit option with a documented default rather than a buried constant.
 - **Time shift is not applied.** Its centre is confirmed but the *duration* of one unit has never
   been measured, so the export keeps the flat grid and says so. Measuring it belongs with M7's
-  gate sweep — same hardware session, same method.
+  tier 7–8 captures — same hardware session, and the same batched method that reduced the gate
+  sweep to one capture.
 
 ---
 
@@ -265,12 +266,17 @@ patterns longer than 64 steps split across pattern slots.
 **Artifact:** the measured constants for the three encodings that place a note in time — gate
 length, time shift, and swing — as data.
 
-**Why it is separate:** these are the encodings still unresolved (spec §6), and none fits a clean
-formula. Until measured, M2 exports on the grid and warns, and M5/M6 write a default gate and warn.
+**Why it is separate:** these are the encodings still unresolved (spec §6). Until measured, M2
+exports on the grid and warns, and M5/M6 write a default gate and warn. Gate is now done and turned
+out to fit a very clean rule — an index — but only once a *consecutive* run of detents was captured
+rather than scattered samples.
 
 **Scope**, all resolved in one session because the device is already out:
 
-- **Gate table** (`110` / `118`) — six points known, the rest is a sweep. Protocol tier 2.
+- **Gate table** (`110` / `118`) — **measured** (protocol tier 2, capture `T2-gate-table`). The
+  encoding is an index: `stored = detent − 1`, 128 entries, gate 0.0625–64 steps, drum identical.
+  Remaining work is mechanical — extend `ksp.constants.GATE_TABLE` from six entries to 128 from
+  spec §6.1, and close the one derived entry (stored `36`) with a single note on the next capture.
 - **Time shift range and linearity** (`112` / `120`) — the centre of 49 is confirmed but nothing
   establishes the range; `project_5`'s ±4 may not be the limit. Protocol T7.1–T7.3.
 - **Swing semantics** (`74`, `97` / `114`) — **never exercised in any sample file**, so it cannot be
@@ -331,5 +337,5 @@ Of the two format questions M1 surfaced, one is now closed:
   already checked in, and M1.5's Test D1 export would settle it outright.
 - ~~**Drum-mode bit (`100`)**~~ — **resolved at M1.5**: the flag is `86` bit 6. Spec §5.
 
-Hardware captures worth doing in one session: M7's gate sweep, M1.5's Test D1 (drum map, and the
+Hardware captures worth doing in one session: M7's tiers 7–8, M1.5's Test D1 (drum map, and the
 `52` packing case for free) and D2, plus the `project_5` drum time-shift re-check.
