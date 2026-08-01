@@ -72,9 +72,12 @@ be checked against the identical files.
   because the unused parameter set is sentinel-filled, but `initial_project` Track 1 pattern 1
   holds a real melody *and* real drums, so the reader reports both. Resolved since: the flag is
   `86` bit 6, confirmed at the device by capture `T3-track1-drum`.
-- **The drum step-active bitmask (`52`) is not fully decoded.** Its packing fits both
-  hardware-confirmed projects but not real user material. Harmless for reading — the note list is
-  authoritative — but it blocks writing, so M5/M6 depend on it.
+- ~~**The drum step-active bitmask (`52`) is not fully decoded.**~~ **Resolved:** lane-major,
+  7 bits per entry, 10 entries per lane, confirmed by captures D1 and D3. Spec §4.
+- **The drum note array is a pool with holes, not a compacted list.** Deleting a note empties its
+  entry and leaves the later ones in place, so `127` marks an empty *entry* rather than the end of
+  the list. The reader stopped at the first sentinel and discarded 43 live notes in
+  `initial_project`. **Fixed**; melodic keeps the stop, which is verified across all five files.
 
 One discrepancy is recorded rather than resolved: `project_5_description.txt` gives Time Shift
 −1 for both kick hits, and the file stores −1 and **+1**. The fixture asserts the conflict so it
@@ -334,11 +337,16 @@ it is worth building after M6 — see the caveat under **Stack**.
 
 M1–M3 and M5–M6 can all be built and tested with nothing but the files already in this repo.
 
-Of the two format questions M1 surfaced, one is now closed:
+Both format questions M1 surfaced are now closed:
 
-- **Drum step-active packing (`52`)** — still open, blocks M5/M6. Decodable from the files
-  already checked in, and M1.5's Test D1 export would settle it outright.
+- ~~**Drum step-active packing (`52`)**~~ — **resolved**: lane-major, 7 bits per entry, confirmed
+  by D1/D3. Spec §4.
 - ~~**Drum-mode bit (`100`)**~~ — **resolved at M1.5**: the flag is `86` bit 6. Spec §5.
+
+Still open in the code rather than in the format: `Format_Corrections_Issue.md` finding 2
+(`SLOTS_BY_ITEM[123]` should be 3, and `slot_is_initialised` should go with it), and
+`P_DRUM_POLY_STEP_COUNT` (`51`), which is per-lane drum length — confirmed real by capture D4 but
+read by nothing, so every lane renders at the pattern-level `115`.
 
 Hardware captures worth doing in one session: M7's gate sweep, M1.5's Test D1 (drum map, and the
 `52` packing case for free) and D2, plus the `project_5` drum time-shift re-check.

@@ -76,6 +76,14 @@ the milestone implementing them lands, so an installed command never crashes on 
   note to its 0-based step. The device stores an event list, not a step grid.
 - `127` means "empty" — but is also a legal pitch and velocity. The only valid existence test is
   `paramId 50 != 127` (`54` for drums). Never infer a note from its velocity.
+- `127` marks an empty **entry**, not the end of the list, and **the two parameter sets are
+  scanned differently**. The melodic list is compacted; the drum array is a pool with holes, so
+  the drum scan skips sentinels and the melodic one stops at the first. Spec §4 rule 1 ("packed
+  contiguously") is a rule for *writers*. Applying it on read discarded 43 live notes in
+  `initial_project` and then blamed the file for losing them.
+- Audibility has **three** gates: pooled (`50`/`54`), flagged (`48`/`52`), **and** within the
+  pattern's declared length (`98`/`115`). Notes past the last step are retained, not stale —
+  shortening a pattern hides them and lengthening it brings them back, confirmed on hardware.
 - Track 1 (item `123`) carries a whole second parameter set for DRUM mode. The mode flag is
   **`86` bit 6** (per-track), not the `100` bitfield the spec originally named — `100` reads 26
   everywhere. A writer must set `86` to match whichever set it writes.
@@ -122,6 +130,14 @@ are not in the project file — step size, the drum map, and most gate encodings
 but deliberately **not applied**, because the duration of one shift unit has not been measured.
 Anything the export decides for itself is reported as a warning; when adding to it, keep that
 property rather than quietly picking a value.
+
+Warnings are `ksp.diagnostics` records, not strings: a stable `Code`, the `Site` they came from,
+and how many notes or steps they cover. `ksp/` raises them and `ksp_cli/` prints them — the
+purity boundary applies here too. Reporting groups by `Code` and sums the counts, so one line can
+say "41 notes across 3 patterns" and `--verbose` can expand it again. **Adding one is a `Code`
+member, a `SUMMARIES` entry and the call site** — no branch and no class per warning. Keep the
+collapsed wording in the table rather than reconstructing it at the call site, or grouping stops
+being able to say anything useful about the count.
 
 ## Code Commentation
 
