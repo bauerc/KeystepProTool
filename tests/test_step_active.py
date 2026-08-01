@@ -237,9 +237,7 @@ def test_a_pattern_within_its_length_is_untouched(project_files_dir) -> None:  #
 
 # --- The flag-without-note cross-check -------------------------------------
 #
-# Every flagged step having a pooled note is an invariant, so no sample project
-# produces this diagnostic and the corpus alone leaves the scan's non-empty
-# result untested. These build the violation directly.
+# No sample project violates the invariant, so these build the violation.
 
 
 def _seq_note(step: int, index: int = 1) -> Note:
@@ -260,8 +258,8 @@ def _seq_note(step: int, index: int = 1) -> Note:
 
 
 def test_a_flagged_step_backed_by_a_note_is_not_reported() -> None:
-    """``active`` is 0-based and ``Note.step`` is 1-based -- the check has to
-    bridge that, so an off-by-one here would invent orphans for every step."""
+    """``active`` is 0-based and ``Note.step`` 1-based; an off-by-one in the
+    bridge would invent an orphan for every step."""
     notes = [_seq_note(1), _seq_note(5, index=2)]
     diagnostics = _check_step_active(1, notes, frozenset({0, 4}), kind=NoteKind.SEQ)
 
@@ -269,8 +267,7 @@ def test_a_flagged_step_backed_by_a_note_is_not_reported() -> None:
 
 
 def test_flags_without_notes_are_reported_in_sorted_step_order() -> None:
-    """The scan is |active| + |notes| work, not |active| * |notes| -- the set of
-    held steps is built once rather than per flagged step."""
+    """One diagnostic listing every orphan, in step order, not one apiece."""
     notes = [_seq_note(1)]
     diagnostics = _check_step_active(1, notes, frozenset({0, 8, 3}), kind=NoteKind.SEQ)
 

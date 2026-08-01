@@ -13,9 +13,6 @@ Control Center produces, both fail in ways that look like format bugs.
 Capture B0.2 exported an untouched project twice and got identical files, so
 MCC's writer is deterministic and there is no drift to chase -- any difference
 these tests see is ours. See ROADMAP.md M3 and spec section 2.
-
-The five-sample sweeps are slow-marked down to one always-on instance each;
-see :func:`every_sample`.
 """
 
 import hashlib
@@ -30,19 +27,15 @@ from ksp import lenient_json
 from ksp.constants import P_SEQ_PITCH
 from ksp.keys import key
 
-#: The sample the always-on instance of each sweep runs on. A real MCC user
-#: export, and the only one carrying both string values -- ``Default`` has no
-#: ``version`` key -- so it is the one sample that exercises every emit path.
+#: The sample every sweep keeps always-on: the only one carrying both string
+#: values, since ``Default`` has no ``version`` key.
 FOUNDATIONAL = "initial_project.KeyStepPro"
 
 
 def every_sample(argname: str = "name") -> pytest.MarkDecorator:
-    """Parametrise over all five samples, marking all but :data:`FOUNDATIONAL`
-    slow.
+    """All five samples, with everything but :data:`FOUNDATIONAL` marked slow.
 
-    The sweeps are near-duplicates of each other: five samples proving one
-    property. One of them stays always-on so a regression cannot reach a commit
-    unnoticed, and the other four run in CI, which does not filter ``slow``.
+    CI does not filter ``slow``, so the other four still run there.
     """
     return pytest.mark.parametrize(
         argname,
@@ -55,12 +48,7 @@ def every_sample(argname: str = "name") -> pytest.MarkDecorator:
 
 @every_sample()
 def test_round_trip_is_byte_identical(name: str, project_files_dir: Path) -> None:
-    """The milestone, on every sample: parse and re-emit changes nothing.
-
-    The ``initial_project`` instance is the suite's foundational regression
-    guard and is deliberately never marked slow -- if the writer drifts by one
-    byte, this is what says so.
-    """
+    """The milestone, on every sample: parse and re-emit changes nothing."""
     expected = without_trailing_comma((project_files_dir / name).read_bytes())
     assert lenient_json.dumps(lenient_json.loads(expected.decode())).encode() == expected
 
@@ -136,11 +124,7 @@ def test_dumps_of_an_empty_mapping() -> None:
 
 
 def test_a_small_mapping_is_strict_json() -> None:
-    """The always-on guard for what T6.2 bought.
-
-    Its whole-file counterpart below is slow-marked, and this is the only other
-    coverage of strictness, so it stays cheap enough to never need marking.
-    """
+    """The always-on half of what T6.2 bought; the whole-file case is slow."""
     project: dict[str, int | str] = {"device": "KeyStepPro", "120_37": 3, "126_99_2": 20}
     assert json.loads(lenient_json.dumps(project)) == project
 

@@ -38,8 +38,7 @@ _TRAILING_COMMA = re.compile(r",(\s*[}\]])")
 #: project names, which are stored as character codes.
 LEADING_KEYS = ("device", "version")
 
-# As a tuple, not ``int | str``: the union form builds a fresh UnionType on
-# every isinstance call, and this one runs once per entry.
+# A tuple, not ``int | str``: the union form rebuilds a UnionType per call.
 _INT_OR_STR = (int, str)
 
 
@@ -88,12 +87,8 @@ def dumps(obj: Mapping[str, int | str]) -> str:
     """
     lines = []
     for k, v in obj.items():
-        # ``json.dumps`` per key and per value costs two encoder set-ups on
-        # every one of ~153,000 entries. ``_escape`` is the C helper it would
-        # reach for anyway under the default ``ensure_ascii=True``, and an int
-        # needs no encoder at all -- together a 7x speed-up on a 3.5 MB file.
-        # The exact keys still go through ``_escape``: bare quoting is faster
-        # still, but would emit broken JSON for a key containing a quote.
+        # ``_escape`` is what ``json.dumps`` reaches for anyway, minus the
+        # encoder set-up. Keys keep it: one holding a quote would break.
         if v.__class__ is int:
             value = repr(v)
         elif isinstance(v, str):
@@ -101,9 +96,7 @@ def dumps(obj: Mapping[str, int | str]) -> str:
         elif isinstance(v, bool) or not isinstance(v, _INT_OR_STR):
             raise TypeError(f"{k} holds {type(v).__name__}, expected int or str")
         else:
-            # An int subclass, which may override __repr__. Encode it the slow
-            # way so its bytes stay whatever they have always been.
-            value = json.dumps(v)
+            value = json.dumps(v)  # an int subclass may override __repr__
         lines.append(f"\t{_escape(k)}: {value}")
 
     return "{\n" + ",\n".join(lines) + ("\n}" if lines else "}")

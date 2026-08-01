@@ -57,11 +57,7 @@ def sample_name(request: pytest.FixtureRequest) -> str:
 
 @pytest.fixture(scope="session")
 def sample_bytes(sample_name: str, project_files_dir: Path) -> bytes:
-    """The sample's bytes exactly as MCC wrote them.
-
-    Session-scoped: these are 3.5 MB apiece and read by two dozen tests.
-    ``bytes`` are immutable, so sharing one across tests cannot leak.
-    """
+    """The sample's bytes exactly as MCC wrote them."""
     path = project_files_dir / sample_name
     assert path.is_file(), f"missing sample project: {path}"
     return path.read_bytes()
@@ -87,7 +83,6 @@ def sample_bytes_strict(sample_bytes: bytes) -> bytes:
 
 @pytest.fixture(scope="session")
 def _parsed_samples() -> dict[str, dict[str, int | str]]:
-    """Backing store for :func:`load_sample`. Never handed to a test."""
     return {}
 
 
@@ -97,10 +92,7 @@ def load_sample(
 ) -> Callable[[str], dict[str, int | str]]:
     """Parse a sample once per session, returning a fresh copy each call.
 
-    Parsing costs 25 ms and copying the result costs 0.4 ms. The copy is not an
-    optimisation detail but the safety property: tests mutate what they are
-    given -- injecting a ``version`` key, editing a pitch -- and a shared dict
-    would carry that into whatever ran next.
+    The copy is the point: tests mutate what they are given.
     """
 
     def load(name: str) -> dict[str, int | str]:
