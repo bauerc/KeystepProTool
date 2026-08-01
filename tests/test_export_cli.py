@@ -364,28 +364,27 @@ def _durations(path: Path) -> list[int]:
     return durations
 
 
-def test_the_fallback_gate_can_be_given(
+def test_the_fallback_gate_never_overrides_a_measured_one(
     project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """initial_project holds a gate encoding of 2, which is not measured.
+    """initial_project's gate 2 used to be unmeasured and take the fallback.
 
-    Raising the fallback moves exactly those notes and leaves the measured
-    ones alone -- the whole point of the option is that it never overrides a
-    length the hardware confirmed.
+    The tier 2 ladder decodes it as 0.1875 of a step, so ``--default-gate``
+    must now move nothing here and say nothing about defaults -- the option
+    only ever covers a value the ladder cannot decode.
     """
     source = str(project_files_dir / "initial_project.KeyStepPro")
     selection = [source, "--track", "1", "--pattern", "1", "-o"]
 
     assert main([*selection, str(tmp_path / "default.mid")]) == 0
-    assert "0.5-step default" in capsys.readouterr().err
+    assert "default length" not in capsys.readouterr().err
     assert main([*selection, str(tmp_path / "long.mid"), "--default-gate", "1"]) == 0
-    assert "1-step default" in capsys.readouterr().err
+    assert "default length" not in capsys.readouterr().err
 
-    pairs = list(
-        zip(_durations(tmp_path / "default.mid"), _durations(tmp_path / "long.mid"), strict=True)
-    )
-    assert all(long in (short, 2 * short) for short, long in pairs)
-    assert any(long == 2 * short for short, long in pairs)
+    durations = _durations(tmp_path / "default.mid")
+    assert durations == _durations(tmp_path / "long.mid")
+    # 0.1875 of a 120-tick step, from the ladder -- not the 60-tick fallback.
+    assert min(durations) == round(0.1875 * 120)
 
 
 def test_a_fallback_gate_of_zero_is_rejected(

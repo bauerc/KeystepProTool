@@ -76,12 +76,19 @@ def test_json_and_text_agree_on_the_selection(
     assert "Track 1" not in capsys.readouterr().out
 
 
-def test_unknown_gate_values_are_marked_not_guessed(
+def test_a_short_gate_prints_its_measured_length(
     project_files_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """initial_project has a drum note whose gate encoding is unmeasured."""
+    """initial_project's drum notes store gate 2, which used to print ``?(2)``.
+
+    The tier 2 sweep resolved it: stored 2 is detent 3, 0.1875 of a step. This
+    is the long-standing ``?(2)`` of spec 6.1, and the one place in the corpus
+    where the new ladder changes what the user sees.
+    """
     main([str(project_files_dir / "initial_project.KeyStepPro"), "--track", "1", "--pattern", "1"])
-    assert "gate ?(2)" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "gate 0.1875" in out
+    assert "?(" not in out
 
 
 def test_empty_project_says_so(project_files_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:

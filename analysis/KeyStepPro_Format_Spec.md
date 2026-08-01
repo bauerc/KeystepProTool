@@ -613,10 +613,11 @@ Deleting that note returns all of them to sentinel **except `40`**, which latche
 That capture's display read `0.5`, which confirms the ladder's `7 → 0.5` entry from a second
 direction and a separate session.
 
-`ksp.constants.GATE_TABLE` still holds only the original six points and `decode_gate` still prints
-anything else as `?(raw)`. **Extending it to the full 128 entries is M7's remaining work** — this
-section is the source data for that change, and the measured/derived distinction above must survive
-into the code comment.
+**Implemented.** `ksp.constants.GATE_TABLE` now enumerates all 128 rungs from the five runs above,
+and `decode_gate` reserves `?(raw)` for a value outside 0–127. The measured/derived provenance is
+carried in the code comment, and `tests/test_gate_ladder.py` checks the enumeration against every
+line of `analysis/gate_display_sweep.txt` — so the table cannot drift from the transcription
+without a test failing.
 
 ---
 

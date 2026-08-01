@@ -181,14 +181,16 @@ no time. Each KeyStep Pro track becomes a MIDI track; Track 1's drum set becomes
 
 - **Gate is a length in steps.** `project_5`'s note placed on beat 9 and tied through beat 12 —
   four steps — stores gate 4. That is what makes a gate convertible into a duration at all, and
-  it is now recorded in `ksp.constants`. Unmeasured encodings export at the fresh-note default
-  (0.5) with a warning; nothing is interpolated.
+  it is now recorded in `ksp.constants`. The ladder has since been measured in full, so only a
+  value outside 0–127 falls back to the fresh-note default (0.5) with a warning; nothing is
+  interpolated.
 - **Long gates have to be truncated at the next note of the same pitch.** `project_5` beat 1 has
   gate 2 with the same pitch repeating on beat 2. The device retriggers; MIDI would be left
   holding an unmatched note-on. The export shortens and warns.
-- **Three things the export needs are not in the project file**: step size (in the undecoded
-  `99`/`116` bitfield), the drum map (a device global, spec §3.4), and most gate encodings (M7).
-  Each is an explicit option with a documented default rather than a buried constant.
+- **Two things the export needs are not in the project file**: step size (in the undecoded
+  `99`/`116` bitfield) and the drum map (a device global, spec §3.4). Each is an explicit option
+  with a documented default rather than a buried constant. Gate was a third until tier 2 measured
+  the ladder.
 - **Time shift is not applied.** Its centre is confirmed but the *duration* of one unit has never
   been measured, so the export keeps the flat grid and says so. Measuring it belongs with M7's
   tier 7–8 captures — same hardware session, and the same batched method that reduced the gate
@@ -282,10 +284,13 @@ rather than scattered samples.
 
 **Scope**, all resolved in one session because the device is already out:
 
-- **Gate table** (`110` / `118`) — **measured** (protocol tier 2, capture `T2-gate-table`). The
-  encoding is an index: `stored = detent − 1`, 128 entries, gate 0.0625–64 steps, drum identical.
-  Remaining work is mechanical — extend `ksp.constants.GATE_TABLE` from six entries to 128 from
-  spec §6.1, and close the one derived entry (stored `36`) with a single note on the next capture.
+- **Gate table** (`110` / `118`) — **measured and shipped** (protocol tier 2, capture
+  `T2-gate-table`). The encoding is an index: `stored = detent − 1`, 128 entries, gate 0.0625–64
+  steps, drum identical. `ksp.constants.GATE_TABLE` holds all 128 and `tests/test_gate_ladder.py`
+  ties it to `analysis/gate_display_sweep.txt`. One entry remains *derived* rather than
+  transcribed — stored `36` (gate 5.25), whose sweep note was over-turned by a detent. It sits
+  inside a confirmed 0.25 run between measured neighbours, so it is not in doubt, but a single
+  note at display 5.25 on the next capture closes it.
 - **Time shift range and linearity** (`112` / `120`) — the centre of 49 is confirmed but nothing
   establishes the range; `project_5`'s ±4 may not be the limit. Protocol T7.1–T7.3.
 - **Swing semantics** (`74`, `97` / `114`) — **never exercised in any sample file**, so it cannot be
