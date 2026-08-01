@@ -12,8 +12,10 @@ exporting projects as MIDI, and writing a project file back out byte-for-byte â€
 comma, which the hardware confirmed MIDI Control Center does not need, so output is strict JSON.
 
 Milestone 4 adds `ksp.mutate`, which places a note into an existing project or changes one value
-on a note already there. It is a library, not a command: nothing you can install on your `PATH`
-writes a `.KeyStepPro` file until M5, which is next.
+on a note already there â€” **verified on the hardware**: files it produced loaded in MIDI Control
+Center, transferred to a KeyStep Pro, and played what they said they would. It is a library, not a
+command: nothing you can install on your `PATH` writes a `.KeyStepPro` file until M5, which is
+next.
 
 ## Install
 

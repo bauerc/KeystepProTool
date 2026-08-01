@@ -23,7 +23,8 @@ the easier direction, it is independently useful — MCC cannot do it — and it
 understanding of the format in a way you can *listen to* rather than merely diff.
 
 **Desk work before hardware work.** Most milestones are fully testable against the files already
-in `project_files/`. Only M4, M7 and final validation need the device present.
+in `project_files/`. Only M4, M7 and final validation need the device present, and M4's session is
+done.
 
 ---
 
@@ -255,7 +256,7 @@ exists has one.
 
 ---
 
-### M4 — Targeted mutation
+### M4 — Targeted mutation ✅ **done**
 **Artifact:** write a note into a real project from software, load it in MCC, push to the device.
 
 **Why it stands alone:** first write that reaches hardware. Confirms our key addressing is
@@ -296,12 +297,23 @@ key addressing is validated at the desk and a hardware session is only booked on
 **Scope: melodic only.** A drum note's lane (`117`) is not a comparable write, because the drum
 step-active array `52` is indexed *by lane* — moving a lane moves its bit too. M6 owns that.
 
-**Two captures, one session** — protocol tier M4. M4.1 places two notes differing only in their
-`48` bit, so it also tests whether the firmware honours a cleared flag *we* wrote rather than one
-it wrote itself; M4.2 changes `project_5`'s Track 3 note 5 from C#2 to C#3, with ordinals 6–8 left
-at C#2 as a control against off-by-one addressing.
+**Confirmed on the device**, protocol tier M4, 2026-08-01.
 
-**Needs hardware.**
+- **M4.1 — the placement recipe is complete on *load*, not just on save.** A file built by
+  `place_note` from the baseline loaded in MCC, transferred, and showed exactly what was written:
+  one note lit and sounding, one placed and dark. Re-exporting it from the device returns the
+  candidate with **zero keys changed** — a full file → MCC → device → MCC → file round trip with
+  no drift whatsoever. That also settles T4.5 from the side that matters for writing: the silent
+  note's `48` was cleared by *us*, in a file the firmware loaded, and the firmware honoured it.
+- **M4.2 — key addressing is correct end to end.** `project_5` Track 3 loaded with its notes
+  intact and step 5 read **C#3** on the device's own display, against C#2 in
+  `project_5_description.txt`, with the neighbouring ordinals unmoved.
+
+**What the readbacks turned up.** The pitch readback differs from the candidate by five keys and
+**none of them are ours**: `39` latches 2 → 3 per item, alongside `40`, and `123_117_<pattern>`
+— a per-pattern scalar on the drum item, distinct from the note-indexed `117` and previously
+undocumented — is normalised from 247 to 60. So `247` is something MCC writes and the firmware
+does not keep. M5 and M6 should expect those and not mistake them for their own output drifting.
 
 ---
 
@@ -417,7 +429,7 @@ it is worth building after M6 — see the caveat under **Stack**.
 | M1.5 Drum map | ✅ done | Test D1 confirms the default | M1 |
 | M2 MIDI export | ✅ done | No | M1, M1.5 |
 | M3 Round-trip | ✅ done | No | M1 |
-| M4 Mutation | code done, captures pending | **Yes** | M3 |
+| M4 Mutation | ✅ done | **Yes** (done) | M3 |
 | M5 MVP convert | | No (desk-testable) | M3, drum `52` packing |
 | M6 Full convert | | No (desk-testable) | M5, M1.5 |
 | M7 Timing calibration | | **Yes** | M3 |
