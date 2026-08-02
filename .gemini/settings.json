@@ -1,0 +1,50 @@
+{
+  "permissions": {
+    "allow": [
+      "command:plutil -extract CFBundleDocumentTypes json -o - '/Applications/Arturia/MIDI Control Center.app/Contents/Info.plist'",
+      "command:plutil -extract CFBundleShortVersionString raw -o - '/Applications/Arturia/MIDI Control Center.app/Contents/Info.plist'",
+      "read_file:/Applications/Arturia/MIDI Control Center.app/Contents/Resources/**",
+      "command:uv sync",
+      "command:uv run"
+    ]
+  },
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "name": "guard-rails",
+            "type": "command",
+            "command": "./scripts/guard_rails.sh",
+            "description": "Block dangerous shell operations before they execute"
+          }
+        ]
+      },
+      {
+        "matcher": "run_shell_command",
+        "hooks": [
+          {
+            "name": "guard-rails",
+            "type": "command",
+            "command": "./scripts/guard_rails.sh",
+            "description": "Block dangerous shell operations before they execute"
+          }
+        ]
+      }
+    ],
+    "AfterAgent": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "validate",
+            "type": "command",
+            "command": "./scripts/validate.sh",
+            "description": "Verify code compilation, type safety, and test criteria before completing turn"
+          }
+        ]
+      }
+    ]
+  }
+}

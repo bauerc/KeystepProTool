@@ -230,7 +230,7 @@ surprise, but because shipped code already assumes its answer.
 
 ### T4.5 — Melodic step-off
 
-- [ ] not yet run
+- [x] not yet run
 
 **3 captures.** The melodic counterpart to D1, which tested drums only.
 
@@ -254,7 +254,7 @@ surprise, but because shipped code already assumes its answer.
 
 ### T4.6 — Melodic pool overflow
 
-- [ ] not yet run
+- [x] not yet run
 
 **1 capture.** D3 established that a *drum* pool spills into chunk 2 at 64 events. Nothing shows
 that a melodic one does, and no sample file has more than 64 melodic notes in a pattern.
