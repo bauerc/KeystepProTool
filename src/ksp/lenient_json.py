@@ -140,18 +140,16 @@ def dumps(obj: Mapping[str, int | str]) -> str:
             which the firmware has ever been shown.
     """
     _escape_fn = _escape
-    lines = []
+    lines: list[str] = []
     append = lines.append
 
     for k, v in obj.items():
-        v_cls = v.__class__
-
-        if v_cls is int:
-            append(f"\t{_escape_fn(k)}: {v}")
-        elif v_cls is str:
-            append(f"\t{_escape_fn(k)}: {_escape_fn(v)}")
-        elif v_cls is bool or not isinstance(v, _INT_OR_STR):
+        if isinstance(v, bool) or not isinstance(v, _INT_OR_STR):
             raise TypeError(f"{k} holds {type(v).__name__}, expected int or str")
+        elif isinstance(v, int):
+            append(f"\t{_escape_fn(k)}: {v}")
+        elif isinstance(v, str):
+            append(f"\t{_escape_fn(k)}: {_escape_fn(v)}")
         else:
             append(f"\t{_escape_fn(k)}: {json.dumps(v)}")
 
