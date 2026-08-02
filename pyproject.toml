@@ -8,13 +8,13 @@ dependencies = [
     "mido>=1.3.3",
 ]
 
-# Console entry points land with the milestones that implement them:
-#   midi2ksp  -> M5 (ksp_cli.convert:main)
-# Declaring them before the modules exist would install commands that crash
+# Console entry points land with the milestones that implement them.
+# Declaring one before its module exists would install a command that crashes
 # on invocation, so they are added alongside the code.
 [project.scripts]
 ksp-dump = "ksp_cli.dump:main"
 ksp2midi = "ksp_cli.export:main"
+midi2ksp = "ksp_cli.convert:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -22,6 +22,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ksp", "src/ksp_cli"]
+# midi2ksp overwrites a template rather than synthesising 153,495 keys, so the
+# factory default ships with it. Without this the installed command has nothing
+# to convert into.
+artifacts = ["src/ksp_cli/templates/*.KeyStepPro"]
 
 [dependency-groups]
 dev = [

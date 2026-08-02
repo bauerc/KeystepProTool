@@ -11,11 +11,14 @@ Milestones 1, 1.5, 2 and 3 of 9 are done: reading and inspecting project files, 
 exporting projects as MIDI, and writing a project file back out byte-for-byte — bar the trailing
 comma, which the hardware confirmed MIDI Control Center does not need, so output is strict JSON.
 
-Milestone 4 adds `ksp.mutate`, which places a note into an existing project or changes one value
+Milestone 4 added `ksp.mutate`, which places a note into an existing project or changes one value
 on a note already there — **verified on the hardware**: files it produced loaded in MIDI Control
-Center, transferred to a KeyStep Pro, and played what they said they would. It is a library, not a
-command: nothing you can install on your `PATH` writes a `.KeyStepPro` file until M5, which is
-next.
+Center, transferred to a KeyStep Pro, and played what they said they would.
+
+Milestone 5 turns that into `midi2ksp`, which converts a MIDI clip into a playable pattern —
+**verified on the hardware**: a converted clip loaded in MIDI Control Center, transferred to a
+KeyStep Pro and played back as written. Both directions now work end to end. It is deliberately an
+MVP: one track, one pattern, monophonic. Real multi-track material, drums and polyphony are M6.
 
 ## Install
 
@@ -179,6 +182,67 @@ else; caveats always reach stderr.
 warning when it does. Expanding the cycle needs to know whether those four sequences are *repeats*
 of a short pattern or *pages* of a 64-step one, and the project files contradict the obvious
 reading — see protocol test T5.8.
+
+## `midi2ksp`
+
+Turn a MIDI clip into a KeyStep Pro pattern:
+
+```sh
+uv run midi2ksp my_riff.mid -o my_riff.KeyStepPro
+```
+
+```
+midi2ksp: warning: note lengths are not carried; every note is written at gate 0.5 steps, what a freshly placed note has on the device
+midi2ksp: warning: the source plays at 120 BPM; tempo is not carried, so the project keeps the one its template holds
+wrote my_riff.KeyStepPro
+  16 note(s) onto track 1, pattern 1 (16 steps)
+```
+
+Drop the result in `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/`, restart MCC, and
+it appears in the Project Browser ready to send to the device.
+
+| Option | Effect |
+|---|---|
+| `-o PATH` | Destination (default: the input file with a `.KeyStepPro` suffix) |
+| `--track N` | KeyStep Pro track 1–4 to write to (default 1) |
+| `--pattern N` | Pattern 1–16 to write to (default 1). It must be empty |
+| `--template PATH` | Project to write into (default: MCC's factory default) |
+| `--midi-track N` | Read only track N of the source file (default: all of them) |
+| `--steps-per-beat N` | Step size (default 4, i.e. 1/16 steps) |
+| `--dry-run` | Report what would be written, and write nothing |
+| `--force` | Overwrite an existing output file |
+| `--quiet` | Suppress the stdout summary. Warnings still go to stderr |
+| `-v`, `--verbose` | List every warning, instead of one summary line per kind |
+
+**A project file is never built from scratch.** Its key set is fixed at 153,495 numeric keys, so
+`midi2ksp` loads a template and overwrites values in it. The default is MCC's own factory project,
+shipped with this tool. Point `--template` at one of your own projects instead and everything else
+in it is kept, which is how a clip goes into a spare pattern of something you are already working
+on. The target pattern has to be empty — appending to a pattern that already holds notes would
+interleave two takes.
+
+### What the conversion decides, and says
+
+- **The clip is anchored.** A pattern is a loop with nowhere to keep a lead-in, so the first note
+  lands on step 1 whatever tick the clip starts at. DAWs routinely export a clip with its session
+  ticks intact.
+- **Notes are quantised** to the step grid, nearest step wins.
+- **One note per step.** Where several sound together the highest is kept and the rest are
+  dropped, with a count. Chords are M6.
+- **Notes past the pattern's last step are dropped**, not written. The device disables them rather
+  than playing them, so writing them would put notes in the file that no hardware makes a sound
+  for. The pattern's length comes from the template, so `--template` is also how you convert a
+  clip longer than 16 steps.
+- **Note lengths are not carried.** Every note gets the gate a freshly placed note has on the
+  device, half a step. The gate ladder is fully measured, so carrying real durations is possible —
+  it is scope, not an unknown, and it belongs to M6.
+- **Tempo is not carried.** The project keeps its template's.
+
+Pitch and velocity pass through unchanged; both are 7-bit on each side.
+
+**The project's name comes from the template**, because a project name is stored as an integer
+parameter whose encoding we have not decoded. In MCC's Project Browser a converted project may
+therefore show the template's name rather than your filename.
 
 ## Development
 

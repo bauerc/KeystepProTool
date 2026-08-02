@@ -110,6 +110,10 @@ def dump_path(obj: Mapping[str, int | str], path: Path | str) -> None:
     destination and is then renamed into place: these files are 3.5 MB and
     their destination is often MCC's Templates folder, where a half-written
     one would be found and parsed.
+
+    ``mkstemp`` creates its file 0600, which is not what writing a file
+    normally gives you and not what MCC should find, so the mode is set to the
+    usual 0644 as the umask allows.
     """
     path = Path(path)
     data = dumps(obj).encode("utf-8")
@@ -118,6 +122,9 @@ def dump_path(obj: Mapping[str, int | str], path: Path | str) -> None:
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
+        umask = os.umask(0)
+        os.umask(umask)
+        os.chmod(tmp, 0o666 & ~umask)
         os.replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
