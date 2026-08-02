@@ -25,6 +25,17 @@ def test_writes_a_project_next_to_its_input(
     assert "16 note(s) onto track 1, pattern 1" in capsys.readouterr().out
 
 
+def test_the_bundled_template_is_the_factory_default(project_files_dir: Path) -> None:
+    """The shipped copy and the sample must not drift apart.
+
+    They are the same file for a reason: the sample is what every format test
+    is written against, and the copy is what a user's conversion starts from.
+    """
+    assert (
+        default_template().read_bytes() == (project_files_dir / "Default.KeyStepPro").read_bytes()
+    )
+
+
 def test_the_bundled_template_is_used_by_default(simple_clip: Path, tmp_path: Path) -> None:
     """The installed command has to work without the repository around it."""
     destination = tmp_path / "out.KeyStepPro"

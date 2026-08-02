@@ -8,7 +8,8 @@ Converts Standard MIDI files ↔ Arturia KeyStep Pro `.KeyStepPro` project files
 Center has no MIDI export for this device, so `ksp2midi` is the only one that exists — and there
 is no reference render to check against: **the hardware's live MIDI output is the sole ground
 truth**. Reading and MIDI export work; `ksp.mutate` places a note or overwrites one value in an
-existing project (M4). Nothing builds a project from MIDI until M5.
+existing project (M4); `ksp.midi_import` converts a clip into one melodic pattern (M5). Real
+multi-track material, drums and polyphony wait for M6.
 
 - `analysis/KeyStepPro_Format_Spec.md` — authoritative format reference. **Read it before touching
   format code.** (`..._deprecated.md` is superseded conclusions; do not cite it.)
@@ -46,10 +47,16 @@ path, so installing from a worktree blocks commits repo-wide once that worktree 
 
 `ksp.midi_export` has three layers that must stay separate: `render_pattern` (pattern → tick
 data), `arrange` (timeline placement), `build_midi_file` (the only `mido` caller). Tests assert on
-`Rendering` data, not parsed MIDI.
+`Rendering` data, not parsed MIDI. `ksp.midi_import` mirrors it inverted — `read_clip` (the only
+`mido` caller) → `quantise` (plain arithmetic) → `apply` (raw dict) — and its tests assert on
+`Placement` data the same way.
 
 Console entry points go in `pyproject.toml` only when their milestone lands, so an installed
-command never crashes on invocation. `midi2ksp` is still unclaimed.
+command never crashes on invocation. All three are claimed; a new one waits for its milestone.
+
+`midi2ksp` ships MCC's factory default in `src/ksp_cli/templates/`, so the installed command has
+something to overwrite. It is a byte-identical copy of `project_files/Default.KeyStepPro` and a
+test holds it there; pre-commit excludes the directory because the file is 3.5 MB.
 
 ## Format traps (details in spec §2, §4)
 
