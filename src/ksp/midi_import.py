@@ -39,16 +39,16 @@ parsed file and a template and decides where the result goes.
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Final
 
 import mido
 
 from ksp import constants, mutate
 from ksp.diagnostics import EMPTY_REPORT, Code, Collector, Report
-from ksp.keys import key
+from ksp.keys import get_int, item_for_track
 from ksp.lenient_json import canonical
-from ksp.midi_export import DEFAULT_STEPS_PER_BEAT, RenderedNote
+from ksp.midi_export import DEFAULT_STEPS_PER_BEAT, RenderedNote, check_steps_per_beat
 
 #: MIDI's own default when a file carries no ``set_tempo``: 500,000
 #: microseconds per beat, i.e. 120 BPM.
@@ -69,8 +69,7 @@ class ImportOptions:
     every track, which is what a type 0 file needs."""
 
     def __post_init__(self) -> None:
-        if self.steps_per_beat < 1:
-            raise ValueError("steps_per_beat must be at least 1")
+        check_steps_per_beat(self.steps_per_beat)
         if self.midi_track is not None and self.midi_track < 1:
             raise ValueError("midi_track counts from 1")
 
@@ -112,12 +111,12 @@ class Placement:
 class ImportResult:
     """A project with the clip written into it, ready to serialise."""
 
-    raw: dict[str, int | str] = field(default_factory=dict)
-    notes: tuple[PlacedNote, ...] = ()
-    track: int = 1
-    pattern: int = 1
-    step_count: int = 0
-    diagnostics: Report = EMPTY_REPORT
+    raw: dict[str, int | str]
+    notes: tuple[PlacedNote, ...]
+    track: int
+    pattern: int
+    step_count: int
+    diagnostics: Report
 
     @property
     def note_count(self) -> int:
@@ -324,8 +323,8 @@ def pattern_step_count(raw: Mapping[str, int | str], *, track: int, pattern: int
 
     ``98`` is 0-based, so a stored 15 is a 16-step pattern.
     """
-    item = _item_for_track(track)
-    stored = _get(raw, item, constants.P_SEQ_STEP_COUNT, pattern)
+    item = item_for_track(track)
+    stored = get_int(raw, item, constants.P_SEQ_STEP_COUNT, pattern)
     if stored is None:
         raise ValueError(f"track {track} pattern {pattern} declares no step count")
     return stored + constants.STEP_COUNT_OFFSET
@@ -336,12 +335,11 @@ def pattern_is_empty(raw: Mapping[str, int | str], *, track: int, pattern: int) 
 
     Existence is ``50 != 127`` and nothing else -- never velocity (spec 4).
     """
-    item = _item_for_track(track)
-    slots = constants.POOL_CAPACITY // constants.MAX_STEPS
+    item = item_for_track(track)
     return all(
-        _get(raw, item, constants.P_SEQ_NOTE_STEP, pattern, slot, ordinal)
+        get_int(raw, item, constants.P_SEQ_NOTE_STEP, pattern, slot, ordinal)
         in (constants.SENTINEL, None)
-        for slot in range(1, slots + 1)
+        for slot in range(1, constants.POOL_SLOTS + 1)
         for ordinal in range(1, constants.MAX_STEPS + 1)
     )
 
@@ -352,8 +350,8 @@ def track_is_melodic(raw: Mapping[str, int | str], *, track: int) -> bool:
     ``86`` bit 6 is DRUM on Track 1 and ARP on Tracks 2-4 (spec 5). Either way
     the melodic pool is not what the device is playing from.
     """
-    item = _item_for_track(track)
-    bits = _get(raw, item, constants.P_TRACK_MODE_BITS)
+    item = item_for_track(track)
+    bits = get_int(raw, item, constants.P_TRACK_MODE_BITS)
     return not (bits or 0) & (1 << constants.DRUM_MODE_BIT)
 
 
@@ -398,18 +396,6 @@ def convert(
         step_count=placement.step_count,
         diagnostics=placement.diagnostics,
     )
-
-
-def _get(raw: Mapping[str, int | str], item: int, param: int, *indices: int) -> int | None:
-    """One integer out of a raw project, without copying it to use ``keys``."""
-    value = raw.get(key(item, param, *indices))
-    return value if isinstance(value, int) else None
-
-
-def _item_for_track(track: int) -> int:
-    if not 1 <= track <= len(constants.TRACK_ITEM_IDS):
-        raise ValueError(f"track {track} out of range 1-{len(constants.TRACK_ITEM_IDS)}")
-    return constants.TRACK_ITEM_IDS[track - 1]
 
 
 def _listed(values: Sequence[int]) -> str:

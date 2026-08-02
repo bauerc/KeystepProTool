@@ -32,12 +32,12 @@ different operation and belongs to M6.
 from collections.abc import Mapping
 
 from ksp import constants
-from ksp.keys import key
+from ksp.keys import item_for_track, key
 
-#: Pool chunks a melodic note may occupy. SLOTS_BY_ITEM says 4 for item 123,
-#: but Track 1's fourth chunk is a zero-filled phantom the firmware never uses
-#: (capture D2-chord4-tr1), so the real ceiling is 3 everywhere.
-_SLOTS = constants.POOL_CAPACITY // constants.MAX_STEPS
+#: Pool chunks a melodic note may occupy. Track 1's fourth chunk is a
+#: zero-filled phantom the firmware never uses (capture D2-chord4-tr1), so the
+#: real ceiling is 3 everywhere.
+_SLOTS = constants.POOL_SLOTS
 
 _NOTE_PARAMS = (
     constants.P_SEQ_NOTE_STEP,
@@ -47,12 +47,6 @@ _NOTE_PARAMS = (
     constants.P_SEQ_TIME_SHIFT,
     constants.P_SEQ_RANDOMNESS,
 )
-
-
-def _item_for_track(track: int) -> int:
-    if not 1 <= track <= len(constants.TRACK_ITEM_IDS):
-        raise ValueError(f"track {track} out of range 1-{len(constants.TRACK_ITEM_IDS)}")
-    return constants.TRACK_ITEM_IDS[track - 1]
 
 
 def _check_pattern(pattern: int) -> None:
@@ -114,7 +108,7 @@ def _slot_steps(raw: Mapping[str, int | str], item: int, pattern: int, slot: int
 
 def pitch_key(*, track: int, pattern: int, note: int, slot: int = 1) -> str:
     """The key holding one melodic note's pitch, by 1-based pool ordinal."""
-    item = _item_for_track(track)
+    item = item_for_track(track)
     _check_pattern(pattern)
     _check_slot(item, slot)
     if not 1 <= note <= constants.MAX_STEPS:
@@ -141,7 +135,7 @@ def set_pitch(
     """
     _check_value("pitch", pitch)
     target = pitch_key(track=track, pattern=pattern, note=note, slot=slot)
-    item = _item_for_track(track)
+    item = item_for_track(track)
 
     step = raw.get(key(item, constants.P_SEQ_NOTE_STEP, pattern, slot, note))
     if step == constants.SENTINEL:
@@ -176,7 +170,7 @@ def place_note(
         ValueError: if the slot is full, if the step or the pattern is already
             at a firmware ceiling, or if any value is out of range.
     """
-    item = _item_for_track(track)
+    item = item_for_track(track)
     _check_pattern(pattern)
     _check_slot(item, slot)
     if not 1 <= step <= constants.MAX_STEPS:

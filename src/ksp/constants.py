@@ -41,8 +41,12 @@ MAX_STEPS: Final = 64
 #: ``reader.slot_is_initialised``.
 SLOTS_BY_ITEM: Final = {123: 4, 124: 3, 125: 3, 126: 3}
 
+#: Pool chunks a note may actually occupy, on every track. SLOTS_BY_ITEM says 4
+#: for item 123, but that fourth chunk is the phantom described above.
+POOL_SLOTS: Final = 3
+
 #: Usable pool capacity, ignoring Track 1's phantom fourth chunk.
-POOL_CAPACITY: Final = 3 * MAX_STEPS
+POOL_CAPACITY: Final = POOL_SLOTS * MAX_STEPS
 
 # --- Project / global parameters (spec section 3.4) ------------------------
 

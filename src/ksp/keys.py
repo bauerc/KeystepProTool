@@ -10,8 +10,18 @@ Spec section 2. Centralising key construction here means the two index spaces
 getting the string right is not also their problem.
 """
 
+from collections.abc import Mapping
 from functools import lru_cache
 from typing import Any
+
+from ksp import constants
+
+
+def item_for_track(track: int) -> int:
+    """The item id carrying sequencer track *track*, counting from 1."""
+    if not 1 <= track <= len(constants.TRACK_ITEM_IDS):
+        raise ValueError(f"track {track} out of range 1-{len(constants.TRACK_ITEM_IDS)}")
+    return constants.TRACK_ITEM_IDS[track - 1]
 
 
 @lru_cache(maxsize=4096)
@@ -29,7 +39,7 @@ def key(item: int, param: int, *indices: int) -> str:
     return f"{item}_{param}_" + "_".join(str(i) for i in indices)
 
 
-def get_int(raw: dict[str, Any], item: int, param: int, *indices: int) -> int | None:
+def get_int(raw: Mapping[str, Any], item: int, param: int, *indices: int) -> int | None:
     """Read one integer value, or ``None`` if the key is absent.
 
     Absent is meaningful rather than exceptional: the key set differs between

@@ -17,7 +17,6 @@ summary only.
 import argparse
 import sys
 from collections.abc import Sequence
-from importlib import resources
 from pathlib import Path
 
 import mido
@@ -37,10 +36,7 @@ TEMPLATE_NAME = "Default.KeyStepPro"
 
 def default_template() -> Path:
     """MCC's factory default, as shipped with this package."""
-    # Wheels install unzipped, so this is the file itself rather than a copy
-    # as_file would clean up on exit.
-    with resources.as_file(resources.files("ksp_cli") / "templates" / TEMPLATE_NAME) as path:
-        return path
+    return Path(__file__).parent / "templates" / TEMPLATE_NAME
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -137,14 +133,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"{PROG}: {exc}", file=sys.stderr)
         return 2
 
-    template_path = args.template or default_template()
-    try:
-        template = load_path(template_path)
-    except OSError as exc:
-        print(f"{PROG}: template: {exc}", file=sys.stderr)
-        return 1
-    except ValueError as exc:
-        print(f"{PROG}: template: {template_path}: {exc}", file=sys.stderr)
+    # Cheapest checks first: the destination depends only on the arguments, and
+    # a bad clip is the likelier mistake. Reading the 3.5 MB template before
+    # either would spend a file read and a parse to reject the command anyway.
+    destination = args.output or args.path.with_suffix(".KeyStepPro")
+    if destination.exists() and not args.force:
+        print(
+            f"{PROG}: {destination} already exists (use --force to overwrite)",
+            file=sys.stderr,
+        )
         return 1
 
     try:
@@ -158,6 +155,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"{PROG}: {args.path}: not a readable MIDI file: {exc}", file=sys.stderr)
         return 1
 
+    template_path = args.template or default_template()
+    try:
+        template = load_path(template_path)
+    except OSError as exc:
+        print(f"{PROG}: template: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"{PROG}: template: {template_path}: {exc}", file=sys.stderr)
+        return 1
+
     try:
         result = convert(midi, template, track=args.track, pattern=args.pattern, options=options)
     except ValueError as exc:
@@ -167,14 +174,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not result.note_count:
         # A project with nothing in it looks like success and plays silence.
         print(f"{PROG}: {args.path}: no notes to convert", file=sys.stderr)
-        return 1
-
-    destination = args.output or args.path.with_suffix(".KeyStepPro")
-    if destination.exists() and not args.force:
-        print(
-            f"{PROG}: {destination} already exists (use --force to overwrite)",
-            file=sys.stderr,
-        )
         return 1
 
     if not args.dry_run:
