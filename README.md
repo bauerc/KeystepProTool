@@ -7,18 +7,13 @@ plan is in [`ROADMAP.md`](./ROADMAP.md).
 
 ## Status
 
-Milestones 1, 1.5, 2 and 3 of 9 are done: reading and inspecting project files, the drum map,
-exporting projects as MIDI, and writing a project file back out byte-for-byte — bar the trailing
-comma, which the hardware confirmed MIDI Control Center does not need, so output is strict JSON.
+Both directions work end to end, and both are **verified on the hardware** — files this tool wrote
+loaded in MIDI Control Center, transferred to a KeyStep Pro, and played what they said they would.
+Three commands ship: `ksp-dump` reads a project, `ksp2midi` exports one as MIDI, and `midi2ksp`
+converts a MIDI clip into a playable pattern.
 
-Milestone 4 added `ksp.mutate`, which places a note into an existing project or changes one value
-on a note already there — **verified on the hardware**: files it produced loaded in MIDI Control
-Center, transferred to a KeyStep Pro, and played what they said they would.
-
-Milestone 5 turns that into `midi2ksp`, which converts a MIDI clip into a playable pattern —
-**verified on the hardware**: a converted clip loaded in MIDI Control Center, transferred to a
-KeyStep Pro and played back as written. Both directions now work end to end. It is deliberately an
-MVP: one track, one pattern, monophonic. Real multi-track material, drums and polyphony are M6.
+`midi2ksp` is deliberately an MVP: one track, one pattern, monophonic, default note lengths. Real
+multi-track material, drums and polyphony are milestone 6 — see [`ROADMAP.md`](./ROADMAP.md).
 
 ## Install
 

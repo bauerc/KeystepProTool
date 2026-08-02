@@ -10,7 +10,8 @@ as notes the file has lost.
 What makes the fix provable rather than plausible is that scanning the whole
 pool takes the flags-without-a-note count to exactly zero, on every pattern of
 every sample file, while leaving the pooled-but-unflagged notes (capture D1)
-untouched. See ``analysis/Format_Corrections_Issue.md`` findings 4 and 5.
+untouched. See spec section 4, "The ``127`` sentinel" and "Pooled does not
+mean audible".
 """
 
 import pytest

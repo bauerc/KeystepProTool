@@ -12,7 +12,7 @@ existing project (M4); `ksp.midi_import` converts a clip into one melodic patter
 multi-track material, drums and polyphony wait for M6.
 
 - `analysis/KeyStepPro_Format_Spec.md` — authoritative format reference. **Read it before touching
-  format code.** (`..._deprecated.md` is superseded conclusions; do not cite it.)
+  format code.**
 - `ROADMAP.md` — milestones M1–M9 and current status. `README.md` — CLI usage and options.
 - `analysis/Timing_Calibration.md`, `analysis/Hardware_Test_Protocol.md` — the unmeasured
   quantities and how they get measured.

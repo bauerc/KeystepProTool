@@ -27,8 +27,8 @@ And the factory mapping is chromatic from MIDI note 36: Arturia's manual says
 "the default mapping starts at MIDI note 36", and the Custom defaults 36..59
 are exactly that run.
 
-Two details remain unconfirmed on hardware and are recorded in the roadmap as
-Test D1: whether a factory-reset device is chromatic-from-36 or
+Two details remain unconfirmed on hardware and are recorded in the capture
+protocol as Test D5: whether a factory-reset device is chromatic-from-36 or
 chromatic-from-0 (MCC's ``defaultValue`` for Low note is 0, which disagrees
 with the manual), and whether chromatic mode maps lane *i* to ``low + i`` or
 ``low + i + 1``. This module implements ``low + i``, matching the manual's
@@ -161,7 +161,7 @@ class DrumMap:
         """Lane *i* plays ``low + i``, the device's Chromatic mode."""
         # MCC caps Low note at 103, which puts the top lane at 126 -- one short
         # of 127. Whether that is an off-by-one in Arturia's range or in this
-        # module's ``low + i`` reading is unconfirmed (roadmap Test D1), so the
+        # module's ``low + i`` reading is unconfirmed (protocol D5), so the
         # device's own limit is enforced rather than a wider one derived from
         # it. No separate overflow check is needed: 103 + 23 cannot exceed 127.
         if not MIN_NOTE <= low <= MAX_CHROMATIC_LOW:

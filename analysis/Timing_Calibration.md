@@ -98,25 +98,12 @@ This matters here because the Time Shift unit may be defined *relative to the st
 duration depends on the step size and the triplet flag. Decoding this bitfield is a prerequisite
 for the timing model, and it comes free with the same hardware session.
 
-### 1.5 MCC does not export MIDI for the KeyStep Pro
+### 1.5 There is no reference render to diff against
 
-**Confirmed in the UI.** There is no export-to-MIDI affordance for this device, which matches what
-the static evidence already said:
-
-- `KeyStepPro.json` declares `actions: ["store", "recall"]`. No device JSON in MCC declares any
-  export action; the set across all of them is `store` / `recall` / `sync`.
-- The only MIDI-file-writing strings in the MCC binary sit in a single block beside
-  `.mbseq` — the **BeatStep Pro** sequence extension — together with `kGetSeqDuty` and
-  `kGetSeqStepSize` and the prompt *"You are about to save your sequences as a .mbseq file.
-  Would you like to generate separate MidiFiles too?"*
-
-That is the BeatStep Pro save path, and it is BSP-only. The widely repeated claim that "MCC can
-export MIDI but cannot import it" therefore does **not** hold for the KeyStep Pro.
-
-**Consequence for this document:** there is **no reference render to diff against**. `ksp2midi`
-is the only MIDI writer that exists for this device, so the sole ground truth for timing is the
-hardware's own MIDI output — which is why tier 8 has to record the device rather than compare
-two files.
+MCC has no MIDI export for the KeyStep Pro — confirmed in the UI, and the evidence is in spec §1.
+So `ksp2midi` is the only MIDI writer that exists for this device, and the sole ground truth for
+timing is the hardware's own MIDI output. That is why tier 8 has to *record* the device rather than
+compare two files.
 
 ---
 
@@ -246,9 +233,9 @@ step size, triplet — is per-pattern, so the whole remaining matrix fits inside
 patterns. **Budget: about 13 export captures (Tier 7) plus 6 recordings (Tier 8).**
 
 Note the test projects must be **built by hand on the device and exported through MCC**, exactly
-as `project_9` was. We cannot generate them: M3 (byte-identical write fidelity) is not done, and
-using an unproven writer to produce the stimulus for a hardware measurement would confound the
-experiment with our own bugs.
+as `project_9` was. The writer is proven now, but using it to produce the stimulus for a hardware
+measurement would confound the experiment with our own bugs: the point of a capture is that the
+device, not this tool, decided what the file says.
 
 ---
 
@@ -290,18 +277,17 @@ All test IDs refer to [`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md)
 | 6 | `99` / `116` bit layout — step size, triplet, polyrhythm, direction | **T5.1–T5.5** (already planned) | `t_step`, hence everything here |
 | 7 | Time Shift unit `U`, and which of models A/B/C | **Tier 8**, recordings R1–R3 | accurate placement both directions |
 | 8 | Do swing and shift add, or interact? | **Tier 8**, recording R5 | the M5 fitting algorithm |
-| ~~9~~ | ~~Gate table above 3.0~~ — **resolved**: the encoding is an index, `stored = detent − 1`, 128 entries (spec §6.1) | Tier 2 ✔ | note durations |
 
-### Two loose ends this investigation turned up
+### One loose end this investigation turned up
 
-- **`src/ksp/reader.py::_swing` may be wrong.** It computes `stored + 25`, treating `97` / `114` as
-  an absolute percentage (default 25 → 50 %). MCC's field label calls it a **signed offset**,
-  −25 % to +25 %. If it is an offset from the global `74`, `seq_swing_percent` is wrong whenever the
-  global is not 50. The two readings coincide at the defaults, which is exactly why no test catches
-  it and why every swing-neutral sample file hides it. **T7.5 decides this.**
-- **The M2 plan's `--time-shift approx` flag** "opts into the documented guess" — but no such guess
-  is documented anywhere, here or elsewhere. Either Tier 8 measures the real unit, or that flag
-  should be dropped rather than shipped pointing at nothing.
+**`src/ksp/reader.py::_swing` may be wrong.** It computes `stored + 25`, treating `97` / `114` as an
+absolute percentage (default 25 → 50 %). MCC's field label calls it a **signed offset**, −25 % to
++25 %. If it is an offset from the global `74`, `seq_swing_percent` is wrong whenever the global is
+not 50. The two readings coincide at the defaults, which is exactly why no test catches it and why
+every swing-neutral sample file hides it. **T7.5 decides this.**
+
+(A `--time-shift approx` flag was considered for M2 and deliberately not shipped: there is no
+documented guess to opt into until tier 8 measures the unit.)
 
 ---
 

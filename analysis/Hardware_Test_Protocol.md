@@ -1,32 +1,35 @@
 # KeyStep Pro hardware capture protocol
 
 **Purpose:** resolve the format questions that cannot be answered from files already on disk, by
-setting known values on the device, exporting them, and diffing — and, for tier M4 alone, by
-running that loop backwards: writing a known value into a file, loading it, and reading the
-device's own export back out.
+setting known values on the device, exporting them, and diffing — or, for a write test, by running
+that loop backwards: writing a known value into a file, loading it, and reading the device's own
+export back out.
 
 **Audience:** a human at the device, and an agent re-reading this later to interpret the captures.
 
-**Companion documents:**
-[`Format_Corrections_Issue.md`](./Format_Corrections_Issue.md) — read its summary table before
-starting.
-
-> **This document contains only unfinished work.** B0 and tiers 1, 2, 3 and 4 have been run (19
-> captures, in `project_files/captures/`, which is gitignored). Their procedures have been
-> **deleted** from this file so that everything still here is something to do. What they found is
-> in [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md), which is the authoritative
+> **This document contains only unfinished work.** B0, tiers 1–4 and the two write tiers (M4, M5)
+> have been run — 22 captures, in `project_files/captures/`, which is gitignored. Their procedures
+> are **deleted** from this file so that everything still here is something to do. What they found
+> is in [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md), which is the authoritative
 > record — not here.
 >
-> Briefly, so nobody re-runs them: drum mode is `86` bit 6 and `100` never moves; a pooled note
-> whose step-active bit is clear does not sound; `idx2` is a 64-entry pool chunk rather than a
-> polyphony voice, with a hardware-enforced 192-event ceiling; `52` is a lane-major 7-bit array;
-> `40` and `39` latch; two untouched exports are byte-identical; and **gate is an index** —
-> `stored = detent − 1`, 128 entries, 0.0625–64 steps, drum identical (spec §6.1).
+> Briefly, so nobody re-runs them:
 >
-> **Also settled, opportunistically rather than by a planned capture:** notes past a pattern's
-> declared last step are **disabled, not stale** — see the O1 ledger row below and spec §4
-> ("Why a note might not play"). This does **not** answer T5.8, which is about the
-> 16 / 32 / 48 / 64 skip *mask*; that capture is still needed.
+> - **Reading.** Drum mode is `86` bit 6 and `100` never moves; a pooled note whose step-active bit
+>   is clear does not sound; `idx2` is a 64-entry pool chunk rather than a polyphony voice, with a
+>   hardware-enforced 192-event ceiling; `52` is a lane-major 7-bit array; `40` and `39` latch; two
+>   untouched exports are byte-identical; and **gate is an index** — `stored = detent − 1`, 128
+>   entries, 0.0625–64 steps, drum identical (spec §6.1).
+> - **Writing (tiers M4, M5).** A file we generate loads in MCC, transfers to the device, and reads
+>   back with **zero keys changed** — the placement recipe is complete on *load*, not just on save,
+>   and a step-active flag we clear is honoured like one the device cleared. Key addressing is
+>   confirmed end to end in a busy project. A converted MIDI clip plays back as written. The five
+>   keys that do move in a readback are not ours: `39` latches 2 → 3 per item, and
+>   `123_117_<pattern>` normalises 247 → 60 (spec §3.3).
+> - **T6.2.** MCC does not need the trailing comma. The writer emits strict JSON, with no flag.
+> - **Opportunistically, not by a planned capture:** notes past a pattern's declared last step are
+>   **disabled, not stale** — see the O1 ledger row below and spec §4 ("Why a note might not
+>   play"). This does **not** answer T5.8, which is about the 16 / 32 / 48 / 64 skip *mask*.
 
 **The baseline every test below starts from** is `B0-baseline.KeyStepPro` — an initialised,
 untouched project, already captured. Where a test says "from the baseline", start by loading or
@@ -36,8 +39,8 @@ re-initialising to that state; do not re-derive it.
 
 | Question | Blocks | Tier |
 |---|---|---|
-| Whether a file we wrote loads, reaches the device, and lands its values where we addressed them | M4, and every write after it | M4 |
 | Whether melodic step-off behaves like drum step-off | M5/M6 export correctness | 4 |
+| What a factory device's Drum Map actually is, and whether it is project state | every drum lane→note claim | 4 |
 | Whether a melodic pool spills into slot 2 like a drum pool | M6 | 4 |
 | The `99` / `116` bitfield layout | M6 | 5 |
 | Pattern chaining beyond 64 steps (`84`) | M6 | 5 |
@@ -83,6 +86,35 @@ Recorded once so the captures are reproducible; this is the route behind every f
 
 MCC's own Save As is not part of the route. Note that `project_files/captures/` is **gitignored**:
 the captures are local evidence, and the finding has to reach the spec to survive.
+
+### The import route
+
+Its mirror, for any test that puts a file we generated *onto* the device. Tiers M4 and M5 used it;
+so does every future write test.
+
+1. **Generate the candidates at the desk**, before the session:
+
+   ```sh
+   uv run pytest -m hardware
+   ```
+
+   The marker-gated tests write their candidates into `project_files/captures/` and assert on the
+   way out that each differs from its source by the expected key count. Readback assertions skip
+   until the matching capture exists.
+
+2. **Copy into MCC's library**, which is world-writable and needs no `sudo`:
+
+   ```sh
+   cp project_files/captures/<name>.KeyStepPro \
+      "/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/"
+   ```
+
+3. **Restart MCC**, find the project in the Project Browser, load it, and send it to the device.
+
+4. **Read the device, then export back** by the route above, saving as `<name>-readback`.
+
+A readback diff is **empty** when the file is right (M4.1), which makes it the cheapest regression
+net available — anything in it is the answer.
 
 ### Device operating notes
 
@@ -187,169 +219,11 @@ the current assumption · what falsifies it · what to do if falsified.**
 
 ---
 
-## Tier M4 — the first write to the device
+## Tier 4 — M6, step-active semantics on the melodic side, and the drum map
 
-**2 captures, one session.** Every other tier reads what the device stores. This one writes, and
-it is the only place our key addressing is checked against the firmware rather than against
-itself. It runs the loop backwards — file → MCC → device → display and ear, then back out through
-Recall From so the result is something a test can assert on.
-
-Milestone M4. PR #47 already showed MCC accepts a file this writer produced and transfers it to
-the device, so what is left is narrower: **does a value we wrote at an address we computed land on
-the note we meant, and does a note we created from nothing actually play?**
-
-### The import route
-
-The mirror of the export route above, and the only route these two tests use.
-
-1. **Generate the candidates at the desk**, before the session:
-
-   ```sh
-   uv run pytest -m hardware
-   ```
-
-   This writes `project_files/captures/M4-place.KeyStepPro` and `M4-pitch.KeyStepPro`, asserting
-   on the way out that they differ from their sources by exactly 14 and 1 keys. The readback
-   assertions skip until the captures below exist.
-
-2. **Copy into MCC's library**, which is world-writable and needs no `sudo`:
-
-   ```sh
-   cp project_files/captures/M4-*.KeyStepPro \
-      "/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/"
-   ```
-
-3. **Restart MCC**, find the project in the Project Browser, load it, and send it to the device.
-   The KeyStep Pro has 16 project slots and any of them will do.
-
-4. **Read the device, then export back** by the standard route, saving as the readback capture
-   named in each test.
-
-### M4.1 — A note we created from nothing plays
-
-- [x] run 2026-08-01 — **confirmed**
-
-- **Resolves:** whether the 8-key placement recipe is complete. It is what the device wrote when a
-  human placed a note (`B0-baseline` → `T1-note-place`), and `ksp.mutate.place_note` reproduces
-  that file byte for byte at the desk — but nothing establishes that the firmware needs no *more*
-  than those keys when it **loads** a file rather than builds one itself.
-- **Also resolves, on the side that matters:** T4.5 showed the device honours a step-active flag
-  **it** cleared. The second note here is identical to the first but for that one bit, so this
-  asks whether it honours a flag **we** cleared in a file it loaded — which is what `ksp2midi`'s
-  `include_disabled` and every M5/M6 write actually rely on.
-- **Device:** load `M4-place`, send it to the device, select Track 2, pattern 1, and **play it**.
-- **Candidate:** `M4-place.KeyStepPro` — generated, not exported. Two notes on Track 2 pattern 1,
-  both pitch 60 (**C3** on the device's naming), both at fresh-note defaults:
-
-  | | step | `48` | expected |
-  |---|---|---|---|
-  | ordinal 1 | 1 | set | **lit, and sounds** |
-  | ordinal 2 | 5 | clear | **dark, and silent — but still holds a note** |
-
-- **Capture:** `M4-place-readback.KeyStepPro`
-- **Keys:** `124_50_1_1_<1..2>` = 0, 4 · `124_109_1_1_<1..2>` = 60, 60 · `124_48_1_1_1` = 1 ·
-  `124_48_1_1_5` = 0 · `124_40_1` = 3
-- **Confirms if:** step 1 is lit and sounds, step 5 is dark and does not sound, pressing step 5
-  still shows a note at C3, and the readback carries both pool entries.
-- **Falsified if:** the project loads but Track 2 pattern 1 is empty (the recipe is missing a key
-  the firmware needs on load — diff the readback against the candidate to see what); or step 5
-  **sounds anyway**, which would mean the firmware treats a flag we wrote differently from one it
-  wrote, and `ExportOptions.include_disabled` is wrong on the melodic side.
-- **If falsified:** do not guess at the missing key. The readback diff names it.
-- **Record what the Project Browser calls it.** Unknown whether MCC lists the filename stem or the
-  project's own stored name, which is an integer-encoded parameter still holding whatever the
-  source project was called. Clear the T6.2 leftovers out of the Templates folder first so there is
-  only one plausible candidate. M5 needs this answer regardless.
-
-### M4.2 — A pitch we changed lands on the note we meant
-
-- [x] run 2026-08-01 — **confirmed**
-
-- **Resolves:** key addressing, end to end, in a busy real project rather than a one-note baseline.
-  A reader and a writer that share the same wrong idea of what `125_109_1_1_5` means round-trip
-  perfectly and still put the note in the wrong place; only the device can tell them apart.
-- **Device:** load `M4-pitch`, send it to the device, select Track 3, pattern 1, and read the note on
-  **step 5** off the display.
-- **Candidate:** `M4-pitch.KeyStepPro` — `project_5` with `125_109_1_1_5` changed **49 → 61**, one
-  key and one line. Ordinal 5 is chosen because its randomness is 100 (it always fires), its skip
-  mask plays it on the first pass, and **ordinals 6–8 share its old pitch** as a control.
-- **Capture:** `M4-pitch-readback.KeyStepPro`
-- **Keys:** `125_109_1_1_5` = 61, with `125_109_1_1_<6..8>` still 49
-- **Confirms if:** the display reads **C#3** on step 5, where `analysis/project_5_description.txt`
-  documents C#2, and steps 6–8 still read C#2. Root note and scale are both 0 in this project, so
-  nothing can quantise the reading.
-- **Falsified if:** step 5 still reads C#2 (the edit did not land), or a *different* step changed
-  (we addressed the wrong ordinal — note that ordinal and step are different index spaces, spec
-  §4), or the pitch is some third value.
-- **If falsified:** diff the candidate against `project_files/project_5.KeyStepPro` first. If that
-  is one line, the writer is fine and the fault is in addressing; repeat on `T1-note-place`, a
-  one-note project where the display reading cannot be ambiguous.
-- **Check the firmware version** before blaming the addressing: the sources carry
-  `"version": "2.5.20"`, and a device updated since may have been migrated by MCC on load.
-
----
-
-## Tier M5 — a converted MIDI clip on the device
-
-**1 capture, and it can share a session with anything else.** M4 already proved that a file this
-writer produces loads, transfers and plays back with zero keys changed, so the format question is
-closed. What is open is narrower and is the milestone itself: **is the pattern the device plays the
-clip we handed it?**
-
-Everything between the two is desk-testable and tested — the conversion is held to M4's own 8-key
-recipe in `tests/test_midi_import.py`, and the clip round-trips out again through `ksp2midi`. This
-capture exists because none of that can hear the device.
-
-### The import route
-
-As tier M4, with one command in front of it:
-
-```sh
-uv run pytest -m hardware      # writes project_files/captures/M5-convert.KeyStepPro
-cp project_files/captures/M5-convert.KeyStepPro \
-   "/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/"
-```
-
-### M5.1 — The clip plays back as the clip
-
-- [x] run 2026-08-01 — **confirmed**. `M5-convert` loaded in MCC, transferred, and played the
-  clip as written. **M5 is verified on the device.**
-
-  Confirmed by playing it, not by a readback: no `M5-convert-readback.KeyStepPro` was exported,
-  so `test_the_device_kept_the_converted_pattern` still skips. That assertion is worth having
-  the next time the device is out — M4.1 showed the readback diff is empty when a file is right,
-  which makes it the cheapest possible regression net — but it is a stronger form of evidence for
-  something already established, not an open question.
-
-- **Resolves:** whether `midi2ksp` produces a playable pattern, which is M5's whole claim.
-- **Device:** load `M5-convert`, send it to the device, select Track 1, pattern 1, and **play it**.
-- **Candidate:** `M5-convert.KeyStepPro` — `project_files/test_file_simple.mid` converted onto
-  Track 1, pattern 1 of the factory default. Sixteen steps, every one lit, all at fresh-note
-  defaults (gate 7, velocity 100, time shift 49, randomness 100). The clip is a C major run with a
-  chromatic wobble, so a transposition or an off-by-one is audible rather than merely visible:
-
-      C3 D3 E3 C3  C3 C#3 B2 C3  C3 C4 B3 A3  C3 D3 E3 C3
-
-- **Capture:** `M5-convert-readback.KeyStepPro`
-- **Confirms if:** all 16 steps are lit, the display reads that sequence starting at step 1, and
-  the readback's note list matches what the converter wrote.
-- **Falsified if:** the pattern is empty (the recipe is incomplete on load — but M4.1 says it is
-  not, so suspect the `version` injection or the key order instead); the notes are there but start
-  at some step other than 1 (the clip anchoring is wrong); or the pitches are transposed (`109` is
-  not the raw MIDI note we assume).
-- **If falsified:** diff the readback against the candidate. M4.1 established that this diff is
-  empty when the file is right, so anything in it is the answer.
-- **Record what the Project Browser calls it**, still open from M4.1. The project's own name is an
-  integer-encoded parameter we do not decode, so a converted project inherits the factory
-  template's — if MCC lists that rather than the filename, every conversion looks alike in the
-  browser and M6 should decode the name parameter.
-
----
-
-## Tier 4 — M6, step-active semantics on the melodic side
-
-**3 captures.** D1–D4 are done and removed; what they established is in spec §4. Both tests here
-extend those drum results to the melodic parameter set, which nothing has measured.
+**5 captures.** D1–D4 are done and removed; what they established is in spec §4. T4.5 and T4.6
+extend those drum results to the melodic parameter set, which nothing has measured. D5 and D6
+settle the drum map, which D1 was also meant to answer and did not.
 
 **T4.5 is the highest-value remaining capture in this document** — not because it is likely to
 surprise, but because shipped code already assumes its answer.
@@ -400,6 +274,44 @@ that a melodic one does, and no sample file has more than 64 melodic notes in a 
   the reader must read all chunks, not just the first.
 - **Also record the ceiling.** If the device errors, note the number and whether it matches the
   192 that D3 produced for drums.
+
+### D5 — What the drum map actually is
+
+- [ ] not yet run
+
+**1 capture, and the readout matters more than the file.** A drum note stores a **lane index** in
+`117`, not a pitch, and the lane→note map is a device global that no project file contains (spec
+§3.2.1). Every drum export this tool produces therefore names an assumed map. The assumption is
+chromatic from 36, and nothing has checked it against a device.
+
+- **Resolves:** two things MCC's `defaultValue`s cannot. Whether a factory device is
+  chromatic-from-**36** or chromatic-from-**0** — MCC's UI fallback says Low note `0`, disagreeing
+  with both the manual and its own Custom defaults of 36…59. And whether chromatic mode maps lane
+  *i* to `low + i` or `low + i + 1` — the manual implies the former, but `maxValue: 103` then puts
+  the top lane at 126 rather than exactly 127.
+- **Device:** **first write down the device's current Drum Map readout** — that reading is the
+  answer and exists nowhere else. Then, on an untouched pattern with Track 1 in DRUM mode, place
+  one hit on each of the 24 lanes, **lane *i* at step *i+1***, 24-step pattern, everything else at
+  fresh-note defaults. Export, then capture the MIDI output while it plays once.
+- **Capture:** `D5-drum-map.KeyStepPro`, plus the MIDI recording
+- **Why one hit per step:** step *n* fires exactly one note-on, so the captured pitch *is* the note
+  for lane *n−1*. All 24 mappings come from one capture, and the lane encoding cross-checks against
+  `123_117_*` in the export.
+- **Confirms if:** the captured pitches run 36…59 against lanes 0…23.
+- **If falsified:** change `ksp.drum_map`'s documented default and the label it prints. The tool
+  must keep saying which map it assumed either way — the map is device state, so no export can ever
+  be certain of it.
+
+### D6 — The drum map is not project state
+
+- [ ] not yet run
+
+**Five minutes, no capture.** Change the Drum Map on the device, export again, and expect a file
+**byte-identical** to D5's. That turns "the map is not in the project file" from an inference off
+the parameter dictionary into an asserted fact.
+
+- **Falsified if:** the bytes differ. Then the map *is* somewhere in the file, and the diff names
+  the keys.
 
 ---
 
@@ -520,7 +432,8 @@ depends on the answer. If setting Monorhythm to on on Track 2 swaps to the same 
 
 ## Tier 6 — Re-checks
 
-**1 capture left** of 2. Cheap, and each removes a standing caveat. T6.2 is done.
+**1 capture left**, and it removes a standing caveat. T6.2 (the trailing comma) is done — see the
+preamble.
 
 ### T6.1 — The `project_5` drum time-shift conflict
 
@@ -542,33 +455,6 @@ depends on the answer. If setting Monorhythm to on on Track 2 swaps to the same 
   run T7.3 rather than improvising captures here.
 - Either way, update `tests/fixtures/project_5.expected.json`, which currently asserts the
   conflict deliberately so it cannot quietly disappear.
-
-### T6.2 — Is the trailing comma required? ✅ **done** (2026-08-01)
-
-- [x] run 2026-08-01 — **the comma is not required.**
-
-- **Resolved:** a standing write-fidelity requirement. `.KeyStepPro` files have a trailing comma
-  before the closing brace, which is why `json.loads` rejects them. MCC parses with
-  Boost.PropertyTree, which tolerates it — nothing established that it *required* it, and it does
-  not.
-- **Device:** the candidate was written as `B0baseline-commaless.KeyStepPro` into
-  `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/`. It appeared in the Project
-  Browser, loaded, **and transferred to the KeyStep Pro** — one step further than this test
-  needed.
-- **Provenance of the candidate.** Derived from `B0-baseline.KeyStepPro`
-  (md5 `64b34737c68da9375ec7e1324e98936a`), so it differs from a known-good hardware export by
-  **one byte**: 3,517,714 against 3,517,715, `diff` showing the single line `"126_99_9": 20,` →
-  `"126_99_9": 20`. That is what makes this a clean result — nothing else varied.
-- **Consequence, applied.** The writer emits strict JSON unconditionally; there is no flag.
-  `ksp.lenient_json.dumps` no longer writes the comma, and `tests/test_round_trip.py` compares
-  against MCC's bytes minus that one byte via the `sample_bytes_strict` fixture.
-  `test_output_differs_from_mcc_by_exactly_the_trailing_comma` pins the deviation at one byte so
-  nothing else can drift in behind it.
-- **Scope — do not over-claim.** This tested the comma and nothing else. Tab indentation, MCC's
-  key order, the absent final newline, the fixed key set and the `version` key are all still
-  untested and remain mandatory. The **reader** must also still accept the comma: every
-  `.KeyStepPro` file that exists has one, and `tests/test_format_invariants.py` asserts that of
-  the checked-in exports.
 
 ---
 
@@ -811,8 +697,9 @@ answered and folded into the spec on 2026-08-01.
 
 | Test ID | Date | Displayed value / setting | Stored value | Notes |
 |---|---|---|---|---|
-| M4.1 | 2026-08-01 | Tr2 pat1: step 1 lit, step 5 placed and dark | `124_48_1_1_1` = 1, `124_48_1_1_5` = 0 | ✅ **done.** Loaded, transferred, and the device showed exactly what was written — one note on, one note placed. **The readback differs from the candidate by zero keys**: a full file → MCC → device → MCC → file round trip introduced no drift at all. So the 8-key placement recipe is complete on *load*, not just on save, and a cleared `48` we wrote is honoured the same as one the device cleared. |
-| M4.2 | 2026-08-01 | Tr3 pat1 step 5 displays **C#3** | `125_109_1_1_5` = 61 | ✅ **done.** Track 3 loaded with its notes intact and step 5 read C#3, against C#2 in `project_5_description.txt`. Key addressing is confirmed end to end. Readback differs from the candidate by **5 keys, none of them ours**: `122/124/125/126_39` latch 2 → 3, and `123_117_1` is normalised 247 → 60 (see spec §3.3). |
+| M4.1 | 2026-08-01 | Tr2 pat1: step 1 lit, step 5 placed and dark | `124_48_1_1_1` = 1, `124_48_1_1_5` = 0 | ✅ **done.** Readback differs from the candidate by **zero keys**. |
+| M4.2 | 2026-08-01 | Tr3 pat1 step 5 displays **C#3** | `125_109_1_1_5` = 61 | ✅ **done.** Addressing confirmed end to end. Readback differs by 5 keys, **none of them ours**: `122/124/125/126_39` latch 2 → 3, `123_117_1` normalised 247 → 60 (spec §3.3). |
+| M5.1 | 2026-08-01 | Tr1 pat1 plays the converted clip as written | n/a — confirmed by ear | ✅ **done.** No readback was exported, so `test_the_device_kept_the_converted_pattern` still skips. Worth capturing next time the device is out, as a regression net rather than an open question. |
 | O1 | 2026-07-31 | `initial_project` Tr1 pat 9, Last Step 48 → 64 → 48 | `123_115_9` = 47 | ✅ **done.** Step-active pooled notes out to step 63. **In the saved project they are disabled and do not play** — that is the file's own state. Raising Last Step to 64 enables them (they appear and sound); lowering it back to 48 disables them again. So **notes past the last step are disabled, not stale.** The toggle was a diagnostic action, not the file's configuration. Not a planned capture — observed while investigating a `ksp2midi` warning. Does **not** answer T5.8. |
 | D25 | 2026-08-01 | one note, Gate display **5.25** | `124_110_1_1_1` = 36 | ✅ **done.** Closes the gate ladder's one derived rung. Diffs to eight keys against `B0-baseline`; predicted and observed agree. Folded into spec §6.1 and `gate_ladder.txt` provenance. |
 | T4.5 | | melodic step 5 toggled off | | No |
@@ -820,9 +707,11 @@ answered and folded into the spec on 2026-08-01.
 | T5.* | | `99` field = | | one row per setting. For the triplet, I added more data to the export. On Track 3 Pattern 1 through 4, I changed the step size/time division number. There are 4 entires all with triplet set, 1/4 1/8 1/16 and 1/32 in that order. I figured this was worth investigating independent of the triplet being set on just Track 2 Pattern one in case there was other stacking concerns. Swing offset on the device defaults to 50% and increments by 1% each turn of the knob and finishes at 75%. The value in the export is 75%. For the drum truck, I avoided completely your suggestion because it fucking sucks. Its clear patterns dictate these values. Not tracks. For the drum track I created 11 patterns as follows: 1 - setting defaults, 2 - Seq Pattern Direction Rand, 3 - Seq Pattern direction Walk, 4 - Time Division 1/4, 5 - Time Division 1/8, 6 - Time Divison 1/16, 7 - Time Division 1/32, 8 - Time Division 1/4 Triplet,9 - Time Division 1/8 Triplet,10 - Time Division 1/16 Triplet,11 - Time Division 1/32 Triplet.|
 | T5.6 | | root note / scale | | For scale, display is Chrom, Major, Minor, Dorian, Mixo, H.Min, Blues, Root, User 1, User 2. I set up the track so Track 1 in Drum mode and Track 2 have 10 patterns following that order. Of note, the Root option didn't seem to take or store anything by just pressing it. On the Rootnote export, the option is stored on Track 3 Pattern 1 and the selection was Scale Pattern Minor and the Root Note selected was D2|
 | T5.7 | | 3-pattern chain | | |
+| D5 | | **Drum Map readout, written down first:** | | lane 0 → note: ; `low + i` or `low + i + 1`? |
+| D6 | | Drum Map changed, re-exported | | byte-identical to D5? |
 | T5.8 | | 16-step pattern, one note per skip mask | | **repeats or pages?** which notes sounded: |
 | T6.1 | | project_5 kick time shifts | | −1/+1 or −1/−1? |
-| T6.2 | 2026-08-01 | `B0baseline-commaless.KeyStepPro`, one byte off `B0-baseline` | n/a — file-level test | ✅ **done. The comma is not required.** Loaded in MCC *and* transferred to the device. The candidate differed from a known-good export by exactly the final `,` (3,517,714 B vs 3,517,715 B), so nothing else was in play. Writer now emits strict JSON with no flag; M3's round-trip target is MCC's bytes minus that byte. Tests the comma **only** — indentation, key order, absent final newline and the fixed key set are untouched by this result. |
+| T6.2 | 2026-08-01 | `B0baseline-commaless.KeyStepPro`, one byte off `B0-baseline` | n/a — file-level test | ✅ **done. The comma is not required.** Loaded in MCC *and* transferred. Tests the comma **only** — indentation, key order, absent final newline and the fixed key set remain mandatory and untested. |
 | T7.1 | | shift min / max displayed | | **the range — run first** |
 | T7.2 | | shift per step: | | one row per note |
 | T7.3 | | drum shift = | | matches melodic? |
@@ -840,29 +729,29 @@ answered and folded into the spec on 2026-08-01.
 
 ## Effort summary
 
-Remaining work only. B0 and tiers 1, 2, 3 and 4 are complete and are not listed.
+Remaining work only. B0, tiers 1–3 and the two write tiers are complete and are not listed.
 
 | Tier | Captures left | Resolves | Milestone |
 |---|---|---|---|
-| 4 | 3 | melodic step-active and pool chunking | M6, M5 |
+| 4 | 5 | melodic step-active, pool chunking, the drum map | M6, M5 |
 | 5 | ~13 | pattern scalars, chaining, step-skip semantics | M6, M2 |
 | 6 | 1 | standing caveats (T6.2 done) | M3 |
 | 7 | ~13 | Time Shift range, swing semantics | M7, M5 |
 | 8 | ~6 recordings | what a Time Shift unit is worth in time | M2, M5 |
-| | **~36 left** of ~57 | | |
+| | **~38 left** of ~59 | | |
 
 Each tier is independently useful — stopping after any one leaves a coherent result rather than a
 half-finished one.
 
-**Remaining ranking: T4.5 → T7.1 → rest of Tier 7 → T4.6 → Tier 6 → Tier 5 → Tier 8.**
-
-- **Tier M4 is done** and is left in this file as the record of the only file → device test there
-  is. It also settled T4.5 from the writer's side: the control note in M4.1 was one *we* cleared
-  in a file the device loaded, and it stayed silent.
+**Remaining ranking: T4.5 → T7.1 → rest of Tier 7 → D5/D6 → T4.6 → Tier 6 → Tier 5 → Tier 8.**
 
 - **T4.5 leads** because it is the one open question that the *shipped* code already depends on:
   the export drops inactive melodic notes on the strength of D1's drum result plus a corpus where
-  `48` never disagrees with the pool. Three captures make that measured instead of inferred.
+  `48` never disagrees with the pool. Three captures make that measured instead of inferred. M4.1
+  settled it from the writer's side only — the control note there was one *we* cleared in a file the
+  device loaded, and it stayed silent.
+- **D5 and D6 are cheap and under-rated.** Every drum export names an assumed lane→note map, and
+  nobody has yet written down what the device's own map says.
 - **T7.1 is two captures and jumps the queue** because it is a go/no-go: if the Time Shift range is
   only ±4, the rest of Tier 7's shift work and most of Tier 8 are not worth running at all.
 - **T7.5 is the other place the code may be wrong** — `reader._swing` and MCC's own field label
