@@ -72,9 +72,9 @@ def test_write_the_m4_candidates(load_sample: Loader, captures_dir: Path) -> Non
     for name, data in ((PLACE_CANDIDATE, place), (PITCH_CANDIDATE, pitch)):
         path = captures_dir / name
         lenient_json.dump_path(data, path)
-        # dump_path goes through mkstemp, which is 0600. These get copied into
-        # MCC's Templates directory, so give them the mode every other project
-        # file there has rather than leaving MCC's read to luck.
+        # dump_path already honours the umask, but these get copied into MCC's
+        # Templates directory, so pin the mode rather than leaving MCC's read
+        # to whatever the operator's shell was set to.
         path.chmod(0o644)
 
     print(f"\nwrote {PLACE_CANDIDATE} and {PITCH_CANDIDATE} to {captures_dir}")

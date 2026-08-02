@@ -289,6 +289,56 @@ The mirror of the export route above, and the only route these two tests use.
 
 ---
 
+## Tier M5 — a converted MIDI clip on the device
+
+**1 capture, and it can share a session with anything else.** M4 already proved that a file this
+writer produces loads, transfers and plays back with zero keys changed, so the format question is
+closed. What is open is narrower and is the milestone itself: **is the pattern the device plays the
+clip we handed it?**
+
+Everything between the two is desk-testable and tested — the conversion is held to M4's own 8-key
+recipe in `tests/test_midi_import.py`, and the clip round-trips out again through `ksp2midi`. This
+capture exists because none of that can hear the device.
+
+### The import route
+
+As tier M4, with one command in front of it:
+
+```sh
+uv run pytest -m hardware      # writes project_files/captures/M5-convert.KeyStepPro
+cp project_files/captures/M5-convert.KeyStepPro \
+   "/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/"
+```
+
+### M5.1 — The clip plays back as the clip
+
+- [ ] not yet run
+
+- **Resolves:** whether `midi2ksp` produces a playable pattern, which is M5's whole claim.
+- **Device:** load `M5-convert`, send it to the device, select Track 1, pattern 1, and **play it**.
+- **Candidate:** `M5-convert.KeyStepPro` — `project_files/test_file_simple.mid` converted onto
+  Track 1, pattern 1 of the factory default. Sixteen steps, every one lit, all at fresh-note
+  defaults (gate 7, velocity 100, time shift 49, randomness 100). The clip is a C major run with a
+  chromatic wobble, so a transposition or an off-by-one is audible rather than merely visible:
+
+      C3 D3 E3 C3  C3 C#3 B2 C3  C3 C4 B3 A3  C3 D3 E3 C3
+
+- **Capture:** `M5-convert-readback.KeyStepPro`
+- **Confirms if:** all 16 steps are lit, the display reads that sequence starting at step 1, and
+  the readback's note list matches what the converter wrote.
+- **Falsified if:** the pattern is empty (the recipe is incomplete on load — but M4.1 says it is
+  not, so suspect the `version` injection or the key order instead); the notes are there but start
+  at some step other than 1 (the clip anchoring is wrong); or the pitches are transposed (`109` is
+  not the raw MIDI note we assume).
+- **If falsified:** diff the readback against the candidate. M4.1 established that this diff is
+  empty when the file is right, so anything in it is the answer.
+- **Record what the Project Browser calls it**, still open from M4.1. The project's own name is an
+  integer-encoded parameter we do not decode, so a converted project inherits the factory
+  template's — if MCC lists that rather than the filename, every conversion looks alike in the
+  browser and M6 should decode the name parameter.
+
+---
+
 ## Tier 4 — M6, step-active semantics on the melodic side
 
 **3 captures.** D1–D4 are done and removed; what they established is in spec §4. Both tests here

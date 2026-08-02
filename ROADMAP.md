@@ -317,7 +317,7 @@ does not keep. M5 and M6 should expect those and not mistake them for their own 
 
 ---
 
-### M5 — MIDI → KeyStep Pro (MVP)
+### M5 — MIDI → KeyStep Pro (MVP) ✅ **done at the desk**
 **Artifact:** `midi2ksp in.mid -o out.KeyStepPro` — one track, one pattern, monophonic,
 default gate.
 
@@ -327,12 +327,45 @@ pattern on the device. Everything after this is breadth, not capability.
 **Approach:** template-and-overwrite. Start from `Default.KeyStepPro`, overwrite values, write
 back. Never synthesise the key set (spec §2).
 
-**Test:** convert a simple clip, drop it in
-`/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/`, restart MCC, confirm it appears in
-the Project Browser and loads. Round-trip through M2 as a desk check first.
+**Delivered:** `ksp.midi_import` and the `midi2ksp` command (`--track`, `--pattern`, `--template`,
+`--midi-track`, `--steps-per-beat`, `--dry-run`, `--force`, `--quiet`, `--verbose`), plus the
+factory template bundled into the wheel so an installed command has something to convert into.
+Three layers mirroring M2's, inverted — `read_clip` (the only `mido` caller) → `quantise` (plain
+arithmetic) → `apply` (raw dict) — so the M8–M9 port translates arithmetic in both directions.
 
-**Scope discipline:** monophonic and single-pattern on purpose. Resist widening this — M6 exists
-for that.
+**Placement is not reimplemented.** `apply` calls `ksp.mutate.place_note`, and
+`test_midi_import.py` asserts that converting a one-note clip reproduces M4's hardware-measured
+8-key diff exactly. A regression in the converter therefore fails against what the device itself
+wrote, not against our own idea of what a note is.
+
+**Test:** the M2 desk check passes — `test_file_simple.mid` → `midi2ksp` → `ksp2midi` returns the
+same sixteen pitches in the same order. **Still needs the device**: protocol tier M5, one capture,
+which is what turns "the file decodes correctly" into "the pattern plays".
+
+**Scope discipline:** monophonic and single-pattern on purpose. Sub-issues #30 (drums) and #31
+(unified drum + melodic) stay open for M6.
+
+**What it turned up.**
+
+- **A MIDI clip does not start at tick 0.** `test_file_simple.mid` — the fixture the milestone
+  names — begins 1920 ticks in, a bar of DAW lead-in. Read literally, every note landed past step
+  16 and the conversion produced an empty project. A pattern is a loop with nowhere to keep a
+  lead-in, so the clip is anchored on its first note and the shift is warned about. This is the
+  kind of thing only a real file surfaces; a synthesised test clip would have started at 0 and
+  hidden it.
+- **The pattern's step count comes from the template**, because M5 writes no scalars. That makes
+  "notes past the last step" a real case rather than a theoretical one, and the spec is explicit
+  that the device disables such notes rather than playing them — so they are dropped with a count
+  instead of written silently.
+- **`dump_path` was leaving files 0600.** It goes through `mkstemp`, whose mode is not what
+  writing a file normally gives you, and these files exist to be read by MCC. It now honours the
+  umask like any other write. M4's hardware test had been working around this with an explicit
+  `chmod`.
+- **Two questions are still open and now visible to users.** A project's *name* is an integer
+  parameter we have not decoded, so a converted project inherits its template's name in MCC's
+  Project Browser — recorded in tier M5 as something to check at the device. And note lengths are
+  not carried: the gate ladder is fully measured, so this is scope rather than an unknown, and it
+  belongs with M6's fuller conversion.
 
 ---
 
@@ -430,7 +463,7 @@ it is worth building after M6 — see the caveat under **Stack**.
 | M2 MIDI export | ✅ done | No | M1, M1.5 |
 | M3 Round-trip | ✅ done | No | M1 |
 | M4 Mutation | ✅ done | **Yes** (done) | M3 |
-| M5 MVP convert | | No (desk-testable) | M3, drum `52` packing |
+| M5 MVP convert | ✅ desk | Tier M5 confirms it plays | M3 |
 | M6 Full convert | | No (desk-testable) | M5, M1.5 |
 | M7 Timing calibration | | **Yes** | M3 |
 | M8 Distribution | | For final check | M6 |

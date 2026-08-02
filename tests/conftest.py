@@ -38,6 +38,18 @@ def project_files_dir() -> Path:
 
 
 @pytest.fixture(scope="session")
+def simple_clip(project_files_dir: Path) -> Path:
+    """16 monophonic 1/16 notes on a clean grid. M5's conversion fixture."""
+    return project_files_dir / "test_file_simple.mid"
+
+
+@pytest.fixture(scope="session")
+def chord_clip(project_files_dir: Path) -> Path:
+    """The same length of material with three-note chords in it."""
+    return project_files_dir / "test_file.mid"
+
+
+@pytest.fixture(scope="session")
 def analysis_dir() -> Path:
     """Format spec and the hardware-confirmed project descriptions."""
     return REPO_ROOT / "analysis"

@@ -13,7 +13,12 @@
 #                      so they are preserved as written rather than tidied.
 #                      (Verified: without this, trailing-whitespace and
 #                      end-of-file-fixer both rewrite them.)
-exclude: ^(project_files/|analysis/.*\.txt$)
+#   src/ksp_cli/templates/
+#                      The bundled copy of MCC's factory default, shipped in
+#                      the wheel so midi2ksp works installed. Same bytes, same
+#                      dialect -- and at 3.5 MB it trips check-added-large-files,
+#                      which is excluded here rather than raised repo-wide.
+exclude: ^(project_files/|analysis/.*\.txt$|src/ksp_cli/templates/)
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit

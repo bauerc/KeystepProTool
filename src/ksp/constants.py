@@ -7,6 +7,11 @@ shift range and unit) this module says so rather than guessing.
 
 from typing import Final
 
+#: The ``version`` string every user-saved project carries and the factory
+#: ``Default.KeyStepPro`` lacks (spec section 2). A converter starting from the
+#: factory template injects it; ``lenient_json.canonical`` puts it in position.
+PROJECT_VERSION: Final = "2.5.20"
+
 #: "Empty" marker in note-indexed arrays. Also a legal pitch and a legal
 #: velocity, which is why note existence is tested on the note->step parameter
 #: alone and never on velocity. Spec section 4.

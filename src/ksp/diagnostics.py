@@ -59,6 +59,15 @@ class Code(StrEnum):
     TRACK_LENGTHS_DIFFER = "track-lengths-differ"
     OVERLAPS_RESOLVED = "overlaps-resolved"
 
+    # --- import ---
+    CLIP_ANCHORED = "clip-anchored"
+    CHORD_REDUCED = "chord-reduced"
+    NOTES_QUANTISED = "notes-quantised"
+    PAST_PATTERN_END = "past-pattern-end"
+    GATE_NOT_CARRIED = "gate-not-carried"
+    TEMPO_NOT_CARRIED = "tempo-not-carried"
+    MULTIPLE_SOURCES = "multiple-sources"
+
 
 @dataclass(frozen=True)
 class Summary:
@@ -157,6 +166,32 @@ SUMMARIES: Mapping[Code, Summary] = {
     Code.OVERLAPS_RESOLVED: Summary(
         "{sites} hold overlapping notes of the same pitch; they were shortened so each has "
         "its own note-off",
+    ),
+    Code.CLIP_ANCHORED: Summary(
+        "the clip does not start at the beginning of the file; its first note was placed on "
+        "step 1 and the rest moved with it. A pattern is a loop, so it has nowhere to keep "
+        "the lead-in",
+    ),
+    Code.CHORD_REDUCED: Summary(
+        "{subjects} share a step with a higher one and were dropped; this conversion is monophonic",
+    ),
+    Code.NOTES_QUANTISED: Summary(
+        "{subjects} did not land on a step and were moved to the nearest one",
+    ),
+    Code.PAST_PATTERN_END: Summary(
+        "{subjects} fall past the pattern's last step and were dropped; the device disables "
+        "notes beyond it, so writing them would put silent notes in the file",
+    ),
+    Code.GATE_NOT_CARRIED: Summary(
+        "note lengths are not carried; every note is written at the gate a freshly placed one "
+        "has on the device",
+    ),
+    Code.TEMPO_NOT_CARRIED: Summary(
+        "the source tempo is not carried; the project keeps the tempo its template holds",
+    ),
+    Code.MULTIPLE_SOURCES: Summary(
+        "notes were taken from more than one source track or channel and merged into one "
+        "pattern; --midi-track picks just one",
     ),
 }
 
