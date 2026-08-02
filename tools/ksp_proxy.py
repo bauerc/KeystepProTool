@@ -4,8 +4,9 @@ Creates a virtual MIDI endpoint named 'KeyStep Pro' that intercepts, decodes,
 and logs all SysEx traffic between Arturia MIDI Control Center (MCC) and the
 physical KeyStep Pro hardware.
 
-Outputs both live human-readable terminal feeds and structured JSON Lines (.jsonl)
-session captures optimized for AI analysis and automated diffing.
+Outputs live human-readable terminal feeds and structured JSON Lines (.jsonl)
+session captures. Supports single unified logs or separate direction logs
+(MCC -> Hardware vs. Hardware -> MCC).
 """
 
 import argparse
@@ -15,7 +16,7 @@ import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, TextIO
 
 import mido
 
@@ -25,11 +26,9 @@ ARTURIA_MANUFACTURER_ID: Final = (0x00, 0x20, 0x6B)
 
 def unpack_7bit(data: Sequence[int] | bytes) -> bytes:
     """Unpack standard MIDI 7-bit bytes to raw 8-bit bytes (MSB group decoding)."""
-    # MIDI SysEx payloads set MSB=0. Arturia uses 7-to-8 bit packing for binary blocks.
     output = bytearray()
     i = 0
     while i < len(data):
-        # 7-bit raw payload bytes can also directly represent ASCII text
         output.append(data[i] & 0x7F)
         i += 1
     return bytes(output)
@@ -50,7 +49,6 @@ def decode_sysex(raw_data: tuple[int, ...] | list[int] | bytes) -> dict[str, Any
         "total_bytes": len(raw_bytes) + 2,  # Including F0 and F7
     }
 
-    # Check for Arturia Manufacturer ID (00 20 6B)
     if len(raw_bytes) >= 3 and tuple(raw_bytes[:3]) == ARTURIA_MANUFACTURER_ID:
         info["is_arturia"] = True
         info["manufacturer"] = "Arturia"
@@ -66,7 +64,6 @@ def decode_sysex(raw_data: tuple[int, ...] | list[int] | bytes) -> dict[str, Any
     info["payload_bytes"] = len(payload)
     info["payload_hex"] = " ".join(f"{b:02X}" for b in payload)
 
-    # Try extracting ASCII strings from payload
     ascii_strings = extract_ascii_strings(payload)
     if ascii_strings:
         info["ascii_strings"] = ascii_strings
@@ -83,7 +80,25 @@ def main() -> int:
         "-o",
         type=Path,
         default=None,
-        help="Path to save structured JSON Lines (.jsonl) capture log.",
+        help="Path to save unified JSON Lines log (or base path if --split is set).",
+    )
+    parser.add_argument(
+        "--split",
+        "-s",
+        action="store_true",
+        help="Split log into <stem>_mcc_to_hw.jsonl and <stem>_hw_to_mcc.jsonl.",
+    )
+    parser.add_argument(
+        "--out-mcc-to-hw",
+        type=Path,
+        default=None,
+        help="Explicit output path for MCC -> Hardware traffic log.",
+    )
+    parser.add_argument(
+        "--out-hw-to-mcc",
+        type=Path,
+        default=None,
+        help="Explicit output path for Hardware -> MCC traffic log.",
     )
     parser.add_argument(
         "--verbose",
@@ -93,11 +108,40 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    log_file = None
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        log_file = args.output.open("a", encoding="utf-8")
-        print(f"📝 Logging structured session to: {args.output.resolve()}")
+    mcc_to_hw_file: TextIO | None = None
+    hw_to_mcc_file: TextIO | None = None
+    unified_file: TextIO | None = None
+
+    # Handle split or explicit output paths
+    if args.split and args.output:
+        stem = args.output.stem
+        parent = args.output.parent
+        ext = args.output.suffix or ".jsonl"
+
+        path_mcc = parent / f"{stem}_mcc_to_hw{ext}"
+        path_hw = parent / f"{stem}_hw_to_mcc{ext}"
+
+        parent.mkdir(parents=True, exist_ok=True)
+        mcc_to_hw_file = path_mcc.open("a", encoding="utf-8")
+        hw_to_mcc_file = path_hw.open("a", encoding="utf-8")
+        print(f"📝 Logging MCC ➔ HW traffic to: {path_mcc.resolve()}")
+        print(f"📝 Logging HW ➔ MCC traffic to: {path_hw.resolve()}")
+    else:
+        if args.out_mcc_to_hw:
+            args.out_mcc_to_hw.parent.mkdir(parents=True, exist_ok=True)
+            mcc_to_hw_file = args.out_mcc_to_hw.open("a", encoding="utf-8")
+            print(f"📝 Logging MCC ➔ HW traffic to: {args.out_mcc_to_hw.resolve()}")
+
+        if args.out_hw_to_mcc:
+            out_hw = args.out_hw_to_mcc
+            out_hw.parent.mkdir(parents=True, exist_ok=True)
+            hw_to_mcc_file = out_hw.open("a", encoding="utf-8")
+            print(f"📝 Logging HW ➔ MCC traffic to: {out_hw.resolve()}")
+
+        if args.output and not (mcc_to_hw_file or hw_to_mcc_file):
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            unified_file = args.output.open("a", encoding="utf-8")
+            print(f"📝 Logging unified session to: {args.output.resolve()}")
 
     print("🔍 Searching for physical KeyStep Pro USB MIDI ports...")
     try:
@@ -138,9 +182,30 @@ def main() -> int:
 
     start_time = time.time()
 
-    def record_packet(direction: str, msg: Any) -> None:
+    def record_packet(reported_direction: str, msg: Any) -> None:
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
         is_sysex = msg.type == "sysex"
+        direction = reported_direction
+
+        sysex_info: dict[str, Any] = {}
+        if is_sysex:
+            sysex_info = decode_sysex(msg.data)
+            # Automatic protocol classification if physical bus mirrors incoming/outgoing traffic
+            raw_hex = sysex_info.get("raw_hex", "")
+            payload_hex = sysex_info.get("payload_hex", "")
+
+            if (
+                raw_hex.startswith("7E 7F 06 02")
+                or payload_hex.startswith("1C")
+                or payload_hex.startswith("1D")
+            ):
+                direction = "HW_TO_MCC"
+            elif (
+                raw_hex.startswith("7E 7F 06 01")
+                or sysex_info.get("payload_bytes", 0) >= 5
+                or raw_hex.startswith("00 00 66")
+            ):
+                direction = "MCC_TO_HW"
 
         record: dict[str, Any] = {
             "timestamp_ms": elapsed_ms,
@@ -149,10 +214,8 @@ def main() -> int:
         }
 
         if is_sysex:
-            sysex_info = decode_sysex(msg.data)
             record["sysex"] = sysex_info
 
-            # Print live feed
             cmd = sysex_info.get("command_id", "RAW")
             strings = sysex_info.get("ascii_strings", [])
             ascii_summary = f" | ASCII: {strings}" if strings else ""
@@ -167,9 +230,19 @@ def main() -> int:
             if args.verbose:
                 print(f"[{elapsed_ms:8.1f} ms] [{direction}] {msg}")
 
-        if log_file:
-            log_file.write(json.dumps(record) + "\n")
-            log_file.flush()
+        line = json.dumps(record) + "\n"
+
+        if unified_file:
+            unified_file.write(line)
+            unified_file.flush()
+
+        if direction == "MCC_TO_HW" and mcc_to_hw_file:
+            mcc_to_hw_file.write(line)
+            mcc_to_hw_file.flush()
+
+        if direction == "HW_TO_MCC" and hw_to_mcc_file:
+            hw_to_mcc_file.write(line)
+            hw_to_mcc_file.flush()
 
     def handle_mcc_to_hardware(msg: Any) -> None:
         record_packet("MCC_TO_HW", msg)
@@ -191,8 +264,9 @@ def main() -> int:
     except KeyboardInterrupt:
         print("\nStopping KeyStep Pro proxy...")
     finally:
-        if log_file:
-            log_file.close()
+        for f in (unified_file, mcc_to_hw_file, hw_to_mcc_file):
+            if f is not None:
+                f.close()
         virtual_in.close()
         virtual_out.close()
         real_in.close()
