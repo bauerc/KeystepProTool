@@ -57,6 +57,13 @@ DEFAULT_TICKS_PER_BEAT: Final = 480
 #: 1/16 is the device's default and the only setting our sample projects use.
 DEFAULT_STEPS_PER_BEAT: Final = 4
 
+
+def check_steps_per_beat(value: int) -> None:
+    """Shared by both directions' options, so the message cannot drift."""
+    if value < 1:
+        raise ValueError("steps_per_beat must be at least 1")
+
+
 #: The device's Drum output default (``globalParamId 79``) is channel 10,
 #: counting from 1; MIDI messages count channels from 0.
 DRUM_CHANNEL: Final = DEFAULT_DRUM_CHANNEL - 1
@@ -98,8 +105,7 @@ class ExportOptions:
     was disabled rather than deleted."""
 
     def __post_init__(self) -> None:
-        if self.steps_per_beat < 1:
-            raise ValueError("steps_per_beat must be at least 1")
+        check_steps_per_beat(self.steps_per_beat)
         if self.ticks_per_beat < 1:
             raise ValueError("ticks_per_beat must be at least 1")
         if self.ticks_per_beat % self.steps_per_beat:
