@@ -312,7 +312,14 @@ cp project_files/captures/M5-convert.KeyStepPro \
 
 ### M5.1 — The clip plays back as the clip
 
-- [ ] not yet run
+- [x] run 2026-08-01 — **confirmed**. `M5-convert` loaded in MCC, transferred, and played the
+  clip as written. **M5 is verified on the device.**
+
+  Confirmed by playing it, not by a readback: no `M5-convert-readback.KeyStepPro` was exported,
+  so `test_the_device_kept_the_converted_pattern` still skips. That assertion is worth having
+  the next time the device is out — M4.1 showed the readback diff is empty when a file is right,
+  which makes it the cheapest possible regression net — but it is a stronger form of evidence for
+  something already established, not an open question.
 
 - **Resolves:** whether `midi2ksp` produces a playable pattern, which is M5's whole claim.
 - **Device:** load `M5-convert`, send it to the device, select Track 1, pattern 1, and **play it**.

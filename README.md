@@ -15,9 +15,10 @@ Milestone 4 added `ksp.mutate`, which places a note into an existing project or 
 on a note already there — **verified on the hardware**: files it produced loaded in MIDI Control
 Center, transferred to a KeyStep Pro, and played what they said they would.
 
-Milestone 5 turns that into `midi2ksp`, which converts a MIDI clip into a playable pattern. It is
-deliberately an MVP: one track, one pattern, monophonic. Real multi-track material, drums and
-polyphony are M6.
+Milestone 5 turns that into `midi2ksp`, which converts a MIDI clip into a playable pattern —
+**verified on the hardware**: a converted clip loaded in MIDI Control Center, transferred to a
+KeyStep Pro and played back as written. Both directions now work end to end. It is deliberately an
+MVP: one track, one pattern, monophonic. Real multi-track material, drums and polyphony are M6.
 
 ## Install
 

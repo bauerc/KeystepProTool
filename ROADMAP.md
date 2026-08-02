@@ -317,7 +317,7 @@ does not keep. M5 and M6 should expect those and not mistake them for their own 
 
 ---
 
-### M5 — MIDI → KeyStep Pro (MVP) ✅ **done at the desk**
+### M5 — MIDI → KeyStep Pro (MVP) ✅ **done**
 **Artifact:** `midi2ksp in.mid -o out.KeyStepPro` — one track, one pattern, monophonic,
 default gate.
 
@@ -339,8 +339,14 @@ arithmetic) → `apply` (raw dict) — so the M8–M9 port translates arithmetic
 wrote, not against our own idea of what a note is.
 
 **Test:** the M2 desk check passes — `test_file_simple.mid` → `midi2ksp` → `ksp2midi` returns the
-same sixteen pitches in the same order. **Still needs the device**: protocol tier M5, one capture,
-which is what turns "the file decodes correctly" into "the pattern plays".
+same sixteen pitches in the same order.
+
+**Confirmed on the device**, protocol tier M5.1, 2026-08-01. `M5-convert` loaded in MCC,
+transferred to the KeyStep Pro and played the clip as written. That closes the loop the tool was
+built for: a MIDI file goes in one end and comes out of the hardware as sound, which no amount of
+desk testing can establish. Confirmed by playing it rather than by a readback capture, so
+`test_the_device_kept_the_converted_pattern` still skips — worth capturing next time the device is
+out, as a regression net rather than an open question.
 
 **Scope discipline:** monophonic and single-pattern on purpose. Sub-issues #30 (drums) and #31
 (unified drum + melodic) stay open for M6.
@@ -463,7 +469,7 @@ it is worth building after M6 — see the caveat under **Stack**.
 | M2 MIDI export | ✅ done | No | M1, M1.5 |
 | M3 Round-trip | ✅ done | No | M1 |
 | M4 Mutation | ✅ done | **Yes** (done) | M3 |
-| M5 MVP convert | ✅ desk | Tier M5 confirms it plays | M3 |
+| M5 MVP convert | ✅ done | **Yes** (done) | M3 |
 | M6 Full convert | | No (desk-testable) | M5, M1.5 |
 | M7 Timing calibration | | **Yes** | M3 |
 | M8 Distribution | | For final check | M6 |
