@@ -27,6 +27,8 @@ from json.encoder import encode_basestring_ascii as _escape
 from pathlib import Path
 from typing import Any
 
+import orjson
+
 # Matches a comma that is followed only by whitespace and a closing bracket.
 # Anchoring on the bracket is what keeps it from touching commas inside string
 # values -- MCC writes none, but the project files are large enough that a
@@ -47,30 +49,82 @@ def strip_trailing_commas(text: str) -> str:
     return _TRAILING_COMMA.sub(r"\1", text)
 
 
-def loads(text: str) -> dict[str, Any]:
-    """Parse MCC's JSON dialect from a string.
+# def loads(text: str) -> dict[str, Any]:
+#     """Parse MCC's JSON dialect from a string.
 
-    Raises:
-        ValueError: if the text does not parse, or parses to something other
-            than an object. A ``.KeyStepPro`` file is always a flat object;
-            anything else means the caller was handed the wrong file.
+#     Raises:
+#         ValueError: if the text does not parse, or parses to something other
+#             than an object. A ``.KeyStepPro`` file is always a flat object;
+#             anything else means the caller was handed the wrong file.
+#     """
+#     parsed = json.loads(strip_trailing_commas(text))
+#     if not isinstance(parsed, dict):
+#         raise ValueError(f"expected a JSON object, got {type(parsed).__name__}")
+#     return parsed
+
+
+# def load_path(path: Path | str) -> dict[str, Any]:
+#     """Parse a ``.KeyStepPro`` file from disk.
+
+#     Decoding uses ``errors="replace"``. These files are ASCII in practice, but
+#     they are hardware exports: refusing to open one because of a stray byte in
+#     a project name would be a poor trade when every key we care about is
+#     numeric.
+#     """
+#     text = Path(path).read_text(encoding="utf-8", errors="replace")
+#     return loads(text)
+
+
+# Fallback type check for flat MCC object requirements
+_INT_OR_STR = (int, str)
+
+
+def strip_trailing_comma_fast(data: bytes) -> bytes:
+    """Remove MCC's trailing comma by searching backwards from the end.
+
+    MCC writes a trailing comma right before the final closing brace '}'.
+    By scanning backwards with rfind, we find the comma instantly without
+    scanning the 3.5 MB body of the file.
     """
-    parsed = json.loads(strip_trailing_commas(text))
+    # Find the position of the closing brace '}' near the end of the file
+    closing_brace = data.rfind(b"}")
+    if closing_brace == -1:
+        return data
+
+    # Look backwards from '}' to find the last comma ','
+    comma_pos = data.rfind(b",", 0, closing_brace)
+    if comma_pos == -1:
+        return data
+
+    # Verify that there are only whitespace bytes (space, tab, newline, return)
+    # between the comma and the closing brace.
+    between = data[comma_pos + 1 : closing_brace]
+    if between.strip() == b"":
+        # Slice out just the comma
+        return data[:comma_pos] + data[comma_pos + 1 :]
+
+    return data
+
+
+def loads(text_or_bytes: str | bytes) -> dict[str, Any]:
+    """Parse MCC's JSON dialect from a string or bytes using orjson."""
+    data = text_or_bytes.encode("utf-8") if isinstance(text_or_bytes, str) else text_or_bytes
+
+    cleaned_data = strip_trailing_comma_fast(data)
+
+    # orjson.loads takes bytes and returns Python objects
+    parsed = orjson.loads(cleaned_data)
+
     if not isinstance(parsed, dict):
         raise ValueError(f"expected a JSON object, got {type(parsed).__name__}")
+
     return parsed
 
 
 def load_path(path: Path | str) -> dict[str, Any]:
-    """Parse a ``.KeyStepPro`` file from disk.
-
-    Decoding uses ``errors="replace"``. These files are ASCII in practice, but
-    they are hardware exports: refusing to open one because of a stray byte in
-    a project name would be a poor trade when every key we care about is
-    numeric.
-    """
-    text = Path(path).read_text(encoding="utf-8", errors="replace")
-    return loads(text)
+    """Parse a ``.KeyStepPro`` file from disk as raw bytes."""
+    data = Path(path).read_bytes()
+    return loads(data)
 
 
 def dumps(obj: Mapping[str, int | str]) -> str:
@@ -85,19 +139,21 @@ def dumps(obj: Mapping[str, int | str]) -> str:
             would serialise as ``1.0`` and a bool as ``true``, neither of
             which the firmware has ever been shown.
     """
+    _escape_fn = _escape
     lines = []
+    append = lines.append
+
     for k, v in obj.items():
-        # ``_escape`` is what ``json.dumps`` reaches for anyway, minus the
-        # encoder set-up. Keys keep it: one holding a quote would break.
-        if v.__class__ is int:
-            value = repr(v)
-        elif isinstance(v, str):
-            value = _escape(v)
-        elif isinstance(v, bool) or not isinstance(v, _INT_OR_STR):
+        v_cls = v.__class__
+
+        if v_cls is int:
+            append(f"\t{_escape_fn(k)}: {v}")
+        elif v_cls is str:
+            append(f"\t{_escape_fn(k)}: {_escape_fn(v)}")
+        elif v_cls is bool or not isinstance(v, _INT_OR_STR):
             raise TypeError(f"{k} holds {type(v).__name__}, expected int or str")
         else:
-            value = json.dumps(v)  # an int subclass may override __repr__
-        lines.append(f"\t{_escape(k)}: {value}")
+            append(f"\t{_escape_fn(k)}: {json.dumps(v)}")
 
     return "{\n" + ",\n".join(lines) + ("\n}" if lines else "}")
 
@@ -143,6 +199,12 @@ def canonical(obj: Mapping[str, int | str]) -> dict[str, int | str]:
     assignment appends it at the end of the dict -- a key order no file MCC
     wrote has ever had.
     """
-    leading = {k: obj[k] for k in LEADING_KEYS if k in obj}
-    rest = sorted(k for k in obj if k not in leading)
-    return leading | {k: obj[k] for k in rest}
+    # Extract leading keys while maintaining order
+    leading_dict = {k: obj[k] for k in LEADING_KEYS if k in obj}
+
+    # Fast set exclusion for rest
+    leading_set = set(leading_dict)
+    rest_keys = sorted(k for k in obj if k not in leading_set)
+
+    # Reconstruct dict
+    return leading_dict | {k: obj[k] for k in rest_keys}
