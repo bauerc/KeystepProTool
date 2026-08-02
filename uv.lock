@@ -171,6 +171,7 @@ source = { editable = "." }
 dependencies = [
     { name = "mido" },
     { name = "orjson" },
+    { name = "python-rtmidi" },
 ]
 
 [package.dev-dependencies]
@@ -187,6 +188,7 @@ dev = [
 requires-dist = [
     { name = "mido", specifier = ">=1.3.3" },
     { name = "orjson", specifier = ">=3.11.9" },
+    { name = "python-rtmidi", specifier = ">=1.5.8" },
 ]
 
 [package.metadata.requires-dev]
@@ -470,6 +472,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/f1/51/276f964496a5714ab
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/7b/14882602ddee241d7984a742fcb423cb4a30fb0d6efc546ac3129fba475a/python_discovery-1.5.0-py3-none-any.whl", hash = "sha256:70c4fc61b4e7404e44f01d6fc44a715c4d685ca6cea83d295922f05891877c98", size = 34205, upload-time = "2026-07-21T13:14:13.398Z" },
 ]
+
+[[package]]
+name = "python-rtmidi"
+version = "1.5.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/ee/0f91965dcc471714c69df21e5ca3d94dc81411b7dee2d31ff1184bea07c9/python_rtmidi-1.5.8.tar.gz", hash = "sha256:7f9ade68b068ae09000ecb562ae9521da3a234361ad5449e83fc734544d004fa", size = 368130, upload-time = "2023-11-20T21:55:02.192Z" }
 
 [[package]]
 name = "pyyaml"

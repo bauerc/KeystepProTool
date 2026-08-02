@@ -277,7 +277,7 @@ that a melodic one does, and no sample file has more than 64 melodic notes in a 
 
 ### D5 — What the drum map actually is
 
-- [ ] not yet run
+- [x] not yet run
 
 **1 capture, and the readout matters more than the file.** A drum note stores a **lane index** in
 `117`, not a pitch, and the lane→note map is a device global that no project file contains (spec
@@ -707,7 +707,7 @@ answered and folded into the spec on 2026-08-01.
 | T5.* | | `99` field = | | one row per setting. For the triplet, I added more data to the export. On Track 3 Pattern 1 through 4, I changed the step size/time division number. There are 4 entires all with triplet set, 1/4 1/8 1/16 and 1/32 in that order. I figured this was worth investigating independent of the triplet being set on just Track 2 Pattern one in case there was other stacking concerns. Swing offset on the device defaults to 50% and increments by 1% each turn of the knob and finishes at 75%. The value in the export is 75%. For the drum truck, I avoided completely your suggestion because it fucking sucks. Its clear patterns dictate these values. Not tracks. For the drum track I created 11 patterns as follows: 1 - setting defaults, 2 - Seq Pattern Direction Rand, 3 - Seq Pattern direction Walk, 4 - Time Division 1/4, 5 - Time Division 1/8, 6 - Time Divison 1/16, 7 - Time Division 1/32, 8 - Time Division 1/4 Triplet,9 - Time Division 1/8 Triplet,10 - Time Division 1/16 Triplet,11 - Time Division 1/32 Triplet.|
 | T5.6 | | root note / scale | | For scale, display is Chrom, Major, Minor, Dorian, Mixo, H.Min, Blues, Root, User 1, User 2. I set up the track so Track 1 in Drum mode and Track 2 have 10 patterns following that order. Of note, the Root option didn't seem to take or store anything by just pressing it. On the Rootnote export, the option is stored on Track 3 Pattern 1 and the selection was Scale Pattern Minor and the Root Note selected was D2|
 | T5.7 | | 3-pattern chain | | |
-| D5 | | **Drum Map readout, written down first:** | | lane 0 → note: ; `low + i` or `low + i + 1`? |
+| D5 | | **Drum Map readout, written down first:** | | There is no drum map on the device. When put into drum mode only 24 keypad leds light up and those are the only ones that interact with an external device or DAW. The midi output (recorded in a DAW) and KeyStepPro project exist. One note per step, starting with the leftmost physical keypad note, and then going up to the final 24 step.|
 | D6 | | Drum Map changed, re-exported | | byte-identical to D5? |
 | T5.8 | | 16-step pattern, one note per skip mask | | **repeats or pages?** which notes sounded: |
 | T6.1 | | project_5 kick time shifts | | −1/+1 or −1/−1? |

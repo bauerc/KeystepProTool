@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "mido>=1.3.3",
     "orjson>=3.11.9",
+    "python-rtmidi>=1.5.8",
 ]
 
 # Console entry points land with the milestones that implement them.
@@ -64,9 +65,9 @@ select = [
 strict = true
 files = ["src", "tests", "tools"]
 
-# mido ships no py.typed, so strict mode rejects the import outright.
+# mido and rtmidi ship no py.typed, so strict mode rejects the import outright.
 [[tool.mypy.overrides]]
-module = "mido.*"
+module = ["mido.*", "rtmidi.*"]
 ignore_missing_imports = true
 
 # mido ships no type information, so its symbols arrive as Any. Confined to
