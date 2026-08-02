@@ -1,7 +1,8 @@
 # Arturia KeyStep Pro `.KeyStepPro` Format Specification
 
-**Status:** current and validated.
-Supersedes [`KeyStepPro_File_Format_Analysis_deprecated.md`](./KeyStepPro_File_Format_Analysis_deprecated.md).
+**Status:** current and validated. The authoritative format reference — nothing else in the
+repository supersedes it. An earlier analysis reached several wrong field mappings; §8 records
+what they were, so a future reader recognises them rather than re-deriving them.
 
 **Device:** Arturia KeyStep Pro, firmware/format `2.5.20`
 **Derived from:** MIDI Control Center 1.23.0.134 and the project files in `../project_files/`
@@ -42,7 +43,7 @@ MCC keeps device data **outside** its app bundle, in a shared, world-readable di
 
 | Path | What it is |
 |---|---|
-| `/Library/Arturia/MIDI Control Center/Resources/KeyStepPro.json` | **The parameter dictionary** — 217 KB, 205 field definitions, 25 item types, 18 bulk-transfer descriptors |
+| `/Library/Arturia/MIDI Control Center/Resources/KeyStepPro.json` | **The parameter dictionary** — 217 KB, 205 field definitions, 25 item types, 18 bulk-transfer descriptors. `fields[]` gives parameter *names*; **`bulkOperation` gives their index shapes** (§9) |
 | `/Library/Arturia/MIDI Control Center/Resources/KeyStepProTest.json` | Factory-test variant of the same schema |
 | `/Library/Arturia/MIDI Control Center/Resources/KeyStepPro.ui` | Panel hit-boxes for the Device Test view. Plain JSON despite the extension. **No format-relevant data** |
 | `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/Factory/Default.KeyStepPro` | **Canonical blank project** — the ideal converter baseline |
@@ -253,7 +254,8 @@ mapping is necessarily an assumption about the owner's device and must be labell
 which is what `ksp.drum_map` does, defaulting to chromatic from 36 (the manual: "the default
 mapping starts at MIDI note 36", and the Custom defaults 36…59 are exactly that run).
 
-Two points still need the hardware, recorded as **Test D1** in the roadmap:
+Two points still need the hardware — **tests D5 and D6** in
+[`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md):
 
 - MCC's `defaultValue` for Mode is Chromatic with Low note `0`, which would put lane 0 at MIDI
   note 0 — disagreeing with both the manual and the Custom defaults. MCC `defaultValue`s are its
@@ -668,17 +670,11 @@ unshifted note.
 
 ### Resolved: the drum step-active bitmask (`52`)
 
-An earlier 8-steps-per-index reading fitted both hardware-confirmed projects (`project_5`:
-17 → steps 1 and 5; `project_9`: 1 → step 1) but failed on `initial_project`, where pattern 1
-holds a kick on steps 1, 5, 9, 13 and a second lane on every odd step, yet `52` reads `17, 34`
-where that packing predicts `17, 17` and `85, 85`.
-
-The correct layout is **7 bits per entry, lane-major, 10 entries per lane**, given in section 4.
-Under it `17, 34` decodes to lane 0 → steps {0, 4, 8, 12}, matching that lane's pool exactly,
-and lane 17's flags are found at a different offset entirely. It reproduces on every file and
-capture checked.
-
-This unblocks writing: a writer can now emit `52` consistently, which M5/M6 require.
+The layout is **7 bits per entry, lane-major, 10 entries per lane**, given in section 4. Under it
+`initial_project` pattern 1's `17, 34` decodes to lane 0 → steps {0, 4, 8, 12}, matching that
+lane's pool exactly, while lane 17's flags sit at a different offset entirely. It reproduces on
+every file and capture checked. (An 8-steps-per-index reading also fits the two single-lane
+hardware-confirmed projects, which is why a multi-lane file was needed to tell them apart.)
 
 The melodic step-active array (`48`) is simpler — one entry per step — and agrees with the note
 list everywhere observed. Both are cross-checked by the reader, which warns rather than
@@ -808,12 +804,11 @@ the range.
 on beat 9 and tied through beat 12 — four steps — as gate 4, and the file stores `110` = 31 for
 it. So a gate converts directly into a note duration; M2's MIDI export relies on this.
 
-**Do not invent a formula for this.** A converter using a plausible-but-wrong gate table produces
-files that load fine and play with wrong note durations — the worst kind of bug, because nothing
-errors. That warning is against fitting a curve to sparse points, which is what the superseded
-`8·g + 3` reading did. It is not an objection to the ladder above: 64 consecutive detents were
-transcribed directly, the rest enumerated from an observed increment rule and count-verified by
-the exact closure at stored 127.
+**Do not fit a curve to sparse points.** A converter using a plausible-but-wrong gate table
+produces files that load fine and play with wrong note durations — the worst kind of bug, because
+nothing errors. The ladder above is not that: 64 consecutive detents were transcribed directly, the
+rest enumerated from an observed increment rule and count-verified by the exact closure at stored
+127.
 
 **Stored `36` (gate 5.25) is now measured too.** It was the sweep's one derived rung — that note
 had been over-turned by a detent and stored 37 — and capture `D25-gate-capture.KeyStepPro` closes
@@ -886,7 +881,12 @@ envelope, so this would need live frame capture to reverse. The file route needs
 
 ---
 
-## 8. Corrections to the deprecated analysis
+## 8. Corrections to the earlier analysis
+
+The repository's first pass at this format was written from the project files alone, on the
+conclusion that MCC ships nothing readable. That conclusion was wrong and so were several of its
+field mappings. The document itself is gone; what it got wrong is kept here, because these are
+the readings a fresh reverse-engineering attempt would plausibly arrive at again.
 
 | Prior claim | Reality |
 |---|---|
@@ -900,9 +900,20 @@ envelope, so this would need live frame capture to reverse. The file route needs
 | Risk of omitting keys the firmware needs | Key set is fixed and identical across all files |
 | `arturia2midi` is doing this on GitHub | Could not be found. Treat as unverified |
 
-The deprecated document's *high-level* observations — flat JSON, trailing comma, structure in
-the key names, 16 patterns × 64 steps, template-and-overwrite as the practical strategy — were
-sound. Its **field-level mappings** were not.
+Its *high-level* observations — flat JSON, trailing comma, structure in the key names, 16 patterns
+× 64 steps, template-and-overwrite as the practical strategy — were sound. Its **field-level
+mappings** were not.
+
+### Prior art
+
+- Arturia's own FAQ states the KeyStep Pro's data structure is **incompatible with the BeatStep
+  Pro**, so BSP tooling cannot be reused.
+- The only documented community MIDI-import workflow is **real-time recording** from a DAW into the
+  hardware — arm record, play the clip. It is bounded by pattern length and captures no per-step
+  skip, randomness or time-shift data.
+- `arturia2midi`, cited by the earlier analysis, could not be found.
+
+A file-level converter is therefore new work rather than a reimplementation.
 
 ---
 
@@ -930,3 +941,44 @@ print([proj.get(f'125_109_1_1_{i}') for i in range(1, 13)])
 
 The §5 tables were produced this way. Any claim here that cannot be re-derived from
 `KeyStepPro.json` plus the files in `../project_files/` should be treated as suspect.
+
+### `bulkOperation` — where the index shapes come from
+
+`fields[]` gives parameter names and nothing else. **`bulkOperation` gives shapes**: for every
+parameter it declares which index ranges are addressable and what each index means. Reading only
+`fields[]` is how the two index spaces (§4) were originally misread, so start here for any question
+of the form "what is this index".
+
+Each descriptor carries `bulkParamIds`, a `bulkItemId` address template and a human-readable
+`desc`. In the template, `"IDX"` is substituted from the enclosing `multibulk_idx` range, a nested
+list is a set of literal index values, and a trailing `start, count` pair is a range:
+
+```json
+{"bulkParamIds": [48, 49], "bulkItemId": [[123], ["IDX"], [1], 17, 16],
+ "desc": "Pattern idx / Step seq parameters (step 17 -> 32) (step active, step skip)"}
+```
+
+— parameters `48` and `49`, item `123`, pattern `IDX`, **index-2 fixed at `1` and only `1`**,
+index-3 running 16 values from 17. That middle `[1]` is why `48`/`49` are per-pattern rather than
+per-slot, while the note parameters use `[1, 2, 3]`. Flatten them all with:
+
+```python
+def walk(o, depth=0):
+    if isinstance(o, dict):
+        d = o.get('desc') or o.get('multibulk_desc')
+        if 'bulkParamIds' in o:
+            print(' ' * depth, o['bulkParamIds'], '|', json.dumps(o.get('bulkItemId')), '|', d)
+        elif d:
+            print(' ' * depth, '##', d, o.get('multibulk_idx', ''))
+        for k, v in o.items():
+            if k == 'multibulk':
+                walk(v, depth + 2)
+    elif isinstance(o, list):
+        for x in o:
+            walk(x, depth)
+
+walk(spec['bulkOperation'])
+```
+
+The dictionary explains *why*; the sample files prove *that*. Every shape claim in §3 and §4 is
+also checkable against `../project_files/` alone, with no MCC installation.
