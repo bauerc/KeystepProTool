@@ -179,7 +179,6 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
-    { name = "python-rtmidi" },
     { name = "pyusb" },
     { name = "ruff" },
 ]
@@ -197,7 +196,6 @@ dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=5.0" },
     { name = "pytest-xdist", specifier = ">=3.5.0" },
-    { name = "python-rtmidi", specifier = ">=1.5.8" },
     { name = "pyusb", specifier = ">=1.3.1" },
     { name = "ruff", specifier = ">=0.6" },
 ]
@@ -473,12 +471,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/f1/51/276f964496a5714ab
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/7b/14882602ddee241d7984a742fcb423cb4a30fb0d6efc546ac3129fba475a/python_discovery-1.5.0-py3-none-any.whl", hash = "sha256:70c4fc61b4e7404e44f01d6fc44a715c4d685ca6cea83d295922f05891877c98", size = 34205 },
 ]
-
-[[package]]
-name = "python-rtmidi"
-version = "1.5.8"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/dd/ee/0f91965dcc471714c69df21e5ca3d94dc81411b7dee2d31ff1184bea07c9/python_rtmidi-1.5.8.tar.gz", hash = "sha256:7f9ade68b068ae09000ecb562ae9521da3a234361ad5449e83fc734544d004fa", size = 368130 }
 
 [[package]]
 name = "pyusb"
