@@ -66,16 +66,11 @@ select = [
 strict = true
 files = ["src", "tests", "tools"]
 
-# mido and rtmidi ship no py.typed, so strict mode rejects the import outright.
+# These ship no py.typed, so strict mode rejects the import outright.
 [[tool.mypy.overrides]]
-module = ["mido.*", "rtmidi.*"]
+module = ["mido.*", "rtmidi.*", "usb.*"]
 ignore_missing_imports = true
 
-# mido ships no type information, so its symbols arrive as Any. Confined to
-# ksp/midi_export.py and its tests; everything else stays fully checked.
-[[tool.mypy.overrides]]
-module = "mido.*"
-ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
