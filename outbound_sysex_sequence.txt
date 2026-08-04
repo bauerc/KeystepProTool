@@ -1,0 +1,17 @@
+# Outbound SysEx extracted from frame 1 onwards
+# Format: [Frame Number] | [Clean SysEx Bytes]
+
+# Frame 7 | f0 7e 7f 06 01 f7
+# 7 Might not be needed?
+Frame 11 | f0 00 20 6b 7f 42 05 01 f7
+Frame 13 | f0 00 20 6b 7f 42 01 01 25 78 f7
+# Are the above frames even needed? 11 appears to "unlock or mode switch"
+# Frame 13 appears to be just a wait or flush signal. WIthout it the first reply is empty but rest are fine
+Frame 5845 | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 10 f7
+Frame 5847 | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 11 10 f7
+Frame 5849 | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 21 10 f7
+Frame 5851 | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 31 10 f7
+Frame XXXX | f0 00 20 6b 7f 42 0b 01 6d 03 7c 01 01 01 10 f7
+Frame TEST | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 40 f7
+Frame PAT1 | f0 00 20 6b 7f 42 0b 01 6d 03 7c 02 01 01 40 f7
+Frame ACTI | f0 00 20 6b 7f 42 0b 01 30 03 7c 02 01 01 10 f7
