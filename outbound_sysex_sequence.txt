@@ -15,3 +15,4 @@ Frame XXXX | f0 00 20 6b 7f 42 0b 01 6d 03 7c 01 01 01 10 f7
 Frame TEST | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 40 f7
 Frame PAT1 | f0 00 20 6b 7f 42 0b 01 6d 03 7c 02 01 01 40 f7
 Frame ACTI | f0 00 20 6b 7f 42 0b 01 30 03 7c 02 01 01 10 f7
+Frame PROJ | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 10 f7

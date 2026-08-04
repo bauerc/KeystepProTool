@@ -37,12 +37,5 @@
     }
   ],
   "unresolved": [
-    {
-      "where": "track 1, pattern 1, drum note 2 (step 5)",
-      "field": "time_shift",
-      "documented": -1,
-      "in_file": 1,
-      "detail": "The description gives Time Shift -1 for both kick hits. Parameter 120 stores 48 and 50, which decode to -1 and +1 against the confirmed centre of 49. Every other value in this project reproduces exactly, and the melodic +1..+4 / -1..-4 ramp independently confirms the centre, so a transcription slip in the description is the more likely explanation -- but it has not been re-checked on the hardware, so it is recorded rather than assumed away."
-    }
   ]
 }

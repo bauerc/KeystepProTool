@@ -380,7 +380,7 @@ depends on the answer. If setting Monorhythm to on on Track 2 swaps to the same 
 
 ### T5.7 — Pattern chaining
 
-- [ ] not yet run
+- [x] not yet run
 
 - **Resolves:** how patterns chain, which is the mechanism M6 needs for source material longer
   than 64 steps. Scene parameter `84` is documented as "16 pattern in a chain (value between 0 and
@@ -397,7 +397,7 @@ depends on the answer. If setting Monorhythm to on on Track 2 swaps to the same 
 
 ### T5.8 — What the four step-skip sequences are
 
-- [ ] not yet run
+- [x] not yet run
 
 > **Not answered by ledger row O1.** O1 found that notes past the *declared last step* (`98` /
 > `115`) are retained and become audible when the pattern is lengthened. That is the pattern
@@ -437,7 +437,7 @@ preamble.
 
 ### T6.1 — The `project_5` drum time-shift conflict
 
-- [ ] not yet run
+- [x] not yet run
 
 - **Resolves:** the one documented discrepancy in the corpus.
   `analysis/project_5_description.txt` states Time Shift **−1 for both kick hits**;
@@ -706,11 +706,11 @@ answered and folded into the spec on 2026-08-01.
 | T4.6 | | >64 melodic notes | | did `48` spill to slot 2? ceiling reached at: 192 notes. 4 chords per note until step 48. Filling step 49 was refused by the device (light would not turn on). Device displayed message of "16 notes limit in a step reached". I then tested more deeply on Track 2 Pattern 2 by setting 16 notes per step. 17th notes were refused with the 16 note limit message. I filled in 12 steps. Trying to fill in the 13th step (this was in step edit mode with overdub button on) produced the 192 limit message per pattern previously seen. The export file is T4-melodic-overflow-v2 |
 | T5.* | | `99` field = | | one row per setting. For the triplet, I added more data to the export. On Track 3 Pattern 1 through 4, I changed the step size/time division number. There are 4 entires all with triplet set, 1/4 1/8 1/16 and 1/32 in that order. I figured this was worth investigating independent of the triplet being set on just Track 2 Pattern one in case there was other stacking concerns. Swing offset on the device defaults to 50% and increments by 1% each turn of the knob and finishes at 75%. The value in the export is 75%. For the drum truck, I avoided completely your suggestion because it fucking sucks. Its clear patterns dictate these values. Not tracks. For the drum track I created 11 patterns as follows: 1 - setting defaults, 2 - Seq Pattern Direction Rand, 3 - Seq Pattern direction Walk, 4 - Time Division 1/4, 5 - Time Division 1/8, 6 - Time Divison 1/16, 7 - Time Division 1/32, 8 - Time Division 1/4 Triplet,9 - Time Division 1/8 Triplet,10 - Time Division 1/16 Triplet,11 - Time Division 1/32 Triplet.|
 | T5.6 | | root note / scale | | For scale, display is Chrom, Major, Minor, Dorian, Mixo, H.Min, Blues, Root, User 1, User 2. I set up the track so Track 1 in Drum mode and Track 2 have 10 patterns following that order. Of note, the Root option didn't seem to take or store anything by just pressing it. On the Rootnote export, the option is stored on Track 3 Pattern 1 and the selection was Scale Pattern Minor and the Root Note selected was D2|
-| T5.7 | | 3-pattern chain | | |
+| T5.7 | | 3-pattern chain | | The scene is saved in Scene slot 1. The chain is composed of Pattern 1 2 3 in that order on Track 2|
 | D5 | | **Drum Map readout, written down first:** | | There is no drum map on the device. When put into drum mode only 24 keypad leds light up and those are the only ones that interact with an external device or DAW. The midi output (recorded in a DAW) and KeyStepPro project exist. One note per step, starting with the leftmost physical keypad note, and then going up to the final 24 step.|
 | D6 | | Drum Map changed, re-exported | | byte-identical to D5? |
-| T5.8 | | 16-step pattern, one note per skip mask | | **repeats or pages?** which notes sounded: |
-| T6.1 | | project_5 kick time shifts | | −1/+1 or −1/−1? |
+| T5.8 | | 16-step pattern, one note per skip mask | | **repeats or pages?** which notes sounded: Beat 1 on pass 1 only. Beat 5 on pass 2 only. Beat 9 on pass 3 only. Beat 13 on pass 4 only, Beat 1 on pass 5 only, Beat 5 on pass 6 only, beat 9 on pass 7 only, beat 13 on pass 8 only, and so on. There is no official language on the device for it. It is activate through the Lst Step/Extend function on the device. Press and hold a beat. Press one of the 4 16/32/48/64 buttons. Light on means it will play at that pass. Light off means it will not. 16 maps to pass 1, 32 to pass 2, 48 to pass 3, 64 to pass 4. When extended fully to 64 steps, a pass is 64 steps in total.|
+| T6.1 | | project_5 kick time shifts | | −1/+1 |
 | T6.2 | 2026-08-01 | `B0baseline-commaless.KeyStepPro`, one byte off `B0-baseline` | n/a — file-level test | ✅ **done. The comma is not required.** Loaded in MCC *and* transferred. Tests the comma **only** — indentation, key order, absent final newline and the fixed key set remain mandatory and untested. |
 | T7.1 | | shift min / max displayed | | **the range — run first** |
 | T7.2 | | shift per step: | | one row per note |
