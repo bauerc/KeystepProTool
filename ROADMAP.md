@@ -225,6 +225,55 @@ See [`analysis/Timing_Calibration.md`](./analysis/Timing_Calibration.md) for the
 arithmetic. **Do not guess any of it** — a wrong timing constant produces files that load fine and
 play wrong, with nothing to signal the error.
 
+## Direct device read over USB SysEx
+
+**Not part of the M1–M9 ladder.** It is an additional input path, not a step toward the existing
+milestones: it makes the hardware a second producer of the same flat dict `ksp.reader.read_project`
+already consumes, so nothing downstream changes. M1–M9 stand whether or not this ever lands.
+
+Today `ksp2midi` can only read a project MCC has already exported. This reads one off the device
+directly. The protocol is decoded in
+[§7 of the format spec](./analysis/format/SysEx_Direct_Transfer_Path.md); the design lives in
+`docs/superpowers/specs/2026-08-05-usb-sysex-project-read-design.md`, whose Phase numbering this
+section keeps.
+
+### Phase 0 — the hardware-free half ✅ **done**
+
+**Artifact:** `ksp.sysex` (frame codec), `ksp.bulk_plan` (the generated read plan) and
+`ksp.bulk_read` (walks the plan against an injected transport and assembles the dict). No `pyusb`
+anywhere in `ksp/`, so the M8–M9 Swift port swaps in CoreMIDI and reuses all three unchanged.
+
+**Test, and it passes:** replaying a captured MCC Recall To exchange
+(`tests/fixtures/recall_tape.txt`, 8,951 request/reply pairs) reconstructs **all 153,497 keys of
+`initial_project.KeyStepPro`** — byte-identical to MCC's export minus the trailing comma this
+writer deliberately omits, and its `ksp2midi` output is byte-identical too. Walking the
+vendor-declared plan also reproduces MCC's 8,951 requests byte-for-byte and in order.
+
+**Green here is not verified on hardware.** Phase 0 proves the codec and the plan against a
+recording. The device's live output remains the sole ground truth.
+
+### Phases 1–4 — pending hardware
+
+- **Phase 1 — the real transport.** Needs `ksp_cli/usb_transport.py`, which Phase 0 does **not**
+  build, plus `ksp_cli/pull.py`. `tools/usb_test.py` already holds a working libusb /
+  interface-2 / kernel-detach recipe to build it from. H1.1/H1.2 cannot run until it exists, so
+  this is the next piece of work — before anyone takes the device out.
+- **Phases 2–4** — live read against the device, then the questions only hardware settles.
+
+No console entry point is declared until the milestone lands, per CLAUDE.md.
+
+### Open items
+
+- **Project selection is unresolved.** Nothing in the address tuple identifies a project slot, so
+  a read returns **whichever project is currently loaded** — `ksp.bulk_read.read_raw` says so in
+  its docstring and every caller must say so to the user. H4.1 settles whether a select command
+  exists at all.
+- **The write direction is undecoded.** Phase 0 is read-only; nothing here says how to send a
+  project *to* the device.
+- **`0xFF` is the device's unset sentinel**, and `247` is MCC's corruption of it in transit. A
+  *file* writer must keep emitting `247`; a *device* writer must not. See
+  [per-pattern scalars](./analysis/format/Parameters_Pattern_Scalars.md).
+
 ### M8 — Distribution
 
 **Artifact:** a signed, notarised thing another KeyStep Pro owner can actually run. Until this

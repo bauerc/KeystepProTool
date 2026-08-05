@@ -11,13 +11,22 @@ A USB call from the MCC software to the Keystep Pro was monitored via Wireshark 
 
 ## Setup Call
 
-From my investigation recorded in `sysex_mvp_call.txt` (which can be used in conjunction with the `replay_handshake.py` script), every call to open up the Arturia KeyStep Pro must start with these 2-3 calls. The frame values correspond to the values found in `recall_sysex.jsonl` for this sequence
+From my investigation recorded in `sysex_mvp_call.txt` (which can be used in conjunction with the `replay_handshake.py` script), every call to open up the Arturia KeyStep Pro must start with these calls. The frame values correspond to the values found in `recall_sysex.jsonl` for this sequence
 
 |[Frame Number] | [Clean SysEx Bytes] |
 | ------- | -----------|
 | Frame 7 | f0 7e 7f 06 01 f7  |
 | Frame 11 | f0 00 20 6b 7f 42 05 01 f7  |
-| Frame 13 | f0 00 20 6b 7f 42 01 01 25 78 f7 |
+
+**Correction — frame 13 is not part of the handshake.** It was originally listed above as a third
+setup call. Decoding the protocol showed it is the **first read of the recall itself**: the short
+request form for `paramId 37, itemId 120` (`25` = 37, `78` = 120), and its reply
+`f0 00 20 6b 7f 42 02 01 25 78 03 f7` carries that key's value, `3`. Frames 7 and 11 are the
+genuine handshake. See [§7 of the format spec](analysis/format/SysEx_Direct_Transfer_Path.md).
+
+|[Frame Number] | [Clean SysEx Bytes] | [What it actually is] |
+| ------- | -----------| --- |
+| Frame 13 | f0 00 20 6b 7f 42 01 01 25 78 f7 | The first read, not a setup call |
 
 ## Retrieval Call
 

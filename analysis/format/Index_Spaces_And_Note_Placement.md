@@ -51,6 +51,12 @@ step, a pattern has at most 64 steps, and a chunk is 64 entries — a full set o
 1 exactly and has nothing left to spill. The drum `52` chunks only because it is packed across
 24 lanes and needs 220 entries for the same job.
 
+**It is also vendor-declared, and it holds for `49` as well.** Arturia's `bulkOperation`
+descriptor fixes the middle index of both `48` and `49` at `[1]`, so MCC itself never reads either
+from any other slot — both are pattern-wide by the vendor's own account, not just by observation.
+See [reproducing findings](./Reproducing_Findings_And_Index_Shapes.md) for the descriptor and
+[the SysEx path](./SysEx_Direct_Transfer_Path.md) for the read plan built from it.
+
 Consequences for writing files:
 
 1. Notes should be packed **contiguously from index 1**, with no gaps. **This is a rule for

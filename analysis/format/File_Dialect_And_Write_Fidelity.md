@@ -40,7 +40,7 @@ These are easy to get wrong and will produce files MCC rejects or misreads:
 | **Trailing comma** | **Read:** MCC writes a `,` before the final `}`, so `json.loads` fails on every file it produces. Strip with `,(\s*[}\]])` → `\1`, or use a lenient/JSON5 parser. **Write: not required** — protocol test T6.2 (2026-08-01) put a file identical to a known-good export apart from that one byte into MCC; it loaded and transferred to the device. `ksp.lenient_json.dumps` therefore emits strict JSON. This is the *only* rule in this table shown to be optional |
 | **Indentation** | Tab-indented |
 | **No final newline** | The file ends at `}`. A standard end-of-file fixer breaks byte identity |
-| **Line format** | Every line is exactly `\t"<key>": <value>,\n` — one tab, the key quoted, `": "` as the separator. Values are integers (0–247 across all samples) or the two strings below, each formatted exactly as `json.dumps` would. There are no floats, no booleans and no nesting anywhere |
+| **Line format** | Every line is exactly `\t"<key>": <value>,\n` — one tab, the key quoted, `": "` as the separator. Values are integers — **0–127**, with the single `247` artifact described in [per-pattern scalars](./Parameters_Pattern_Scalars.md) as the sole exception across all samples — or the two strings below, each formatted exactly as `json.dumps` would. There are no floats, no booleans and no nesting anywhere |
 | **Key order** | `device` first, then `version` if present, then every numeric key **sorted as a string**: `126_99_16` comes before `126_99_2`. A numeric sort produces a different file |
 | **`version` key** | User-saved projects have `"version": "2.5.20"` immediately after `"device"`. The factory `Default.KeyStepPro` **does not**. A converter starting from the factory default must inject it — and put it in position, because assigning it to a loaded dict appends it at the end |
 | **Fixed key set** | All observed files share an identical set of **153,495 numeric keys**. `Default.KeyStepPro` = 153,496 total (no `version`); user projects = 153,497. Never add or remove keys — only overwrite values |
@@ -58,8 +58,9 @@ produces is not merely accepted by MCC's parser (T6.2) — the device stores and
 faithfully.
 
 The only keys a device round trip moves are its own bookkeeping: `39` latches 2 → 3 per item,
-alongside `40`, and `123_117_<pat>` normalises to 60 (see [per-pattern scalars](./Parameters_Pattern_Scalars.md)). A converter should expect those and
-must not treat them as its own output drifting.
+alongside `40`, and `123_117_<pat>` normalises to 60 — the device never held the `247` MCC wrote
+there, only its own `0xFF` sentinel (see [per-pattern scalars](./Parameters_Pattern_Scalars.md)).
+A converter should expect those and must not treat them as its own output drifting.
 
 Together these rules are enough: applying them to a parsed sample reproduces its bytes exactly.
 `ksp.lenient_json.dumps` / `canonical` implement them and `tests/test_round_trip.py` holds all

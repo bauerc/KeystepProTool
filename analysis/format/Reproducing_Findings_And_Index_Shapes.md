@@ -30,6 +30,13 @@ print([proj.get(f'125_109_1_1_{i}') for i in range(1, 13)])
 The tables in [the worked example](./Worked_Example_Project_5.md) were produced this way. Any claim here that cannot be re-derived from
 `KeyStepPro.json` plus the files in `../../project_files/` should be treated as suspect.
 
+**Arturia's own file is not strict JSON either.** `KeyStepPro.json` carries trailing commas before
+closing brackets — `json.loads` fails on it at line 387 — so it needs the same lenient handling as
+the project files. In this repository that is `ksp.lenient_json.strip_trailing_commas`, the regex
+form, and **not** `lenient_json.loads`: that one repairs only the single comma before a final
+closing brace and will not touch an interior one. The file also holds 38 duplicate `desc` and
+`comment` keys, which are harmless — `json` is last-wins already.
+
 ### `bulkOperation` — where the index shapes come from
 
 `fields[]` gives parameter names and nothing else. **`bulkOperation` gives shapes**: for every
@@ -67,6 +74,12 @@ def walk(o, depth=0):
 
 walk(spec['bulkOperation'])
 ```
+
+**Read the templates, not the prose.** The `bulkItemId` templates are correct — walking them
+generates MCC's entire 8,951-request read stream byte-identically (see
+[the SysEx path](./SysEx_Direct_Transfer_Path.md)). The `desc` strings beside them are not: the
+note-pool chunk leaves all carry "note 129 -> 144"-style text with chunk-3 numbering copy-pasted
+across all three chunks. Where a `desc` and its template disagree, the template is right.
 
 The dictionary explains *why*; the sample files prove *that*. Every shape claim in the parameter dictionary and index-space files is
 also checkable against `../../project_files/` alone, with no MCC installation.
