@@ -24,7 +24,6 @@ from pathlib import Path
 from ksp.constants import DEFAULT_GATE_LENGTH
 from ksp.diagnostics import Report
 from ksp.midi_export import (
-    DEFAULT_STEPS_PER_BEAT,
     DEFAULT_TICKS_PER_BEAT,
     DRUM_CHANNEL,
     ExportOptions,
@@ -77,12 +76,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="export only this pattern",
     )
     parser.add_argument(
-        "--steps-per-beat",
-        type=int,
-        default=DEFAULT_STEPS_PER_BEAT,
+        "--passes",
+        default="auto",
+        choices=("auto", "1", "2", "3", "4"),
         help=(
-            "step size as a division of the beat (default: %(default)s, i.e. 1/16 steps). "
-            "The project file does store this, in a bitfield we have not decoded"
+            "how many of the four 16/32/48/64 repeats to render (default: %(default)s -- "
+            "four when a pattern holds a note that does not play on all four, one otherwise)"
         ),
     )
     parser.add_argument(
@@ -204,7 +203,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         options = ExportOptions(
             ticks_per_beat=args.ticks_per_beat,
-            steps_per_beat=args.steps_per_beat,
+            passes=None if args.passes == "auto" else int(args.passes),
             drum_map=drum_map,
             drum_channel=args.drum_channel - 1,
             default_gate=args.default_gate,

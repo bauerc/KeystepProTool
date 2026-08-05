@@ -13,6 +13,7 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
+from ksp import constants
 from ksp.constants import note_name
 from ksp.diagnostics import EMPTY_REPORT, Report
 from ksp.drum_map import DrumMap
@@ -43,6 +44,77 @@ class PatternMode(StrEnum):
     DRUM = "drum"
     BOTH = "both"
     EMPTY = "empty"
+
+
+class PlaybackDirection(StrEnum):
+    """How a pattern walks its steps (99 / 116 bits 5-6).
+
+    ``UNKNOWN`` is the honest reading of the fourth value: two bits allow it
+    but the device never produced it during T5.5, so nothing knows its name.
+    """
+
+    FORWARD = "forward"
+    RANDOM = "random"
+    WALK = "walk"
+    UNKNOWN = "unknown"
+
+
+_DIRECTIONS = {
+    constants.DIRECTION_FORWARD: PlaybackDirection.FORWARD,
+    constants.DIRECTION_RANDOM: PlaybackDirection.RANDOM,
+    constants.DIRECTION_WALK: PlaybackDirection.WALK,
+}
+
+
+@dataclass(frozen=True)
+class PatternBits:
+    """One decoded 99 / 116 field.
+
+    The sequencer and drum fields share this layout; only their defaults
+    differ (spec 3.3). ``raw`` is kept so a caller can see the value the
+    decode came from without going back to the file.
+    """
+
+    raw: int
+    step_denominator: int
+    """4, 8, 16 or 32 -- the step size as the device displays it."""
+
+    triplet: bool
+    polyrhythm: bool
+    direction: PlaybackDirection
+    unallocated: int
+    """Bits set that tier 5 never accounted for. Always 0 in every known file."""
+
+    @classmethod
+    def decode(cls, raw: int) -> "PatternBits":
+        return cls(
+            raw=raw,
+            step_denominator=constants.step_denominator(raw),
+            triplet=constants.is_triplet(raw),
+            polyrhythm=constants.is_polyrhythm(raw),
+            direction=_DIRECTIONS.get(constants.direction_index(raw), PlaybackDirection.UNKNOWN),
+            unallocated=constants.unallocated_bits(raw),
+        )
+
+    @property
+    def steps_per_beat(self) -> int:
+        return self.step_denominator // 4
+
+    @property
+    def label(self) -> str:
+        """How the device writes it: ``1/16``, or ``1/16T`` for a triplet."""
+        return f"1/{self.step_denominator}{'T' if self.triplet else ''}"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "raw": self.raw,
+            "step_size": self.label,
+            "step_denominator": self.step_denominator,
+            "triplet": self.triplet,
+            "polyrhythm": self.polyrhythm,
+            "direction": self.direction.value,
+            "unallocated": self.unallocated,
+        }
 
 
 @dataclass(frozen=True)
@@ -146,8 +218,18 @@ class Pattern:
 
     seq_step_count: int
     seq_swing_percent: int
+    seq_bits: PatternBits
     drum_step_count: int | None
     drum_swing_percent: int | None
+    drum_bits: PatternBits | None
+    root_note: int
+    """Pitch class 0-11 (parameter 107). The octave the display shows is not
+    stored anywhere in the file."""
+
+    scale: int
+    """Index into ``constants.SCALE_NAMES`` (parameter 108). One list serves
+    both parameter sets -- there is no drum twin."""
+
     notes: tuple[Note, ...]
     diagnostics: Report = EMPTY_REPORT
     """Inconsistencies found while decoding. Reported, never silently fixed --
@@ -163,8 +245,19 @@ class Pattern:
     def is_empty(self) -> bool:
         return not self.notes
 
+    @property
+    def scale_name(self) -> str | None:
+        return constants.scale_name(self.scale)
+
     def notes_of(self, kind: NoteKind) -> tuple[Note, ...]:
         return tuple(n for n in self.notes if n.kind is kind)
+
+    def bits(self, kind: NoteKind) -> PatternBits:
+        """The 99 / 116 field governing *kind*, falling back to the melodic one
+        on the tracks that have no drum set."""
+        if kind is NoteKind.DRUM and self.drum_bits is not None:
+            return self.drum_bits
+        return self.seq_bits
 
     def to_dict(self, drum_map: DrumMap | None = None) -> dict[str, Any]:
         return {
@@ -173,8 +266,13 @@ class Pattern:
             "has_data": self.has_data,
             "seq_step_count": self.seq_step_count,
             "seq_swing_percent": self.seq_swing_percent,
+            "seq_bits": self.seq_bits.to_dict(),
             "drum_step_count": self.drum_step_count,
             "drum_swing_percent": self.drum_swing_percent,
+            "drum_bits": self.drum_bits.to_dict() if self.drum_bits else None,
+            "root_note": self.root_note,
+            "scale": self.scale,
+            "scale_name": self.scale_name,
             "notes": [n.to_dict(drum_map) for n in self.notes],
             "warnings": list(self.warnings),
             "diagnostics": self.diagnostics.to_list(),
@@ -214,6 +312,40 @@ class Track:
 
 
 @dataclass(frozen=True)
+class Chain:
+    """One track's pattern chain within a scene (parameter 84).
+
+    ``patterns`` is in chain order and 1-based, matching how the device
+    numbers patterns; the file stores them 0-based.
+    """
+
+    track: int
+    patterns: tuple[int, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"track": self.track, "patterns": list(self.patterns)}
+
+
+@dataclass(frozen=True)
+class Scene:
+    """One of the 16 scenes, holding a chain per track.
+
+    Only tracks that actually chain appear: an unused slot reads the sentinel
+    across all 16 entries, which is every scene of every sample project.
+    """
+
+    number: int
+    chains: tuple[Chain, ...] = ()
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.chains
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"scene": self.number, "chains": [c.to_dict() for c in self.chains]}
+
+
+@dataclass(frozen=True)
 class Project:
     """A decoded ``.KeyStepPro`` project."""
 
@@ -225,12 +357,17 @@ class Project:
     global_swing_percent: int
     current_scene: int
     tracks: tuple[Track, ...]
+    scenes: tuple[Scene, ...] = ()
     source_name: str = ""
     diagnostics: Report = EMPTY_REPORT
 
     @property
     def warnings(self) -> tuple[str, ...]:
         return self.diagnostics.messages
+
+    @property
+    def chained_scenes(self) -> tuple[Scene, ...]:
+        return tuple(s for s in self.scenes if not s.is_empty)
 
     def track(self, number: int) -> Track:
         """Return track *number*, counting from 1."""
@@ -258,6 +395,7 @@ class Project:
             "tempo_bpm": self.tempo_bpm,
             "global_swing_percent": self.global_swing_percent,
             "current_scene": self.current_scene,
+            "scenes": [s.to_dict() for s in self.chained_scenes],
             "warnings": list(self.warnings),
             "diagnostics": self.diagnostics.to_list(),
         }

@@ -10,7 +10,7 @@ import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
-from ksp.constants import SKIP_SEQUENCES
+from ksp.constants import SKIP_SEQUENCES, root_note_name
 from ksp.diagnostics import Collector, Report
 from ksp.drum_map import DEFAULT_CHROMATIC_LOW, DrumMap
 from ksp.model import Note, NoteKind, Pattern, Project, Track
@@ -63,8 +63,18 @@ def _disabled_marker(note: Note, last_step: int | None) -> str:
     return ""
 
 
+def _scale_line(pattern: Pattern) -> str:
+    """Root note and scale, both decoded by protocol T5.6."""
+    scale = pattern.scale_name or f"scale {pattern.scale} (off the device's list)"
+    return f"      root {root_note_name(pattern.root_note)}   scale {scale}"
+
+
 def _pattern_lines(pattern: Pattern, drum_map: DrumMap | None, *, verbose: bool) -> Iterator[str]:
     yield f"    Pattern {pattern.number:<2} [{pattern.mode.value}]"
+    if pattern.root_note or pattern.scale:
+        # Only when set: every sample project reads C chromatic, and a line
+        # printed on all 16 patterns of all 4 tracks would be noise.
+        yield _scale_line(pattern)
 
     # A pattern's melodic and drum sets each have their own step count and
     # swing, so each is printed against the notes it governs rather than as a
@@ -82,7 +92,12 @@ def _pattern_lines(pattern: Pattern, drum_map: DrumMap | None, *, verbose: bool)
                 yield f"      drum map: {drum_map.describe()}"
         else:
             steps, swing = pattern.seq_step_count, pattern.seq_swing_percent
-        yield f"      {kind.value}: {steps} steps, swing {swing}%"
+        bits = pattern.bits(kind)
+        rhythm = "poly" if bits.polyrhythm else "mono"
+        yield (
+            f"      {kind.value}: {steps} steps, {bits.label}, swing {swing}%, "
+            f"{bits.direction.value}, {rhythm}"
+        )
         width = 30 if kind is NoteKind.DRUM and drum_map is not None else 10
         for slot in sorted({n.slot for n in notes}):
             yield f"        slot {slot}"
@@ -141,6 +156,12 @@ def format_project(
         f"  tempo {project.tempo_bpm:g} BPM   swing {project.global_swing_percent}%   "
         f"scene {project.current_scene}",
     ]
+    # Only scenes that chain something: a project nobody has chained holds the
+    # sentinel in all 16 slots of all 5 tracks of all 16 scenes.
+    for scene in project.chained_scenes:
+        for chain in scene.chains:
+            patterns = " -> ".join(str(p) for p in chain.patterns)
+            lines.append(f"  scene {scene.number} track {chain.track} chain: {patterns}")
     if verbose:
         lines.extend(f"  ! {w}" for w in project.warnings)
     lines.append("")

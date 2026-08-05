@@ -122,7 +122,7 @@ wrote out/project_9_track1_pattern3.mid
 | `-o PATH` | Destination (default: the input file with a `.mid` suffix); with `--split`, a directory |
 | `--split` | One file per non-empty (track, pattern), named `<stem>_track{N}_pattern{P}.mid` |
 | `--track N` / `--pattern N` | Export only one track or pattern |
-| `--steps-per-beat N` | Step size (default 4, i.e. 1/16 steps) |
+| `--passes {auto,1,2,3,4}` | How many of the four 16/32/48/64 repeats to render (default `auto`) |
 | `--ticks-per-beat N` | MIDI resolution (default 480) |
 | `--drum-map SPEC` | Same grammar and config file as `ksp-dump` (default `chromatic:36`) |
 | `--default-gate STEPS` | Length used where a gate value is outside the measured 0–127 ladder (default 0.5) |
@@ -135,17 +135,23 @@ wrote out/project_9_track1_pattern3.mid
 | `--quiet` | Suppress the stdout summary. Warnings still go to stderr |
 | `-v`, `--verbose` | List every warning, instead of one summary line per kind |
 
-Anything the export had to decide for itself is printed to stderr as a warning, because two
-things it needs are not in the project file:
+Anything the export had to decide for itself is printed to stderr as a warning. One thing it
+needs is not in the project file at all:
 
-- **Step size** is stored in a bitfield we have not decoded, so `--steps-per-beat` supplies it.
 - **The drum map** is a device-global setting, not project data. The export names the map it
   assumed every time. Unlike `ksp-dump`, `--drum-map none` is refused: a MIDI file has to name a
   note for every lane, so there is no honest way to leave a lane unresolved.
 
-**Gate lengths** used to be a third. The full 128-rung ladder is now measured, so every gate a
-real file can hold converts directly into a note duration. `--default-gate` remains for a value
-outside 0–127, which is warned about rather than interpolated.
+**Gate lengths and step size** used to be two more. The full 128-rung gate ladder is measured, so
+every gate a real file can hold converts directly into a note duration; `--default-gate` remains
+for a value outside 0–127, which is warned about rather than interpolated. Step size and triplet
+are measured too, and read per pattern out of the file, so there is nothing to supply.
+
+**Each pattern is a four-repeat cycle.** Every note carries a mask saying which of the repeats it
+plays in, and the device runs them as repeats of the pattern rather than as pages of a long one.
+`--passes auto` expands a pattern to four repeats when any of its notes sits one out, and renders
+one when none do — so a project nobody has masked comes out exactly as it did before the flag
+existed. `--passes 1` flattens the cycle deliberately, and says that it did.
 
 Where a pattern holds both a melodic and a drum note set, only the one the track's mode flag
 (parameter `86` bit 6) says the device plays is exported — the other is leftovers from before the
@@ -203,7 +209,7 @@ it appears in the Project Browser ready to send to the device.
 | `--pattern N` | Pattern 1–16 to write to (default 1). It must be empty |
 | `--template PATH` | Project to write into (default: MCC's factory default) |
 | `--midi-track N` | Read only track N of the source file (default: all of them) |
-| `--steps-per-beat N` | Step size (default 4, i.e. 1/16 steps) |
+| `--steps-per-beat N` | Step size to quantise to (default 4, i.e. 1/16 steps). Written into the pattern |
 | `--dry-run` | Report what would be written, and write nothing |
 | `--force` | Overwrite an existing output file |
 | `--quiet` | Suppress the stdout summary. Warnings still go to stderr |

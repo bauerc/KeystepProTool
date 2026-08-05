@@ -18,7 +18,7 @@ import pytest
 
 from ksp import constants
 from ksp.diagnostics import Code
-from ksp.midi_export import ExportOptions, render_pattern
+from ksp.midi_export import ExportOptions, render_pattern, ticks_per_step
 from ksp.model import Note, NoteKind
 from ksp.reader import _check_step_active, load
 
@@ -209,11 +209,11 @@ def test_notes_past_the_last_step_are_dropped_by_default(initial_project) -> Non
     )
 
     rendering = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM)
-    ticks_per_step = ExportOptions().ticks_per_step
-    assert all(n.tick // ticks_per_step < last for n in rendering.notes)
+    step_ticks = ticks_per_step(pattern, NoteKind.DRUM, ExportOptions().ticks_per_beat)
+    assert all(n.tick // step_ticks < last for n in rendering.notes)
     # The pattern is its declared length, not stretched to reach a note that
     # does not sound.
-    assert rendering.length_ticks == last * ticks_per_step
+    assert rendering.length_ticks == last * step_ticks
     assert any("past the last step of 48" in w for w in rendering.warnings)
     assert any("--include-disabled" in w for w in rendering.warnings)
 
@@ -227,7 +227,8 @@ def test_include_disabled_restores_notes_past_the_last_step(initial_project) -> 
     pooled = pattern.notes_of(NoteKind.DRUM)
     assert len(rendering.notes) == len(pooled)
     # Widened so the recovered notes land where the file puts them.
-    assert rendering.length_ticks > pattern.drum_step_count * options.ticks_per_step
+    step_ticks = ticks_per_step(pattern, NoteKind.DRUM, options.ticks_per_beat)
+    assert rendering.length_ticks > pattern.drum_step_count * step_ticks
     assert any("--include-disabled is set" in w for w in rendering.warnings)
 
 
@@ -235,7 +236,9 @@ def test_a_pattern_within_its_length_is_untouched(project_files_dir) -> None:  #
     """The filter must not fire on the hardware-confirmed reference project."""
     project = load(project_files_dir / "project_5.KeyStepPro")
     pattern = project.tracks[0].patterns[0]
-    rendering = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM)
+    rendering = render_pattern(
+        pattern, track_number=1, kind=NoteKind.DRUM, options=ExportOptions(passes=1)
+    )
     assert len(rendering.notes) == len(pattern.notes_of(NoteKind.DRUM))
     assert not any("past the last step" in w for w in rendering.warnings)
 

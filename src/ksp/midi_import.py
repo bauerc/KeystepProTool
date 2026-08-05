@@ -45,10 +45,11 @@ from typing import Final
 import mido
 
 from ksp import constants, mutate
+from ksp.constants import DEFAULT_STEPS_PER_BEAT, check_steps_per_beat
 from ksp.diagnostics import EMPTY_REPORT, Code, Collector, Report
 from ksp.keys import get_int, item_for_track
 from ksp.lenient_json import canonical
-from ksp.midi_export import DEFAULT_STEPS_PER_BEAT, RenderedNote, check_steps_per_beat
+from ksp.midi_export import RenderedNote
 
 #: MIDI's own default when a file carries no ``set_tempo``: 500,000
 #: microseconds per beat, i.e. 120 BPM.
@@ -60,9 +61,10 @@ class ImportOptions:
     """Everything the MIDI file cannot tell us about the target pattern."""
 
     steps_per_beat: int = DEFAULT_STEPS_PER_BEAT
-    """Step size. The device's own setting lives in the undecoded ``99``/``116``
-    bitfield (spec 3.3), so it is supplied rather than read, exactly as in the
-    export direction."""
+    """Step size to quantise to. Unlike the export direction, which now reads
+    the pattern's own setting out of ``99``, this is a real choice: it decides
+    what grid the incoming clip is snapped to. ``apply`` writes it into the
+    pattern's ``99`` so the device plays back at the size it was written for."""
 
     midi_track: int | None = None
     """Read only this track of the source file, counting from 1. ``None`` reads
@@ -104,6 +106,11 @@ class Placement:
 
     notes: tuple[PlacedNote, ...]
     step_count: int
+    steps_per_beat: int = DEFAULT_STEPS_PER_BEAT
+    """The grid the notes were snapped to. Carried so ``apply`` can write it
+    into the pattern's own step size rather than leaving the device to play a
+    1/32 clip at 1/16."""
+
     diagnostics: Report = EMPTY_REPORT
 
 
@@ -280,6 +287,7 @@ def quantise(clip: Clip, *, step_count: int, options: ImportOptions | None = Non
     return Placement(
         notes=tuple(by_step[step] for step in sorted(by_step)),
         step_count=step_count,
+        steps_per_beat=options.steps_per_beat,
         diagnostics=collector.report(),
     )
 
@@ -302,7 +310,9 @@ def apply(
             pitch=note.pitch,
             velocity=note.velocity,
         )
-    return result
+    return mutate.set_step_size(
+        result, track=track, pattern=pattern, steps_per_beat=placement.steps_per_beat
+    )
 
 
 def saveable(raw: Mapping[str, int | str]) -> dict[str, int | str]:

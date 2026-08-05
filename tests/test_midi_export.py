@@ -25,10 +25,14 @@ from ksp.midi_export import (
     render_pattern,
     render_project,
 )
-from ksp.model import NoteKind, Pattern, Project
+from ksp.model import NoteKind, Pattern, PatternBits, Project
 from ksp.reader import load
 
 TICKS_PER_STEP = 120  # the 480/4 default: 1/16 steps at 480 ticks per beat
+
+#: project_5 and project_9 carry real skip masks, so anything asserting one
+#: pattern's own content has to say which repeat it means.
+ONE_PASS = ExportOptions(passes=1)
 
 
 @dataclass(frozen=True)
@@ -87,7 +91,12 @@ def project_9(project_files_dir: Path) -> Project:
 
 @pytest.fixture
 def exported_5(project_5: Project) -> ExportResult:
-    return export_project(project_5)
+    """One pass, so these assertions read the pattern rather than the cycle.
+
+    project_5's notes carry real skip masks, so the default export repeats it
+    four times; the expansion has its own tests below.
+    """
+    return export_project(project_5, ExportOptions(passes=1))
 
 
 def test_tempo_and_resolution_come_from_the_project(exported_5: ExportResult) -> None:
@@ -181,7 +190,8 @@ def test_the_drum_map_is_named_in_the_output_not_left_implied(
 
 def test_a_custom_drum_map_moves_the_exported_notes(project_5: Project) -> None:
     """The same lane must follow whatever map the user's device actually has."""
-    result = export_project(project_5, ExportOptions(drum_map=DrumMap.custom(range(60, 84))))
+    options = ExportOptions(drum_map=DrumMap.custom(range(60, 84)), passes=1)
+    result = export_project(project_5, options)
     assert [n.note for n in played(result.midi, "Track 1 (drum)")] == [60, 60]
     assert any("custom (assumed - not in file)" in w for w in result.warnings)
 
@@ -204,7 +214,7 @@ def test_patterns_are_laid_end_to_end_and_stay_aligned_across_tracks(
     16-step pattern later -- not at its own pattern index, which would leave a
     bar of silence for the pattern nobody used.
     """
-    result = export_project(project_9)
+    result = export_project(project_9, ExportOptions(passes=1))
     assert result.pattern_numbers == (2, 3)
 
     drums = played(result.midi, "Track 1 (drum)")
@@ -218,7 +228,26 @@ def test_patterns_are_laid_end_to_end_and_stay_aligned_across_tracks(
 
 def test_the_file_lasts_as_long_as_its_patterns(project_9: Project) -> None:
     """Two 16-step patterns at 120 BPM in 1/16 steps: two bars, four seconds."""
-    assert export_project(project_9).midi.length == pytest.approx(4.0)
+    assert export_project(project_9, ExportOptions(passes=1)).midi.length == pytest.approx(4.0)
+
+
+def test_a_masked_note_lands_on_the_repeat_it_plays_in(project_9: Project) -> None:
+    """project_9 pattern 3's only hit is masked to 32, i.e. the second repeat.
+
+    The device runs the four sequences as repeats of the pattern (spec 5,
+    protocol T5.8), so that note is silent on the first pass and sounds on the
+    second -- which is the whole difference between the repeats reading and
+    the pages one.
+    """
+    result = export_project(project_9)
+    drums = played(result.midi, "Track 1 (drum)")
+
+    # Pattern 2 has no masks and stays one pass; pattern 3 expands to four,
+    # and its note sits one pass into them.
+    assert [n.start for n in drums] == [0, 32 * TICKS_PER_STEP]
+    assert any("rendered as 4 repeats" in w for w in result.warnings)
+    # 16 steps of pattern 2, then four 16-step repeats of pattern 3.
+    assert result.midi.length == pytest.approx(10.0)
 
 
 def _drum_gates_off_the_ladder(pattern: Pattern, raw: int = 200) -> Pattern:
@@ -315,7 +344,7 @@ def test_a_pattern_holding_one_set_is_exported_whatever_the_mode_flag_says(
     melodic = project_5.select(track=3)
     in_drum_mode = replace(melodic, tracks=(replace(melodic.tracks[0], drum_mode=True),))
 
-    result = export_project(in_drum_mode)
+    result = export_project(in_drum_mode, ExportOptions(passes=1))
     assert result.track_names == ("Track 3",)
     assert result.note_count == 10
 
@@ -327,7 +356,7 @@ def test_an_empty_project_exports_nothing(project_files_dir: Path) -> None:
 
 
 def test_selection_narrows_what_is_exported(project_5: Project) -> None:
-    result = export_project(project_5.select(track=3))
+    result = export_project(project_5.select(track=3), ExportOptions(passes=1))
     assert result.track_names == ("Track 3",)
     assert result.note_count == 10
 
@@ -339,8 +368,8 @@ def test_swing_delays_the_second_step_of_each_pair(project_5: Project) -> None:
     second starts half a step late.
     """
     swung = _with_swing(project_5, 75)
-    flat = export_project(swung, ExportOptions(apply_swing=False))
-    result = export_project(swung)
+    flat = export_project(swung, ExportOptions(apply_swing=False, passes=1))
+    result = export_project(swung, ONE_PASS)
 
     offsets = [
         s.start - f.start
@@ -364,23 +393,49 @@ def _with_swing(project: Project, percent: int) -> Project:
     return replace(project, tracks=tracks)
 
 
-def test_step_size_is_configurable_because_the_file_does_not_say(project_5: Project) -> None:
-    """Step size lives in the undecoded 99/116 bitfield (spec 3.3)."""
-    eighths = export_project(project_5, ExportOptions(steps_per_beat=2))
+def test_step_size_comes_from_the_pattern_itself(project_5: Project) -> None:
+    """Bits 3-4 of 99, measured by T5.1 -- so nobody has to supply it."""
+    eighths = export_project(_with_bits(project_5, raw=12))
     assert [n.start for n in played(eighths.midi, "Track 3")][:2] == [0, 240]
 
 
+def test_a_triplet_pattern_renders_two_thirds_of_the_step(project_5: Project) -> None:
+    """Bit 0, and why the default resolution is divisible by 3."""
+    triplets = export_project(_with_bits(project_5, raw=21))
+    assert [n.start for n in played(triplets.midi, "Track 3")][:2] == [0, 80]
+
+
+def test_a_non_forward_direction_is_reported_not_reordered(project_5: Project) -> None:
+    """Rand and Walk have no MIDI equivalent, so the export says so (T5.5)."""
+    walking = export_project(_with_bits(project_5, raw=84))
+    assert [n.start for n in played(walking.midi, "Track 3")][:2] == [0, TICKS_PER_STEP]
+    assert any("walk" in w for w in walking.warnings)
+
+
+def _with_bits(project: Project, *, raw: int) -> Project:
+    """A copy of *project* with track 3 pattern 1's 99 field overridden.
+
+    Every sample project holds the same 20, so a non-default step size,
+    triplet or direction can only be covered by building the case.
+    """
+    track = project.track(3)
+    pattern = replace(track.pattern(1), seq_bits=PatternBits.decode(raw))
+    patterns = tuple(pattern if p.number == 1 else p for p in track.patterns)
+    tracks = tuple(replace(t, patterns=patterns) if t.number == 3 else t for t in project.tracks)
+    return replace(project, tracks=tracks)
+
+
 def test_the_chromatic_drum_map_base_is_configurable(project_5: Project) -> None:
-    result = export_project(project_5, ExportOptions(drum_map=DrumMap.chromatic(60)))
+    result = export_project(project_5, ExportOptions(drum_map=DrumMap.chromatic(60), passes=1))
     assert played(result.midi, "Track 1 (drum)")[0].note == 60
 
 
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
-        ({"steps_per_beat": 0}, "at least 1"),
         ({"ticks_per_beat": 0}, "at least 1"),
-        ({"ticks_per_beat": 100, "steps_per_beat": 3}, "not divisible"),
+        ({"ticks_per_beat": 100}, "not divisible"),
+        ({"passes": 5}, "passes must be 1-4"),
         ({"drum_channel": 16}, "0-15"),
         ({"default_gate": 0}, "greater than 0"),
     ],
@@ -406,7 +461,12 @@ class TestRenderLayer:
         project_5 track 3 pattern 1: beats 1-4 C2, 5-8 C#2, then D at beats 9
         and 13 -- the second sitting at note index 10 but step 13.
         """
-        rendering = render_pattern(project_5.track(3).pattern(1), track_number=3, kind=NoteKind.SEQ)
+        rendering = render_pattern(
+            project_5.track(3).pattern(1),
+            track_number=3,
+            kind=NoteKind.SEQ,
+            options=ONE_PASS,
+        )
 
         assert rendering.pattern_number == 1
         assert rendering.length_ticks == 16 * TICKS_PER_STEP
@@ -420,13 +480,18 @@ class TestRenderLayer:
 
     def test_gate_is_a_duration_in_steps(self, project_5: Project) -> None:
         """The tie from beat 9 to beat 12 stores gate 4 and lasts four steps."""
-        rendering = render_pattern(project_5.track(3).pattern(1), track_number=3, kind=NoteKind.SEQ)
+        rendering = render_pattern(
+            project_5.track(3).pattern(1),
+            track_number=3,
+            kind=NoteKind.SEQ,
+            options=ONE_PASS,
+        )
         assert rendering.notes[8].duration_ticks == 4 * TICKS_PER_STEP
         assert rendering.notes[9].duration_ticks == round(3.5 * TICKS_PER_STEP)
 
     def test_the_drum_set_renders_onto_the_drum_channel(self, project_5: Project) -> None:
         rendering = render_pattern(
-            project_5.track(1).pattern(1), track_number=1, kind=NoteKind.DRUM
+            project_5.track(1).pattern(1), track_number=1, kind=NoteKind.DRUM, options=ONE_PASS
         )
         assert rendering.midi_track_name == "Track 1 (drum)"
         assert [n.pitch for n in rendering.notes] == [DEFAULT_CHROMATIC_LOW] * 2
@@ -434,7 +499,7 @@ class TestRenderLayer:
 
     def test_an_arrangement_can_be_built_without_touching_mido(self, project_5: Project) -> None:
         """render -> arrange -> build: only the last step knows about MIDI."""
-        arrangement = arrange(render_project(project_5))
+        arrangement = arrange(render_project(project_5, ONE_PASS))
 
         assert [t.name for t in arrangement.tracks] == ["Track 1 (drum)", "Track 3"]
         assert arrangement.note_count == 12
@@ -480,10 +545,10 @@ class TestSplit:
 
     def test_each_file_starts_at_tick_zero(self, project_9: Project) -> None:
         """Merged, pattern 3 sits a pattern late; split, it stands alone."""
-        merged = played(export_project(project_9).midi, "Track 1 (drum)")
+        merged = played(export_project(project_9, ONE_PASS).midi, "Track 1 (drum)")
         assert [n.start for n in merged] == [0, 16 * TICKS_PER_STEP]
 
-        pattern_3 = next(r for r in export_split(project_9) if r.pattern_numbers == (3,))
+        pattern_3 = next(r for r in export_split(project_9, ONE_PASS) if r.pattern_numbers == (3,))
         assert [n.start for n in played(pattern_3.midi, "Track 1 (drum)")] == [0]
 
     def test_a_split_file_holds_only_its_own_track(self, project_5: Project) -> None:

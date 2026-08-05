@@ -22,8 +22,8 @@ from pathlib import Path
 import mido
 
 from ksp import constants
+from ksp.constants import DEFAULT_STEPS_PER_BEAT
 from ksp.lenient_json import dump_path, load_path
-from ksp.midi_export import DEFAULT_STEPS_PER_BEAT
 from ksp.midi_import import ImportOptions, ImportResult, convert, saveable
 from ksp_cli.reporting import add_verbose_option, print_report
 
@@ -93,8 +93,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_STEPS_PER_BEAT,
         metavar="N",
         help=(
-            "step size (default: %(default)s, i.e. 1/16 steps). The device's own setting is "
-            "held in a bitfield we have not decoded, so it is supplied rather than read"
+            "step size to quantise to (default: %(default)s, i.e. 1/16 steps). Written into "
+            "the pattern, so the device plays back on the grid the clip was snapped to"
         ),
     )
     parser.add_argument(

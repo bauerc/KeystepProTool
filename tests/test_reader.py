@@ -7,6 +7,7 @@ broke rather than just reporting that a note came out wrong.
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -121,6 +122,34 @@ class TestProjectLevel:
     def test_swing_carries_a_plus_25_offset(self) -> None:
         raw = {"device": "KeyStepPro", "120_74": 50}
         assert read_project(raw).global_swing_percent == 50
+
+
+class TestScenes:
+    """Pattern chains, measured by T5.7. Item 121, parameter 84."""
+
+    def test_a_chain_is_read_in_order_and_stops_at_the_sentinel(self) -> None:
+        raw: dict[str, Any] = {"device": "KeyStepPro", "121_84_1_2_1": 0, "121_84_1_2_2": 2}
+        raw |= {f"121_84_1_2_{s}": constants.SENTINEL for s in range(3, 17)}
+
+        (chain,) = read_project(raw).scenes[0].chains
+        # Stored 0-based, reported the way the device numbers patterns.
+        assert (chain.track, chain.patterns) == (2, (1, 3))
+
+    def test_a_chain_with_a_hole_is_reported_rather_than_absorbed(self) -> None:
+        """Not something the device produces, so it is not quietly repaired."""
+        raw: dict[str, Any] = {"device": "KeyStepPro", "121_84_1_2_1": 0}
+        raw |= {f"121_84_1_2_{s}": constants.SENTINEL for s in range(2, 17)}
+        raw["121_84_1_2_4"] = 5
+
+        project = read_project(raw)
+        (chain,) = project.scenes[0].chains
+        assert chain.patterns == (1,)
+        assert any("gap" in w for w in project.warnings)
+
+    def test_no_sample_project_chains_anything(self, project_files_dir: Path) -> None:
+        """84 reads the sentinel in every slot of every file we have."""
+        for path in sorted(project_files_dir.glob("*.KeyStepPro")):
+            assert cached_load(path).chained_scenes == (), path.name
 
 
 class TestAgainstRealFiles:

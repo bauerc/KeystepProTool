@@ -27,6 +27,7 @@ the file has lost.
 """
 
 from collections.abc import Sequence
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -34,7 +35,17 @@ from typing import Any
 from ksp import constants, lenient_json
 from ksp.diagnostics import Code, Collector, Diagnostic, Site
 from ksp.keys import get_int, read_array
-from ksp.model import Note, NoteKind, Pattern, PatternMode, Project, Track
+from ksp.model import (
+    Chain,
+    Note,
+    NoteKind,
+    Pattern,
+    PatternBits,
+    PatternMode,
+    Project,
+    Scene,
+    Track,
+)
 
 
 @lru_cache(maxsize=16)
@@ -79,6 +90,7 @@ def read_project(raw: dict[str, Any], source_name: str = "") -> Project:
         current_scene=_scalar(raw, constants.ITEM_PROJECT, constants.P_CURRENT_SCENE, default=0)
         + 1,
         tracks=tracks,
+        scenes=_read_scenes(raw, collector),
         source_name=source_name,
         diagnostics=collector.report(),
     )
@@ -100,6 +112,41 @@ def _read_tempo(raw: dict[str, Any]) -> float:
     msb = _scalar(raw, constants.ITEM_PROJECT, constants.P_TEMPO_MSB, default=0)
     hundredths = lsb + midsb * constants.TEMPO_CHUNK + msb * constants.TEMPO_CHUNK**2
     return hundredths / constants.TEMPO_SCALE
+
+
+def _read_scenes(raw: dict[str, Any], collector: Collector) -> tuple[Scene, ...]:
+    """Decode each scene's pattern chains from parameter 84.
+
+    Chains are contiguous and sentinel-terminated: capture T5-chain-3 stores
+    0, 1, 2 and leaves the remaining 13 slots at 127. A value *after* a
+    sentinel is not something the device produces, so it is reported rather
+    than absorbed into the chain.
+    """
+    scenes = []
+    for scene in range(1, constants.SCENE_COUNT + 1):
+        chains = []
+        for track in range(1, constants.SCENE_TRACK_COUNT + 1):
+            stored = [
+                get_int(raw, constants.ITEM_SCENES, constants.P_SCENE_CHAIN, scene, track, slot)
+                for slot in range(1, constants.CHAIN_SLOTS + 1)
+            ]
+            patterns: list[int] = []
+            for value in stored:
+                if value is None or value == constants.SENTINEL:
+                    break
+                # Stored 0-based, reported the way the device numbers patterns.
+                patterns.append(value + 1)
+            if any(v is not None and v != constants.SENTINEL for v in stored[len(patterns) :]):
+                collector.add(
+                    Code.CHAIN_HAS_HOLE,
+                    f"track {track}'s chain has a gap after {len(patterns)} pattern(s); "
+                    f"everything after it was ignored",
+                    site=Site(scene=scene, track=track),
+                )
+            if patterns:
+                chains.append(Chain(track=track, patterns=tuple(patterns)))
+        scenes.append(Scene(number=scene, chains=tuple(chains)))
+    return tuple(scenes)
 
 
 def _read_track(raw: dict[str, Any], number: int, item_id: int) -> Track:
@@ -203,12 +250,22 @@ def _read_pattern(
         )
 
     is_drum_track = item_id == constants.DRUM_TRACK_ITEM_ID
+    scale = _scalar(raw, item_id, constants.P_SCALE, pattern, default=0)
+    if constants.scale_name(scale) is None:
+        collector.add(
+            Code.SCALE_OFF_LIST,
+            f"parameter 108 holds {scale}, past the end of the device's scale list",
+            site=site,
+        )
     return Pattern(
         number=pattern,
         mode=mode,
         has_data=has_data,
         seq_step_count=_step_count(raw, item_id, constants.P_SEQ_STEP_COUNT, pattern),
         seq_swing_percent=_swing(raw, item_id, constants.P_SEQ_SWING, pattern),
+        seq_bits=_pattern_bits(
+            raw, item_id, constants.P_SEQ_PATTERN_BITS, pattern, collector, site
+        ),
         drum_step_count=(
             _step_count(raw, item_id, constants.P_DRUM_STEP_COUNT, pattern)
             if is_drum_track
@@ -217,9 +274,44 @@ def _read_pattern(
         drum_swing_percent=(
             _swing(raw, item_id, constants.P_DRUM_SWING, pattern) if is_drum_track else None
         ),
+        drum_bits=(
+            _pattern_bits(
+                raw, item_id, constants.P_DRUM_PATTERN_BITS, pattern, collector, site, kind="drum"
+            )
+            if is_drum_track
+            else None
+        ),
+        root_note=_scalar(raw, item_id, constants.P_ROOT_NOTE, pattern, default=0),
+        scale=scale,
         notes=notes,
         diagnostics=collector.report(),
     )
+
+
+def _pattern_bits(
+    raw: dict[str, Any],
+    item_id: int,
+    param: int,
+    pattern: int,
+    collector: Collector,
+    site: Site,
+    *,
+    kind: str = "seq",
+) -> PatternBits:
+    """Decode 99 or 116 -- step size, triplet, polyrhythm and direction.
+
+    Both fields share a layout (spec 3.3, protocol tier 5), so the only thing
+    the caller varies is which parameter to read.
+    """
+    bits = PatternBits.decode(_scalar(raw, item_id, param, pattern, default=0))
+    if bits.unallocated:
+        collector.add(
+            Code.PATTERN_BITS_UNKNOWN,
+            f"parameter {param} holds {bits.raw} ({bits.raw:#09b}), whose bit "
+            f"{bits.unallocated:#b} no capture accounted for",
+            site=replace(site, kind=kind),
+        )
+    return bits
 
 
 def _step_count(raw: dict[str, Any], item_id: int, param: int, pattern: int) -> int:
