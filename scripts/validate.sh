@@ -41,5 +41,5 @@ if ! uv run pytest -n auto -m "not slow and not hardware"; then
     exit 1
 fi
 
-echo -e "\n🎉 SUCCESS: Code base is clean, typed, secure, and passing!"
+echo -e '{"decision": "stop", "reason": "All checks passed successfully."}'
 exit 0
