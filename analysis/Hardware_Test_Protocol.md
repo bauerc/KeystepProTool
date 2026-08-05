@@ -7,46 +7,9 @@ export back out.
 
 **Audience:** a human at the device, and an agent re-reading this later to interpret the captures.
 
-> **This document contains only unfinished work.** B0, tiers 1–5 and the two write tiers (M4, M5)
-> have been run — 37 captures plus one MIDI recording, in `project_files/captures/`, which is
-> gitignored. Their procedures are **deleted** from this file so that everything still here is
-> something to do. What they found is in
+> **This document contains only unfinished work.** What is found is in
 > [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md), which is the authoritative record —
 > not here.
->
-> Briefly, so nobody re-runs them:
->
-> - **Reading.** Drum mode is `86` bit 6 and `100` never moves; a pooled note whose step-active bit
->   is clear does not sound; `idx2` is a 64-entry pool chunk rather than a polyphony voice, with a
->   hardware-enforced 192-event ceiling; `52` is a lane-major 7-bit array; `40` and `39` latch; two
->   untouched exports are byte-identical; and **gate is an index** — `stored = detent − 1`, 128
->   entries, 0.0625–64 steps, drum identical (spec §6.1).
-> - **Writing (tiers M4, M5).** A file we generate loads in MCC, transfers to the device, and reads
->   back with **zero keys changed** — the placement recipe is complete on *load*, not just on save,
->   and a step-active flag we clear is honoured like one the device cleared. Key addressing is
->   confirmed end to end in a busy project. A converted MIDI clip plays back as written. The five
->   keys that do move in a readback are not ours: `39` latches 2 → 3 per item, and
->   `123_117_<pattern>` normalises 247 → 60 (spec §3.3).
-> - **Tier 4.** Melodic step-off behaves exactly like drum step-off: the flag clears, the pool
->   entry survives, and the note does not sound (T4.5). The melodic pool chunks like the drum
->   pool — 64 events per chunk to the same 192 ceiling — while `48` stays wholly in chunk 1, which
->   is structural, since 64 steps need exactly one chunk (T4.6). The device's drum map is
->   **chromatic from 36 with lane *i* on `low + i`**, measured off its own MIDI output; chromatic
->   takes a low note of 0–103, custom gives all 24 lanes a free note (D5). It is a device menu
->   setting with no representation in the project file at all, which is what D6 asked (spec
->   §3.2.1, §4).
-> - **Tier 5.** The `99` / `116` bitfield is decoded in full, and it is **one layout** for both
->   halves: triplet at bit 0, polyrhythm at bit 2, step size at bits 3–4 (1/4 … 1/32) and playback
->   direction at bits 5–6 (Fwd, Rand, Walk). Bit 1 is set by nothing, and swing is **not** in the
->   field at all — that toggle writes `97`. The 20-vs-16 default asymmetry was only a default.
->   Root note is a pitch class, scale indexes the device's own list, and its eighth entry (Root) is
->   unstorable. A chain is 0-based pattern numbers in order, sentinel-terminated, addressed by
->   track number. And the four 16 / 32 / 48 / 64 sequences are **repeats**, not pages — which is
->   what `ksp2midi --passes` is built on (spec §3.3, §3.3.1, §5).
-> - **T6.2.** MCC does not need the trailing comma. The writer emits strict JSON, with no flag.
-> - **Opportunistically, not by a planned capture:** notes past a pattern's declared last step are
->   **disabled, not stale** — see the O1 ledger row below and spec §4 ("Why a note might not
->   play"). That is the pattern *length*, a different mechanism from T5.8's skip mask.
 
 **The baseline every test below starts from** is `B0-baseline.KeyStepPro` — an initialised,
 untouched project, already captured. Where a test says "from the baseline", start by loading or
@@ -54,12 +17,12 @@ re-initialising to that state; do not re-derive it.
 
 **What is genuinely unknown and needs the device:**
 
-| Question | Blocks | Tier |
-|---|---|---|
-| Time Shift range and linearity (`112` / `120`) | M7; whether shift is usable at all | 7 |
-| Which parameter governs effective swing (`74` / `97` / `114`) | M7, and `reader._swing` may be wrong | 7 |
-| Whether `113` randomness is probability or timing jitter | the validity of every timing measurement | 7 |
-| What one Time Shift unit is worth in time | M2's grid-quantise warning, M5's quantiser | 8 |
+| Question                                                      | Blocks                                     | Tier |
+| ------------------------------------------------------------- | ------------------------------------------ | ---- |
+| Time Shift range and linearity (`112` / `120`)                | M7; whether shift is usable at all         | 7    |
+| Which parameter governs effective swing (`74` / `97` / `114`) | M7, and `reader._swing` may be wrong       | 7    |
+| Whether `113` randomness is probability or timing jitter      | the validity of every timing measurement   | 7    |
+| What one Time Shift unit is worth in time                     | M2's grid-quantise warning, M5's quantiser | 8    |
 
 The last four are the subject of [`Timing_Calibration.md`](./Timing_Calibration.md), which carries
 the model and the arithmetic; tiers 7 and 8 below are the captures that feed it.
@@ -74,7 +37,7 @@ Every test below is one capture. A capture is:
    preceding capture in the same tier — each test says which. Never start from an unknown state.
 2. **Change exactly one thing.** One parameter, one note, one setting.
 3. **Read the device display and write down what it says.** The stored value is what we are
-   trying to learn, so the *displayed* value is the ground truth and only exists in your notes.
+   trying to learn, so the _displayed_ value is the ground truth and only exists in your notes.
    This is the step that cannot be recovered later.
 4. **Export**, by the route below. It is fixed — every capture in the corpus used it.
 5. **Save it as** `project_files/captures/<test-id>.KeyStepPro`, using the test ID verbatim.
@@ -101,7 +64,7 @@ the captures are local evidence, and the finding has to reach the spec to surviv
 
 ### The import route
 
-Its mirror, for any test that puts a file we generated *onto* the device. Tiers M4 and M5 used it;
+Its mirror, for any test that puts a file we generated _onto_ the device. Tiers M4 and M5 used it;
 so does every future write test.
 
 1. **Generate the candidates at the desk**, before the session:
@@ -131,7 +94,7 @@ net available — anything in it is the answer.
 ### Device operating notes
 
 Things that are not on the display and are easy to lose between sessions. Each is needed to
-*perform* one of the tests below.
+_perform_ one of the tests below.
 
 - **Step Edit** (a physical button) is required to add notes to an existing step — that is how a
   chord gets built. It is off by default and switches itself off when you change project and come
@@ -141,7 +104,7 @@ Things that are not on the display and are easy to lose between sessions. Each i
 - **ARP octave** has no display readout at all. It is SHIFT plus one of five silkscreened keys on
   the second physical octave, −1 / 0 / +1 / +2 / +3, with 0 at C#3.
 - **Erasing a note** is ERASE + the step button. Toggling a step off only mutes it; the note stays
-  in the pool and playing a new pitch onto the dark step re-lights the *old* note rather than
+  in the pool and playing a new pitch onto the dark step re-lights the _old_ note rather than
   replacing it.
 - **The device names middle C as C3** (C2 = MIDI 48). Write displayed note names down as the
   device shows them and convert later — do not pre-convert in your notes.
@@ -161,7 +124,7 @@ Things that are not on the display and are easy to lose between sessions. Each i
 
 ### Batched sweep captures
 
-**The one-change rule above applies to captures that are read by diffing.** A *sweep* capture is
+**The one-change rule above applies to captures that are read by diffing.** A _sweep_ capture is
 not read that way, and holding it to the same rule is what made the gate sweep — the former Tier 2,
 now complete (spec §6.1) — unrunnable for months: one export per encoder detent is ~128
 sync-and-save cycles through MCC. Batching collapsed it to a single capture, and **Tier 7's shift
@@ -173,7 +136,7 @@ directly by key rather than by diff. That is allowed when:
 
 - **one parameter** is swept, and nothing else on the device is touched;
 - **each value sits on a distinct note**, so no two changes share a key;
-- a **note map** — which step carries which intended value — is written down *at capture time*,
+- a **note map** — which step carries which intended value — is written down _at capture time_,
   in the ledger or a companion data file. Without it the capture is unreadable afterwards.
 
 Three rules that are not optional:
@@ -262,12 +225,12 @@ preamble.
 ## Tier 7 — Time Shift and Swing encodings
 
 **~13 captures.** Ordinary export-and-diff captures, same workflow as every tier above. These
-resolve what the *stored* values mean; Tier 8 resolves what they are worth in time. Background and
+resolve what the _stored_ values mean; Tier 8 resolves what they are worth in time. Background and
 the model are in [`Timing_Calibration.md`](./Timing_Calibration.md).
 
 Two things make this tier necessary. **Time Shift has never been swept** — the only non-default
 values in the whole corpus are `project_5`'s ±1…±4 ramp, so the range is unknown and T6.1's
-fallback branch merely *assumes* ±4. And **swing has never been set at all**: `74` reads 50 and
+fallback branch merely _assumes_ ±4. And **swing has never been set at all**: `74` reads 50 and
 `97` / `114` read 25 in all 16 patterns of all four tracks of all five sample files, so there is
 zero observational data on it.
 
@@ -287,7 +250,7 @@ zero observational data on it.
   down** until the display stops moving. Place a note at beat 5, turn timeshift **all the way up**, export.
 - **Captures:** `T7-shift.KeyStepPro`
 - **Diff against:** `T1-note-place.KeyStepPro` (or the baseline plus the note)
-- **Keys:** `124_112_1_1_1`, `124_112_1_1_5`  only
+- **Keys:** `124_112_1_1_1`, `124_112_1_1_5` only
 - **Confirms if:** the two stored values sit symmetrically
   about 49.
 - **Falsified if:** the range is asymmetric about 49, or the stored value leaves 0–127.
@@ -349,7 +312,7 @@ zero observational data on it.
 - [x] not yet run
 
 - **Resolves:** the single most consequential question in this tier. MCC labels `97` / `114`
-  *"swing (%) (an offset of 25 is applied to be send by MIDI) (−25 % to +25 %)"* — a **signed
+  _"swing (%) (an offset of 25 is applied to be send by MIDI) (−25 % to +25 %)"_ — a **signed
   offset**. But `src/ksp/reader.py::_swing` reads it as an **absolute percentage** (`stored + 25`,
   so the default 25 → 50 %). Both readings agree when the global is 50, which is why every sample
   file hides the difference and no test catches it.
@@ -416,7 +379,7 @@ zero observational data on it.
 ## Tier 8 — Live timing capture
 
 **~6 recordings.** The only tier that does not work by exporting files. Everything above reads what
-the device *stores*; this measures what the device *does*, because the quantity we need — what one
+the device _stores_; this measures what the device _does_, because the quantity we need — what one
 Time Shift unit is worth in time — does not appear in the file at all.
 
 Run this **after Tier 7**, which supplies the range to sweep, and **after T7.8**, which says whether
@@ -443,14 +406,14 @@ Different from a capture. A recording is:
 
 ### The matrix
 
-| ID | BPM | Step size | Varying | Resolves |
-|---|---|---|---|---|
-| R1 | 30 | 1/4 | shift = 0, ±1, ±half, ±max | the unit `U` at maximum resolution |
-| R2 | 120 | 1/4 | same shift values | is `U` tempo-invariant? |
-| R3 | 30 | 1/16 | same shift values | is `U` a fraction of a step or a fixed tick count? |
-| R4 | 30 | 1/4 | swing at min / mid / max, shift 0 | the swing formula, and which parameter governs it |
-| R5 | 30 | 1/4 | swing max **and** shift max together | do they add, or interact? |
-| R6 | 30 | 1/4 | repeat of R1, fresh session | reproducibility |
+| ID  | BPM | Step size | Varying                              | Resolves                                           |
+| --- | --- | --------- | ------------------------------------ | -------------------------------------------------- |
+| R1  | 30  | 1/4       | shift = 0, ±1, ±half, ±max           | the unit `U` at maximum resolution                 |
+| R2  | 120 | 1/4       | same shift values                    | is `U` tempo-invariant?                            |
+| R3  | 30  | 1/16      | same shift values                    | is `U` a fraction of a step or a fixed tick count? |
+| R4  | 30  | 1/4       | swing at min / mid / max, shift 0    | the swing formula, and which parameter governs it  |
+| R5  | 30  | 1/4       | swing max **and** shift max together | do they add, or interact?                          |
+| R6  | 30  | 1/4       | repeat of R1, fresh session          | reproducibility                                    |
 
 - [x] R1 — 30 BPM, 1/4, shift sweep
 - [x] R2 — 120 BPM, 1/4
@@ -468,11 +431,11 @@ slow, coarse setting is what makes this measurable at all.**
 
 Three candidate encodings, and the matrix separates all three:
 
-| Model | What one unit is | Signature in the data |
-|---|---|---|
-| **A** — fraction of a step | `t_step / N` | R1 ≡ R2 in *ticks*; R3 differs from R1 in ms by exactly the step-size ratio |
-| **B** — fixed clock ticks | a constant tick count | R1 ≡ R2 in ticks; **R3 ≡ R1 in ms** |
-| **C** — absolute time | a constant in ms | **R1 ≡ R2 in ms**, not in ticks |
+| Model                      | What one unit is      | Signature in the data                                                       |
+| -------------------------- | --------------------- | --------------------------------------------------------------------------- |
+| **A** — fraction of a step | `t_step / N`          | R1 ≡ R2 in _ticks_; R3 differs from R1 in ms by exactly the step-size ratio |
+| **B** — fixed clock ticks  | a constant tick count | R1 ≡ R2 in ticks; **R3 ≡ R1 in ms**                                         |
+| **C** — absolute time      | a constant in ms      | **R1 ≡ R2 in ms**, not in ticks                                             |
 
 - **R1 vs R2 separates C** from the other two: only under C does a tempo change leave the
   millisecond offset unchanged.
@@ -496,35 +459,34 @@ Rows for the completed tiers have been removed along with their procedures. The 
 captures owed were collected in a separate gaps ledger, which is now **closed** — every row was
 answered and folded into the spec on 2026-08-01.
 
-| Test ID | Date | Displayed value / setting | Stored value | Notes |
-|---|---|---|---|---|
-| T6.1 | | project_5 kick time shifts | | −1/+1 |
-| T6.2 | 2026-08-01 | `B0baseline-commaless.KeyStepPro`, one byte off `B0-baseline` | n/a — file-level test | ✅ **done. The comma is not required.** Loaded in MCC *and* transferred. Tests the comma **only** — indentation, key order, absent final newline and the fixed key set remain mandatory and untested. |
-| T7.1 | | shift min / max displayed | | **the range — run first**  Min -49, Max 50. Increments by 1|
-| T7.2 | | shift per step: | | beat 1 -49, beat 3 -25, beat 5 -1, beat 7 0, beat 9 1, beat 11 25, beat 13 50 |
-| T7.3 | | drum shift = | | Time shift ranges matches, -49 to 50 at 1 increments |
-| T7.4 | | global swing = | | min/max the encoder reaches: Min is 50%, max is 75%. Not exporting 50% since it is the min AND the default|
-| T7.5 | | pattern swing = | | absolute %. Display shows two sections when moving, global and Track. Track swing has a default of 50%, min of 50%, and a max of 75%|
-| T7.6 | | global + pattern swing | | **which one did you hear?** Neither, swing only affects even numbered steps (step 2, 4, etc). When I changed the to even steps, I could hear the difference. The odd notes played on exact beat while the even notes were pushed later. Exact timing can be seen in the R4 timing test. |
-| T7.7 | | drum swing = | | It is a per track, not per pattern, same as melody, and the min and default is 50 and the max is 75. |
-| T7.8 | | randomness 100 then min | | **notes drop? timing wander?** This has nothing to do with timing whatsoever. This is all about if a note plays or not. At 0, note never plays. At 50% it play half the time. At 100 it plays all the time. No timing jitter ever. |
-| R1 | | 30 BPM, 1/4, shift sweep | | measured offset per unit: |
-| R2 | | 120 BPM, 1/4 | | same ticks as R1? |
-| R3 | | 30 BPM, 1/16 | | same ms as R1? |
-| R4 | | 30 BPM, swing sweep | | |
-| R5 | | swing + shift together | | additive? |
-| R6 | | repeat of R1 | | reproduced? |
+| Test ID | Date | Displayed value / setting  | Stored value | Notes                                                                                                                                                                                                                                                                                   |
+| ------- | ---- | -------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T6.1    |      | project_5 kick time shifts |              | −1/+1                                                                                                                                                                                                                                                                                   |
+| T7.1    |      | shift min / max displayed  |              | **the range — run first** Min -49, Max 50. Increments by 1                                                                                                                                                                                                                              |
+| T7.2    |      | shift per step:            |              | beat 1 -49, beat 3 -25, beat 5 -1, beat 7 0, beat 9 1, beat 11 25, beat 13 50                                                                                                                                                                                                           |
+| T7.3    |      | drum shift =               |              | Time shift ranges matches, -49 to 50 at 1 increments                                                                                                                                                                                                                                    |
+| T7.4    |      | global swing =             |              | min/max the encoder reaches: Min is 50%, max is 75%. Not exporting 50% since it is the min AND the default                                                                                                                                                                              |
+| T7.5    |      | pattern swing =            |              | absolute %. Display shows two sections when moving, global and Track. Track swing has a default of 50%, min of 50%, and a max of 75%                                                                                                                                                    |
+| T7.6    |      | global + pattern swing     |              | **which one did you hear?** Neither, swing only affects even numbered steps (step 2, 4, etc). When I changed the to even steps, I could hear the difference. The odd notes played on exact beat while the even notes were pushed later. Exact timing can be seen in the R4 timing test. |
+| T7.7    |      | drum swing =               |              | It is a per track, not per pattern, same as melody, and the min and default is 50 and the max is 75.                                                                                                                                                                                    |
+| T7.8    |      | randomness 100 then min    |              | **notes drop? timing wander?** This has nothing to do with timing whatsoever. This is all about if a note plays or not. At 0, note never plays. At 50% it play half the time. At 100 it plays all the time. No timing jitter ever.                                                      |
+| R1      |      | 30 BPM, 1/4, shift sweep   |              | measured offset per unit:                                                                                                                                                                                                                                                               |
+| R2      |      | 120 BPM, 1/4               |              | same ticks as R1?                                                                                                                                                                                                                                                                       |
+| R3      |      | 30 BPM, 1/16               |              | same ms as R1?                                                                                                                                                                                                                                                                          |
+| R4      |      | 30 BPM, swing sweep        |              |                                                                                                                                                                                                                                                                                         |
+| R5      |      | swing + shift together     |              | additive?                                                                                                                                                                                                                                                                               |
+| R6      |      | repeat of R1               |              | reproduced?                                                                                                                                                                                                                                                                             |
 
 ## Effort summary
 
 Remaining work only. B0, tiers 1–5 and the two write tiers are complete and are not listed.
 
-| Tier | Captures left | Resolves | Milestone |
-|---|---|---|---|
-| 6 | 1 | standing caveats (T6.2 done) | M3 |
-| 7 | ~13 | Time Shift range, swing semantics | M7, M5 |
-| 8 | ~6 recordings | what a Time Shift unit is worth in time | M2, M5 |
-| | **~20 left** of ~59 | | |
+| Tier | Captures left       | Resolves                                | Milestone |
+| ---- | ------------------- | --------------------------------------- | --------- |
+| 6    | 1                   | standing caveats (T6.2 done)            | M3        |
+| 7    | ~13                 | Time Shift range, swing semantics       | M7, M5    |
+| 8    | ~6 recordings       | what a Time Shift unit is worth in time | M2, M5    |
+|      | **~20 left** of ~59 |                                         |           |
 
 Each tier is independently useful — stopping after any one leaves a coherent result rather than a
 half-finished one.
