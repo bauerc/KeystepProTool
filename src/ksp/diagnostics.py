@@ -40,6 +40,9 @@ class Code(StrEnum):
     DRUM_LANE_OUT_OF_RANGE = "drum-lane-out-of-range"
     FLAG_WITHOUT_NOTE = "flag-without-note"
     DISABLED_STEP_OFF = "disabled-step-off"
+    PATTERN_BITS_UNKNOWN = "pattern-bits-unknown"
+    SCALE_OFF_LIST = "scale-off-list"
+    CHAIN_HAS_HOLE = "chain-has-hole"
 
     # --- drum map ---
     DRUM_MAP_ASSUMED = "drum-map-assumed"
@@ -55,6 +58,8 @@ class Code(StrEnum):
     GATE_OFF_LADDER = "gate-off-ladder"
     TIME_SHIFT_NOT_APPLIED = "time-shift-not-applied"
     STEP_SKIP_SINGLE_PASS = "step-skip-single-pass"
+    STEP_SKIP_EXPANDED = "step-skip-expanded"
+    DIRECTION_NOT_APPLIED = "direction-not-applied"
     DRUM_LANE_DROPPED = "drum-lane-dropped"
     TRACK_LENGTHS_DIFFER = "track-lengths-differ"
     OVERLAPS_RESOLVED = "overlaps-resolved"
@@ -102,6 +107,16 @@ SUMMARIES: Mapping[Code, Summary] = {
     ),
     Code.DRUM_LANE_OUT_OF_RANGE: Summary(
         "{sites} hold drum lanes outside the device's 24",
+    ),
+    Code.PATTERN_BITS_UNKNOWN: Summary(
+        "{sites} set a bit of parameter 99 / 116 that no capture accounted for (spec 3.3)",
+    ),
+    Code.SCALE_OFF_LIST: Summary(
+        "{sites} hold a scale index the device's list does not reach",
+    ),
+    Code.CHAIN_HAS_HOLE: Summary(
+        "{sites} hold a pattern chain with a gap in it; everything after the gap was ignored",
+        site="scene",
     ),
     Code.FLAG_WITHOUT_NOTE: Summary(
         "{subjects} across {sites} are flagged active but hold no note. Every flagged step "
@@ -152,8 +167,16 @@ SUMMARIES: Mapping[Code, Summary] = {
         "so the shift was not applied",
     ),
     Code.STEP_SKIP_SINGLE_PASS: Summary(
-        "notes are set to play on only some of the 16/32/48/64 sequences; the export renders "
-        "one pass of each pattern and includes them all",
+        "notes are set to play on only some of the 16/32/48/64 sequences, which the device "
+        "plays as four repeats; --passes 1 renders one and includes them all",
+    ),
+    Code.STEP_SKIP_EXPANDED: Summary(
+        "{sites} were rendered as repeats so each note lands on the 16/32/48/64 "
+        "sequences its mask selects",
+    ),
+    Code.DIRECTION_NOT_APPLIED: Summary(
+        "{sites} play in a non-forward direction, which no MIDI file can express; the "
+        "export renders them forward",
     ),
     Code.DRUM_LANE_DROPPED: Summary(
         "{subjects} lie outside the device's 24 drum lanes and were dropped",
@@ -204,9 +227,12 @@ class Site:
     pattern: int | None = None
     kind: str | None = None
     slot: int | None = None
+    scene: int | None = None
 
     def describe(self) -> str:
         parts = []
+        if self.scene is not None:
+            parts.append(f"scene {self.scene}")
         if self.track is not None:
             parts.append(f"track {self.track}")
         if self.pattern is not None:

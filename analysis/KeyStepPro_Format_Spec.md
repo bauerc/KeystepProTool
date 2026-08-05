@@ -296,9 +296,9 @@ export can never be certain which one the owner has — it can only say which on
 |---|---|
 | `97` / `114` | Seq / DRUM swing % — stored with a **+25 offset** (±25% → 0…50) |
 | `98` / `115` | Seq / DRUM step count — **0-based** (15 = 16 steps) |
-| `99` / `116` | Bitfield: triplet, swing offset, polyrhythm, step size, playback direction. Only **`116` bit 2** is measured — drum Mono/Poly, i.e. per-lane step lengths (§3.2, §5). The rest is unallocated |
+| `99` / `116` | Bitfield: step size, triplet, polyrhythm, playback direction. **Measured in full** — one layout for both halves, see below |
 | `100` | Bitfield. Dictionary says ARP/Drum mode, ARP type, ARP octave; only **ARP octave (bits 4–6)** is hardware-confirmed, as `stored = octave + 1` (§5). Drum mode is `86` bit 6, not here |
-| `107` / `108` | Root note / scale |
+| `107` / `108` | Root note (pitch class 0–11) / scale (index into the device's list). **Measured** — see below. `108` has no drum twin: one value serves both parameter sets |
 | `40` | Pattern data state: `0` in the factory template, `2` initialised but empty, `3` holds data. **A latch** — see below |
 | `123_117_<pat>` | **Item 123 only, and distinct from the note-indexed `117`** — same paramId, one index instead of three. Meaning unknown; `60` in every file except `initial_project`, `project_5` and `project_9`, which hold `247` at pattern 1 only. **A device round trip normalises it to 60** (protocol M4.2), so `247` is something MCC writes and the firmware does not keep. It is the only non-latch key that moved in an M4 readback |
 | `20`–`23`, `25`–`28` | Program Change (Seq / Drum), MSB/LSB split |
@@ -313,6 +313,77 @@ a freshly initialised project.)
 Params `109`–`113` and `117`–`121` also appear in a **one-index form** (`<item>_<param>_<pattern>`)
 holding the pattern's **default** value for that field — hence array sizes of 4,112 (`16×4×64 + 16`)
 rather than 4,096.
+
+#### The `99` / `116` bitfield — measured
+
+**Measured 2026-08-04, protocol tier 5**, against `B0-baseline`. The sequencer field and the drum
+field are **one layout**; only their defaults differ.
+
+| Bits | Value | Field | Values |
+|---|---|---|---|
+| 0 | 1 | Triplet | |
+| 1 | 2 | — | set by nothing, in any file or capture |
+| 2 | 4 | Polyrhythm (set) / Monorhythm (clear) | |
+| 3–4 | 8, 16 | Step size | 0 = 1/4, 1 = 1/8, **2 = 1/16**, 3 = 1/32 |
+| 5–6 | 32, 64 | Playback direction | 0 = Fwd, 1 = Rand, 2 = Walk |
+
+The evidence, capture by capture:
+
+- **Step size** — `T5-99-stepsize` sets patterns 1–4 to 1/4, 1/8, 1/16, 1/32 and stores
+  **4 / 12 / 20 / 28**.
+- **Triplet** — `T5-99-triplet` moves `124_99_1` 20 → **21**, and sweeps Track 3 to
+  **5 / 13 / 21 / 29**, i.e. the triplet bit against each step size in turn.
+- **Polyrhythm** — `T5-99-monorhythm` moves `124_99_1` 20 → **16**. This is the same bit `D4` moved
+  on the drum side, and it is the **whole of the 20-vs-16 asymmetry**: sequencer patterns ship with
+  polyrhythm on and drum patterns ship with it off. Nothing about the layout differs.
+- **Direction** — `T5-99-direction` sets patterns 1–3 to Fwd, Rand, Walk and stores
+  **20 / 52 / 84**, confirming the dictionary's "bits 5–6". The fourth value the two bits allow was
+  never produced; it has no known name, and a reader should say so rather than pick one.
+- **The drum half** — `T5-99-drum` sets 11 drum patterns to 0, 1, 8, 9, 16, 17, 24, 25, 48 and 80,
+  which decode through the same four fields.
+
+**Swing is not in this field.** MCC's dictionary names a *swing offset state* among its contents,
+but `T5-99-swingoffset` leaves `99` untouched and moves `124_97_1` 25 → 50 instead. The per-pattern
+swing parameter is the only thing that toggle writes.
+
+#### Root note and scale — measured
+
+**Also tier 5.** `107` is a **pitch class 0–11**: `T5-rootnote` selects root D and stores **2**; the
+octave the display shows is not in the file at all. `108` indexes the device's scale list **in
+display order**:
+
+| 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+|---|---|---|---|---|---|---|---|---|---|
+| Chromatic | Major | Minor | Dorian | Mixolydian | H.Min | Blues | Root | User 1 | User 2 |
+
+`T5-scale` walks patterns 1–10 down that list on both item 123 and item 124 and stores 0–9 — with
+**one exception that is the finding**: selecting **Root** (index 7) stores nothing. Pattern 8 stayed
+at its previous value on both tracks, so a file never holds 7. `ksp.constants.SCALE_NAMES` carries
+the list and `UNSTORABLE_SCALE` carries that caveat.
+
+### 3.3.1 Scenes and pattern chaining — item `121`
+
+**Measured 2026-08-04, capture `T5-chain-3`.** A scene holds a **pattern chain per track**, which is
+the mechanism M6 needs for source material longer than 64 steps.
+
+```
+121_84_<scene>_<track>_<slot>    pattern number, 0-based, in chain order
+121_83_<scene>_<track>           moves with the chain; not decoded
+```
+
+Chaining patterns 1 → 2 → 3 on **Track 2** in scene 1 stores `121_84_1_2_1..3` = **0, 1, 2** and
+leaves slots 4–16 at the `127` sentinel. So a chain is **contiguous, 0-based and
+sentinel-terminated**, and `84` reads 127 across all 16 slots of all 5 tracks of all 16 scenes in
+every sample project — nobody had used a chain before this capture.
+
+**The track index in the key is the track number.** Track 2 → index 2, which confirms the
+descriptors' claim; index 5 is the Control track. This was worth checking because it is the one
+place the item ordering is not the obvious one.
+
+**`121_83_1_2` moves 0 → 32 at the same time, and one capture cannot say why.** Both
+`(last << 4) | first` and `((len − 1) << 4)` give 32 for a chain of patterns 1–3, and nothing
+separates them without a chain that starts somewhere other than pattern 1. The observation is
+recorded; nothing reads it.
 
 ### 3.4 Per-track and project
 
@@ -567,7 +638,7 @@ Existence and audibility are different tests, and there is more than one way to 
 | 2 | **Disabled: step turned off** | drum `123_52_<pat>_<slot>_<idx>`, one **bit**; melodic `<item>_48_<pat>_1_<step>`, one entry | `123_52_9_1_1` = `0` → lane 0 step 5 is off. Contrast `123_52_9_1_2` = `2` = `0b0000010` → lane 0 step 9 is on. **No melodic example in a committed file** — see below | Re-light the step; the note returns intact | **Hardware** — drums D1, melodic T4.5 |
 | 3 | **Disabled: past the last step** | `<item>_98_<pat>` melodic, `123_115_<pat>` drum, 0-based | `123_115_9` = `47` → 48 steps, while `123_54_9_1_45` = `56` → step 57 | Raise Last Step | **Hardware** (O1) |
 | 4 | Velocity 0 | `<item>_111_<pat>_<slot>_<ord>`, `119` for drums | **None in the corpus** — no note in any committed file has velocity 0 | Raise the velocity | Inferred, never tested |
-| 5 | Skipped on this pass | melodic `<item>_49_<pat>_<slot>_<step>` (**step**-indexed), drum `123_53_...` (**note**-indexed) | `125_49_1_1_5` = `5` = `0b0101` → plays on 16 and 48 only; `15` is the default "always" | Set the mask to all four | ⚠ **Unresolved** — repeats or pages? **T5.8** |
+| 5 | Skipped on this pass | melodic `<item>_49_<pat>_<slot>_<step>` (**step**-indexed), drum `123_53_...` (**note**-indexed) | `125_49_1_1_5` = `5` = `0b0101` → plays on 16 and 48 only; `15` is the default "always" | Set the mask to all four | **Hardware** (T5.8) — the four sequences are **repeats** |
 | 6 | Lost to randomness | `<item>_113_<pat>_<slot>_<ord>`, `121` for drums | `125_113_1_1_1` = `10`, against a fresh note's default of `100` | Set randomness to always | ⚠ **Unresolved** — probability or timing jitter? **T7.8** |
 
 Row 2's drum key needs the packing from "A third layout" above, because one entry holds seven
@@ -597,8 +668,9 @@ on the device, and the only two the tools report under that word. Say "disabled 
 off)" or "disabled (past the last step)"; never "silent", "inactive" or "lost".
 
 Rows 5 and 6 differ in kind: they are properties of a *pass*, not of the note's stored state, so
-the same note can sound on one loop and not the next. Neither is decodable at the desk. Until
-T5.8 and T7.8 run, `ksp2midi` renders one pass and includes every note whatever its mask.
+the same note can sound on one loop and not the next. Row 5 is now measured — the four sequences
+are four **repeats** of the pattern (T5.8), which `ksp2midi --passes` renders. Row 6 is not:
+until T7.8 runs, randomness is reported and never applied.
 
 Row 1 is not a disabled note at all — it is the absence of one. Note also that `127` marks an
 empty *entry*, not the end of the list; see "The `127` sentinel" above, because reading it as a
@@ -622,9 +694,10 @@ again, with the step-64 light going out. The toggle was a diagnostic action, not
 > `ksp2midi` drops them by default, the same as any other disabled note, and says how many;
 > `--include-disabled` exports them.
 
-**This is not the step-skip question.** The 16 / 32 / 48 / 64 *mask* (`49` / `53`, "repeats or
-pages?" in §5) is a separate mechanism and is still unresolved — protocol **T5.8** decides it.
-The observation above is about the pattern's declared length only.
+**This is not the step-skip question.** The 16 / 32 / 48 / 64 *mask* (`49` / `53`, §5) is a
+separate mechanism, measured separately by **T5.8**; the two are easy to conflate at the device
+because both change which steps light up. The observation above is about the pattern's declared
+length only.
 
 ---
 
@@ -669,10 +742,10 @@ so its velocity 120 appears at **note** index 10 while its skip mask 12 appears 
 index 13. Read with a single index space, this looks like a data inconsistency; read correctly,
 every value lines up.
 
-### Step skip is a 4-bit mask
+### Step skip is a 4-bit mask, and the four sequences are **repeats**
 
-The KeyStep Pro can run a pattern as four consecutive 16-step sequences (16 / 32 / 48 / 64).
-`49` / `53` is a bitmask of which of those a note plays in:
+The KeyStep Pro runs a pattern as four sequences (16 / 32 / 48 / 64). `49` / `53` is a bitmask of
+which of those a note plays in:
 
 | Bit | Value | Sequence |
 |---|---|---|
@@ -683,14 +756,23 @@ The KeyStep Pro can run a pattern as four consecutive 16-step sequences (16 / 32
 
 `15` = plays always (the default). `5` = {16, 48}. `12` = {48, 64}.
 
-> **Unresolved: repeats or pages?** "Four consecutive 16-step sequences" reads as four *pages* of
-> a 64-step pattern, but `project_5` pattern 1 is only **16 steps** and carries notes masked to 48
-> and 64 — which under the pages reading could never sound, contradicting a hardware-confirmed
-> description. Under a *repeats* reading (the pattern loops four times and the mask picks which
-> loops a note plays in) every mask is meaningful at any length. Nothing in the files separates
-> the two; **protocol T5.8** does, on the device. Until then `ksp2midi` renders a single pass,
-> includes every note whatever its mask, and warns that it did — a `--passes` expansion built on
-> the wrong reading would produce files that play confidently wrong.
+**Repeats, not pages — measured 2026-08-04, capture `T5-skip-16step`, protocol T5.8.** The pattern
+**loops four times** and the mask picks which loops a note plays in. A pass is the pattern's own
+declared length at *any* length, so every mask is meaningful even on a pattern far shorter than 64
+steps, and the 16 / 32 / 48 / 64 labels name passes rather than step ranges.
+
+The capture puts four notes in a **16-step** pattern, at steps 1, 5, 9 and 13, with `49` at those
+steps = **1, 2, 4, 8**. Played through eight loops, the operator heard beat 1 on pass 1, beat 5 on
+pass 2, beat 9 on pass 3, beat 13 on pass 4, and then the same cycle again. Extending the pattern to
+64 steps makes a pass 64 steps; the cycle is still four of them.
+
+This is the reading `project_5` already implied — pattern 1 is 16 steps and carries notes masked to
+48 and 64, which under a *pages* reading could never sound. The device has no vocabulary of its own
+for the setting: it is reached by holding a step and pressing one of the four **Lst Step/Extend**
+buttons, where a lit button means the note plays on that pass.
+
+`ksp2midi --passes` renders the cycle: four repeats when any note carries a partial mask, one when
+none does, and `--passes 1` to flatten it deliberately.
 
 ### Drum validation
 
@@ -789,24 +871,19 @@ Track 1 pattern 1 holds both** a real 64-step melody and a real 12-note drum pat
 set, so the drums are live and the melody is leftovers. The reader still reports every note and
 warns — it resolves the *mode*, it does not discard data.
 
-### Partly resolved: `116` bit 2 is drum Mono/Poly
+### Resolved: `116` bit 2 is Mono/Poly, and so is `99` bit 2
 
-The `99` / `116` bitfield is otherwise unallocated, but one bit is now measured.
-`D4-lane-steplength` was taken to pin `51`, and it moves a second scalar nobody diffed for:
-**`123_116_1` 16 → 20**, bit 2, set at the same moment the operator switched Track 1's drum
-mode from Mono to Poly to give lanes independent lengths. That matches the dictionary's own
-*polyrythm state* among the field's named contents.
+`D4-lane-steplength` was taken to pin `51` and moved a second scalar nobody diffed for:
+**`123_116_1` 16 → 20**, bit 2, set at the moment the operator switched Track 1's drum mode from
+Mono to Poly to give lanes independent lengths. So on the **drum** side: **bit 2 clear = Mono, all
+24 lanes share one length; bit 2 set = Poly, `51` is honoured per lane.** §3.2 states the writer's
+obligation.
 
-So for the **drum** side: **bit 2 clear = Mono, all 24 lanes share one length; bit 2 set = Poly,
-`51` is honoured per lane.** §3.2 states the writer's obligation.
-
-**What is not pinned.** The capture moved the mode and a lane length together, so bit 2 is
-established as "the thing that makes lanes independent" and not, strictly, as a bit named
-polyrhythm in general. And it does **not** transfer to the melodic side by symmetry: `Default`
-holds `99` = 20 with bit 2 **already set** on every pattern while `116` = 16 has it clear, so the
-two halves cannot both mean "polyrhythm off by default". Either the bit means something else in
-`99`, or its sense is inverted, or the defaults simply differ. Tier 5 resolves that; until it
-does, treat only `116` bit 2 as known.
+That reading used to stop there, because `Default` holds `99` = 20 with bit 2 **already set** while
+`116` = 16 has it clear, and the two halves could not both mean "polyrhythm off by default".
+**T5.3 settles it**: toggling Monorhythm on Track 2 moves `124_99_1` 20 → 16, the same bit, in the
+same sense. The defaults simply differ — sequencer patterns ship polyrhythm on, drum patterns ship
+it off — and the layouts are identical (§3.3).
 
 ---
 
@@ -826,9 +903,14 @@ length is **resolved** (§6.1) and kept in the table for contrast.
 | Swing semantics | `74`, `97` / `114` | **never exercised** in any sample file | T7.4–T7.7 |
 
 **Swing deserves particular caution.** `74` reads 50 and `97` / `114` read 25 in all 16 patterns of
-all four tracks of all five sample projects, so there is no observational data on it whatsoever.
-MCC labels `97` / `114` a signed offset (−25 %…+25 %) while `ksp.reader._swing` reads them as an
+all four tracks of all five sample projects, so there is almost no observational data on it. MCC
+labels `97` / `114` a signed offset (−25 %…+25 %) while `ksp.reader._swing` reads them as an
 absolute percentage; the two agree only because the global is always 50 here.
+
+Tier 5 supplied the one data point there is, incidentally: `T5-99-swingoffset` moves `124_97_1`
+25 → **50**, which is the top of the parameter's range under either reading. It settles that swing
+lives in `97` rather than in the `99` bitfield (§3.3) and nothing more — T7.5 still owns the
+semantics.
 
 ### 6.1 Gate length
 

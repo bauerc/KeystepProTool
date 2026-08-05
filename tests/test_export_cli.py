@@ -23,7 +23,9 @@ def test_writes_a_midi_file_next_to_its_input(
         "Track 1 (drum)",
         "Track 3",
     ]
-    assert "12 note(s)" in capsys.readouterr().out
+    # 12 pooled notes over the four repeats their skip masks select: the four
+    # unmasked ones sound in all of them, the other eight in two each.
+    assert "32 note(s)" in capsys.readouterr().out
 
 
 def test_output_path_can_be_given(
@@ -131,17 +133,28 @@ def test_an_empty_project_is_an_error(
     assert "nothing to export" in capsys.readouterr().err
 
 
-def test_step_size_can_be_overridden(project_files_dir: Path, tmp_path: Path) -> None:
+def test_passes_defaults_to_expanding_the_skip_cycle(
+    project_files_dir: Path, tmp_path: Path
+) -> None:
+    """project_5's masks make it four repeats of a 16-step pattern."""
+    destination = tmp_path / "out.mid"
+    argv = [str(project_files_dir / "project_5.KeyStepPro"), "-o", str(destination)]
+    assert main(argv) == 0
+    # 64 sixteenths at 120 BPM.
+    assert mido.MidiFile(destination).length == pytest.approx(8.0)
+
+
+def test_passes_can_be_pinned_to_one(project_files_dir: Path, tmp_path: Path) -> None:
     destination = tmp_path / "out.mid"
     argv = [
         str(project_files_dir / "project_5.KeyStepPro"),
         "-o",
         str(destination),
-        "--steps-per-beat",
-        "2",
+        "--passes",
+        "1",
     ]
     assert main(argv) == 0
-    assert mido.MidiFile(destination).length == pytest.approx(4.0)  # 16 eighths at 120 BPM
+    assert mido.MidiFile(destination).length == pytest.approx(2.0)  # 16 sixteenths
 
 
 class TestDrumMap:
@@ -155,7 +168,14 @@ class TestDrumMap:
         self, project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         destination = tmp_path / "out.mid"
-        argv = [str(project_files_dir / "project_5.KeyStepPro"), "-o", str(destination)]
+        # One pass, so the count is the lane mapping rather than the skip cycle.
+        argv = [
+            str(project_files_dir / "project_5.KeyStepPro"),
+            "-o",
+            str(destination),
+            "--passes",
+            "1",
+        ]
         assert main(argv) == 0
 
         track = next(t for t in mido.MidiFile(destination).tracks if t.name == "Track 1 (drum)")
@@ -171,6 +191,8 @@ class TestDrumMap:
             str(destination),
             "--drum-map",
             f"custom:{notes}",
+            "--passes",
+            "1",
         ]
         assert main(argv) == 0
         track = next(t for t in mido.MidiFile(destination).tracks if t.name == "Track 1 (drum)")
@@ -220,7 +242,7 @@ def test_include_stale_exports_the_set_the_device_would_not_play(
 def test_impossible_timing_options_are_rejected_before_any_file_is_read(
     project_files_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    argv = [str(project_files_dir / "project_5.KeyStepPro"), "--steps-per-beat", "7"]
+    argv = [str(project_files_dir / "project_5.KeyStepPro"), "--ticks-per-beat", "100"]
     assert main(argv) == 2
     assert "not divisible" in capsys.readouterr().err
 
@@ -314,7 +336,7 @@ class TestDryRun:
 
         captured = capsys.readouterr()
         assert f"would write {destination}" in captured.out
-        assert "12 note(s)" in captured.out
+        assert "32 note(s)" in captured.out
         assert "warning:" in captured.err  # the caveats are worth seeing first
 
     def test_it_lists_every_file_a_split_export_would_write(

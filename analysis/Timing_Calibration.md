@@ -87,16 +87,18 @@ melodic notes and all 412 drum notes; the encoder was never touched.
 **Unknown:** the range (`D_min` / `D_max`), the unit (what one step of the encoder is worth in
 time), and whether the mapping stays 1:1 beyond ±4.
 
-### 1.4 Step size and triplet are unexplored
+### 1.4 Step size and triplet are measured
 
-`99` reads `20` in every pattern of every file except two patterns of `initial_project`, which
-read `16`. One differing bit across the whole corpus is not enough to decode a five-field
-bitfield (triplet, swing offset state, polyrhythm, step size, playback direction — of which only
-*"playback direction: bit 5–6"* is documented).
+**Resolved by tier 5**, 2026-08-04. `99` reads `20` in every pattern of every file except two
+patterns of `initial_project`, which read `16` — one differing bit across the whole corpus, far
+too little to decode at the desk. The captures decoded it: **step size at bits 3–4** (0 = 1/4,
+1 = 1/8, 2 = 1/16, 3 = 1/32) and **triplet at bit 0**, with the drum field `116` sharing the
+layout. Spec §3.3 carries the measurement; `ksp.model.PatternBits` carries the decode.
 
-This matters here because the Time Shift unit may be defined *relative to the step*, and the step
-duration depends on the step size and the triplet flag. Decoding this bitfield is a prerequisite
-for the timing model, and it comes free with the same hardware session.
+This mattered here because the Time Shift unit may be defined *relative to the step*, and the step
+duration depends on both. `t_step` in §2 now has its inputs, and every sample project turns out to
+sit at 1/16 with no triplet — so the corpus gives one step size and tier 8 must not assume it
+generalises without checking the pattern it is recording.
 
 ### 1.5 There is no reference render to diff against
 
@@ -274,7 +276,7 @@ All test IDs refer to [`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md)
 | 3 | Is `randomness` probability or timing jitter? | **T7.8** | the validity of every timing measurement |
 | 4 | Which parameter governs effective swing (`S`) | **T7.4–T7.6** | swing encode/decode, and `reader._swing` |
 | 5 | Does drum shift/swing match melodic? | **T7.3**, **T7.7** | the drum path in M5/M6 |
-| 6 | `99` / `116` bit layout — step size, triplet, polyrhythm, direction | **T5.1–T5.5** (already planned) | `t_step`, hence everything here |
+| 6 | `99` / `116` bit layout — step size, triplet, polyrhythm, direction | **T5.1–T5.5** ✅ **measured** (spec §3.3) | `t_step`, hence everything here |
 | 7 | Time Shift unit `U`, and which of models A/B/C | **Tier 8**, recordings R1–R3 | accurate placement both directions |
 | 8 | Do swing and shift add, or interact? | **Tier 8**, recording R5 | the M5 fitting algorithm |
 

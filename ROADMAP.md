@@ -90,12 +90,14 @@ caller. Tests assert on `Rendering` data, not parsed MIDI. `tests/test_midi_expo
 `project_5` and `project_9` against the hardware-confirmed descriptions rather than against our own
 reader.
 
-**Two options are deliberately unshipped**, both because the number they need has never been
-measured and a wrong one produces a file that loads cleanly and plays wrong:
+**`--passes` shipped once T5.8 measured what it needed**: the four 16/32/48/64 sequences are
+*repeats* of the pattern, not pages of a long one, so a masked note sounds on the loops its mask
+names. The export expands the cycle by default and `--passes 1` flattens it. Step size and triplet
+came out of the same tier, so `--steps-per-beat` is gone from `ksp2midi` — the file says.
 
-- **`--passes`** (expanding the 16/32/48/64 step-skip cycle) waits on **T5.8** — whether the four
-  sequences are *repeats* or *pages*. Until then the export renders one pass, includes every note,
-  and warns.
+**One option is still deliberately unshipped**, because the number it needs has never been measured
+and a wrong one produces a file that loads cleanly and plays wrong:
+
 - **`--time-shift approx`** waits on **tier 8**. The centre of `112`/`120` is confirmed but the
   duration of one unit is not, so there is nothing to scale by that we would not be inventing.
 
@@ -180,7 +182,13 @@ than 64 steps split across pattern slots. Real musical material instead of toy c
   **`86` bit 6**, not `100` — must match whichever set you write.
 - Both step-active arrays must be written consistently with the note list, because **the device
   plays the flags, not the pool**. A pooled note whose flag is clear is silent.
-- Anything over 64 steps must be split and chained, never silently truncated.
+- Anything over 64 steps must be split and chained, never silently truncated. The chain format is
+  measured (spec §3.3.1): `121_84_<scene>_<track>_<slot>`, 0-based pattern numbers in order, the
+  rest left at the sentinel. The reader decodes chains; nothing writes one yet.
+- Each pattern's step size, triplet and direction live in `99` / `116` (spec §3.3), so a writer
+  that changes the grid must move bits 3–4 with it — `ksp.mutate.set_step_size` is the only thing
+  that should. A pattern imported at one grid and left declaring another plays at the wrong speed
+  with nothing to signal it.
 - `idx2` is a **64-entry pool chunk, not a polyphony voice**, so chords sit in one chunk as
   consecutive ordinals sharing a step and there is no 3- or 4-note ceiling. The real limit is **192
   events per pattern**, which the firmware enforces with an on-screen error. The open question is
@@ -265,7 +273,12 @@ Both are understood; neither has reached the code.
   is zero-filled because nothing addresses it, not because the firmware forgot to initialise it.
 - **`P_DRUM_POLY_STEP_COUNT` (`51`) is read by nothing.** It is per-lane drum step count, indexed by
   lane 1–24, confirmed real by capture D4 — which is how the KeyStep Pro does polyrhythm on the drum
-  track. Until something reads it, every lane renders at the pattern-level `115`.
+  track. Until something reads it, every lane renders at the pattern-level `115`. The flag that
+  governs it is now decoded on both halves (`99` / `116` bit 2, spec §3.3), so what is missing is
+  the rendering, not the reading.
+- **Playback direction is decoded and not applied.** Rand and Walk have no MIDI equivalent, so
+  `ksp2midi` renders those patterns forward and warns. Rendering a plausible random order would be
+  inventing a performance the device did not give us.
 
 **Hardware captures worth doing in one session:** M7's tiers 7–8, and T6.1 (the `project_5` drum
 time-shift re-check). Ranked in

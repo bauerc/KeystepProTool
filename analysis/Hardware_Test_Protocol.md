@@ -7,8 +7,8 @@ export back out.
 
 **Audience:** a human at the device, and an agent re-reading this later to interpret the captures.
 
-> **This document contains only unfinished work.** B0, tiers 1–4 and the two write tiers (M4, M5)
-> have been run — 27 captures plus one MIDI recording, in `project_files/captures/`, which is
+> **This document contains only unfinished work.** B0, tiers 1–5 and the two write tiers (M4, M5)
+> have been run — 37 captures plus one MIDI recording, in `project_files/captures/`, which is
 > gitignored. Their procedures are **deleted** from this file so that everything still here is
 > something to do. What they found is in
 > [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md), which is the authoritative record —
@@ -35,10 +35,18 @@ export back out.
 >   takes a low note of 0–103, custom gives all 24 lanes a free note (D5). It is a device menu
 >   setting with no representation in the project file at all, which is what D6 asked (spec
 >   §3.2.1, §4).
+> - **Tier 5.** The `99` / `116` bitfield is decoded in full, and it is **one layout** for both
+>   halves: triplet at bit 0, polyrhythm at bit 2, step size at bits 3–4 (1/4 … 1/32) and playback
+>   direction at bits 5–6 (Fwd, Rand, Walk). Bit 1 is set by nothing, and swing is **not** in the
+>   field at all — that toggle writes `97`. The 20-vs-16 default asymmetry was only a default.
+>   Root note is a pitch class, scale indexes the device's own list, and its eighth entry (Root) is
+>   unstorable. A chain is 0-based pattern numbers in order, sentinel-terminated, addressed by
+>   track number. And the four 16 / 32 / 48 / 64 sequences are **repeats**, not pages — which is
+>   what `ksp2midi --passes` is built on (spec §3.3, §3.3.1, §5).
 > - **T6.2.** MCC does not need the trailing comma. The writer emits strict JSON, with no flag.
 > - **Opportunistically, not by a planned capture:** notes past a pattern's declared last step are
 >   **disabled, not stale** — see the O1 ledger row below and spec §4 ("Why a note might not
->   play"). This does **not** answer T5.8, which is about the 16 / 32 / 48 / 64 skip *mask*.
+>   play"). That is the pattern *length*, a different mechanism from T5.8's skip mask.
 
 **The baseline every test below starts from** is `B0-baseline.KeyStepPro` — an initialised,
 untouched project, already captured. Where a test says "from the baseline", start by loading or
@@ -48,8 +56,6 @@ re-initialising to that state; do not re-derive it.
 
 | Question | Blocks | Tier |
 |---|---|---|
-| The `99` / `116` bitfield layout | M6 | 5 |
-| Pattern chaining beyond 64 steps (`84`) | M6 | 5 |
 | Time Shift range and linearity (`112` / `120`) | M7; whether shift is usable at all | 7 |
 | Which parameter governs effective swing (`74` / `97` / `114`) | M7, and `reader._swing` may be wrong | 7 |
 | Whether `113` randomness is probability or timing jitter | the validity of every timing measurement | 7 |
@@ -222,121 +228,6 @@ read, but nothing here waits on it.
 
 Each test states: **what it resolves · device steps · capture name · keys to diff · what confirms
 the current assumption · what falsifies it · what to do if falsified.**
-
----
-
-## Tier 5 — M6, pattern scalars
-
-**~12 captures.** Lower value per capture than tiers 2–4, but these are the settings that make a
-converted pattern *sound* like the source material rather than merely contain the right notes.
-
-### T5.1–T5.5 — The `99` bitfield
-
-- [x] T5.1 step size — one capture, one pattern per setting, Track 2, pattern 1 1/4, pattern 2 1/8, pattern 3 1/16, pattern 4 1/32
-- [x] T5.2 triplet on
-- [x] T5.3 monorhythm on
-- [x] T5.4 swing offset on
-- [x] T5.5 playback direction — one capture , one pattern per setting, Track 2 pattern 1 Fwd, pattern 2 Rand, pattern 3 Walk
-- [x] drum-side repeat on `116`
-
-`99` is "Pattern Seq triplet state, swing offset state, polyrythm state, step size, playback
-direction in a bitfield", with the dictionary's own comment placing **playback direction at bits
-5–6**. Everything else is unallocated guesswork.
-
-Known values: `Default.KeyStepPro` holds `99` = **20** (`0b0010100`) on every pattern, and
-`116` (the drum equivalent) holds **16** (`0b0010000`). `initial_project` has `99` = 16 on Track 1
-pattern 1 and Track 3 pattern 1, and 20 elsewhere — so bit 2 (value 4) is the one that varies in
-real material. Note the seq and drum defaults already differ by exactly that bit.
-
-**One bit is already measured, on the drum side.** `D4-lane-steplength` moves `123_116_1`
-16 → 20 — bit 2 — at the moment Track 1's drum mode went Mono → Poly, which is what lets lanes
-hold different step counts. So **`116` bit 2 = Mono/Poly**, and the drum half of this test only
-needs to confirm the *remaining* fields. See spec §5 for the limits of that reading.
-
-**The bit 2 asymmetry is now the sharpest question here**, not a footnote: `99` = 20 has bit 2
-set by default while `116` = 16 has it clear. Polyrhythm is set to on by default for Sequence tracks. A
-capture that toggles polyrhythm off on **Track 2** and watches `124_99_1` settles whether the two
-halves share a layout at all — run it early, because the rest of the sweep's interpretation
-depends on the answer. If setting Monorhythm to on on Track 2 swaps to the same measured value for Drums, definitively 16 means Mono and 20 mean Poly
-
-- **Device:** from the baseline, Track 2 pattern 1. Change **one field at a time** (except for step size), returning to default
-  between captures: step size, triplet on, polyrhythm on, swing offset on, playback direction, last step
-  through each of its settings.
-- **Captures:** `T5-99-stepsize`, `T5-99-triplet`, `T5-99-monorhythm`,
-  `T5-99-swingoffset`, `T5-99-direction`
-- **Keys:** `124_99_1`
-- **Confirms if:** playback direction occupies bits 5–6, and each other field maps to a
-  contiguous bit range that accounts for the observed defaults of 20 and 16.
-- **Falsified if:** direction is elsewhere, or two fields share a bit.
-- **Record the displayed setting name for every capture** — the mapping from stored bits to the
-  device's own labels is the deliverable, and it cannot be reconstructed from the file.
-- **Step size needs one capture**, since patterns appear to have distinct settings for this bit this saves time and exports
-- **Then repeat one capture on the drum side** (`116`, `123_116_<pattern>`) to check the layout is
-  shared — bit 2 aside, which `D4` already settled. If seq and drum differ, both need sweeping.
-
-### T5.6 — Root note and scale
-
-- [x] not yet run
-
-- **Resolves:** `107` (root note) and `108` (scale), which are 0 in every sample file, and the
-  user-scale parameters `101`–`106`.
-- **Device:** from the baseline. Set a non-default root note, export. Set a non-default scale, export.
-- **Captures:** `T5-rootnote`, `T5-scale`
-- **Keys:** `124_107_1`, `124_108_1`
-- **Confirms if:** each moves independently and the scale value indexes the device's scale list in
-  display order.
-- **Record the full scale list in display order** if you can page through it — that turns `108`
-  into pure lookup data, like the gate table.
-
-### T5.7 — Pattern chaining
-
-- [x] not yet run
-
-- **Resolves:** how patterns chain, which is the mechanism M6 needs for source material longer
-  than 64 steps. Scene parameter `84` is documented as "16 pattern in a chain (value between 0 and
-  15 if defined, otherwise 127)" and reads **127 across all 16 entries of all 5 tracks in every
-  sample file** — so no sample has ever used a chain.
-- **Device:** from the baseline. Build a chain of **3 patterns** on Track 2 within scene 1. Export.
-- **Capture:** `T5-chain-3.KeyStepPro`
-- **Keys:** `121_84_1_2_<1..16>` (scene 1, track 2), and `121_83_*` (current pattern per track)
-- **Confirms if:** the first three entries hold 0-based pattern numbers and the rest stay 127.
-- **Falsified if:** the chain lands somewhere else, or the ordering is not what the display shows.
-- **Note the track index mapping.** `121_84_<scene>_<track>_*` uses track index 5 for the Control
-  track and 1–4 for the sequencer tracks, per the descriptors — worth confirming, since it is the
-  one place the item ordering is not the obvious one.
-
-### T5.8 — What the four step-skip sequences are
-
-- [x] not yet run
-
-> **Not answered by ledger row O1.** O1 found that notes past the *declared last step* (`98` /
-> `115`) are retained and become audible when the pattern is lengthened. That is the pattern
-> length, a different mechanism from the per-note skip mask `49` / `53` this test is about. The
-> two are easy to conflate at the device because both change which steps light up.
-
-- **Resolves:** whether 16 / 32 / 48 / 64 are four **repeats** of a pattern shorter than 64 steps
-  or four **pages** of a 64-step one. This blocks `ksp2midi --passes` (issue #22), which cannot be
-  written until it is known, and it is the same question for `midi2ksp` in reverse.
-- **Why it is open:** spec §5 calls them "four consecutive 16-step sequences", which reads like
-  pages — but `project_5` pattern 1 is 16 steps long and carries notes masked to 48 and 64
-  (`49` = 5 and 12). Under the pages reading those notes could never sound, which contradicts a
-  hardware-confirmed description. Under the repeats reading every mask is meaningful at any
-  pattern length. The file cannot settle it; only the device can.
-- **Device:** from the baseline. Track 2, pattern 1, length **16 steps**. Four notes at beats 1, 5, 9, 13
-  on four different pitches. Set their skip masks to 16-only, 32-only, 48-only and 64-only
-  respectively. Export, then **play the pattern and listen through at least eight loops**.
-- **Capture:** `T5-skip-16step.KeyStepPro`
-- **Keys:** `124_49_1_1_<1..16>` (step-indexed, unlike the drum `53`)
-- **Confirms repeats if:** the four notes sound on successive loops in turn — beat 1 only on
-  loop 1, beat 5 only on loop 2, and so on, cycling every four loops.
-- **Confirms pages if:** only the 16-masked note ever sounds and the other three are silent, or
-  the device refuses to set a mask above 16 on a 16-step pattern at all.
-- **Then repeat at 64 steps.** Set the pattern to 64 steps with one note per 16-step quarter, each
-  masked to a *different* sequence than the quarter it sits in. Under repeats it plays all four
-  over four loops; under pages three of them never sound. This is the case that separates the
-  readings when the pattern is long enough for both to be coherent.
-- **Also note the display.** Whatever the device calls the setting is worth transcribing verbatim —
-  the vocabulary usually gives the model away.
 
 ---
 
@@ -607,9 +498,6 @@ answered and folded into the spec on 2026-08-01.
 
 | Test ID | Date | Displayed value / setting | Stored value | Notes |
 |---|---|---|---|---|
-| T5.6 | | root note / scale | | For scale, display is Chrom, Major, Minor, Dorian, Mixo, H.Min, Blues, Root, User 1, User 2. I set up the track so Track 1 in Drum mode and Track 2 have 10 patterns following that order. Of note, the Root option didn't seem to take or store anything by just pressing it. On the Rootnote export, the option is stored on Track 3 Pattern 1 and the selection was Scale Pattern Minor and the Root Note selected was D2|
-| T5.7 | | 3-pattern chain | | The scene is saved in Scene slot 1. The chain is composed of Pattern 1 2 3 in that order on Track 2|
-| T5.8 | | 16-step pattern, one note per skip mask | | **repeats or pages?** which notes sounded: Beat 1 on pass 1 only. Beat 5 on pass 2 only. Beat 9 on pass 3 only. Beat 13 on pass 4 only, Beat 1 on pass 5 only, Beat 5 on pass 6 only, beat 9 on pass 7 only, beat 13 on pass 8 only, and so on. There is no official language on the device for it. It is activate through the Lst Step/Extend function on the device. Press and hold a beat. Press one of the 4 16/32/48/64 buttons. Light on means it will play at that pass. Light off means it will not. 16 maps to pass 1, 32 to pass 2, 48 to pass 3, 64 to pass 4. When extended fully to 64 steps, a pass is 64 steps in total.|
 | T6.1 | | project_5 kick time shifts | | −1/+1 |
 | T6.2 | 2026-08-01 | `B0baseline-commaless.KeyStepPro`, one byte off `B0-baseline` | n/a — file-level test | ✅ **done. The comma is not required.** Loaded in MCC *and* transferred. Tests the comma **only** — indentation, key order, absent final newline and the fixed key set remain mandatory and untested. |
 | T7.1 | | shift min / max displayed | | **the range — run first**  Min -49, Max 50. Increments by 1|
@@ -629,20 +517,19 @@ answered and folded into the spec on 2026-08-01.
 
 ## Effort summary
 
-Remaining work only. B0, tiers 1–4 and the two write tiers are complete and are not listed.
+Remaining work only. B0, tiers 1–5 and the two write tiers are complete and are not listed.
 
 | Tier | Captures left | Resolves | Milestone |
 |---|---|---|---|
-| 5 | ~13 | pattern scalars, chaining, step-skip semantics | M6, M2 |
 | 6 | 1 | standing caveats (T6.2 done) | M3 |
 | 7 | ~13 | Time Shift range, swing semantics | M7, M5 |
 | 8 | ~6 recordings | what a Time Shift unit is worth in time | M2, M5 |
-| | **~33 left** of ~59 | | |
+| | **~20 left** of ~59 | | |
 
 Each tier is independently useful — stopping after any one leaves a coherent result rather than a
 half-finished one.
 
-**Remaining ranking: T7.1 → rest of Tier 7 → Tier 6 → Tier 5 → Tier 8.**
+**Remaining ranking: T7.1 → rest of Tier 7 → Tier 6 → Tier 8.**
 
 - **T7.1 leads** and is two captures, because it is a go/no-go: if the Time Shift range is
   only ±4, the rest of Tier 7's shift work and most of Tier 8 are not worth running at all.

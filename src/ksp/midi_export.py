@@ -11,19 +11,19 @@ layout, and there are two:
 * **Split** -- one file per non-empty (track, pattern), each starting at tick 0.
   No layout is invented at all; the caller reassembles them.
 
-Two quantities the file does not tell us have to be supplied from outside, and
-each is an :class:`ExportOptions` field rather than a buried literal:
+One quantity the file does not tell us has to be supplied from outside, and it
+is an :class:`ExportOptions` field rather than a buried literal: **the drum
+map**. Lane -> MIDI note is a *device global*, explicitly not in the project
+file (spec 3.2.1), so a :class:`ksp.drum_map.DrumMap` is supplied and named in
+the output. MIDI has no way to express an unresolved lane, so unlike
+``ksp-dump`` this cannot fall back to printing the lane number.
 
-* **Step size.** Held in the undecoded bitfield ``99``/``116`` (spec 3.3).
-  Defaults to 1/16.
-* **The drum map.** Lane -> MIDI note is a *device global*, explicitly not in
-  the project file (spec 3.2.1), so a :class:`ksp.drum_map.DrumMap` is supplied
-  and named in the output. MIDI has no way to express an unresolved lane, so
-  unlike ``ksp-dump`` this cannot fall back to printing the lane number.
-
-Gate length used to be a third; the ladder is now measured in full (spec 6.1),
-so ``default_gate`` only covers a value off the 0-127 ladder -- corrupt input,
-which is still warned about rather than rounded to the nearest rung.
+Gate length and step size used to be two more. Both are measured now: the gate
+ladder in full (spec 6.1), so ``default_gate`` only covers a value off the
+0-127 ladder -- corrupt input, which is still warned about rather than rounded
+to the nearest rung -- and step size and triplet in the ``99``/``116`` bitfield
+(spec 3.3, protocol tier 5), which the export reads per pattern rather than
+asking the user to name a grid the file already knows.
 
 The work is in three layers, so the M8/M9 Swift port translates arithmetic
 rather than a MIDI library:
@@ -47,21 +47,15 @@ import mido
 from ksp import constants
 from ksp.diagnostics import EMPTY_REPORT, Code, Collector, Diagnostic, Report, Site
 from ksp.drum_map import DEFAULT_DRUM_CHANNEL, DrumMap
-from ksp.model import Note, NoteKind, Pattern, Project
+from ksp.model import Note, NoteKind, Pattern, PlaybackDirection, Project, Track
 
-#: 480 divides evenly by 3 and 4, so triplet step sizes stay exact if M6 ever
-#: decodes the triplet bit.
+#: 480 divides evenly by 3 and 4, so every step size the device offers stays
+#: exact, triplets included: the finest is a 1/32 triplet at 20 ticks.
 DEFAULT_TICKS_PER_BEAT: Final = 480
 
-#: 1/16 steps. The real value lives in the undecoded ``99``/``116`` bitfield;
-#: 1/16 is the device's default and the only setting our sample projects use.
-DEFAULT_STEPS_PER_BEAT: Final = 4
-
-
-def check_steps_per_beat(value: int) -> None:
-    """Shared by both directions' options, so the message cannot drift."""
-    if value < 1:
-        raise ValueError("steps_per_beat must be at least 1")
+#: What ``ticks_per_beat`` must divide by for every step size x triplet
+#: combination to land on a whole tick: 1/32 needs 8, and a triplet needs 3.
+TICKS_PER_BEAT_DIVISOR: Final = 24
 
 
 #: The device's Drum output default (``globalParamId 79``) is channel 10,
@@ -78,7 +72,6 @@ class ExportOptions:
     """Everything the project file cannot tell us about timing and mapping."""
 
     ticks_per_beat: int = DEFAULT_TICKS_PER_BEAT
-    steps_per_beat: int = DEFAULT_STEPS_PER_BEAT
     drum_map: DrumMap = field(default_factory=DrumMap.chromatic)
     drum_channel: int = DRUM_CHANNEL
     default_gate: float = constants.DEFAULT_GATE_LENGTH
@@ -104,23 +97,28 @@ class ExportOptions:
     Turn it on to see everything the file holds, e.g. to recover an edit that
     was disabled rather than deleted."""
 
+    passes: int | None = None
+    """How many of the four 16/32/48/64 repeats to render. ``None`` is auto:
+    four when a pattern holds a note that does not play on all four, one
+    otherwise. The device runs the mask as *repeats* of the pattern, whatever
+    its length (spec 5, protocol T5.8), so a single pass sounds every masked
+    note at once -- musically wrong, and the reason this defaults to auto."""
+
     def __post_init__(self) -> None:
-        check_steps_per_beat(self.steps_per_beat)
         if self.ticks_per_beat < 1:
             raise ValueError("ticks_per_beat must be at least 1")
-        if self.ticks_per_beat % self.steps_per_beat:
+        if self.ticks_per_beat % TICKS_PER_BEAT_DIVISOR:
             raise ValueError(
                 f"ticks_per_beat {self.ticks_per_beat} is not divisible by "
-                f"steps_per_beat {self.steps_per_beat}; steps would not land on exact ticks"
+                f"{TICKS_PER_BEAT_DIVISOR}; the device's 1/4-1/32 step sizes and their "
+                f"triplets would not land on exact ticks"
             )
         if not 0 <= self.drum_channel <= 15:
             raise ValueError("drum_channel must be 0-15")
         if self.default_gate <= 0:
             raise ValueError("default_gate must be greater than 0")
-
-    @property
-    def ticks_per_step(self) -> int:
-        return self.ticks_per_beat // self.steps_per_beat
+        if self.passes is not None and not 1 <= self.passes <= constants.SKIP_CYCLE_PASSES:
+            raise ValueError(f"passes must be 1-{constants.SKIP_CYCLE_PASSES}, or None for auto")
 
 
 @dataclass(frozen=True)
@@ -213,6 +211,29 @@ def declared_step_count(pattern: Pattern, kind: NoteKind) -> int:
     return pattern.seq_step_count
 
 
+def ticks_per_step(pattern: Pattern, kind: NoteKind, ticks_per_beat: int) -> int:
+    """How long one step of *pattern* is, from its own step size and triplet.
+
+    Both come out of the ``99``/``116`` bitfield (spec 3.3), so nothing here is
+    a caller's assumption: a 1/16 pattern at 480 ticks per beat is 120 ticks a
+    step, and its triplet is 80.
+    """
+    bits = pattern.bits(kind)
+    ticks = ticks_per_beat * 4 // bits.step_denominator
+    return ticks * 2 // 3 if bits.triplet else ticks
+
+
+def auto_passes(notes: Sequence[Note]) -> int:
+    """Four when any note sits out one of the four repeats, else one.
+
+    A note that plays on all four is the default the device writes, so a
+    project nobody has masked renders exactly as it did before ``--passes``
+    existed.
+    """
+    partial = any(len(n.skip) != constants.SKIP_CYCLE_PASSES for n in notes)
+    return constants.SKIP_CYCLE_PASSES if partial else 1
+
+
 def swing_percent(pattern: Pattern, kind: NoteKind) -> int:
     if kind is NoteKind.DRUM and pattern.drum_swing_percent is not None:
         return pattern.drum_swing_percent
@@ -244,7 +265,7 @@ def render_pattern(
     options = options or ExportOptions()
     collector = Collector()
     site = Site(track=track_number, pattern=pattern.number, kind=kind.value)
-    ticks_per_step = options.ticks_per_step
+    step_ticks = ticks_per_step(pattern, kind, options.ticks_per_beat)
 
     # Filter before measuring: a note the device does not play must not
     # stretch the pattern it sits in. Both ways of being disabled are dropped
@@ -286,9 +307,38 @@ def render_pattern(
         playable = tuple(n for n in playable if n.active and n.step <= last)
 
     steps = step_count(pattern, kind, playable)
-    length_ticks = steps * ticks_per_step
+    pass_ticks = steps * step_ticks
+    passes = options.passes or auto_passes(playable)
+    length_ticks = pass_ticks * passes
     swing = swing_percent(pattern, kind)
     channel = options.drum_channel if kind is NoteKind.DRUM else track_number - 1
+
+    masked = [n for n in playable if len(n.skip) != constants.SKIP_CYCLE_PASSES]
+    if masked and passes > 1:
+        collector.add(
+            Code.STEP_SKIP_EXPANDED,
+            f"rendered as {passes} repeats so that {len(masked)} masked note(s) land on the "
+            f"16/32/48/64 sequences they play in",
+            site=site,
+            subjects=len(masked),
+        )
+    elif masked:
+        collector.add(
+            Code.STEP_SKIP_SINGLE_PASS,
+            f"{len(masked)} note(s) play on only some of the 16/32/48/64 sequences, which the "
+            f"device runs as four repeats; one pass was rendered and all of them included",
+            site=site,
+            subjects=len(masked),
+        )
+
+    direction = pattern.bits(kind).direction
+    if direction is not PlaybackDirection.FORWARD:
+        collector.add(
+            Code.DIRECTION_NOT_APPLIED,
+            f"plays {direction.value}, which a MIDI file cannot express; the steps were "
+            f"rendered in forward order",
+            site=site,
+        )
 
     if kind is NoteKind.DRUM:
         collector.add(
@@ -315,19 +365,33 @@ def render_pattern(
         if not (said_step_off and d.code is Code.DISABLED_STEP_OFF)
     )
 
-    notes: list[RenderedNote] = []
+    # Rendered once per note, then replicated: a note's tick data does not
+    # change between passes, and rendering it four times would say anything it
+    # has to say -- an off-ladder gate, an unapplied time shift -- four times.
+    rendered_notes: list[tuple[Note, RenderedNote]] = []
     for note in playable:
-        rendered = _render_note(note, kind, channel, swing, options, collector)
+        rendered = _render_note(note, kind, channel, swing, step_ticks, options, collector)
         if rendered is None:
             continue
-        if rendered.tick + rendered.duration_ticks > length_ticks:
+        if rendered.tick + rendered.duration_ticks > pass_ticks:
             collector.add(
                 Code.GATE_SHORTENED,
                 "note(s) whose gate ran past the end of the pattern were shortened to it",
                 site=Site(pattern=pattern.number),
             )
-            rendered = replace(rendered, duration_ticks=max(1, length_ticks - rendered.tick))
-        notes.append(rendered)
+            rendered = replace(rendered, duration_ticks=max(1, pass_ticks - rendered.tick))
+        rendered_notes.append((note, rendered))
+
+    notes: list[RenderedNote] = []
+    for index in range(passes):
+        sequence = constants.SKIP_SEQUENCES[index]
+        offset = index * pass_ticks
+        for note, rendered in rendered_notes:
+            # One pass renders everything: the mask has no meaning without the
+            # repeats it selects between.
+            if passes > 1 and sequence not in note.skip:
+                continue
+            notes.append(replace(rendered, tick=rendered.tick + offset) if offset else rendered)
 
     return Rendering(
         track_number=track_number,
@@ -344,10 +408,10 @@ def _render_note(
     kind: NoteKind,
     channel: int,
     swing: int,
+    step_ticks: int,
     options: ExportOptions,
     collector: Collector,
 ) -> RenderedNote | None:
-    ticks_per_step = options.ticks_per_step
     pitch = note.pitch
     if kind is NoteKind.DRUM:
         # A lane the device does not have means parameter 117 is not the
@@ -368,16 +432,9 @@ def _render_note(
             "note(s) carry a non-zero time shift; its timing encoding is not measured, "
             "so the shift was not applied",
         )
-    if len(note.skip) != len(constants.SKIP_SEQUENCES):
-        collector.add(
-            Code.STEP_SKIP_SINGLE_PASS,
-            "note(s) are set to play on only some of the 16/32/48/64 sequences; the export "
-            "renders one pass of each pattern and includes them all",
-        )
-
-    tick = (note.step - 1) * ticks_per_step
+    tick = (note.step - 1) * step_ticks
     if options.apply_swing:
-        tick += _swing_delay(note.step, swing, ticks_per_step)
+        tick += _swing_delay(note.step, swing, step_ticks)
 
     gate = note.gate
     if gate is None:
@@ -389,7 +446,7 @@ def _render_note(
         )
     return RenderedNote(
         tick=tick,
-        duration_ticks=max(1, round(gate * ticks_per_step)),
+        duration_ticks=max(1, round(gate * step_ticks)),
         pitch=pitch,
         velocity=max(MIN_VELOCITY, note.velocity),
         channel=channel,
@@ -597,9 +654,15 @@ def render_project(project: Project, options: ExportOptions | None = None) -> tu
     from before the track was switched over. Parameter 86 bit 6 says which one
     the device plays, so only that one is exported; the other would be notes no
     hardware ever produces.
+
+    An automatic pass count is resolved across each pattern *column* rather
+    than per rendering, so a pattern that expands to four repeats on one track
+    does not leave the same pattern playing once and then falling silent on
+    another. ``arrange`` gives every track the column's longest length, so this
+    is what keeps pattern N starting at the same tick on every track.
     """
     options = options or ExportOptions()
-    renderings: list[Rendering] = []
+    plans: list[tuple[Track, Pattern, NoteKind, Diagnostic | None]] = []
     for track in project.tracks:
         live = NoteKind.DRUM if track.drum_mode else NoteKind.SEQ
         for pattern in track.patterns:
@@ -624,21 +687,31 @@ def render_project(project: Project, options: ExportOptions | None = None) -> tu
                     site=Site(track=track.number, pattern=pattern.number),
                 )
             for kind in kinds:
-                rendering = render_pattern(
-                    pattern, track_number=track.number, kind=kind, options=options
-                )
-                if stale_diagnostic is not None:
-                    # The reader says the same pattern holds both sets. This
-                    # says that *and* which flag brings the other one back, so
-                    # its duplicate is dropped rather than printed alongside.
-                    kept = tuple(
-                        d for d in rendering.diagnostics if d.code is not Code.MIXED_NOTE_SETS
-                    )
-                    rendering = replace(
-                        rendering,
-                        diagnostics=Report((stale_diagnostic, *kept)),
-                    )
-                renderings.append(rendering)
+                plans.append((track, pattern, kind, stale_diagnostic))
+
+    column_passes: dict[int, int] = {}
+    for _, pattern, kind, _ in plans:
+        number = pattern.number
+        column_passes[number] = max(
+            column_passes.get(number, 1), auto_passes(pattern.notes_of(kind))
+        )
+
+    renderings: list[Rendering] = []
+    for track, pattern, kind, stale_diagnostic in plans:
+        passes = options.passes or column_passes[pattern.number]
+        rendering = render_pattern(
+            pattern,
+            track_number=track.number,
+            kind=kind,
+            options=replace(options, passes=passes),
+        )
+        if stale_diagnostic is not None:
+            # The reader says the same pattern holds both sets. This says that
+            # *and* which flag brings the other one back, so its duplicate is
+            # dropped rather than printed alongside.
+            kept = tuple(d for d in rendering.diagnostics if d.code is not Code.MIXED_NOTE_SETS)
+            rendering = replace(rendering, diagnostics=Report((stale_diagnostic, *kept)))
+        renderings.append(rendering)
     return tuple(renderings)
 
 

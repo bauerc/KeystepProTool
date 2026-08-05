@@ -14,9 +14,10 @@ import pytest
 
 from ksp import constants, midi_import, reader
 from ksp.diagnostics import Code
+from ksp.keys import key
 from ksp.midi_import import ImportOptions
 from ksp.model import NoteKind
-from test_mutate import PLACEMENT_RECIPE, changed
+from test_mutate import PLACEMENT_RECIPE, TRACK_2_ITEM, changed
 
 Loader = Callable[[str], dict[str, int | str]]
 
@@ -66,6 +67,30 @@ def test_one_note_writes_exactly_the_m4_recipe(load_sample: Loader) -> None:
     note, so this ties the converter to a hardware measurement rather than to
     our own idea of what a note is.
     """
+    base = load_sample("baseline.KeyStepPro")
+    result = midi_import.convert(clip_of([(0, 60, 100)]), base, track=2, pattern=1)
+
+    assert changed(base, result.raw) == PLACEMENT_RECIPE
+
+
+def test_a_non_default_step_size_writes_the_pattern_bitfield(load_sample: Loader) -> None:
+    """One key beyond the recipe, and only when the grid is not the default.
+
+    Without it the device would play a clip quantised at 1/32 on its 1/16
+    grid: the file loads, the notes are all present, and it runs at half
+    speed. Bits 3-4 of 99, measured by T5.1.
+    """
+    base = load_sample("baseline.KeyStepPro")
+    options = ImportOptions(steps_per_beat=8)
+    result = midi_import.convert(clip_of([(0, 60, 100)]), base, track=2, pattern=1, options=options)
+
+    bits = key(TRACK_2_ITEM, constants.P_SEQ_PATTERN_BITS, 1)
+    assert changed(base, result.raw) == PLACEMENT_RECIPE | {bits: (20, 28)}
+    assert constants.step_denominator(28) == 32
+
+
+def test_the_default_step_size_leaves_the_bitfield_alone(load_sample: Loader) -> None:
+    """1/16 is what the template already holds, so writing it moves nothing."""
     base = load_sample("baseline.KeyStepPro")
     result = midi_import.convert(clip_of([(0, 60, 100)]), base, track=2, pattern=1)
 

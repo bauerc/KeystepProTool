@@ -1,9 +1,10 @@
 """Targeted edits to a parsed ``.KeyStepPro`` project.
 
-Milestone M4. Two operations, each specified by a hardware capture diff rather
-than inferred: placing a melodic note (8 keys, ``B0-baseline`` ->
-``T1-note-place``) and changing one note's pitch (1 key, ``T1-note-place`` ->
-``T1-note-pitch``).
+Milestone M4. Three operations, each specified by a hardware capture diff
+rather than inferred: placing a melodic note (8 keys, ``B0-baseline`` ->
+``T1-note-place``), changing one note's pitch (1 key, ``T1-note-place`` ->
+``T1-note-pitch``) and setting a pattern's step size (1 key, bits 3-4 of
+``99``, ``B0-baseline`` -> ``T5-99-stepsize``).
 
 Placing a note writes six note-indexed parameters, one **step**-indexed
 step-active flag and the pattern's data-state latch::
@@ -144,6 +145,28 @@ def set_pitch(
         )
 
     return _with_values(raw, {target: pitch})
+
+
+def set_step_size(
+    raw: Mapping[str, int | str],
+    *,
+    track: int,
+    pattern: int,
+    steps_per_beat: int,
+) -> dict[str, int | str]:
+    """Set one pattern's step size in ``99``, leaving the field's other bits.
+
+    Bits 3-4 only (spec 3.3, protocol T5.1). Triplet, polyrhythm and direction
+    are the user's settings on the device and are not ours to overwrite, which
+    is why this reads the stored value rather than composing a fresh one.
+    """
+    item = item_for_track(track)
+    _check_pattern(pattern)
+    target = key(item, constants.P_SEQ_PATTERN_BITS, pattern)
+    stored = raw.get(target)
+    if not isinstance(stored, int):
+        raise KeyError(f"not in the file: {target}")
+    return _with_values(raw, {target: constants.steps_per_beat_bits(stored, steps_per_beat)})
 
 
 def place_note(

@@ -31,6 +31,30 @@ DRUM_TRACK_ITEM_ID: Final = 123
 PATTERNS_PER_TRACK: Final = 16
 MAX_STEPS: Final = 64
 
+# --- Scenes and pattern chaining (item 121) --------------------------------
+# Measured 2026-08-04, capture T5-chain-3: a 3-pattern chain on Track 2 in
+# scene 1 stores 121_84_1_2_1..3 = 0, 1, 2 and leaves slots 4-16 at SENTINEL.
+# Pattern numbers are 0-based; the track index in the key is the track number.
+
+SCENE_COUNT: Final = 16
+
+#: Chain slots per (scene, track) -- one per pattern the chain can hold.
+CHAIN_SLOTS: Final = 16
+
+#: Tracks addressed by a scene key: 1-4 are the sequencer tracks and 5 is the
+#: Control track, which is the one place the item ordering is not the obvious
+#: one. Confirmed on the sequencer side by T5-chain-3.
+SCENE_TRACK_COUNT: Final = 5
+CONTROL_TRACK_INDEX: Final = 5
+
+P_SCENE_CHAIN: Final = 84
+
+#: Moves 0 -> 32 alongside the chain above. One capture cannot separate
+#: ``(last << 4) | first`` from ``(len - 1) << 4`` -- both give 32 for a chain
+#: of patterns 1-3 -- so nothing reads it. Distinct from G_DRUM_MAP_NOTE_1,
+#: which is 83 under a different item.
+P_SCENE_PATTERN_STATE: Final = 83
+
 #: Pool chunks per track -- *not* polyphony voices. idx2 splits one flat note
 #: pool into blocks of MAX_STEPS entries, so real capacity is 3 x 64 = 192
 #: events per pattern, which the device enforces with an on-screen error --
@@ -87,6 +111,111 @@ SWING_OFFSET: Final = 25
 
 #: Step counts are 0-based: stored 15 means a 16-step pattern.
 STEP_COUNT_OFFSET: Final = 1
+
+# --- The per-pattern bitfield (99 / 116) -----------------------------------
+# Measured 2026-08-04, protocol tier 5, against B0-baseline. The sequencer
+# field and the drum field share one layout; only their defaults differ, which
+# is the whole of the 20-vs-16 asymmetry that looked like two encodings:
+#
+#   T5-99-stepsize     patterns 1-4 = 4 / 12 / 20 / 28   1/4, 1/8, 1/16, 1/32
+#   T5-99-triplet      124_99_1 = 21, and 5 / 13 / 21 / 29 across the sizes
+#   T5-99-monorhythm   124_99_1 = 16, Monorhythm on
+#   T5-99-direction    patterns 1-3 = 20 / 52 / 84       Fwd, Rand, Walk
+#   T5-99-drum         11 drum patterns decode identically through 116
+#
+# T5-99-swingoffset moved 97 and left 99 alone, so the dictionary's "swing
+# offset state" is not a bit here.
+
+#: Bit 0. Displayed as Triplet.
+TRIPLET_BIT: Final = 0
+
+#: Bit 2. Set = Polyrhythm, clear = Monorhythm. On the drum side this is what
+#: gives lanes independent lengths and makes 51 meaningful (capture D4);
+#: sequencer patterns default to set, drum patterns to clear.
+POLYRHYTHM_BIT: Final = 2
+
+#: Bits 3-4, indexing STEP_SIZE_DENOMINATORS.
+STEP_SIZE_SHIFT: Final = 3
+STEP_SIZE_MASK: Final = 0b11
+
+#: Step size by stored index: 1/4, 1/8, 1/16, 1/32. 1/16 (index 2) is the
+#: device default and the only size any sample project uses.
+STEP_SIZE_DENOMINATORS: Final = (4, 8, 16, 32)
+
+#: Bits 5-6. 0 = Forward, 1 = Random, 2 = Walk; 3 was never produced by the
+#: device and has no known name.
+DIRECTION_SHIFT: Final = 5
+DIRECTION_MASK: Final = 0b11
+DIRECTION_FORWARD: Final = 0
+DIRECTION_RANDOM: Final = 1
+DIRECTION_WALK: Final = 2
+
+#: Bit 1 is set by nothing: not in any sample project, not in any capture.
+_ALLOCATED_BITS: Final = (
+    1 << TRIPLET_BIT
+    | 1 << POLYRHYTHM_BIT
+    | STEP_SIZE_MASK << STEP_SIZE_SHIFT
+    | DIRECTION_MASK << DIRECTION_SHIFT
+)
+
+
+def step_denominator(bits: int) -> int:
+    """Step size as a note denominator: 16 means 1/16 steps."""
+    return STEP_SIZE_DENOMINATORS[(bits >> STEP_SIZE_SHIFT) & STEP_SIZE_MASK]
+
+
+def is_triplet(bits: int) -> bool:
+    return bool(bits & 1 << TRIPLET_BIT)
+
+
+def is_polyrhythm(bits: int) -> bool:
+    return bool(bits & 1 << POLYRHYTHM_BIT)
+
+
+def direction_index(bits: int) -> int:
+    return (bits >> DIRECTION_SHIFT) & DIRECTION_MASK
+
+
+def unallocated_bits(bits: int) -> int:
+    """Bits set that tier 5 never accounted for. Non-zero means a value the
+    captures did not produce, which callers report rather than interpret."""
+    return bits & ~_ALLOCATED_BITS
+
+
+#: Parameter 108 indexes the device's scale list in display order, transcribed
+#: off the device during T5.6 and confirmed by T5-scale, which walks patterns
+#: 1-10 down the list on two tracks and stores 0-9.
+#:
+#: Index 7 (Root) is in the list but **cannot be stored**: selecting it leaves
+#: 108 at its previous value, so a file never holds 7. Kept in the tuple so the
+#: remaining indices line up with what the display shows.
+SCALE_NAMES: Final = (
+    "Chromatic",
+    "Major",
+    "Minor",
+    "Dorian",
+    "Mixolydian",
+    "Harmonic Minor",
+    "Blues",
+    "Root",
+    "User 1",
+    "User 2",
+)
+
+#: The one entry of SCALE_NAMES the device declines to store (T5.6).
+UNSTORABLE_SCALE: Final = 7
+
+
+def scale_name(stored: int) -> str | None:
+    """Name parameter 108's value, or ``None`` if it is off the list."""
+    if 0 <= stored < len(SCALE_NAMES):
+        return SCALE_NAMES[stored]
+    return None
+
+
+#: Root note is a pitch class, 0-11: T5-rootnote selects D and stores 2, with
+#: the octave the display shows kept nowhere in the file.
+ROOT_NOTE_COUNT: Final = 12
 
 # --- Melodic note parameters (spec section 3.1) ----------------------------
 # 48 and 49 are indexed by step; 50 and 109-113 are indexed by note ordinal.
@@ -274,6 +403,48 @@ def decode_gate(stored: int) -> float | None:
     return GATE_TABLE.get(stored)
 
 
+#: How the four sequences run: as **repeats**, not pages. Measured by ear over
+#: eight loops during T5.8 -- a 16-step pattern with one note per mask played
+#: beat 1 on pass 1, beat 5 on pass 2, beat 9 on pass 3, beat 13 on pass 4,
+#: then cycled. A pass is the pattern's own declared length at any length, so
+#: every mask is meaningful even on a pattern far shorter than 64 steps.
+SKIP_CYCLE_PASSES: Final = len(SKIP_SEQUENCES)
+
+#: Every sequence set, i.e. a note that plays on all four passes. The value 49
+#: and 53 hold unless the user says otherwise, which is why a writer placing a
+#: note leaves them alone.
+SKIP_MASK_ALL: Final = (1 << SKIP_CYCLE_PASSES) - 1
+
+#: Steps per beat when the pattern runs at 1/16, the device default. Only the
+#: *import* direction has to choose this -- an export reads the pattern's own
+#: step size out of 99 / 116.
+DEFAULT_STEPS_PER_BEAT: Final = 4
+
+
+def check_steps_per_beat(value: int) -> None:
+    """Shared by every caller that lets a user pick one, so the message cannot
+    drift."""
+    if value < 1:
+        raise ValueError("steps_per_beat must be at least 1")
+
+
+def steps_per_beat_bits(bits: int, steps_per_beat: int) -> int:
+    """Set the step-size field of *bits* to *steps_per_beat*, leaving the rest.
+
+    Raises for a step size the device cannot express: the field is two bits
+    wide and holds 1/4 through 1/32 only.
+    """
+    denominator = steps_per_beat * 4
+    if denominator not in STEP_SIZE_DENOMINATORS:
+        sizes = ", ".join(f"1/{d}" for d in STEP_SIZE_DENOMINATORS)
+        raise ValueError(
+            f"1/{denominator} steps cannot be stored; the device holds {sizes} "
+            f"in parameter 99 (spec 3.3)"
+        )
+    index = STEP_SIZE_DENOMINATORS.index(denominator)
+    return bits & ~(STEP_SIZE_MASK << STEP_SIZE_SHIFT) | index << STEP_SIZE_SHIFT
+
+
 def decode_skip_mask(mask: int) -> tuple[int, ...]:
     """Return the 16/32/48/64 sequences a note plays in.
 
@@ -290,3 +461,11 @@ _NOTE_NAMES: Final = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#"
 def note_name(pitch: int) -> str:
     """Render a MIDI pitch the way the hardware labels it, e.g. 48 -> ``C2``."""
     return f"{_NOTE_NAMES[pitch % 12]}{pitch // 12 - 2}"
+
+
+def root_note_name(root: int) -> str:
+    """Name parameter 107's pitch class, e.g. 2 -> ``D``.
+
+    No octave: the display shows one but the file does not store it (T5.6).
+    """
+    return _NOTE_NAMES[root % ROOT_NOTE_COUNT]
