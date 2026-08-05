@@ -27,12 +27,17 @@ And the factory mapping is chromatic from MIDI note 36: Arturia's manual says
 "the default mapping starts at MIDI note 36", and the Custom defaults 36..59
 are exactly that run.
 
-Two details remain unconfirmed on hardware and are recorded in the capture
-protocol as Test D5: whether a factory-reset device is chromatic-from-36 or
-chromatic-from-0 (MCC's ``defaultValue`` for Low note is 0, which disagrees
-with the manual), and whether chromatic mode maps lane *i* to ``low + i`` or
-``low + i + 1``. This module implements ``low + i``, matching the manual's
-"which note the lowest key will trigger".
+**Both halves are measured** (capture D5). With one hit per lane on 24
+consecutive steps, the device's own MIDI output ran 36..59 in lane order, so
+the factory map is chromatic from 36 and lane *i* plays ``low + i`` -- not
+``low + i + 1``. MCC's ``defaultValue`` of 0 for Low note is its fallback with
+no device attached and does not describe the hardware. The operator's menu
+readout adds the rest of the shape: chromatic mode takes a low note of 0-103,
+and custom mode gives all 24 lanes a free note 0-127, overlaps allowed,
+defaulting to the same 36..59 run.
+
+That the map is device state is unchanged by any of it, so the labelling
+obligation above stands.
 """
 
 from __future__ import annotations
@@ -44,15 +49,16 @@ from typing import Any, Final
 from ksp.constants import DRUM_LANE_COUNT, note_name
 from ksp.diagnostics import EMPTY_REPORT, Code, Collector, Report
 
-#: Arturia's documented default. The Custom defaults in ``KeyStepPro.json``
-#: are 36..59, i.e. a chromatic run from here, and the manual agrees.
+#: What the device's Drum Map menu actually reads, confirmed by its own MIDI
+#: output (capture D5). The manual and the Custom defaults of 36..59 agree.
 DEFAULT_CHROMATIC_LOW: Final = 36
 
 #: ``globalParamId 79`` (Drum output) defaults to 10, separately from tracks
 #: 1-4 which default to 0-3.
 DEFAULT_DRUM_CHANNEL: Final = 10
 
-#: Highest Low note MCC will accept in chromatic mode.
+#: Highest Low note the device's encoder reaches in chromatic mode (D5), the
+#: same cap MCC applies.
 MAX_CHROMATIC_LOW: Final = 103
 
 MIN_NOTE: Final = 0
@@ -159,11 +165,10 @@ class DrumMap:
     @classmethod
     def chromatic(cls, low: int = DEFAULT_CHROMATIC_LOW) -> DrumMap:
         """Lane *i* plays ``low + i``, the device's Chromatic mode."""
-        # MCC caps Low note at 103, which puts the top lane at 126 -- one short
-        # of 127. Whether that is an off-by-one in Arturia's range or in this
-        # module's ``low + i`` reading is unconfirmed (protocol D5), so the
-        # device's own limit is enforced rather than a wider one derived from
-        # it. No separate overflow check is needed: 103 + 23 cannot exceed 127.
+        # The device stops at Low note 103 too, which leaves the top lane on
+        # 126 -- Arturia's range is one short of 127 rather than this being an
+        # off-by-one here, since D5 saw lane 0 fire 36 at a low note of 36. No
+        # separate overflow check is needed: 103 + 23 cannot exceed 127.
         if not MIN_NOTE <= low <= MAX_CHROMATIC_LOW:
             raise ValueError(f"chromatic low note {low} is outside {MIN_NOTE}-{MAX_CHROMATIC_LOW}")
         return cls(

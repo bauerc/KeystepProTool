@@ -35,7 +35,9 @@ class TestDefaults:
 
         ``KeyStepPro.json`` gives Note 1..Note 24 defaults of 36..59, and the
         manual says "the default mapping starts at MIDI note 36". A chromatic
-        map from 36 must reproduce that run exactly.
+        map from 36 must reproduce that run exactly. The device transmits that
+        same run (capture D5); ``test_hardware_tier4.py`` holds it against the
+        recording.
         """
         assert DrumMap.chromatic(DEFAULT_CHROMATIC_LOW).notes == tuple(range(36, 60))
 
@@ -105,10 +107,10 @@ class TestValidation:
     def test_the_devices_highest_low_note_still_fits(self) -> None:
         """103 + 23 = 126, one short of 127.
 
-        That gap is the open question recorded as U2: either Arturia's range
-        is off by one, or chromatic mode maps lane *i* to ``low + i + 1``
-        rather than ``low + i``. Pinned here so a future hardware answer has
-        to come past this test.
+        The gap is Arturia's range being one short, not an off-by-one here:
+        capture D5 heard lane 0 fire 36 with the low note at 36, which is
+        ``low + i`` and rules out the ``low + i + 1`` reading that would have
+        landed the top lane exactly on 127.
         """
         assert DrumMap.chromatic(103).notes[-1] == 126
 

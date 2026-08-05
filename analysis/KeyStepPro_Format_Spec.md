@@ -254,15 +254,41 @@ mapping is necessarily an assumption about the owner's device and must be labell
 which is what `ksp.drum_map` does, defaulting to chromatic from 36 (the manual: "the default
 mapping starts at MIDI note 36", and the Custom defaults 36…59 are exactly that run).
 
-Two points still need the hardware — **tests D5 and D6** in
-[`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md):
+#### What the device's map actually is — measured
 
-- MCC's `defaultValue` for Mode is Chromatic with Low note `0`, which would put lane 0 at MIDI
-  note 0 — disagreeing with both the manual and the Custom defaults. MCC `defaultValue`s are its
-  UI fallback when no device is attached, so the device's factory state is unconfirmed.
-- Whether chromatic mode maps lane *i* to `low + i` or `low + i + 1`. The manual's "which note
-  the lowest key will trigger" implies the former, but `maxValue: 103` then puts the top lane at
-  126, one short of 127, whereas the latter lands exactly on 127.
+**Hardware, capture D5.** One hit per lane on 24 consecutive steps — lane *i* on step *i+1* — and
+the pattern recorded while it played once. The device transmitted **36, 37, … 59** in lane order
+on **channel 10**, which settles both halves of the question at once:
+
+- **The factory map is chromatic from 36**, not from 0. MCC's `defaultValue` of `0` for Low note
+  is its UI fallback with no device attached and does not describe the hardware.
+- **Lane *i* plays `low + i`**, not `low + i + 1` — lane 0 fired 36 with the low note at 36. So
+  the top lane at the maximum low note is 126: Arturia's range is one short of 127, rather than
+  this being an off-by-one in the reading.
+
+The recording cross-checks against the export, which makes it a whole-chain result rather than a
+MIDI observation alone: the 24 *sounding* notes in `D5-drum-map.KeyStepPro` carry `117` = 0…23 on
+steps 1…24, in the same order as the pitches heard. (The pattern also holds five superseded hits
+on lanes 19–23; they are pooled with their step-active bits clear, so the `52` decode is what
+separates them — see §4.)
+
+The operator's menu readout supplies the rest of the shape, and exists nowhere else:
+
+| Mode | What it takes | Range | Default |
+|---|---|---|---|
+| Chromatic | one Low note; lane *i* = `low + i` | 0–103 | **36** |
+| Custom | all 24 notes independently, overlaps permitted | 0–127 each | **36…59** |
+
+**D6 — the map is not in the project file, and there is nothing there to find.** No byte-identity
+capture was taken and none is needed: the setting lives in the device's own menus with no project
+representation at all. The file evidence agrees — D5's export diffed against `B0-baseline` moves
+only `40`, `52`, `54`, `86`, `115` and `117`–`121`, all note and pattern parameters, with nothing
+that could hold 24 note assignments. This is the same conclusion the parameter dictionary gives
+above, now with the device's own behaviour behind it.
+
+**None of this makes a converter's map any less an assumption.** The map is device state, so an
+export can never be certain which one the owner has — it can only say which one it used, and
+`ksp.drum_map` still does.
 
 ### 3.3 Per-pattern scalars (index = pattern 1–16)
 
@@ -344,9 +370,18 @@ lanes that were filled). It also reproduces on real user material: `initial_proj
 lane 0 → {0, 4, 8, 12} and pattern 3 lane 7 → all 16 steps, each matching that lane's pool
 exactly.
 
-The melodic equivalent `48` is far simpler — one entry per step, value `1` or `0`, and in every
-file observed the whole pattern's flags sit in **slot 1**, with slots 2–3 unused. No capture yet
-shows what `48` does once a melodic pool spills past 64 events.
+The melodic equivalent `48` is far simpler — one entry per step, value `1` or `0`, and the whole
+pattern's flags sit in **slot 1**, with slots 2–3 unused.
+
+**Hardware-confirmed at the one point where it could have gone wrong** (capture T4.6). A pattern
+filled to the 192-event ceiling spills its pool into chunks 2 and 3 — 64 live entries in each —
+while `124_48_1_2_*` and `124_48_1_3_*` stay **entirely zero**. So `48` does *not* chunk
+alongside the pool, and a reader may take it from slot 1 and treat it as pattern-wide.
+
+That is structural rather than lucky, which is why it can be relied on: `48` holds one entry per
+step, a pattern has at most 64 steps, and a chunk is 64 entries — a full set of flags fills chunk
+1 exactly and has nothing left to spill. The drum `52` chunks only because it is packed across
+24 lanes and needs 220 entries for the same job.
 
 Consequences for writing files:
 
@@ -393,8 +428,9 @@ reproducing `T1-note-place` byte for byte from the committed `baseline.KeyStepPr
 > `place_note` from the baseline was loaded in MCC, transferred to the device, and exported back:
 > the readback differs from the candidate by **zero keys**. So these 8 are not just what the
 > firmware writes when a human places a note, they are everything it needs to be handed one. The
-> same capture placed a second note with `48` deliberately clear; it stayed silent, which extends
-> T4.5 from a flag the device cleared to one we wrote.
+> same capture placed a second note with `48` deliberately clear; it stayed silent. With T4.5 the
+> two halves meet: the device honours a flag it cleared itself *and* one we wrote into a file it
+> loaded.
 
 **Deleting** a note sends the six note parameters back to `127` and clears `48`, but leaves `40`
 at 3 — it latches, so an emptied pattern is not distinguishable from a full one by `40` alone.
@@ -429,6 +465,14 @@ patterns, and then reports their step-active flags as orphans.
 > (capture D1) untouched. Every flagged step having a pooled note is an invariant, so a violation
 > means the pool was decoded wrongly — not that the file is damaged.
 
+**The invariant holds across the sample files, but the device can break it.** `T4-melodic-overflow-v2`
+carries `124_48_1_1_49` set with no pooled note behind it: the operator lit step 49 and the
+firmware then refused the note, having already reached the 192-event ceiling. So a flag with
+nothing behind it is a real state the hardware can produce, not proof of a decode bug — the
+reader is pool-driven, invents nothing from it, and reports it. Read the warning as "this file is
+odd", not "this reader is wrong", and check the pattern's event count before suspecting the pool
+scan.
+
 ### `idx2` is a pool chunk, not a voice — and the zero-fill trap
 
 `idx2` runs **1–4 on Track 1** and **1–3 on Tracks 2–4**, and it is tempting to read it as a
@@ -446,6 +490,15 @@ device needs **Step Edit** mode; that is data entry, not format — see the test
 Notes reach slot 2 only when slot 1's 64 entries are full. `D3-drum-overflow` fills a drum
 pattern past capacity: the events land 64 in slot 1, 64 in slot 2, 64 in slot 3, and the device
 then displays a **192-note limit** error. So the ceiling is real and the firmware enforces it.
+
+**The melodic side does the same** (capture `T4-melodic-overflow-v2`), which matters because no
+sample file has more than 64 melodic notes in a pattern and the behaviour had never been seen:
+64 events in each of chunks 1–3, the same 192 error, and the step-active array left behind in
+chunk 1 as described in §4 above. The two parameter sets chunk alike.
+
+Note the asymmetry in what is *allocated* versus what is *allowed*. Melodic items address
+`idx2` = 1–3, so 192 is exactly the key space. Track 1 addresses a fourth chunk — 256 slots — and
+still stops at 192, so the ceiling is a firmware limit rather than a storage one.
 
 **At the ceiling the device refuses the next hit — it does not overwrite.** The operator confirms
 the 193rd hit was rejected outright, with the error shown immediately and no existing event
@@ -511,7 +564,7 @@ Existence and audibility are different tests, and there is more than one way to 
 | # | Why it does not play | Key in the file | Example, from a committed file | Undo on the device | Confidence |
 |---|---|---|---|---|---|
 | 1 | The pool entry is empty — there is no note | `<item>_50_<pat>_<slot>_<ord>`, `54` for drums | `123_54_9_1_22` = `127` — a **hole**, not the end: ordinals 21 and 25 hold steps 42 and 44 | n/a, nothing is stored | Certain |
-| 2 | **Disabled: step turned off** | drum `123_52_<pat>_<slot>_<idx>`, one **bit**; melodic `<item>_48_<pat>_1_<step>`, one entry | `123_52_9_1_1` = `0` → lane 0 step 5 is off. Contrast `123_52_9_1_2` = `2` = `0b0000010` → lane 0 step 9 is on. **No melodic example exists** — see below | Re-light the step; the note returns intact | **Hardware** (D1), drums only |
+| 2 | **Disabled: step turned off** | drum `123_52_<pat>_<slot>_<idx>`, one **bit**; melodic `<item>_48_<pat>_1_<step>`, one entry | `123_52_9_1_1` = `0` → lane 0 step 5 is off. Contrast `123_52_9_1_2` = `2` = `0b0000010` → lane 0 step 9 is on. **No melodic example in a committed file** — see below | Re-light the step; the note returns intact | **Hardware** — drums D1, melodic T4.5 |
 | 3 | **Disabled: past the last step** | `<item>_98_<pat>` melodic, `123_115_<pat>` drum, 0-based | `123_115_9` = `47` → 48 steps, while `123_54_9_1_45` = `56` → step 57 | Raise Last Step | **Hardware** (O1) |
 | 4 | Velocity 0 | `<item>_111_<pat>_<slot>_<ord>`, `119` for drums | **None in the corpus** — no note in any committed file has velocity 0 | Raise the velocity | Inferred, never tested |
 | 5 | Skipped on this pass | melodic `<item>_49_<pat>_<slot>_<step>` (**step**-indexed), drum `123_53_...` (**note**-indexed) | `125_49_1_1_5` = `5` = `0b0101` → plays on 16 and 48 only; `15` is the default "always" | Set the mask to all four | ⚠ **Unresolved** — repeats or pages? **T5.8** |
@@ -528,10 +581,16 @@ bit  = step % 7 = 4                              -> (0 >> 4) & 1  = 0   step is 
 ```
 
 **Two of these six have no example in any committed file**, and that is a finding rather than an
-omission. No melodic note anywhere in the corpus has its `48` bit clear, which is why row 2's
-melodic half rests on the drum result plus agreement between `48` and the note list — protocol
-**T4.5** is the capture that settles it, and it is the highest-value one outstanding. No note
-anywhere has velocity 0, so row 4 is inference from MIDI convention alone.
+omission. No note anywhere has velocity 0, so row 4 is inference from MIDI convention alone.
+
+Row 2's melodic half is **measured** but only in a capture, not in the corpus — no melodic note in
+any committed file has its `48` bit clear. Capture T4.5 makes it: two identical notes at beats 1
+and 5, then beat 5's step toggled off without deleting it. Exactly one key moves,
+`124_48_1_1_5` from `1` to `0`; the pool entry — `50`, `109`–`113` — survives byte for byte, and
+the operator confirms beat 5 did not sound. That is D1's shape on the melodic parameter set, and
+it is what lets `ksp2midi` drop step-off notes on both sets rather than on drums alone. Because
+the captures are gitignored, the check lives in `tests/test_hardware_tier4.py`, which skips where
+the file is absent.
 
 Rows **2 and 3 are what "disabled" means** — one state, two mechanisms, both toggled the same way
 on the device, and the only two the tools report under that word. Say "disabled (step turned
@@ -676,9 +735,10 @@ lane's pool exactly, while lane 17's flags sit at a different offset entirely. I
 every file and capture checked. (An 8-steps-per-index reading also fits the two single-lane
 hardware-confirmed projects, which is why a multi-lane file was needed to tell them apart.)
 
-The melodic step-active array (`48`) is simpler — one entry per step — and agrees with the note
-list everywhere observed. Both are cross-checked by the reader, which warns rather than
-reconciling.
+The melodic step-active array (`48`) is simpler — one entry per step, slot 1 only, measured at
+the pool ceiling (T4.6) — and it agrees with the note list in every committed file. Where it
+disagrees the note is disabled, not absent: T4.5 is the capture that shows the device doing it.
+Both arrays are cross-checked by the reader, which warns rather than reconciling.
 
 ### Resolved: drum mode is parameter `86` bit 6, not `100`
 

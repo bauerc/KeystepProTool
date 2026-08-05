@@ -73,8 +73,10 @@ cannot emit a drum note and M6 cannot turn an incoming note 36 back into a lane.
 one, not writable into one. The tool therefore treats it as *configuration with a documented
 default* (chromatic from 36), never as a decoded fact, and always prints which map it used.
 
-**Still needs hardware:** protocol **D5** (what a factory device's map actually is) and **D6** (that
-changing it leaves the file byte-identical). Both are five-minute tests.
+**Measured** (protocol D5): the device's own MIDI output runs 36…59 across the 24 lanes, so the
+factory map is chromatic from 36 and lane *i* plays `low + i`. Chromatic mode takes a low note of
+0–103; custom mode gives all 24 lanes a free note. There is no map in the project file to find,
+which is what D6 asked. The documented default was right and stands — see spec §3.2.1.
 
 ### M2 — KeyStep Pro → MIDI export ✅ **done**
 
@@ -239,7 +241,7 @@ is worth building after M6 — see the caveat under **Stack**.
 | Milestone | Status | Needs hardware? | Depends on |
 |---|---|---|---|
 | M1 Reader | ✅ done | No | — |
-| M1.5 Drum map | ✅ done | D5/D6 confirm the default | M1 |
+| M1.5 Drum map | ✅ done | No — D5/D6 confirmed the default | M1 |
 | M2 MIDI export | ✅ done | No | M1, M1.5 |
 | M3 Round-trip | ✅ done | No | M1 |
 | M4 Mutation | ✅ done | **Yes** (done) | M3 |
@@ -265,7 +267,6 @@ Both are understood; neither has reached the code.
   lane 1–24, confirmed real by capture D4 — which is how the KeyStep Pro does polyrhythm on the drum
   track. Until something reads it, every lane renders at the pattern-level `115`.
 
-**Hardware captures worth doing in one session:** M7's tiers 7–8, T4.5 (the one open question
-shipped code already depends on), D5/D6 (the drum map), and T6.1 (the `project_5` drum time-shift
-re-check). Ranked in
+**Hardware captures worth doing in one session:** M7's tiers 7–8, and T6.1 (the `project_5` drum
+time-shift re-check). Ranked in
 [`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md).
