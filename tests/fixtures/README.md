@@ -9,6 +9,11 @@ than against a reimplementation of the same expectations. See ROADMAP.md M1.
 | `project_5.expected.json` | Every note of the hardware-confirmed `project_5`, decoded |
 | `project_9.expected.json` | The three targeted single-note tests in `project_9` |
 | `empty_projects.expected.json` | The two baselines that must decode to nothing at all |
+| `recall_tape.txt` | MCC's Recall To exchange with the device, 8,951 request/reply frame pairs |
+
+`recall_tape.txt` is distilled by `tools/make_recall_tape.py` from
+`usb_midi_investigation/recall_sysex.jsonl`, which is gitignored — the tape is
+tracked so the replay tests cannot skip silently on a fresh clone.
 
 ## Provenance, and why it matters
 
