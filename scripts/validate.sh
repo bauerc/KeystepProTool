@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -o pipefail
 
+# Hooks fire from arbitrary cwds; every step below assumes the repo root.
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
+
 # 1. AUTO-FORMAT & LINT (Using uv to run Ruff)
 echo "=== [1/5] Auto-formatting with Ruff ==="
 uv run ruff format .
@@ -41,5 +44,4 @@ if ! uv run pytest -n auto -m "not slow and not hardware"; then
     exit 1
 fi
 
-echo -e '{"decision": "stop", "reason": "All checks passed successfully."}'
 exit 0
