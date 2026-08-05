@@ -2,6 +2,12 @@
 
 Guidance for Claude Code working in this repository.
 
+## Conventions
+
+- Comment concisely. Large docstrings on methods should NOT be used.
+- Claude plan files committed to this repository are deleted as part of the implementing task.
+- Use subagents
+
 ## What this is
 
 Converts Standard MIDI files ↔ Arturia KeyStep Pro `.KeyStepPro` project files. MIDI Control
@@ -11,10 +17,10 @@ truth**. Reading and MIDI export work; `ksp.mutate` places a note or overwrites 
 existing project (M4); `ksp.midi_import` converts a clip into one melodic pattern (M5). Real
 multi-track material, drums and polyphony wait for M6.
 
-- `analysis/KeyStepPro_Format_Spec.md` — authoritative format reference. **Read it before touching
+- [KeyStep Pro Format Spec](analysis/KeyStepPro_Format_Spec.md) — authoritative format reference. **Read it before touching
   format code.**
-- `ROADMAP.md` — milestones M1–M9 and current status. `README.md` — CLI usage and options.
-- `analysis/Timing_Calibration.md`, `analysis/Hardware_Test_Protocol.md` — the unmeasured
+- [Implementation Road Map](ROADMAP.md) — milestones M1–M9 and current status. `README.md` — CLI usage and options Cohosted on Github Issues for this repo.
+- [Timing Calibration](analysis/Timing_Calibration.md), [Hardware Test Protocol](analysis/Hardware_Test_Protocol.md) — the unmeasured
   quantities and how they get measured.
 
 ## Commands
@@ -58,49 +64,10 @@ command never crashes on invocation. All three are claimed; a new one waits for 
 something to overwrite. It is a byte-identical copy of `project_files/Default.KeyStepPro` and a
 test holds it there; pre-commit excludes the directory because the file is 3.5 MB.
 
-## Format traps (details in spec §2, §4)
-
-- Flat JSON, ~153,495 integer entries; all structure lives in key names
-  `<itemId>_<paramId>[_i1][_i2][_i3]`.
-- **Not strict JSON** — trailing comma, tab indentation, no final newline. `json.loads` rejects
-  what MCC writes, so the reader must tolerate the comma. The **writer omits it** (T6.2 put a
-  commaless file on the device), so its output is strict JSON and one byte shorter than MCC's;
-  every other byte must still match. Nothing else in the dialect is optional.
-- Key set is **fixed**: template-and-overwrite from `Default.KeyStepPro`, never add or remove
-  keys. The factory default lacks the `version` key user projects have — inject it.
-- **Two index spaces** — the top source of bugs. `48`/`49` are step-indexed; `50` and `109`–`113`
-  are indexed by note ordinal, with `50` giving each note's 0-based step. The device stores an
-  event list, not a step grid.
-- **Existence ≠ audibility.** A note exists when `50 != 127` (`54` for drums); it *sounds* only if
-  its step-active bit is set (`48` melodic, `52` drum — packed lane-major). Never infer a note
-  from its velocity, and never infer emptiness from `40` (it latches).
-- **Placing a melodic note is 8 keys, not one** (spec §4): `50`, `109`–`113` by note ordinal, plus
-  `48` **by step, in slot 1**, plus `40` = 3. `49` is not written — it already reads 15. Four notes
-  on one step means four pool entries and *one* `48` bit. `ksp.mutate.place_note` is the only
-  thing that should be building that set.
-- Track 1 (item `123`) carries a second DRUM parameter set. The mode flag is **`86` bit 6**, not
-  `100`. A writer must set `86` to match whichever set it writes.
-- A drum note's `117` is a **lane index (0–23)**, not a pitch. The lane→note map is a global
-  device setting absent from the file; `ksp.drum_map` holds it as configuration and every consumer
-  states which map it assumed.
-- **Gate is measured** (spec §6.1): an index, `stored = detent − 1`, 128 rungs, 0.0625–64 steps,
-  drum ladder identical. `tests/test_gate_ladder.py` holds `GATE_TABLE` against the transcription.
-- **Time shift and swing encodings are still unmeasured** (M7, needs hardware). Stay on the grid
-  and warn — a guessed encoding produces files that load fine and play wrong.
-
-Keep the unknowns user-visible: each is an `ExportOptions` field with a documented default, never
-a buried constant, and anything the export decides for itself is reported as a warning.
-
 ## Repository data is not source
 
 `project_files/*.KeyStepPro` and `analysis/*.txt` are excluded from pre-commit deliberately —
 never reformat, re-indent, or add a final newline. The exports are M3's byte-identical baseline;
 the `.txt` files are transcribed from the hardware display and cannot be regenerated without the
 device. `tests/test_format_invariants.py` makes such corruption fail loudly; if it fails, the fix
-is almost never in that file.
-
-## Conventions
-
-- Comment concisely. Large docstrings on methods should NOT be used.
-- Claude plan files committed to this repository are deleted as part of the implementing task.
-- Use subagents
+is never in that file.
