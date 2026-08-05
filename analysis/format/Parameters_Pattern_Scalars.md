@@ -15,7 +15,7 @@
 | `100` | Bitfield. Dictionary says ARP/Drum mode, ARP type, ARP octave; only **ARP octave (bits 4–6)** is hardware-confirmed, as `stored = octave + 1` (see [resolved mode flags](./Resolved_Mode_Flags_And_Bitmasks.md)). Drum mode is `86` bit 6, not here |
 | `107` / `108` | Root note (pitch class 0–11) / scale (index into the device's list). **Measured** — see below. `108` has no drum twin: one value serves both parameter sets |
 | `40` | Pattern data state: `0` in the factory template, `2` initialised but empty, `3` holds data. **A latch** — see below |
-| `123_117_<pat>` | **Item 123 only, and distinct from the note-indexed `117`** — same paramId, one index instead of three. Meaning unknown; `60` in every file except `initial_project`, `project_5` and `project_9`, which hold `247` at pattern 1 only. **A device round trip normalises it to 60** (protocol M4.2), so `247` is something MCC writes and the firmware does not keep. It is the only non-latch key that moved in an M4 readback |
+| `123_117_<pat>` | **Item 123 only, and distinct from the note-indexed `117`** — same paramId, one index instead of three. Meaning unknown; `60` in every file except `initial_project` (patterns 1–13), `project_9` (1–3) and `project_5` (1), which hold `247`. See the note below — `247` is a transport artifact, not a value the device holds |
 | `20`–`23`, `25`–`28` | Program Change (Seq / Drum), MSB/LSB split |
 | `101`–`106` | User scales 1 and 2, each split MSB / MidSB / LSB |
 
@@ -28,6 +28,28 @@ a freshly initialised project.)
 Params `109`–`113` and `117`–`121` also appear in a **one-index form** (`<item>_<param>_<pattern>`)
 holding the pattern's **default** value for that field — hence array sizes of 4,112 (`16×4×64 + 16`)
 rather than 4,096.
+
+#### `247` is a transport artifact — and `0xFF` is the device's sentinel
+
+Two hardware observations, and both stand:
+
+- **M4.2:** a device round trip normalises `123_117_<pat>` to `60`. It is the only non-latch key
+  that moved in an M4 readback.
+- **The SysEx capture:** on those same patterns the device *sends* `0xFF`, its "pattern default
+  pitch unset" sentinel. The firmware keeps `0xFF`; it does not hold `247`.
+
+The mechanism reconciling them: `0xFF` is a **MIDI System Reset** byte, so no conformant host
+parser passes it through inside a SysEx message. MCC loses it and stores the terminator sitting at
+that offset — `0xF7` = `247` — instead. That is why `247` is the **only value above 127 in any
+project file** (verified across all six samples), and why it never survives a round trip back
+through the device.
+
+The consequence splits by direction:
+
+- A **file writer** must still emit `247`, because that is what MCC produces and what the M3/H3.2
+  byte-diff gate compares against. `ksp.bulk_read` maps `0xFF` → `247` for exactly this reason.
+- A **device writer** must never emit `247`; the device's own value is `0xFF`. That path is
+  undecoded and out of scope — see [the SysEx path](./SysEx_Direct_Transfer_Path.md).
 
 #### The `99` / `116` bitfield — measured
 
