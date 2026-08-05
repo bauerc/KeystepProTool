@@ -139,3 +139,52 @@ def load_sample(
         return dict(_parsed_samples[name])
 
     return load
+
+
+def load_tape(fixtures_dir: Path) -> list[tuple[bytes, bytes]]:
+    """The captured exchange as ``(request, reply)`` frame pairs, in order.
+
+    Tracked on purpose: the raw capture is gitignored, so a test bound to it
+    would skip silently in every worktree and on every fresh clone.
+    """
+    pairs = []
+    for line in (fixtures_dir / "recall_tape.txt").read_text().splitlines():
+        request, reply = line.split()
+        pairs.append((bytes.fromhex(request), bytes.fromhex(reply)))
+    return pairs
+
+
+class ReplayTransport:
+    """Answers out of a captured exchange, keyed by the request frame.
+
+    Keyed rather than sequential, so a plan that asks for the right things in
+    the wrong order still resolves -- and ``asked`` is what proves the order.
+    """
+
+    def __init__(self, pairs: list[tuple[bytes, bytes]]) -> None:
+        self._replies = dict(pairs)
+        self.asked: list[bytes] = []
+
+    def exchange(self, request: bytes) -> bytes:
+        self.asked.append(request)
+        try:
+            return self._replies[request]
+        except KeyError:
+            raise LookupError(f"no captured reply for {request.hex()}") from None
+
+
+@pytest.fixture(scope="session")
+def recall_tape(fixtures_dir: Path) -> list[tuple[bytes, bytes]]:
+    return load_tape(fixtures_dir)
+
+
+@pytest.fixture
+def replay_transport(
+    recall_tape: list[tuple[bytes, bytes]],
+) -> Callable[..., ReplayTransport]:
+    """Build a transport over the tape, or over a doctored copy of it."""
+
+    def build(pairs: list[tuple[bytes, bytes]] | None = None) -> ReplayTransport:
+        return ReplayTransport(recall_tape if pairs is None else pairs)
+
+    return build
