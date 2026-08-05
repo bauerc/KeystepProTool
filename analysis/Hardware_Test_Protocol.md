@@ -194,34 +194,6 @@ the current assumption · what falsifies it · what to do if falsified.**
 
 ---
 
-## Tier 6 — Re-checks
-
-**1 capture left**, and it removes a standing caveat. T6.2 (the trailing comma) is done — see the
-preamble.
-
-### T6.1 — The `project_5` drum time-shift conflict
-
-- [x] not yet run
-
-- **Resolves:** the one documented discrepancy in the corpus.
-  `analysis/project_5_description.txt` states Time Shift **−1 for both kick hits**;
-  `project_5.KeyStepPro` stores `120` = 48 and 50, which decode to **−1 and +1** against the
-  centre of 49. The melodic ramp in the same project independently confirms the centre is 49, so
-  a transcription slip is the likelier explanation — but nobody has looked at the device since.
-- **Device:** load `project_5` on the KeyStep Pro. Read the Time Shift of both kick hits off the
-  display. **This is a read, not a capture** — no export needed unless the values disagree with
-  the file.
-- **Confirms if:** the display shows −1 and +1, i.e. the description has a typo.
-- **Falsified if:** the display shows −1 and −1, i.e. time shift does not decode the way we think
-  on the drum track specifically.
-- **If falsified:** drum time shift (`120`) needs its own sweep — it may not share the melodic
-  centre of 49. **T7.3 is that sweep**, and it covers the full range rather than assuming ±4 is it;
-  run T7.3 rather than improvising captures here.
-- Either way, update `tests/fixtures/project_5.expected.json`, which currently asserts the
-  conflict deliberately so it cannot quietly disappear.
-
----
-
 ## Tier 7 — Time Shift and Swing encodings
 
 **~13 captures.** Ordinary export-and-diff captures, same workflow as every tier above. These
@@ -229,8 +201,8 @@ resolve what the _stored_ values mean; Tier 8 resolves what they are worth in ti
 the model are in [`Timing_Calibration.md`](./Timing_Calibration.md).
 
 Two things make this tier necessary. **Time Shift has never been swept** — the only non-default
-values in the whole corpus are `project_5`'s ±1…±4 ramp, so the range is unknown and T6.1's
-fallback branch merely _assumes_ ±4. And **swing has never been set at all**: `74` reads 50 and
+values in the whole corpus are `project_5`'s ±1…±4 ramp, so the range is unknown and ±4 is merely
+the largest value anyone has seen. And **swing has never been set at all**: `74` reads 50 and
 `97` / `114` read 25 in all 16 patterns of all four tracks of all five sample files, so there is
 zero observational data on it.
 
@@ -279,8 +251,9 @@ zero observational data on it.
 
 - [x] not yet run
 
-- **Resolves:** whether `120` shares the melodic centre of 49 and the same range. Also supersedes
-  T6.1's fallback branch.
+- **Resolves:** whether `120` shares the melodic centre of 49 and the same range. `project_5`'s two
+  kicks, read off the display, pin the centre at −1/+1 only; everything past ±1 is untested on the
+  drum side.
 - **Device:** from the baseline. Track 1 in drum mode, an untouched pattern. Place a Kick at beat 1, 3, 5, 7, 9. Set
   Time Shift to -49, −1, 0, +1, 50, export.
 - **Captures:** `T7-drumshift.KeyStepPro`
@@ -288,8 +261,9 @@ zero observational data on it.
 - **Confirms if:** the stored values match the melodic mapping from T7.1/T7.2 at the same displayed
   values.
 - **Falsified if:** they differ at any point.
-- **If falsified:** drum shift needs its own full sweep, and `project_5`'s −1/+1 reading is a real
-  encoding difference rather than the transcription slip T6.1 assumes.
+- **If falsified:** drum shift needs its own full sweep against its own centre. `project_5`'s
+  displayed −1/+1 stays true either way — it just stops implying that stored 48/50 means the same
+  thing everywhere else.
 
 ### T7.4 — Global swing alone
 
@@ -461,7 +435,6 @@ answered and folded into the spec on 2026-08-01.
 
 | Test ID | Date | Displayed value / setting  | Stored value | Notes                                                                                                                                                                                                                                                                                   |
 | ------- | ---- | -------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T6.1    |      | project_5 kick time shifts |              | −1/+1                                                                                                                                                                                                                                                                                   |
 | T7.1    |      | shift min / max displayed  |              | **the range — run first** Min -49, Max 50. Increments by 1                                                                                                                                                                                                                              |
 | T7.2    |      | shift per step:            |              | beat 1 -49, beat 3 -25, beat 5 -1, beat 7 0, beat 9 1, beat 11 25, beat 13 50                                                                                                                                                                                                           |
 | T7.3    |      | drum shift =               |              | Time shift ranges matches, -49 to 50 at 1 increments                                                                                                                                                                                                                                    |
@@ -479,19 +452,18 @@ answered and folded into the spec on 2026-08-01.
 
 ## Effort summary
 
-Remaining work only. B0, tiers 1–5 and the two write tiers are complete and are not listed.
+Remaining work only. B0, tiers 1–6 and the two write tiers are complete and are not listed.
 
 | Tier | Captures left       | Resolves                                | Milestone |
 | ---- | ------------------- | --------------------------------------- | --------- |
-| 6    | 1                   | standing caveats (T6.2 done)            | M3        |
 | 7    | ~13                 | Time Shift range, swing semantics       | M7, M5    |
 | 8    | ~6 recordings       | what a Time Shift unit is worth in time | M2, M5    |
-|      | **~20 left** of ~59 |                                         |           |
+|      | **~19 left** of ~59 |                                         |           |
 
 Each tier is independently useful — stopping after any one leaves a coherent result rather than a
 half-finished one.
 
-**Remaining ranking: T7.1 → rest of Tier 7 → Tier 6 → Tier 8.**
+**Remaining ranking: T7.1 → rest of Tier 7 → Tier 8.**
 
 - **T7.1 leads** and is two captures, because it is a go/no-go: if the Time Shift range is
   only ±4, the rest of Tier 7's shift work and most of Tier 8 are not worth running at all.

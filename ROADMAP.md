@@ -57,9 +57,9 @@ Expected values live in `tests/fixtures/` as JSON, **transcribed by hand from th
 than generated from the reader** — that is what makes them independent ground truth, and what lets a
 future Swift port be checked against identical files. Never regenerate them from the code.
 
-**One discrepancy is asserted rather than resolved.** `project_5_description.txt` gives Time Shift
-−1 for both kick hits; the file stores −1 and **+1**. The fixture holds the conflict so it cannot
-quietly disappear. Protocol T6.1 settles it.
+**The one description-vs-file discrepancy is closed.** The device was re-read on 2026-08-05
+(protocol T6.1): `project_5`'s two kicks display Time Shift −1 and **+1**, so the description
+carried a transcription slip and now reads what the file stores — see spec §5.
 
 ### M1.5 — Drum map ✅ **done**
 
@@ -211,7 +211,7 @@ The remainder resolves in one session, except tier 8, which needs a rig that can
 - **Time shift range and linearity** (`112` / `120`) — **#42**, protocol T7.1–T7.3. The centre of 49
   is confirmed but nothing establishes the range; `project_5`'s ±4 may not be the limit. T7.1 is a
   **go/no-go that jumps the queue**: if the range really is ±4, most of this and of tier 8 is not
-  worth running. T7.3 also settles the `project_5` drum conflict.
+  worth running.
 - **Swing semantics** (`74`, `97` / `114`) — **#43**, protocol T7.4–T7.7. **Never exercised in any
   sample file**, so it cannot be decoded at the desk at all. Also settles whether `reader._swing` is
   right to read the per-pattern value as absolute rather than a signed offset.
@@ -280,6 +280,5 @@ Both are understood; neither has reached the code.
   `ksp2midi` renders those patterns forward and warns. Rendering a plausible random order would be
   inventing a performance the device did not give us.
 
-**Hardware captures worth doing in one session:** M7's tiers 7–8, and T6.1 (the `project_5` drum
-time-shift re-check). Ranked in
+**Hardware captures worth doing in one session:** M7's tiers 7–8. Ranked in
 [`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md).

@@ -124,13 +124,11 @@ def test_unresolved_discrepancies_still_hold(case: tuple[dict[str, Any], Project
         assert entry["detail"].strip(), f"{entry['where']}: unresolved entry needs an explanation"
 
 
-def test_project_5_time_shift_conflict_is_real(project_files_dir: Path) -> None:
-    """Pin the one live discrepancy to the actual decoded value.
+def test_project_5_second_kick_shift_is_positive(project_files_dir: Path) -> None:
+    """The +1 the device displays for the second kick (T6.1), pinned by hand.
 
-    ``project_5_description.txt`` gives Time Shift -1 for both kick hits; the
-    file stores +1 for the second. Asserting the decoded value here means the
-    fixture's ``unresolved`` entry is anchored to something real rather than to
-    a comment nobody re-checks.
+    The description first transcribed -1 here. Asserting the decoded value
+    keeps the corrected reading anchored to the file rather than to prose.
     """
     project = load(project_files_dir / "project_5.KeyStepPro")
     second_kick = project.track(1).pattern(1).notes[1]

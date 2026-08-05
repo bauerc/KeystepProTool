@@ -1,7 +1,7 @@
 # Worked example — `project_5`
 
 **Spec section:** §5 (1 of 3) — part of [`KeyStepPro_Format_Spec.md`](../KeyStepPro_Format_Spec.md)
-**Covers:** `project_5` decoded step by step against its hardware-confirmed description, melodic and drum, plus the one conflict that remains unresolved.
+**Covers:** `project_5` decoded step by step against its hardware-confirmed description, melodic and drum, including the drum time shift re-read on the device.
 **Related:** §5 continues in [the step-skip mask](./Step_Skip_Mask_And_Passes.md) and [resolved mode flags](./Resolved_Mode_Flags_And_Bitmasks.md).
 
 ---
@@ -55,20 +55,19 @@ Track 1 (item `123`), pattern 1, documented as "kick on beats 1 and 5":
   `52` appears to pack 8 steps per index, so 64 steps would occupy indices 1–8. See the caveat in [resolved mode flags](./Resolved_Mode_Flags_And_Bitmasks.md).
 - `54` (note→step) = `0`, `4` → steps 1 and 5. ✓
 - `119` velocity = 127, 50 ✓ · `121` randomness = 80, 90 ✓
-- `120` time shift = 48, 50 → −1 and **+1**. ⚠ The description gives −1 for *both* kicks. See
-  "Unresolved: drum time shift" below.
+- `120` time shift = 48, 50 → −1 and **+1** ✓ — re-read on the device, protocol T6.1. See
+  "Drum time shift" below.
 - `53` skip = 3 (`{16,32}`), 12 (`{48,64}`) ✓ — note-indexed here, unlike the melodic `49`.
 
 > The melodic `49` is step-indexed while the drum `53` is note-indexed. This asymmetry is what
 > the data shows consistently across files, but it is unusual enough to re-confirm before
 > relying on it in a writer.
 
-### Unresolved: drum time shift in `project_5`
+### Drum time shift in `project_5`
 
-`project_5_description.txt` states Time Shift **−1** for both kick hits. Parameter `120` stores
-`48` and `50`, which decode to −1 and **+1** against the centre of 49.
+**Re-read on the device 2026-08-05, protocol T6.1** — a display read, not a capture. The display
+shows −1 and **+1**, matching `120` = 48, 50 against the centre of 49. `project_5_description.txt`
+originally transcribed −1 for both kick hits and has been corrected; the file was right all along.
 
-Every other value in the project reproduces exactly, and the melodic +1…+4 / −1…−4 ramp
-independently confirms that the centre is 49, so a transcription slip in the description is the
-likelier explanation — but it has not been re-checked on the device. The M1 fixtures record the
-file's value and keep the conflict asserted, so it cannot quietly disappear.
+Drum `120` therefore decodes against the melodic centre at these two points. The rest of its range
+is untested — T7.3 sweeps it.

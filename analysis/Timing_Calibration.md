@@ -259,9 +259,7 @@ Controls the protocol must apply:
 - **Gate affects note-off only**, so it cannot contaminate onset measurements. That is why the
   gate table was captured in the same session for free (spec §6.1, tier 2 — now done).
 - **Track 1 in DRUM mode uses the parallel parameter set** (`120` shift, `114` swing), so drum and
-  melodic parameters must be swept separately. This also resolves, as a byproduct, the recorded
-  discrepancy where `project_5_description.txt` gives Time Shift −1 for both kicks while the file
-  stores −1 and +1 (spec §5).
+  melodic parameters must be swept separately.
 
 ---
 
