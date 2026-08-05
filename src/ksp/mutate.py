@@ -14,7 +14,7 @@ step-active flag and the pattern's data-state latch::
     <item>_111_<pat>_<slot>_<ord>   velocity
     <item>_112_<pat>_<slot>_<ord>   time shift
     <item>_113_<pat>_<slot>_<ord>   randomness
-    <item>_48_<pat>_1_<step>        step active -- slot 1, always
+    <item>_48_<pat>_1_<step>        step active -- slot 1, always (T4.6)
     <item>_40_<pat>                 pattern holds data
 
 Step skip (``49``) is deliberately absent: an empty project already holds 15,

@@ -269,12 +269,15 @@ def _read_step_active(
 ) -> frozenset[Any]:
     """Decode which steps the device will actually play, 0-based.
 
-    Melodic (``48``) is one entry per step and lives wholly in chunk 1 in
-    every file observed, so the result is a set of steps. Drum (``52``) is
-    per lane, so the result is a set of ``(lane, step)`` pairs -- see
-    ``constants.drum_step_active_indices`` for the packing.
+    Melodic (``48``) is one entry per step and lives wholly in chunk 1, so the
+    result is a set of steps. Drum (``52``) is per lane, so the result is a set
+    of ``(lane, step)`` pairs -- see ``constants.drum_step_active_indices`` for
+    the packing.
     """
     if kind is NoteKind.SEQ:
+        # Chunk 1 is the whole array, not just where the flags happen to be:
+        # one entry per step and at most 64 steps fills it exactly, so a pool
+        # spilling into chunks 2-3 leaves these behind (capture T4.6).
         flags = read_array(
             raw, item_id, constants.P_SEQ_STEP_ACTIVE, pattern, 1, length=constants.MAX_STEPS
         )
@@ -446,7 +449,8 @@ def _check_step_active(
     """Cross-check the note list against the step-active flags.
 
     The two are not redundant -- the device plays the flags, so a pooled note
-    whose flag is clear is silent (capture D1). Two things are worth saying:
+    whose flag is clear is silent, measured on drums (D1) and on the melodic
+    set (T4.5). Two things are worth saying:
     a flag with no note behind it, and pooled notes that will not sound, which
     is the case that used to become phantom MIDI.
 

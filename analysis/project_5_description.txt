@@ -2,7 +2,7 @@ I have created a new project (Project 5) sequence with the following attributes:
 1 Drum Track on Track 1 on Pattern 1
 Kick played on beats 1 and 5
 Beat 1 has Velocity 127, Gate 1, Time Shift -1, Randomness 80 Step skip set up to only run on sequence 16 and 32
-Beat 5 has Velocity 50, Gate 2, Time Shift -1, Randomness 90 Step skip set up to only run on sequence 48 and 64
+Beat 5 has Velocity 50, Gate 2, Time Shift +1, Randomness 90 Step skip set up to only run on sequence 48 and 64
 
 1 Sequence Track on Track 3 on Pattern 1
 

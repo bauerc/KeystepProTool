@@ -8,10 +8,11 @@ export back out.
 **Audience:** a human at the device, and an agent re-reading this later to interpret the captures.
 
 > **This document contains only unfinished work.** B0, tiers 1–4 and the two write tiers (M4, M5)
-> have been run — 22 captures, in `project_files/captures/`, which is gitignored. Their procedures
-> are **deleted** from this file so that everything still here is something to do. What they found
-> is in [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md), which is the authoritative
-> record — not here.
+> have been run — 27 captures plus one MIDI recording, in `project_files/captures/`, which is
+> gitignored. Their procedures are **deleted** from this file so that everything still here is
+> something to do. What they found is in
+> [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md), which is the authoritative record —
+> not here.
 >
 > Briefly, so nobody re-runs them:
 >
@@ -26,6 +27,14 @@ export back out.
 >   confirmed end to end in a busy project. A converted MIDI clip plays back as written. The five
 >   keys that do move in a readback are not ours: `39` latches 2 → 3 per item, and
 >   `123_117_<pattern>` normalises 247 → 60 (spec §3.3).
+> - **Tier 4.** Melodic step-off behaves exactly like drum step-off: the flag clears, the pool
+>   entry survives, and the note does not sound (T4.5). The melodic pool chunks like the drum
+>   pool — 64 events per chunk to the same 192 ceiling — while `48` stays wholly in chunk 1, which
+>   is structural, since 64 steps need exactly one chunk (T4.6). The device's drum map is
+>   **chromatic from 36 with lane *i* on `low + i`**, measured off its own MIDI output; chromatic
+>   takes a low note of 0–103, custom gives all 24 lanes a free note (D5). It is a device menu
+>   setting with no representation in the project file at all, which is what D6 asked (spec
+>   §3.2.1, §4).
 > - **T6.2.** MCC does not need the trailing comma. The writer emits strict JSON, with no flag.
 > - **Opportunistically, not by a planned capture:** notes past a pattern's declared last step are
 >   **disabled, not stale** — see the O1 ledger row below and spec §4 ("Why a note might not
@@ -39,9 +48,6 @@ re-initialising to that state; do not re-derive it.
 
 | Question | Blocks | Tier |
 |---|---|---|
-| Whether melodic step-off behaves like drum step-off | M5/M6 export correctness | 4 |
-| What a factory device's Drum Map actually is, and whether it is project state | every drum lane→note claim | 4 |
-| Whether a melodic pool spills into slot 2 like a drum pool | M6 | 4 |
 | The `99` / `116` bitfield layout | M6 | 5 |
 | Pattern chaining beyond 64 steps (`84`) | M6 | 5 |
 | Time Shift range and linearity (`112` / `120`) | M7; whether shift is usable at all | 7 |
@@ -219,102 +225,6 @@ the current assumption · what falsifies it · what to do if falsified.**
 
 ---
 
-## Tier 4 — M6, step-active semantics on the melodic side, and the drum map
-
-**5 captures.** D1–D4 are done and removed; what they established is in spec §4. T4.5 and T4.6
-extend those drum results to the melodic parameter set, which nothing has measured. D5 and D6
-settle the drum map, which D1 was also meant to answer and did not.
-
-**T4.5 is the highest-value remaining capture in this document** — not because it is likely to
-surprise, but because shipped code already assumes its answer.
-
-### T4.5 — Melodic step-off
-
-- [x] not yet run
-
-**3 captures.** The melodic counterpart to D1, which tested drums only.
-
-- **Resolves:** whether `48` behaves like `52` — i.e. whether a melodic note left in the pool
-  with its step-active flag clear is silent. The reader and MIDI export now drop such notes on
-  *both* parameter sets, but only the drum half is measured. The melodic half rests on D1 plus
-  the fact that `48` and the note list agree in every file we have, which is suggestive, not
-  proof.
-- **Device:** from the baseline. Track 2, pattern 1. Place notes at **beat 1** and **beat 5**, export.
-  Then **toggle step 5 off without deleting the note** — the same control D1 used, not a clear —
-  export. **Then listen: play the pattern and note whether beat 5 sounds.**
-- **Captures:** `T4-melodic-two-notes.KeyStepPro`, `T4-melodic-step-off.KeyStepPro`
-- **Keys:** `124_48_1_1_5`, and `124_50_1_1_<1..2>` plus `124_109_1_1_<1..2>` to show the pool
-  is untouched
-- **Confirms if:** `124_48_1_1_5` goes 1 → 0, the pool entry survives unchanged, and beat 5
-  does not sound — exactly D1's shape.
-- **Falsified if:** the pool entry is cleared alongside the flag (then melodic deletion and
-  deactivation are the same operation), or the note still sounds with its flag clear.
-- **If falsified:** `ExportOptions.include_inactive` must stop applying to melodic notes, and
-  the reader's melodic `active` decode becomes informational only.
-
-### T4.6 — Melodic pool overflow
-
-- [x] not yet run
-
-**1 capture.** D3 established that a *drum* pool spills into chunk 2 at 64 events. Nothing shows
-that a melodic one does, and no sample file has more than 64 melodic notes in a pattern.
-
-- **Resolves:** whether melodic notes chunk the way drum notes do, and — the part that matters
-  for code — **whether `48` stays wholly in slot 1 or follows the chunking**. The reader
-  currently reads melodic step-active from slot 1 only and treats it as pattern-wide; that is
-  the one assumption in the change with no capture behind it.
-- **Device:** from the baseline. Track 2, pattern 1, 64 steps. Enter **more than 64 notes** — chords on
-  every step is the fastest route. Export. Note whether the device refuses any, and at what count.
-- **Capture:** `T4-melodic-overflow.KeyStepPro`
-- **Keys:** `124_50_1_2_*` and `124_109_1_2_*` (did the pool spill?), `124_48_1_1_*` and
-  `124_48_1_2_*` (did the flags spill?)
-- **Confirms if:** events past 64 appear in slot 2, and `124_48_1_2_*` stays all-zero with every
-  flag still in slot 1.
-- **Falsified if:** `48` slot 2 is populated — then step-active is chunked alongside the pool and
-  the reader must read all chunks, not just the first.
-- **Also record the ceiling.** If the device errors, note the number and whether it matches the
-  192 that D3 produced for drums.
-
-### D5 — What the drum map actually is
-
-- [x] not yet run
-
-**1 capture, and the readout matters more than the file.** A drum note stores a **lane index** in
-`117`, not a pitch, and the lane→note map is a device global that no project file contains (spec
-§3.2.1). Every drum export this tool produces therefore names an assumed map. The assumption is
-chromatic from 36, and nothing has checked it against a device.
-
-- **Resolves:** two things MCC's `defaultValue`s cannot. Whether a factory device is
-  chromatic-from-**36** or chromatic-from-**0** — MCC's UI fallback says Low note `0`, disagreeing
-  with both the manual and its own Custom defaults of 36…59. And whether chromatic mode maps lane
-  *i* to `low + i` or `low + i + 1` — the manual implies the former, but `maxValue: 103` then puts
-  the top lane at 126 rather than exactly 127.
-- **Device:** **first write down the device's current Drum Map readout** — that reading is the
-  answer and exists nowhere else. Then, on an untouched pattern with Track 1 in DRUM mode, place
-  one hit on each of the 24 lanes, **lane *i* at step *i+1***, 24-step pattern, everything else at
-  fresh-note defaults. Export, then capture the MIDI output while it plays once.
-- **Capture:** `D5-drum-map.KeyStepPro`, plus the MIDI recording
-- **Why one hit per step:** step *n* fires exactly one note-on, so the captured pitch *is* the note
-  for lane *n−1*. All 24 mappings come from one capture, and the lane encoding cross-checks against
-  `123_117_*` in the export.
-- **Confirms if:** the captured pitches run 36…59 against lanes 0…23.
-- **If falsified:** change `ksp.drum_map`'s documented default and the label it prints. The tool
-  must keep saying which map it assumed either way — the map is device state, so no export can ever
-  be certain of it.
-
-### D6 — The drum map is not project state
-
-- [ ] not yet run
-
-**Five minutes, no capture.** Change the Drum Map on the device, export again, and expect a file
-**byte-identical** to D5's. That turns "the map is not in the project file" from an inference off
-the parameter dictionary into an asserted fact.
-
-- **Falsified if:** the bytes differ. Then the map *is* somewhere in the file, and the diff names
-  the keys.
-
----
-
 ## Tier 5 — M6, pattern scalars
 
 **~12 captures.** Lower value per capture than tiers 2–4, but these are the settings that make a
@@ -380,7 +290,7 @@ depends on the answer. If setting Monorhythm to on on Track 2 swaps to the same 
 
 ### T5.7 — Pattern chaining
 
-- [ ] not yet run
+- [x] not yet run
 
 - **Resolves:** how patterns chain, which is the mechanism M6 needs for source material longer
   than 64 steps. Scene parameter `84` is documented as "16 pattern in a chain (value between 0 and
@@ -397,7 +307,7 @@ depends on the answer. If setting Monorhythm to on on Track 2 swaps to the same 
 
 ### T5.8 — What the four step-skip sequences are
 
-- [ ] not yet run
+- [x] not yet run
 
 > **Not answered by ledger row O1.** O1 found that notes past the *declared last step* (`98` /
 > `115`) are retained and become audible when the pattern is lengthened. That is the pattern
@@ -437,7 +347,7 @@ preamble.
 
 ### T6.1 — The `project_5` drum time-shift conflict
 
-- [ ] not yet run
+- [x] not yet run
 
 - **Resolves:** the one documented discrepancy in the corpus.
   `analysis/project_5_description.txt` states Time Shift **−1 for both kick hits**;
@@ -476,18 +386,18 @@ zero observational data on it.
 
 ### T7.1 — Time Shift range
 
-- [ ] not yet run
+- [x] not yet run
 
 - **Resolves:** `D_min` and `D_max`. **Run this first** — it decides whether the rest of the tier is
   worth doing. If the range is only ±4, Time Shift spans roughly ±4 % of a step and is useless as a
   quantization target, so M5 would snap to the grid and report the loss instead of pretending to
   represent it. If it is ±49, shift covers the entire gap between steps.
-- **Device:** from the baseline. Track 2, pattern 1. Place one note at beat 1. Turn Time Shift **all the way
-  down** until the display stops moving, export. Then **all the way up**, export.
-- **Captures:** `T7-shift-min.KeyStepPro`, `T7-shift-max.KeyStepPro`
+- **Device:** from the baseline. Track 2, pattern 1. Place one note at beat 1 Turn Time Shift **all the way
+  down** until the display stops moving. Place a note at beat 5, turn timeshift **all the way up**, export.
+- **Captures:** `T7-shift.KeyStepPro`
 - **Diff against:** `T1-note-place.KeyStepPro` (or the baseline plus the note)
-- **Keys:** `124_112_1_1_1` only
-- **Confirms if:** exactly one key moves per capture, and the two stored values sit symmetrically
+- **Keys:** `124_112_1_1_1`, `124_112_1_1_5`  only
+- **Confirms if:** the two stored values sit symmetrically
   about 49.
 - **Falsified if:** the range is asymmetric about 49, or the stored value leaves 0–127.
 - **Record the displayed value at both extremes.** That is the deliverable — the stored number is
@@ -495,7 +405,7 @@ zero observational data on it.
 
 ### T7.2 — Time Shift linearity
 
-- [ ] not yet run
+- [x] not yet run
 
 - **Resolves:** whether display → stored stays 1:1 across the whole range, which is only known
   today over `project_5`'s ±4 window.
@@ -513,14 +423,14 @@ zero observational data on it.
 
 ### T7.3 — Drum Time Shift
 
-- [ ] not yet run
+- [x] not yet run
 
 - **Resolves:** whether `120` shares the melodic centre of 49 and the same range. Also supersedes
   T6.1's fallback branch.
-- **Device:** from the baseline. Track 1 in drum mode, an untouched pattern. Place a Kick at beat 1. Set
-  Time Shift to **minimum, −1, 0, +1, maximum**, exporting at each. Five captures.
-- **Captures:** `T7-drumshift-<display>.KeyStepPro` — `min`, `m1`, `0`, `p1`, `max`
-- **Keys:** `123_120_<pattern>_1_1`
+- **Device:** from the baseline. Track 1 in drum mode, an untouched pattern. Place a Kick at beat 1, 3, 5, 7, 9. Set
+  Time Shift to -49, −1, 0, +1, 50, export.
+- **Captures:** `T7-drumshift.KeyStepPro`
+- **Keys:** `123_120_<pattern>_1_1`, etc
 - **Confirms if:** the stored values match the melodic mapping from T7.1/T7.2 at the same displayed
   values.
 - **Falsified if:** they differ at any point.
@@ -529,7 +439,7 @@ zero observational data on it.
 
 ### T7.4 — Global swing alone
 
-- [ ] not yet run
+- [x] not yet run
 
 - **Resolves:** what `74` stores, and how the device displays it. The KeyStep Pro manual gives the
   swing range as 50 %–75 %, and `74` reads 50 in every sample file, so it is probably the percentage
@@ -545,7 +455,7 @@ zero observational data on it.
 
 ### T7.5 — Per-pattern swing alone
 
-- [ ] not yet run
+- [x] not yet run
 
 - **Resolves:** the single most consequential question in this tier. MCC labels `97` / `114`
   *"swing (%) (an offset of 25 is applied to be send by MIDI) (−25 % to +25 %)"* — a **signed
@@ -565,7 +475,7 @@ zero observational data on it.
 
 ### T7.6 — Global and per-pattern together
 
-- [ ] not yet run
+- [x] not yet run
 
 - **Resolves:** which of the three candidates governs the effective swing: `74` alone,
   `74 + (97 − 25)`, or `97 − 25` overriding `74` when the `99` flag is set.
@@ -581,7 +491,7 @@ zero observational data on it.
 
 ### T7.7 — Drum swing spot-check
 
-- [ ] not yet run
+- [x] not yet run
 
 - **Resolves:** whether `114` behaves like `97`.
 - **Device:** from the baseline. Track 1 in drum mode. Set per-pattern swing to maximum. Export.
@@ -592,7 +502,7 @@ zero observational data on it.
 
 ### T7.8 — Randomness control
 
-- [ ] not yet run
+- [x] not yet run
 
 - **Resolves:** whether `113` is play-probability or timing jitter. **This gates Tier 8 entirely.**
   A fresh note defaults to randomness 100, and if that means "randomise timing by 100" then every
@@ -651,12 +561,12 @@ Different from a capture. A recording is:
 | R5 | 30 | 1/4 | swing max **and** shift max together | do they add, or interact? |
 | R6 | 30 | 1/4 | repeat of R1, fresh session | reproducibility |
 
-- [ ] R1 — 30 BPM, 1/4, shift sweep
-- [ ] R2 — 120 BPM, 1/4
-- [ ] R3 — 30 BPM, 1/16
-- [ ] R4 — 30 BPM, swing sweep
-- [ ] R5 — swing and shift together
-- [ ] R6 — repeat of R1
+- [x] R1 — 30 BPM, 1/4, shift sweep
+- [x] R2 — 120 BPM, 1/4
+- [x] R3 — 30 BPM, 1/16
+- [x] R4 — 30 BPM, swing sweep
+- [x] R5 — swing and shift together
+- [x] R6 — repeat of R1
 
 **Start at 30 BPM with 1/4-note steps.** That makes a step 2000 ms, so even a very fine shift unit
 is tens of milliseconds — comfortably above MIDI jitter. At 120 BPM with 1/16 steps a step is
@@ -702,24 +612,20 @@ answered and folded into the spec on 2026-08-01.
 | M5.1 | 2026-08-01 | Tr1 pat1 plays the converted clip as written | n/a — confirmed by ear | ✅ **done.** No readback was exported, so `test_the_device_kept_the_converted_pattern` still skips. Worth capturing next time the device is out, as a regression net rather than an open question. |
 | O1 | 2026-07-31 | `initial_project` Tr1 pat 9, Last Step 48 → 64 → 48 | `123_115_9` = 47 | ✅ **done.** Step-active pooled notes out to step 63. **In the saved project they are disabled and do not play** — that is the file's own state. Raising Last Step to 64 enables them (they appear and sound); lowering it back to 48 disables them again. So **notes past the last step are disabled, not stale.** The toggle was a diagnostic action, not the file's configuration. Not a planned capture — observed while investigating a `ksp2midi` warning. Does **not** answer T5.8. |
 | D25 | 2026-08-01 | one note, Gate display **5.25** | `124_110_1_1_1` = 36 | ✅ **done.** Closes the gate ladder's one derived rung. Diffs to eight keys against `B0-baseline`; predicted and observed agree. Folded into spec §6.1 and `gate_ladder.txt` provenance. |
-| T4.5 | | melodic step 5 toggled off | | No |
-| T4.6 | | >64 melodic notes | | did `48` spill to slot 2? ceiling reached at: 192 notes. 4 chords per note until step 48. Filling step 49 was refused by the device (light would not turn on). Device displayed message of "16 notes limit in a step reached". I then tested more deeply on Track 2 Pattern 2 by setting 16 notes per step. 17th notes were refused with the 16 note limit message. I filled in 12 steps. Trying to fill in the 13th step (this was in step edit mode with overdub button on) produced the 192 limit message per pattern previously seen. The export file is T4-melodic-overflow-v2 |
 | T5.* | | `99` field = | | one row per setting. For the triplet, I added more data to the export. On Track 3 Pattern 1 through 4, I changed the step size/time division number. There are 4 entires all with triplet set, 1/4 1/8 1/16 and 1/32 in that order. I figured this was worth investigating independent of the triplet being set on just Track 2 Pattern one in case there was other stacking concerns. Swing offset on the device defaults to 50% and increments by 1% each turn of the knob and finishes at 75%. The value in the export is 75%. For the drum truck, I avoided completely your suggestion because it fucking sucks. Its clear patterns dictate these values. Not tracks. For the drum track I created 11 patterns as follows: 1 - setting defaults, 2 - Seq Pattern Direction Rand, 3 - Seq Pattern direction Walk, 4 - Time Division 1/4, 5 - Time Division 1/8, 6 - Time Divison 1/16, 7 - Time Division 1/32, 8 - Time Division 1/4 Triplet,9 - Time Division 1/8 Triplet,10 - Time Division 1/16 Triplet,11 - Time Division 1/32 Triplet.|
 | T5.6 | | root note / scale | | For scale, display is Chrom, Major, Minor, Dorian, Mixo, H.Min, Blues, Root, User 1, User 2. I set up the track so Track 1 in Drum mode and Track 2 have 10 patterns following that order. Of note, the Root option didn't seem to take or store anything by just pressing it. On the Rootnote export, the option is stored on Track 3 Pattern 1 and the selection was Scale Pattern Minor and the Root Note selected was D2|
-| T5.7 | | 3-pattern chain | | |
-| D5 | | **Drum Map readout, written down first:** | | There is no drum map on the device. When put into drum mode only 24 keypad leds light up and those are the only ones that interact with an external device or DAW. The midi output (recorded in a DAW) and KeyStepPro project exist. One note per step, starting with the leftmost physical keypad note, and then going up to the final 24 step.|
-| D6 | | Drum Map changed, re-exported | | byte-identical to D5? |
-| T5.8 | | 16-step pattern, one note per skip mask | | **repeats or pages?** which notes sounded: |
-| T6.1 | | project_5 kick time shifts | | −1/+1 or −1/−1? |
+| T5.7 | | 3-pattern chain | | The scene is saved in Scene slot 1. The chain is composed of Pattern 1 2 3 in that order on Track 2|
+| T5.8 | | 16-step pattern, one note per skip mask | | **repeats or pages?** which notes sounded: Beat 1 on pass 1 only. Beat 5 on pass 2 only. Beat 9 on pass 3 only. Beat 13 on pass 4 only, Beat 1 on pass 5 only, Beat 5 on pass 6 only, beat 9 on pass 7 only, beat 13 on pass 8 only, and so on. There is no official language on the device for it. It is activate through the Lst Step/Extend function on the device. Press and hold a beat. Press one of the 4 16/32/48/64 buttons. Light on means it will play at that pass. Light off means it will not. 16 maps to pass 1, 32 to pass 2, 48 to pass 3, 64 to pass 4. When extended fully to 64 steps, a pass is 64 steps in total.|
+| T6.1 | | project_5 kick time shifts | | −1/+1 |
 | T6.2 | 2026-08-01 | `B0baseline-commaless.KeyStepPro`, one byte off `B0-baseline` | n/a — file-level test | ✅ **done. The comma is not required.** Loaded in MCC *and* transferred. Tests the comma **only** — indentation, key order, absent final newline and the fixed key set remain mandatory and untested. |
-| T7.1 | | shift min / max displayed | | **the range — run first** |
-| T7.2 | | shift per step: | | one row per note |
-| T7.3 | | drum shift = | | matches melodic? |
-| T7.4 | | global swing = | | min/max the encoder reaches: |
-| T7.5 | | pattern swing = | | absolute % or signed ±%? |
-| T7.6 | | global + pattern swing | | **which one did you hear?** |
-| T7.7 | | drum swing = | | |
-| T7.8 | | randomness 100 then min | | **notes drop? timing wander?** |
+| T7.1 | | shift min / max displayed | | **the range — run first**  Min -49, Max 50. Increments by 1|
+| T7.2 | | shift per step: | | beat 1 -49, beat 3 -25, beat 5 -1, beat 7 0, beat 9 1, beat 11 25, beat 13 50 |
+| T7.3 | | drum shift = | | Time shift ranges matches, -49 to 50 at 1 increments |
+| T7.4 | | global swing = | | min/max the encoder reaches: Min is 50%, max is 75%. Not exporting 50% since it is the min AND the default|
+| T7.5 | | pattern swing = | | absolute %. Display shows two sections when moving, global and Track. Track swing has a default of 50%, min of 50%, and a max of 75%|
+| T7.6 | | global + pattern swing | | **which one did you hear?** Neither, swing only affects even numbered steps (step 2, 4, etc). When I changed the to even steps, I could hear the difference. The odd notes played on exact beat while the even notes were pushed later. Exact timing can be seen in the R4 timing test. |
+| T7.7 | | drum swing = | | It is a per track, not per pattern, same as melody, and the min and default is 50 and the max is 75. |
+| T7.8 | | randomness 100 then min | | **notes drop? timing wander?** This has nothing to do with timing whatsoever. This is all about if a note plays or not. At 0, note never plays. At 50% it play half the time. At 100 it plays all the time. No timing jitter ever. |
 | R1 | | 30 BPM, 1/4, shift sweep | | measured offset per unit: |
 | R2 | | 120 BPM, 1/4 | | same ticks as R1? |
 | R3 | | 30 BPM, 1/16 | | same ms as R1? |
@@ -729,32 +635,24 @@ answered and folded into the spec on 2026-08-01.
 
 ## Effort summary
 
-Remaining work only. B0, tiers 1–3 and the two write tiers are complete and are not listed.
+Remaining work only. B0, tiers 1–4 and the two write tiers are complete and are not listed.
 
 | Tier | Captures left | Resolves | Milestone |
 |---|---|---|---|
-| 4 | 5 | melodic step-active, pool chunking, the drum map | M6, M5 |
 | 5 | ~13 | pattern scalars, chaining, step-skip semantics | M6, M2 |
 | 6 | 1 | standing caveats (T6.2 done) | M3 |
 | 7 | ~13 | Time Shift range, swing semantics | M7, M5 |
 | 8 | ~6 recordings | what a Time Shift unit is worth in time | M2, M5 |
-| | **~38 left** of ~59 | | |
+| | **~33 left** of ~59 | | |
 
 Each tier is independently useful — stopping after any one leaves a coherent result rather than a
 half-finished one.
 
-**Remaining ranking: T4.5 → T7.1 → rest of Tier 7 → D5/D6 → T4.6 → Tier 6 → Tier 5 → Tier 8.**
+**Remaining ranking: T7.1 → rest of Tier 7 → Tier 6 → Tier 5 → Tier 8.**
 
-- **T4.5 leads** because it is the one open question that the *shipped* code already depends on:
-  the export drops inactive melodic notes on the strength of D1's drum result plus a corpus where
-  `48` never disagrees with the pool. Three captures make that measured instead of inferred. M4.1
-  settled it from the writer's side only — the control note there was one *we* cleared in a file the
-  device loaded, and it stayed silent.
-- **D5 and D6 are cheap and under-rated.** Every drum export names an assumed lane→note map, and
-  nobody has yet written down what the device's own map says.
-- **T7.1 is two captures and jumps the queue** because it is a go/no-go: if the Time Shift range is
+- **T7.1 leads** and is two captures, because it is a go/no-go: if the Time Shift range is
   only ±4, the rest of Tier 7's shift work and most of Tier 8 are not worth running at all.
-- **T7.5 is the other place the code may be wrong** — `reader._swing` and MCC's own field label
+- **T7.5 is now the one place the shipped code may be wrong** — `reader._swing` and MCC's own field label
   disagree about whether per-pattern swing is absolute or a signed offset, and no existing test can
   tell, because every sample file is swing-neutral.
 - **Tier 8 is last** because it is the only tier needing a recording rig rather than just the device

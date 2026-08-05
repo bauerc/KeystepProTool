@@ -33,8 +33,10 @@ MAX_STEPS: Final = 64
 
 #: Pool chunks per track -- *not* polyphony voices. idx2 splits one flat note
 #: pool into blocks of MAX_STEPS entries, so real capacity is 3 x 64 = 192
-#: events per pattern, which the device enforces with an on-screen error
-#: (capture D3). Chords live inside one chunk as consecutive ordinals sharing
+#: events per pattern, which the device enforces with an on-screen error --
+#: measured on drums (D3) and on the melodic set (T4.6), where the pool spills
+#: into chunks 2 and 3 while the step-active array stays wholly in chunk 1.
+#: Chords live inside one chunk as consecutive ordinals sharing
 #: a step (capture D2), so there is no 3- or 4-note ceiling. Track 1's fourth
 #: chunk is zero-filled rather than sentinel-filled and stays untouched even
 #: when a fourth chord voice is added, i.e. the firmware never uses it. See

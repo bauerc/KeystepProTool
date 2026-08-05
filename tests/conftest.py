@@ -74,7 +74,7 @@ def require_capture(captures_dir: Path) -> Callable[[str], Path]:
     def resolve(name: str) -> Path:
         path = captures_dir / name
         if not path.is_file():
-            pytest.skip(f"no {name}; see analysis/Hardware_Test_Protocol.md, tier M4")
+            pytest.skip(f"no {name}; see analysis/Hardware_Test_Protocol.md")
         return path
 
     return resolve

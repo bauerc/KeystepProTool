@@ -2,13 +2,14 @@
 
 The device plays the step-active flags, not the note pool: capture D1 toggled
 a drum step off without deleting its note, the pooled entry survived
-byte-for-byte, and the step did not sound. See
-``analysis/Hardware_Test_Protocol.md`` tier 4.
+byte-for-byte, and the step did not sound. T4.5 repeated it on the melodic
+parameter set with the same result, so both halves are measured (spec §4).
 
 The captures themselves are not in the repository (``project_files/captures/``
 is gitignored), so the hardware result is pinned here through the committed
 ``initial_project``, which contains the same situation in real user material,
-plus direct tests of the packing arithmetic.
+plus direct tests of the packing arithmetic. ``test_hardware_tier4.py`` asserts
+against the captures directly and skips where they are absent.
 """
 
 from dataclasses import replace
@@ -128,7 +129,11 @@ def test_reader_warns_about_disabled_notes(initial_project) -> None:  # type: ig
 
 
 def test_melodic_notes_are_flagged(initial_project) -> None:  # type: ignore[no-untyped-def]
-    """`48` and the melodic pool agree everywhere we have data."""
+    """`48` and the melodic pool agree in every committed file.
+
+    Which is a corpus fact, not the behaviour: what the device does when they
+    disagree is capture T4.5, in ``test_hardware_tier4.py``.
+    """
     pattern = initial_project.tracks[0].patterns[0]
     seq = [n for n in pattern.notes if n.kind is NoteKind.SEQ]
     assert seq and all(n.active for n in seq)
