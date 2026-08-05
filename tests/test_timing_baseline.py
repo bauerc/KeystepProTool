@@ -81,12 +81,8 @@ def test_project_5_ramp_decodes_as_documented(project_files_dir: Path) -> None:
     assert ramp == PROJECT_5_SEQ_RAMP
 
 
-def test_drum_shift_conflict_is_still_asserted(project_files_dir: Path) -> None:
-    """project_5's description says -1 for both kicks; the file says -1 and +1.
-
-    Protocol T6.1 / T7.3 resolve it. Until then the conflict stays pinned so it
-    cannot quietly disappear.
-    """
+def test_drum_shift_matches_the_confirmed_display(project_files_dir: Path) -> None:
+    """Both kicks were re-read on the device 2026-08-05 (T6.1): -1 and +1."""
     project = load(project_files_dir / "project_5.KeyStepPro")
     track1 = next(t for t in project.tracks if t.number == 1)
     pattern1 = next(p for p in track1.patterns if p.number == 1)
