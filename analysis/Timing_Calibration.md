@@ -278,6 +278,71 @@ All test IDs refer to [`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md)
 | 7 | Time Shift unit `U`, and which of models A/B/C | **Tier 8**, recordings R1–R3 | accurate placement both directions |
 | 8 | Do swing and shift add, or interact? | **Tier 8**, recording R5 | the M5 fitting algorithm |
 
+### 6.1 Tier 8 Recording Capture Ledger
+
+R1 Results - Shift 0, 1, 25, 50, 0, -1, -25, -49
+```
+pairs            8
+tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
+offset (ticks)   mean -0.38   sd 32.99   min -60   max +58
+offset (ms)      mean -1.56   sd 137.45
+```
+
+R2 Results - Shift 50
+```
+pairs            8
+tempo            120 BPM, 480 ticks/beat (1.0417 ms/tick)
+offset (ticks)   mean -59.00   sd 0.00   min -59   max -59
+offset (ms)      mean -61.46   sd 0.00
+```
+
+R3 Results - Shift 50
+```
+pairs            32
+tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
+offset (ticks)   mean +56.25   sd 20.88   min -60   max +60
+offset (ms)      mean +234.38   sd 87.00
+```
+
+R4 Results - Track Swing 50% (only used even notes 2, 6, etc).
+```
+pairs            8
+tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
+offset (ticks)   mean +0.00   sd 0.00   min +0   max +0
+offset (ms)      mean +0.00   sd 0.00
+```
+
+R4 Results - Track Swing 63% (only used even notes 2, 6, etc).
+```
+pairs            8
+tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
+offset (ticks)   mean -31.00   sd 0.00   min -31   max -31
+offset (ms)      mean -129.17   sd 0.00
+```
+
+R4 Results - Track Swing 75% (only used even notes 2, 6, etc).
+```
+pairs            8
+tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
+offset (ticks)   mean -60.00   sd 0.00   min -60   max -60
+offset (ms)      mean -250.00   sd 0.00
+```
+
+R5 Results - Track Swing 75% and Timeshift 50
+```
+pairs            8
+tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
+offset (ticks)   mean -120.00   sd 0.50   min -121   max -119
+offset (ms)      mean -500.00   sd 2.08
+```
+
+R6 Results
+```
+pairs            8
+tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
+offset (ticks)   mean -0.38   sd 32.99   min -60   max +58
+offset (ms)      mean -1.56   sd 137.45
+```
 ### One loose end this investigation turned up
 
 **`src/ksp/reader.py::_swing` may be wrong.** It computes `stored + 25`, treating `97` / `114` as an
@@ -312,11 +377,4 @@ Or run the tool, which does this across a whole directory and diffs two files:
 uv run python tools/timing_diff.py project_files/*.KeyStepPro
 uv run python tools/timing_diff.py --diff project_files/Default.KeyStepPro \
                                           project_files/project_5.KeyStepPro
-```
-
-The absence of a glide parameter is checkable directly against MCC's dictionary:
-
-```sh
-grep -ril "glide\|portamento" "/Library/Arturia/MIDI Control Center/Resources/"
-# -> only MatrixBrute's GUI resources
 ```
