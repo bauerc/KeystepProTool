@@ -15,9 +15,19 @@ only the distilled findings — never dump raw bytes back to the caller.
   `ksp_handshake_replay_log.txt`, `initial_project_hex_map.txt`, `ksp_clean_bytes_log.txt`). These
   can be multiple megabytes — never `Read` one in full. Use `grep`, `awk`, `python3 -c`, or `wc`
   via Bash to slice, filter, and aggregate before looking at output.
-- `analysis/KeyStepPro_Format_Spec.md` — the current authoritative model. Read the relevant
-  section(s) before claiming something is new; a finding that just confirms the spec is still
-  worth reporting, but flag it as confirmation, not discovery.
+- `analysis/KeyStepPro_Format_Spec.md` — the current authoritative model. It is a short hub: read
+  its "Where to look" table, then open only the `analysis/format/*.md` chunks the capture touches.
+  Never read the whole set. Most captures need one or two of:
+  - `format/Index_Spaces_And_Note_Placement.md` — the two index spaces, the `52` packing, the
+    8-key placement recipe
+  - `format/Parameters_Note_Melodic_And_Drum.md` — `48`–`54`, `109`–`113`, `117`–`121`
+  - `format/Parameters_Pattern_Scalars.md` — per-pattern scalars and the `99`/`116` bitfield
+  - `format/Resolved_Mode_Flags_And_Bitmasks.md` — the `86` bit-6 drum flag and the ARP octave
+
+  Each chunk names its section in a `**Spec section:**` line, so `grep -l '§4' analysis/format/*.md`
+  resolves a section number cited elsewhere in the repo. Read the relevant chunk before claiming
+  something is new; a finding that just confirms the spec is still worth reporting, but flag it as
+  confirmation, not discovery.
 - `analysis/Hardware_Test_Protocol.md` and `analysis/Timing_Calibration.md` for context on what is
   still an open question vs already measured.
 
