@@ -219,9 +219,28 @@ groove is also only believed with at least three notes on delayed steps — othe
 would be explained as swing and displace every other. Held to `ksp2midi` → `midi2ksp` round trips
 at 50, 58, 66 and 75 %, so the two directions agree end to end rather than by construction.
 
-**Not verified on hardware.** Green tests mean the file is well-formed, not that it plays. The
-device check is [`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md)'s to
-record.
+**Confirmed on the device** 2026-08-06: the converted four-track project loaded, transferred and
+played. That is the milestone — every capability M6 added is one no earlier milestone could put in
+front of the hardware, so until this ran, "green" only ever meant *well-formed*.
+
+What it establishes, and what it does not. Confirmed by ear, so it covers what the device *does*
+with the file: the drum track plays from Track 1's drum set with `86` bit 6 set and the packed `52`
+flags right, chords sound as chords rather than as one note per step, tied notes hold, and a
+128-step track plays through as one sequence — which is the chain in `121_84` being honoured, the
+one thing in this milestone with no desk-testable proxy at all.
+
+Two things it deliberately does not establish:
+
+- **No readback.** `test_the_device_kept_the_converted_pattern` skipped for M5 for the same reason
+  and still does; M6's candidate now has the same shape waiting for it in
+  `tests/test_hardware_import.py`. Worth ten minutes next time the device is out — M4 showed a
+  readback diff is empty when the file is right, which makes it the cheapest regression net there
+  is, and it is the only way to catch a value that loads and plays but is not the value we meant.
+- **Not which MIDI notes the drums sounded.** A drum note stores a *lane*, and the lane→note map is
+  a device global the project file cannot carry (spec §3.2.1). The converter fitted
+  chromatic-from-31 to the source and wrote lanes 0–3; what those lanes actually played depends on
+  the map the device was set to. The rhythm and the lane assignment are what was confirmed, not the
+  pitches.
 
 **The M8/M9 decision point is now open.** The CLI does everything the format allows; whether a GUI
 is worth building is the question this milestone was meant to answer.
