@@ -1,14 +1,15 @@
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 
-def transform_packet(packet: dict) -> dict:
+def transform_packet(packet: dict[str, Any]) -> dict[str, Any]:
     """Flattens Wireshark packet JSON export into a structured dictionary."""
     layers = packet.get("_source", {}).get("layers", {})
 
     # Helper function to unpack single-item lists common in Wireshark JSON
-    def get_first(key: str, default=None):
+    def get_first(key: str, default: Any = None) -> Any:
         val = layers.get(key, default)
         if isinstance(val, list) and len(val) > 0:
             return val[0]
