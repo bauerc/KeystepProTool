@@ -171,7 +171,7 @@ No tooling needs to exist first. This is enough:
 from ksp import lenient_json
 
 BASE = "project_files/captures/B0-baseline.KeyStepPro"
-CAP  = "project_files/captures/T7-shift-min.KeyStepPro"
+CAP  = "project_files/captures/T7-swing-both.KeyStepPro"
 
 a = lenient_json.load_path(BASE)
 b = lenient_json.load_path(CAP)
@@ -186,6 +186,14 @@ for k in sorted(a.keys() | b.keys(), key=lambda s: [int(p) if p.isdigit() else p
 
 A clean single-parameter capture should print a handful of lines. If it prints hundreds, either
 more changed than you intended or you are diffing against the wrong baseline.
+
+**If it prints nothing at all, the capture is a duplicate** — the change never reached the file, or
+the export never happened. **Run this before leaving the device**, while the setting can still be
+redone in seconds. Two tier 7 captures failed this way and were only caught at decode time, months
+of elapsed session away from the hardware: `T7-swing-both` turned out byte-identical to
+`T7-swing-global-75`, which cost the tier its one question about how global and per-pattern swing
+combine. A capture that silently matches its baseline is the most expensive kind of bad capture,
+because nothing about the file looks wrong.
 
 A `ksp-diff` command would be a natural by-product of M4 and would make tiers 3–5 much faster to
 read, but nothing here waits on it.
