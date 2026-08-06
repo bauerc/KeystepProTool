@@ -292,6 +292,125 @@ cleanly and plays with wrong timing, and nothing errors.
 
 ---
 
+## Phase 1 — USB read probes
+
+**Not a tier and not part of M1–M9.** These do not go through MIDI Control Center and produce no
+`.KeyStepPro` file: they talk to the device directly over raw USB and print what came back. The
+protocol they exercise is read-only — nothing here writes to the device — so the one-change rule
+and the export route above do not apply. Design and phase numbering live in
+`docs/superpowers/specs/2026-08-05-usb-sysex-project-read-design.md`.
+
+**Before you start.** Quit MIDI Control Center; it holds the device and the probes will not get
+it. On macOS the system binds its own USB-MIDI driver to interface 2 and will not release it to an
+unprivileged process, so every command below needs `sudo`. Each probe is a few seconds.
+
+```sh
+sudo uv run python tools/usb_probe.py <probe> [--save project_files/captures/H1-x.jsonl]
+```
+
+Nothing in the read protocol's address tuple identifies a project slot, so every probe reads
+**whichever project is loaded on the panel**. Note which one that is in the ledger — H4.1 is what
+settles whether a slot can be selected at all.
+
+### H1.1 — Identity
+
+- [x] **run 2026-08-06 — confirmed.** Reply byte-identical to the capture's frame 9.
+
+- **Resolves:** whether the firmware version can be read at all. Nothing in the read protocol
+  carries it, and a project file always has one, so without this `bulk_read` has to assume
+  `2.5.20` from the capture.
+- **Command:** `usb_probe.py identity`
+- **Confirms if:** the decoded version is `2.5.20`.
+- **Falsified if:** no reply arrives, or the version differs. A different version is not a bug —
+  it means the firmware was updated, and `bulk_plan` should be regenerated from the new MCC
+  descriptor before trusting a full dump.
+
+### H1.2 — Single scalar read
+
+- [x] **run 2026-08-06 — confirmed.** `120_37 = 3`, the same value the capture holds.
+
+- **Resolves:** whether the whole stack works end to end — framing out, request, reply, ack,
+  de-framing in — on one byte, before anything longer is attempted.
+- **Command:** `usb_probe.py scalar`
+- **Confirms if:** any value comes back for `120_37`. The capture holds `3`.
+- **Falsified if:** the read times out, or the device answers a different address than it was
+  asked for. A timeout here means the handshake, not the codec — run H1.4 next.
+
+### H1.3 — Throughput
+
+- [x] **run 2026-08-06 — confirmed, and it is free.** 3.994 ms at `count=16`, 3.998 ms at
+  `count=64`, 64 values delivered. The period does not move with the payload, so a full dump goes
+  from 38.3 s to 9.6 s for nothing but a different count byte. **Not yet acted on** — see the
+  Phase 3 note below.
+
+- **Resolves:** whether `count` may exceed the 16 MCC never goes above. At 16 a full dump is ~36 s;
+  at 64 it would be ~10 s. **This is a re-confirmation, not a discovery** —
+  `keysteppro_usb_investigation.md` already records a live `count=0x40` request answered with 64
+  bytes. That note predates the protocol decode, which is why it is being run again.
+- **Command:** `usb_probe.py throughput`
+- **Confirms if:** the `count=64` row returns 64 values and its median period is close to the
+  `count=16` row's — throughput is per-request, not per-byte.
+- **Falsified if:** `count=64` returns short, errors, or takes four times as long. Then 16 is a
+  device limit rather than an MCC convention and the plan stays as generated.
+
+### H1.4 — Prologue minimisation
+
+- [x] **run 2026-08-06 — settled: there is no handshake.** All four combinations returned
+  `120_37 = 3`, including both frames skipped.
+
+- **Resolved:** which of the two handshake frames a read actually needs. The answer is **neither**.
+  MCC sends a universal identity request and then `f0 00 20 6b 7f 42 05 01 f7`, and the
+  investigation notes guessed the latter was an "unlock or mode switch". It unlocks nothing: a
+  cold read answers without it. `bulk_read` needs to send no prologue at all.
+- The identity request is still required, but for the **version string** in a byte-identical file,
+  not as a handshake. That distinction is the finding.
+- **Command to re-run:** `usb_probe.py prologue` — it runs all four combinations itself.
+- **Would have been falsified if:** only the both-sent row worked. It was not.
+
+### H1.5 — The 0xFF sentinel
+
+- [x] **run 2026-08-06 — confirmed.** Patterns 1–13 read `255` raw; patterns 14–16 read `60`.
+  `0xFF` survives raw USB intact, so the `247` in every project file is MCC's corruption of it and
+  a writer must never emit `247`.
+
+- **Resolves:** whether `0xFF` reaches a raw-USB reader intact. It is a MIDI System Reset byte, so
+  no conformant host parser passes it through inside a SysEx — that is why MCC writes `247` and why
+  247 is the only number above 127 in any project file. If it survives here, the file's 247 is
+  confirmed as host-side corruption of a real device value meaning *pattern default pitch unset*.
+- **Command:** `usb_probe.py sentinel` — reads `123_117_1` through `123_117_16`.
+- **Confirms if:** at least one pattern reads `255` raw. Which patterns are unset depends on the
+  loaded project; `initial_project` had patterns 1–13 unset.
+- **Falsified if:** every pattern reads `247`, or the reads that should be unset come back empty.
+  Then the sentinel is being eaten below `deframe` and the transport, not MCC, is the lossy part.
+
+### Probe ledger
+
+**All five run 2026-08-06 and all five confirm.** The loaded project answered `120_37 = 3` with
+patterns 1–13 unset, which is what `initial_project.KeyStepPro` holds — the same project the
+Recall To capture was taken from. Raw output in `usb_probe_results.txt`.
+
+| Probe | Date       | Loaded project | Result |
+| ----- | ---------- | -------------- | ------ |
+| H1.1  | 2026-08-06 | initial_project | version = **2.5.20**. Reply `f07e7f060200206b0200090025140502f7`, byte-identical to capture frame 9 |
+| H1.2  | 2026-08-06 | initial_project | `120_37` = **3**, matching the capture |
+| H1.3  | 2026-08-06 | initial_project | count=64 **honoured**, 64 values. Median 3.994 ms at 16, 3.998 ms at 64 — flat. Full dump 38.3 s → 9.6 s |
+| H1.4  | 2026-08-06 | initial_project | **all four rows succeeded.** No handshake is required — neither the identity request nor the `0x05` frame |
+| H1.5  | 2026-08-06 | initial_project | patterns 1–13 read **255** raw; 14–16 read 60. The sentinel survives raw USB |
+
+**Two findings change later phases.**
+
+- **H1.4 removes the prologue.** `bulk_read` sends no handshake. The `0x05` frame is MCC's habit,
+  not the device's requirement, and the "unlock or mode switch" guess in
+  `usb_midi_investigation/keysteppro_usb_investigation.md` is wrong.
+- **H1.3 offers a 4× dump, and it is deliberately not taken yet.** `bulk_plan.py` is generated to
+  reproduce MCC's request stream byte-for-byte, and `test_bulk_plan.py` holds it there. Raising the
+  count rewrites that stream, so it needs its own verification — the tail chunks of the 24-lane and
+  240-entry parameters do not divide by 64 the way the 64-step ones do, and a count that overruns a
+  parameter's extent has never been tested. **Phase 3 work, gated on H3.2's byte-diff**, not a
+  drive-by change to a passing plan.
+
+---
+
 ## Capture ledger
 
 Fill in as you go. This table is the record; the `.KeyStepPro` files are the evidence.

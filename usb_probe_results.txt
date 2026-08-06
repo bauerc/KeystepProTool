@@ -1,0 +1,47 @@
+--identity--
+reply   f07e7f060200206b0200090025140502f7
+version 2.5.20
+H1.1 confirms if that reads 2.5.20
+
+--scalar--
+120_37 = 3
+H1.2 confirms if a value came back at all; 3 is what the capture holds
+note: this reads whichever project is loaded on the panel (H4.1 is unsettled)
+
+--throughput--
+ count   ok  median ms   full dump
+    16  yes      3.994       38.3s  (16 values)
+    64  yes      3.998        9.6s  (64 values)
+H1.3 confirms if count=64 returns 64 values; expected, from the earlier live run
+note: this reads whichever project is loaded on the panel (H4.1 is unsettled)
+
+--prologue--
+ identity   prologue  result
+     sent       sent  120_37 = 3
+     sent    skipped  120_37 = 3
+  skipped       sent  120_37 = 3
+  skipped    skipped  120_37 = 3
+H1.4 settles which rows succeed; the last row is the minimal prologue if it does
+note: this reads whichever project is loaded on the panel (H4.1 is unsettled)
+
+--sentinel--
+pattern   raw  meaning
+      1   255  unset (MCC would store 247)
+      2   255  unset (MCC would store 247)
+      3   255  unset (MCC would store 247)
+      4   255  unset (MCC would store 247)
+      5   255  unset (MCC would store 247)
+      6   255  unset (MCC would store 247)
+      7   255  unset (MCC would store 247)
+      8   255  unset (MCC would store 247)
+      9   255  unset (MCC would store 247)
+     10   255  unset (MCC would store 247)
+     11   255  unset (MCC would store 247)
+     12   255  unset (MCC would store 247)
+     13   255  unset (MCC would store 247)
+     14    60  initialised
+     15    60  initialised
+     16    60  initialised
+13 of 16 patterns unset
+H1.5 confirms if any pattern reads 255 raw rather than 247
+note: this reads whichever project is loaded on the panel (H4.1 is unsettled)

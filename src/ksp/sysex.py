@@ -24,6 +24,19 @@ SUBCOMMAND: Final = 0x01
 
 ACK: Final = HEADER + bytes((CMD_ACK, 0x00, END))
 
+#: MCC sends this once before the first read and the device never answers it.
+#: H1.4 read a cold device without it and got the same value, so it is MCC's
+#: habit and not a handshake: a reader need not send it. Kept because it is
+#: part of the recorded exchange and H1.4 is re-run against it.
+CMD_PROLOGUE: Final = 0x05
+PROLOGUE: Final = HEADER + bytes((CMD_PROLOGUE, SUBCOMMAND, END))
+
+#: Universal (non-Arturia) identity envelope. Not a handshake either -- H1.4
+#: read fine without it -- but nothing in the read protocol carries the
+#: firmware version, so a byte-identical file still needs this request.
+IDENTITY_REQUEST: Final = bytes((0xF0, 0x7E, 0x7F, 0x06, 0x01, END))
+_IDENTITY_PREFIX: Final = bytes((0xF0, 0x7E, 0x7F, 0x06, 0x02, 0x00, 0x20, 0x6B))
+
 #: The device's "pattern default pitch unset" sentinel. It is a MIDI System
 #: Reset byte, so no conformant host parser passes it through inside a SysEx:
 #: MCC loses it and stores the terminator sitting at that offset instead, which
@@ -87,3 +100,16 @@ def parse_reply(frame: bytes) -> tuple[ReadRequest, tuple[int, ...]]:
     if len(values) != count:
         raise ValueError(f"reply carried {len(values)} values, header promised {count}")
     return request, values
+
+
+def parse_identity(frame: bytes) -> str:
+    """The firmware version out of a universal identity reply.
+
+    Arturia's version field is four bytes and runs backwards: the observed
+    ``25 14 05 02`` is build 0x25 then 20.5.2 reversed, i.e. 2.5.20.
+    """
+    if not frame.startswith(_IDENTITY_PREFIX) or frame[-1:] != bytes((END,)):
+        raise ValueError("not a KeyStep Pro identity reply")
+    if len(frame) != 17:
+        raise ValueError(f"identity reply is {len(frame)} bytes, expected 17")
+    return f"{frame[-2]}.{frame[-3]}.{frame[-4]}"
