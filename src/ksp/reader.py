@@ -322,10 +322,8 @@ def _step_count(raw: dict[str, Any], item_id: int, param: int, pattern: int) -> 
 def _swing(raw: dict[str, Any], item_id: int, param: int, pattern: int) -> int:
     """Swing is stored with a +25 offset: 25 means 50%, i.e. no swing.
 
-    Measured by tier 7 (T7.5, T7.7): the device displays an absolute 50-75%,
-    and stored 50 reads as 75% at the encoder's maximum. MCC's field label
-    calls 97 / 114 a signed -25%..+25% offset from the global; the hardware
-    says otherwise, so the label is wrong and this reading is right.
+    MCC labels 97/114 a signed -25%..+25% offset; the device displays an
+    absolute 50-75%, so the label is wrong and this reading is right.
     """
     return (
         _scalar(raw, item_id, param, pattern, default=constants.SWING_OFFSET)

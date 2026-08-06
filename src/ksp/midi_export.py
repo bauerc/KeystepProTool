@@ -717,10 +717,8 @@ def render_project(project: Project, options: ExportOptions | None = None) -> tu
 
 def _result(arrangement: Arrangement, project: Project, options: ExportOptions) -> ExportResult:
     diagnostics = arrangement.diagnostics
-    # Tier 7 showed 74 holds a live percentage of its own, so a non-default
-    # global is real groove being dropped rather than an inert field. It is not
-    # applied because T7.6 never established how it combines with the
-    # per-pattern value, and guessing would be the wrong kind of wrong.
+    # How the global combines with the per-pattern value is not measured, so
+    # it is reported rather than folded in.
     if options.apply_swing and project.global_swing_percent != constants.SWING_RANGE_PERCENT[0]:
         global_swing = Diagnostic(
             Code.GLOBAL_SWING_NOT_APPLIED,

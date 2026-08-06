@@ -106,14 +106,11 @@ P_DRUM_PATTERN_BITS: Final = 116
 PATTERN_HAS_DATA: Final = 3
 
 #: Swing is stored with a +25 offset: stored 25 is 50% (no swing), stored 50
-#: is 75%. Measured 2026-08-05 by tier 7 (T7.5, T7.7): the display reads an
-#: absolute 50-75%, so 97 / 114 hold a percentage and not the signed -25..+25
-#: offset MCC's own field label claims. Spec section 3.3.
+#: is 75%. Spec section 3.3.
 SWING_OFFSET: Final = 25
 
-#: The displayed swing range, global (74) and per-pattern (97 / 114) alike.
-#: 50% is straight and is both the minimum and the default; the encoder will
-#: not go below it, so swing only ever delays. Tier 7, T7.4-T7.5, T7.7.
+#: The displayed swing range. 50% is straight, and is both the minimum and the
+#: default, so swing only ever delays.
 SWING_RANGE_PERCENT: Final = (50, 75)
 
 #: Step counts are 0-based: stored 15 means a 16-step pattern.
@@ -235,7 +232,7 @@ P_SEQ_PITCH: Final = 109
 P_SEQ_GATE: Final = 110
 P_SEQ_VELOCITY: Final = 111
 P_SEQ_TIME_SHIFT: Final = 112
-P_SEQ_RANDOMNESS: Final = 113
+P_SEQ_RANDOMNESS: Final = 113  # play probability, not timing jitter
 
 # --- Drum note parameters, item 123 only (spec section 3.2) ---------------
 
@@ -303,28 +300,22 @@ G_DRUM_MAP_NOTE_1: Final = 83  # ..106 = Note 1..Note 24, custom mode
 # --- Value encodings -------------------------------------------------------
 
 #: Time shift is an offset around a centre of 49, so stored 50 is +1 and
-#: stored 48 is -1. First seen in project_5's +-4 ramp, then confirmed by
-#: tier 7 at twelve points spanning the whole range: stored = 49 + displayed
-#: holds exactly, with no compression at the extremes. Unlike gate, this is a
-#: plain offset rather than a ladder, and the drum field 120 shares it.
+#: stored 48 is -1. The drum field 120 shares it.
 TIME_SHIFT_CENTRE: Final = 49
 
-#: The displayed range of time shift, measured 2026-08-05 by protocol tier 7
-#: (T7.1-T7.3, captures T7-shift, T7-shift-linearity, T7-drumshift). The
-#: encoder runs -49..+50 in steps of 1, so stored spans 0..99 around the
-#: centre of 49. Asymmetric by one: there is no displayed -50.
+#: The displayed range of time shift, in steps of 1. Asymmetric by one: there
+#: is no displayed -50.
 TIME_SHIFT_RANGE: Final[tuple[int, int]] = (-49, 50)
 
-#: The stored bounds of TIME_SHIFT_RANGE, as written into 112 / 120.
+#: The same bounds as stored in 112 / 120.
 TIME_SHIFT_STORED_MIN: Final = TIME_SHIFT_CENTRE + TIME_SHIFT_RANGE[0]
 TIME_SHIFT_STORED_MAX: Final = TIME_SHIFT_CENTRE + TIME_SHIFT_RANGE[1]
 
-#: What one unit of time shift is worth, as a fraction of a step. The range
-#: above is measured; this is not. It may be a fraction of a step, a fixed
-#: tick count or an absolute time, which needs a recording of the device's
-#: MIDI output to tell apart (protocol tier 8; see
-#: analysis/Timing_Calibration.md). None until then, and never guessed -- a
-#: wrong timing constant produces files that load cleanly and play wrong.
+#: What one unit of time shift is worth, as a fraction of a step. Unmeasured:
+#: it may instead be a fixed tick count or an absolute time, which needs a
+#: recording of the device's MIDI output to tell apart. None until then, and
+#: never guessed -- a wrong timing constant produces files that load cleanly
+#: and play wrong.
 TIME_SHIFT_UNIT: Final[float | None] = None
 
 
@@ -401,16 +392,6 @@ DEFAULT_GATE_LENGTH: Final = GATE_TABLE[DEFAULT_GATE_STORED]
 #: the caller says nothing.
 FRESH_VELOCITY: Final = 100
 FRESH_RANDOMNESS: Final = 100
-
-#: 113 / 121 is the probability that a note sounds on any given pass, not the
-#: timing jitter the parameter's name suggests. Established by ear in tier 7
-#: (T7.8): at 100 the note plays every pass, at 50 about half of them, at the
-#: minimum never, and onsets never wander at any setting. So the fresh default
-#: of 100 means "always plays", and every timing measurement taken at the
-#: default is measuring the device rather than noise -- which is what made
-#: tier 8 worth running at all. No capture sweeps the stored values, so the
-#: displayed-to-stored mapping is assumed 1:1 and is not asserted anywhere.
-RANDOMNESS_ALWAYS: Final = 100
 
 #: The firmware's two ceilings, both enforced with an on-screen message
 #: (capture T4-melodic-overflow-v2). POOL_CAPACITY above is the per-pattern

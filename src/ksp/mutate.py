@@ -71,9 +71,7 @@ def _check_value(name: str, value: int) -> None:
 
 
 def _check_time_shift(stored: int) -> None:
-    # Narrower than the 7-bit field: tier 7 swept the encoder end to end and it
-    # stops at stored 0 and 99, so anything outside that is a value the device
-    # cannot be made to display.
+    # Narrower than the 7-bit field: the encoder cannot reach past these.
     low, high = constants.TIME_SHIFT_STORED_MIN, constants.TIME_SHIFT_STORED_MAX
     if not low <= stored <= high:
         displayed = stored - constants.TIME_SHIFT_CENTRE

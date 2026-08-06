@@ -91,13 +91,13 @@ def test_drum_shift_matches_the_confirmed_display(project_files_dir: Path) -> No
 
 
 def test_the_unmeasured_unit_still_refuses_to_guess() -> None:
-    """Tier 7 measured the range; what one unit is worth in time is tier 8's."""
+    """What one unit is worth in time is not measured, so it stays None."""
     assert constants.TIME_SHIFT_UNIT is None
     assert constants.time_shift_fraction(4) is None
 
 
 def test_time_shift_range_is_the_measured_one() -> None:
-    """T7.1-T7.3: the encoder runs -49..+50, so stored spans 0..99."""
+    """The encoder runs -49..+50, so stored spans 0..99."""
     assert constants.TIME_SHIFT_RANGE == (-49, 50)
     assert constants.TIME_SHIFT_STORED_MIN == 0
     assert constants.TIME_SHIFT_STORED_MAX == 99
