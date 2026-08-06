@@ -236,11 +236,21 @@ Two things it deliberately does not establish:
   `tests/test_hardware_import.py`. Worth ten minutes next time the device is out — M4 showed a
   readback diff is empty when the file is right, which makes it the cheapest regression net there
   is, and it is the only way to catch a value that loads and plays but is not the value we meant.
-- **Not which MIDI notes the drums sounded.** A drum note stores a *lane*, and the lane→note map is
-  a device global the project file cannot carry (spec §3.2.1). The converter fitted
-  chromatic-from-31 to the source and wrote lanes 0–3; what those lanes actually played depends on
-  the map the device was set to. The rhythm and the lane assignment are what was confirmed, not the
-  pitches.
+- **Not what the drum track transmits.** The lanes themselves were confirmed: the source's lowest
+  pitch landed on the device's lowest lane and the four ran in order, which is what fitting the map
+  from the lowest pitch is for. That holds whatever the device's own map says, because the global
+  map decides only what MIDI note a lane **sends out** — not which lane plays. So the outbound
+  notes are the part still unconfirmed, and they matter only when the drum track is driving
+  something else.
+
+**The fitted map is right for a contiguous source and only approximately right for a sparse one.**
+`m6-test-file.mid` uses 31–34, four adjacent pitches, so chromatic-from-31 put them on lanes 0–3
+exactly. A General MIDI kit is not adjacent — 36, 38, 42, 46 is kick, snare and two hats — and
+fitting chromatically from 36 would place those on lanes 0, 2, 6 and 10. Every hit still sounds and
+the ordering still holds, but three lanes of the device's grid are skipped where a drummer would
+expect four in a row. Faithful to the intervals, not to the intent. Worth an option that packs
+distinct pitches onto consecutive lanes instead; nothing in the format prevents it, and it is the
+sort of thing that is obvious once a GM file is converted and invisible until then.
 
 **The M8/M9 decision point is now open.** The CLI does everything the format allows; whether a GUI
 is worth building is the question this milestone was meant to answer.
