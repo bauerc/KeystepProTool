@@ -71,10 +71,25 @@ def test_every_kind_survives_collapsing(
         "drum lanes resolved through",
         "past the last step of 48",
         "different total lengths",
-        "16/32/48/64",
         "--include-stale exports both",
     ):
         assert phrase in default, phrase
+
+
+def test_the_step_skip_kind_survives_collapsing(
+    project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Checked against project_5, the only file that really skips steps.
+
+    ``initial_project`` reads 15 -- "plays on all four passes" -- in every
+    entry of the ``49`` array it actually uses, so it never had a step skip to
+    report. It appeared to until the reader stopped taking that array from the
+    note's own pool chunk instead of chunk 1, where it wholly lives (spec 4).
+    """
+    argv = [str(project_files_dir / "project_5.KeyStepPro"), "-o", str(tmp_path / "p5.mid")]
+    assert export_main([*argv, "--dry-run"]) == 0
+
+    assert "16/32/48/64" in capsys.readouterr().err
 
 
 def test_quiet_still_shows_the_caveats(

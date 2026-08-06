@@ -61,3 +61,27 @@ def resolve_drum_map(spec: str | None, config_path: Path | None = None) -> DrumM
     if path.is_file():
         return DrumMap.from_dict(json.loads(path.read_text(encoding="utf-8")))
     return DrumMap.chromatic(DEFAULT_CHROMATIC_LOW)
+
+
+def resolve_import_drum_map(spec: str | None, config_path: Path | None = None) -> DrumMap | None:
+    """The same choice for ``midi2ksp``, where unset means *fit to the source*.
+
+    Reading a lane back can fall through to the factory default and print what
+    it assumed. Writing one cannot: a source whose drums sit anywhere but
+    36-59 would have every hit dropped as unmapped. So an unconfigured import
+    fits a map to the pitches it was given, and says so.
+
+    ``none`` is refused rather than accepted, because a drum note stores a lane
+    and there is no lane without a map.
+    """
+    if spec == "none":
+        raise ValueError(
+            "a drum note stores a lane, not a pitch, so importing drums needs a map; "
+            "use chromatic:N or custom:a,b,c, or leave --drum-map off to fit one"
+        )
+    if spec is not None:
+        return parse_drum_map(spec)
+    path = CONFIG_PATH if config_path is None else config_path
+    if path.is_file():
+        return DrumMap.from_dict(json.loads(path.read_text(encoding="utf-8")))
+    return None

@@ -3,50 +3,52 @@
 The inverse of :mod:`ksp.midi_export`, and a much narrower operation than it
 looks. The key set of a ``.KeyStepPro`` file is fixed at 153,495 numeric keys
 (spec section 2), so nothing here *creates* a project: a template is loaded and
-values are overwritten in it. Placement itself is
-:func:`ksp.mutate.place_note`, whose 8-key recipe was measured from the device
-rather than inferred.
+values are overwritten in it. Placement itself is :func:`ksp.mutate.place_note`
+and :func:`ksp.mutate.place_drum_note`, whose 8-key recipes were measured from
+the device rather than inferred.
 
-Milestone M5, and deliberately the MVP of one: **one melodic track, one
-pattern, monophonic**. Polyphony, drums and multi-pattern splitting are M6.
+Milestone M6 widened this from M5's one monophonic pattern to real material:
+every note-bearing source track, chords, a drum track on Track 1, note lengths,
+tempo, and sequences longer than one pattern split across consecutive slots and
+chained.
 
-Two things the conversion does not carry, both warned about on every run
-because the rule is that anything decided for the user is visible:
+What the conversion still decides for the user, and says so on every run:
 
-* **Note length.** Every note is written at the gate a freshly placed note has
-  on the device. Gate *is* fully measured (spec 6.1) so carrying real durations
-  is possible; the MVP does not, and M6 owns it.
-* **Tempo.** ``70``-``72`` are decoded, but the project keeps its template's
-  tempo.
-
-A third is not a decision but a consequence: the pattern's step count is the
-template's, so notes landing past its last step are **dropped**, not written.
-The device disables notes past the last step rather than deleting them, so
-writing them would put notes in the file that no hardware plays.
+* **The clip is anchored.** A pattern is a loop with nowhere to keep a lead-in,
+  so the first note lands on step 1 whatever tick the file starts at.
+* **A track's length is rounded up to the bar**, then cut into 64-step
+  patterns. The device's ceiling is 64 steps and nothing may be truncated
+  silently.
+* **The drum map is an assumption.** Which MIDI note a lane plays lives in
+  device settings, not the file (spec 3.2.1), so a map is either given or
+  fitted to the source pitches, and either way it is reported.
 
 The work is in three layers, matching the export direction so the M8/M9 Swift
 port translates arithmetic rather than a MIDI library:
 
-1. :func:`read_clip` -- a ``mido.MidiFile`` becomes plain
+1. :func:`read_song` -- a ``mido.MidiFile`` becomes plain
    :class:`~ksp.midi_export.RenderedNote` data in ticks. The only part that
    knows what ``mido`` is.
-2. :func:`quantise` -- ticks become steps, chords are reduced and everything
-   out of bounds is dropped, still as plain data.
-3. :func:`apply` -- placed notes go into a raw project dict.
+2. :func:`plan_song` -- ticks become steps, gates, swing and time shifts, and
+   everything out of bounds is dropped, still as plain data.
+3. :func:`apply` -- a plan goes into a raw project dict.
 
 Nothing here reads or writes a path, and nothing prints: the caller supplies a
 parsed file and a template and decides where the result goes.
 """
 
-from collections.abc import Mapping, Sequence
+import math
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
 import mido
 
 from ksp import constants, mutate
+from ksp import drum_map as drum_map_module
 from ksp.constants import DEFAULT_STEPS_PER_BEAT, check_steps_per_beat
-from ksp.diagnostics import EMPTY_REPORT, Code, Collector, Report
+from ksp.diagnostics import EMPTY_REPORT, Code, Collector, Report, Site
+from ksp.drum_map import DrumMap
 from ksp.keys import get_int, item_for_track
 from ksp.lenient_json import canonical
 from ksp.midi_export import RenderedNote
@@ -55,10 +57,23 @@ from ksp.midi_export import RenderedNote
 #: microseconds per beat, i.e. 120 BPM.
 DEFAULT_TEMPO: Final = 500_000
 
+#: MIDI's default when a file carries no ``time_signature``.
+DEFAULT_TIME_SIGNATURE: Final = (4, 4)
+
+#: The MIDI channel GM reserves for percussion, counting from 0.
+DRUM_CHANNEL: Final = 9
+
+#: No swing. Both the bottom of the device's range and its default.
+_STRAIGHT: Final = constants.SWING_RANGE_PERCENT[0]
+
+#: Notes that must land on delayed steps before a groove is believed rather
+#: than left to per-note time shift.
+_MIN_SWUNG_NOTES: Final = 3
+
 
 @dataclass(frozen=True)
 class ImportOptions:
-    """Everything the MIDI file cannot tell us about the target pattern."""
+    """Everything the MIDI file cannot tell us about the target project."""
 
     steps_per_beat: int = DEFAULT_STEPS_PER_BEAT
     """Step size to quantise to. Unlike the export direction, which now reads
@@ -70,15 +85,31 @@ class ImportOptions:
     """Read only this track of the source file, counting from 1. ``None`` reads
     every track, which is what a type 0 file needs."""
 
+    drum_track: int | None = None
+    """Which source track to write as drums, counting from 1. ``None`` looks
+    for a track on the GM percussion channel instead, and finds nothing in the
+    many files that put drums on an ordinary channel."""
+
+    drum_map: DrumMap | None = None
+    """The lane-to-note map to invert. ``None`` fits a chromatic one to the
+    source's own pitches, because the real map is device state the file does
+    not carry (spec 3.2.1)."""
+
+    carry_tempo: bool = True
+    fit_swing: bool = True
+    fit_time_shift: bool = True
+
     def __post_init__(self) -> None:
         check_steps_per_beat(self.steps_per_beat)
-        if self.midi_track is not None and self.midi_track < 1:
-            raise ValueError("midi_track counts from 1")
+        for name in ("midi_track", "drum_track"):
+            value = getattr(self, name)
+            if value is not None and value < 1:
+                raise ValueError(f"{name} counts from 1")
 
 
 @dataclass(frozen=True)
 class Clip:
-    """A MIDI file's note events, in ticks. No MIDI library involved."""
+    """One source track's note events, in ticks. No MIDI library involved."""
 
     notes: tuple[RenderedNote, ...]
     ticks_per_beat: int
@@ -90,6 +121,25 @@ class Clip:
     def channels(self) -> tuple[int, ...]:
         return tuple(sorted({note.channel for note in self.notes}))
 
+    @property
+    def is_percussion(self) -> bool:
+        """Whether every note sits on the GM percussion channel."""
+        return bool(self.notes) and self.channels == (DRUM_CHANNEL,)
+
+
+@dataclass(frozen=True)
+class Song:
+    """A whole source file: one clip per note-bearing track, plus its timing."""
+
+    clips: tuple[Clip, ...]
+    ticks_per_beat: int
+    tempo_bpm: float
+    beats_per_bar: float
+    tempo_changes: int = 0
+
+    def steps_per_bar(self, steps_per_beat: int) -> int:
+        return max(1, round(self.beats_per_bar * steps_per_beat))
+
 
 @dataclass(frozen=True)
 class PlacedNote:
@@ -98,11 +148,16 @@ class PlacedNote:
     step: int
     pitch: int
     velocity: int
+    gate: int = constants.DEFAULT_GATE_STORED
+    time_shift: int = constants.TIME_SHIFT_CENTRE
+    lane: int | None = None
+    """The drum lane this hit plays, or ``None`` on a melodic note. A drum note
+    stores a lane index in ``117`` where a melodic one stores a pitch."""
 
 
 @dataclass(frozen=True)
 class Placement:
-    """A clip reduced to what one pattern can hold."""
+    """What one pattern holds."""
 
     notes: tuple[PlacedNote, ...]
     step_count: int
@@ -111,82 +166,169 @@ class Placement:
     into the pattern's own step size rather than leaving the device to play a
     1/32 clip at 1/16."""
 
+    pattern: int = 1
+    swing_percent: int = constants.SWING_RANGE_PERCENT[0]
     diagnostics: Report = EMPTY_REPORT
 
 
 @dataclass(frozen=True)
+class TrackPlan:
+    """One source track's worth of patterns, and where they go."""
+
+    track: int
+    """The device track, 1-4."""
+
+    placements: tuple[Placement, ...]
+    is_drum: bool = False
+    source_track: int | None = None
+
+    @property
+    def notes(self) -> tuple[PlacedNote, ...]:
+        return tuple(note for placement in self.placements for note in placement.notes)
+
+    @property
+    def patterns(self) -> tuple[int, ...]:
+        return tuple(placement.pattern for placement in self.placements)
+
+
+@dataclass(frozen=True)
+class SongPlan:
+    """Everything the conversion decided, before any of it is written."""
+
+    tracks: tuple[TrackPlan, ...]
+    tempo_bpm: float | None = None
+    """The tempo to write, or ``None`` to keep the template's."""
+
+    drum_map: DrumMap | None = None
+    scene: int = 1
+    diagnostics: Report = EMPTY_REPORT
+
+    @property
+    def notes(self) -> tuple[PlacedNote, ...]:
+        return tuple(note for track in self.tracks for note in track.notes)
+
+
+@dataclass(frozen=True)
 class ImportResult:
-    """A project with the clip written into it, ready to serialise."""
+    """A project with the source written into it, ready to serialise."""
 
     raw: dict[str, int | str]
-    notes: tuple[PlacedNote, ...]
-    track: int
-    pattern: int
-    step_count: int
+    plan: SongPlan
     diagnostics: Report
 
     @property
+    def notes(self) -> tuple[PlacedNote, ...]:
+        return self.plan.notes
+
+    @property
     def note_count(self) -> int:
-        return len(self.notes)
+        return len(self.plan.notes)
+
+    @property
+    def track(self) -> int:
+        """The first device track written. The single-target path has one."""
+        return self.plan.tracks[0].track if self.plan.tracks else 1
+
+    @property
+    def pattern(self) -> int:
+        return self.plan.tracks[0].placements[0].pattern if self.plan.tracks else 1
+
+    @property
+    def step_count(self) -> int:
+        return self.plan.tracks[0].placements[0].step_count if self.plan.tracks else 0
 
 
-def read_clip(midi: mido.MidiFile, options: ImportOptions | None = None) -> Clip:
-    """Pair note-ons with their note-offs and return them in absolute ticks."""
-    options = options or ImportOptions()
+# --- Layer 1: reading MIDI -------------------------------------------------
 
-    tempo = DEFAULT_TEMPO
+
+def _track_notes(track: Iterable[mido.Message]) -> tuple[list[RenderedNote], int, int]:
+    """Pair one track's note-ons with their note-offs, in absolute ticks.
+
+    Also returns the last tick seen and how many tempo changes went past, so
+    the caller can tell a file with a tempo map from one without.
+    """
+    tick = 0
+    tempos = 0
     notes: list[RenderedNote] = []
-    sources: list[int] = []
+    # (channel, pitch) -> (onset tick, velocity). A second note-on for a pitch
+    # already sounding retriggers it, so the earlier one ends here.
+    open_notes: dict[tuple[int, int], tuple[int, int]] = {}
 
-    for number, track in enumerate(midi.tracks, start=1):
-        if options.midi_track is not None and number != options.midi_track:
+    for message in track:
+        tick += message.time
+        if message.type == "set_tempo":
+            tempos += 1
+            continue
+        if message.type not in ("note_on", "note_off"):
             continue
 
-        tick = 0
-        # (channel, pitch) -> (onset tick, velocity). A second note-on for a
-        # pitch already sounding retriggers it, so the earlier one ends here.
-        open_notes: dict[tuple[int, int], tuple[int, int]] = {}
-        started = len(notes)
-
-        for message in track:
-            tick += message.time
-            if message.type == "set_tempo":
-                tempo = message.tempo
-                continue
-            if message.type not in ("note_on", "note_off"):
-                continue
-
-            held = (message.channel, message.note)
-            ending = message.type == "note_off" or message.velocity == 0
-            if held in open_notes:
-                onset, velocity = open_notes.pop(held)
-                notes.append(
-                    RenderedNote(
-                        tick=onset,
-                        duration_ticks=tick - onset,
-                        pitch=message.note,
-                        velocity=velocity,
-                        channel=message.channel,
-                    )
-                )
-            if not ending:
-                open_notes[held] = (tick, message.velocity)
-
-        # A note-on the file never closes still sounded; end it at the track's
-        # last event rather than discarding it.
-        for (channel, pitch), (onset, velocity) in open_notes.items():
+        held = (message.channel, message.note)
+        ending = message.type == "note_off" or message.velocity == 0
+        if held in open_notes:
+            onset, velocity = open_notes.pop(held)
             notes.append(
                 RenderedNote(
                     tick=onset,
-                    duration_ticks=max(0, tick - onset),
-                    pitch=pitch,
+                    duration_ticks=tick - onset,
+                    pitch=message.note,
                     velocity=velocity,
-                    channel=channel,
+                    channel=message.channel,
                 )
             )
+        if not ending:
+            open_notes[held] = (tick, message.velocity)
 
-        if len(notes) > started:
+    # A note-on the file never closes still sounded; end it at the track's last
+    # event rather than discarding it.
+    for (channel, pitch), (onset, velocity) in open_notes.items():
+        notes.append(
+            RenderedNote(
+                tick=onset,
+                duration_ticks=max(0, tick - onset),
+                pitch=pitch,
+                velocity=velocity,
+                channel=channel,
+            )
+        )
+
+    return notes, tick, tempos
+
+
+def _timing(midi: mido.MidiFile) -> tuple[int, tuple[int, int], int]:
+    """The file's first tempo, its first time signature and how many tempi."""
+    tempo = DEFAULT_TEMPO
+    signature = DEFAULT_TIME_SIGNATURE
+    changes = 0
+    found_tempo = False
+    found_signature = False
+
+    for track in midi.tracks:
+        for message in track:
+            if message.type == "set_tempo":
+                changes += 1
+                if not found_tempo:
+                    tempo, found_tempo = message.tempo, True
+            elif message.type == "time_signature" and not found_signature:
+                signature = (message.numerator, message.denominator)
+                found_signature = True
+
+    return tempo, signature, changes
+
+
+def read_clip(midi: mido.MidiFile, options: ImportOptions | None = None) -> Clip:
+    """Every selected track's notes, merged into one clip in absolute ticks."""
+    options = options or ImportOptions()
+    tempo, _, _ = _timing(midi)
+
+    notes: list[RenderedNote] = []
+    sources: list[int] = []
+    for number, track in enumerate(midi.tracks, start=1):
+        if options.midi_track is not None and number != options.midi_track:
+            continue
+        found, _, _ = _track_notes(track)
+        if found:
             sources.append(number)
+            notes.extend(found)
 
     notes.sort(key=lambda note: (note.tick, note.pitch))
     return Clip(
@@ -197,8 +339,287 @@ def read_clip(midi: mido.MidiFile, options: ImportOptions | None = None) -> Clip
     )
 
 
+def read_song(midi: mido.MidiFile, options: ImportOptions | None = None) -> Song:
+    """One clip per note-bearing source track, in file order.
+
+    A type 0 file puts everything on one track, so it yields a single clip and
+    converts to a single device track. Type 1 files -- what a DAW exports --
+    give one clip per instrument, which is the shape M6 is for.
+    """
+    options = options or ImportOptions()
+    tempo, (numerator, denominator), changes = _timing(midi)
+    tempo_bpm = float(mido.tempo2bpm(tempo))
+
+    clips = []
+    for number, track in enumerate(midi.tracks, start=1):
+        if options.midi_track is not None and number != options.midi_track:
+            continue
+        notes, _, _ = _track_notes(track)
+        if not notes:
+            continue
+        notes.sort(key=lambda note: (note.tick, note.pitch))
+        clips.append(
+            Clip(
+                notes=tuple(notes),
+                ticks_per_beat=midi.ticks_per_beat,
+                tempo_bpm=tempo_bpm,
+                source_tracks=(number,),
+            )
+        )
+
+    return Song(
+        clips=tuple(clips),
+        ticks_per_beat=midi.ticks_per_beat,
+        tempo_bpm=tempo_bpm,
+        # A bar in quarter notes, which is what a beat is here.
+        beats_per_bar=numerator * 4 / denominator,
+        tempo_changes=changes,
+    )
+
+
+# --- Layer 2: planning -----------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _Snapped:
+    """One source note against the grid, before it belongs to a pattern."""
+
+    step: int
+    """0-based, counted from the anchored origin, and unbounded by a pattern."""
+
+    residual: float
+    """Ticks between where the note actually is and where its step is."""
+
+    note: RenderedNote
+
+
+def _anchor(clip: Clip, ticks_per_step: float) -> float:
+    """The tick the clip's first note is snapped back from."""
+    first = min((note.tick for note in clip.notes), default=0)
+    return round(first / ticks_per_step) * ticks_per_step
+
+
+def _swing_delay(step: int, percent: int, ticks_per_step: float) -> float:
+    """Ticks the device delays *step* (0-based) by, at *percent* swing.
+
+    Rounded exactly as ``midi_export._swing_delay`` rounds it, so a groove that
+    survives one direction survives the other.
+    """
+    if not step % 2:
+        return 0.0
+    return float(round(ticks_per_step * (2 * percent / 100 - 1)))
+
+
+def _assign_step(offset: float, ticks_per_step: float, percent: int) -> tuple[int, float]:
+    """The step *offset* belongs to under *percent* swing, and what is left.
+
+    Nearest-step arithmetic alone cannot do this. At 75% -- the device's
+    maximum -- a delayed step sits exactly half a step late, so snapping to the
+    nearest lands it on the *next* step and collapses each pair onto one. So
+    the neighbours are tried against the swung grid and the closest wins.
+    """
+    base = round(offset / ticks_per_step)
+    best: tuple[int, float] | None = None
+    for step in (base - 1, base, base + 1):
+        if step < 0:
+            continue
+        residual = offset - (step * ticks_per_step + _swing_delay(step, percent, ticks_per_step))
+        if best is None or abs(residual) < abs(best[1]):
+            best = (step, residual)
+    return best if best is not None else (0, offset)
+
+
+def _snap(clip: Clip, ticks_per_step: float, origin: float, percent: int) -> list[_Snapped]:
+    snapped = []
+    for note in sorted(clip.notes, key=lambda n: (n.tick, n.pitch)):
+        step, residual = _assign_step(note.tick - origin, ticks_per_step, percent)
+        snapped.append(_Snapped(step=step, residual=residual, note=note))
+    return snapped
+
+
+def _fit_swing(clip: Clip, ticks_per_step: float, origin: float) -> int:
+    """The swing percentage that best explains a clip's timing.
+
+    Fitting swing before spending any time shift is the point: one
+    pattern-level value expresses a systematic groove for free, and the per-note
+    field is scarce -- a fixed 60 ticks either way (Timing_Calibration 3.2).
+
+    Done as a search over the 26 storable percentages rather than by inverting
+    a median, because the residual a median would be taken over depends on the
+    swing that produced it: at anything past two thirds the delayed steps snap
+    to the wrong beat and the estimate chases its own tail. Twenty-six
+    candidates scored against the notes is both exact and cheap. Ties keep the
+    lowest, so a straight clip stays straight.
+    """
+    low, high = constants.SWING_RANGE_PERCENT
+    if not clip.notes:
+        return low
+
+    offsets = [note.tick - origin for note in clip.notes]
+    best_percent, best_cost = low, math.inf
+    for percent in range(low, high + 1):
+        cost = sum(abs(_assign_step(o, ticks_per_step, percent)[1]) for o in offsets)
+        if cost < best_cost - 1e-9:
+            best_percent, best_cost = percent, cost
+
+    if best_percent == low:
+        return low
+
+    # A groove is a thing a pattern does repeatedly. Without that guard the
+    # search will gladly explain one late note as swing, which would displace
+    # every other note on a delayed step to explain a single one.
+    swung = sum(1 for o in offsets if _assign_step(o, ticks_per_step, best_percent)[0] % 2)
+    return best_percent if swung >= _MIN_SWUNG_NOTES else low
+
+
+def _fit_shift(residual: float, ticks_per_beat: int) -> tuple[int, float]:
+    """A residual as a stored time shift, and what it could not express.
+
+    The unit is a fixed 1/400 of a beat (spec 6.4), so the reachable range is
+    60 ticks either way at 480 PPQN whatever the step size. At a 1/4 grid that
+    is an eighth of a step and most residuals will not fit; at 1/32 it is a
+    whole one.
+    """
+    unit = ticks_per_beat / constants.TIME_SHIFT_UNITS_PER_BEAT
+    low, high = constants.TIME_SHIFT_RANGE
+    wanted = residual / unit
+    units = max(low, min(high, round(wanted)))
+    return constants.TIME_SHIFT_CENTRE + units, residual - units * unit
+
+
+def _gate_for(note: RenderedNote, ticks_per_step: float) -> tuple[int, bool]:
+    """The ladder rung nearest this note's length, and whether it is exact."""
+    length = note.duration_ticks / ticks_per_step
+    stored = constants.encode_gate(length)
+    return stored, constants.GATE_TABLE[stored] == length
+
+
+def _place(
+    snapped: Sequence[_Snapped],
+    *,
+    step_count: int,
+    pattern: int,
+    ticks_per_step: float,
+    ticks_per_beat: int,
+    options: ImportOptions,
+    drum_map: DrumMap | None,
+    site: Site,
+    collector: Collector,
+    swing: int,
+    offset: int = 0,
+) -> Placement:
+    """Turn snapped notes into one pattern's worth of placed ones.
+
+    *offset* is the 0-based step this pattern starts at within the track, so a
+    split track's later patterns count their steps from 1 again. *swing* is
+    already fitted and already removed from each residual, so what is left here
+    is only what time shift has to carry.
+    """
+    notes: list[PlacedNote] = []
+    approximated = 0
+    held_past_end = 0
+    unrepresentable = 0
+    unmapped: list[int] = []
+
+    for entry in snapped:
+        local = entry.step - offset
+        gate, exact = _gate_for(entry.note, ticks_per_step)
+        if not exact:
+            approximated += 1
+        if local + entry.note.duration_ticks / ticks_per_step > step_count:
+            held_past_end += 1
+
+        shift = constants.TIME_SHIFT_CENTRE
+        if options.fit_time_shift:
+            shift, remainder = _fit_shift(entry.residual, ticks_per_beat)
+            if abs(remainder) > ticks_per_beat / constants.TIME_SHIFT_UNITS_PER_BEAT / 2:
+                unrepresentable += 1
+
+        lane: int | None = None
+        if drum_map is not None:
+            lane = drum_map.lane_for_note(entry.note.pitch)
+            if lane is None:
+                unmapped.append(entry.note.pitch)
+                continue
+
+        notes.append(
+            PlacedNote(
+                step=local + 1,
+                pitch=entry.note.pitch,
+                velocity=entry.note.velocity,
+                gate=gate,
+                time_shift=shift,
+                lane=lane,
+            )
+        )
+
+    if swing != constants.SWING_RANGE_PERCENT[0]:
+        collector.add(
+            Code.SWING_FITTED,
+            f"the source swings; pattern {pattern} was written at {swing}% swing and each "
+            "note's leftover given to its time shift",
+            site=site,
+        )
+    if approximated:
+        collector.add(
+            Code.GATE_APPROXIMATED,
+            f"{approximated} note length(s) are not on the gate ladder and took the nearest "
+            "rung; the ladder is coarse above 3 steps",
+            site=site,
+            subjects=approximated,
+        )
+    if held_past_end:
+        collector.add(
+            Code.GATE_PAST_END,
+            f"{held_past_end} note(s) are held past step {step_count}; the device loops the "
+            "pattern rather than sustaining them",
+            site=site,
+            subjects=held_past_end,
+        )
+    if unrepresentable:
+        collector.add(
+            Code.TIMING_RESIDUAL,
+            f"{unrepresentable} note(s) sit further off the grid than swing and time shift "
+            "together reach, and were left at the nearest position the device can store",
+            site=site,
+            subjects=unrepresentable,
+        )
+    if unmapped:
+        collector.add(
+            Code.DRUM_PITCH_UNMAPPED,
+            f"{len(unmapped)} note(s) at pitch(es) {_listed(sorted(set(unmapped)))} are outside "
+            "the drum map's 24 lanes and were dropped",
+            site=site,
+            subjects=len(unmapped),
+        )
+
+    if len(notes) > constants.POOL_CAPACITY:
+        collector.add(
+            Code.POOL_OVERFLOW,
+            f"pattern {pattern} holds {len(notes)} events; the firmware's limit is "
+            f"{constants.POOL_CAPACITY}, so the last {len(notes) - constants.POOL_CAPACITY} "
+            "were dropped",
+            site=site,
+            subjects=len(notes) - constants.POOL_CAPACITY,
+        )
+        notes = notes[: constants.POOL_CAPACITY]
+
+    return Placement(
+        notes=tuple(notes),
+        step_count=step_count,
+        steps_per_beat=options.steps_per_beat,
+        pattern=pattern,
+        swing_percent=swing,
+        diagnostics=EMPTY_REPORT,
+    )
+
+
 def quantise(clip: Clip, *, step_count: int, options: ImportOptions | None = None) -> Placement:
-    """Snap *clip* to a *step_count*-step grid, one note per step.
+    """Snap *clip* to a *step_count*-step grid, as one pattern.
+
+    The single-target path: notes past the last step are dropped, because the
+    device disables them rather than playing them. :func:`plan_track` is the
+    one that splits instead.
 
     Raises:
         ValueError: if *step_count* is outside the device's 1-64.
@@ -209,6 +630,7 @@ def quantise(clip: Clip, *, step_count: int, options: ImportOptions | None = Non
 
     collector = Collector()
     ticks_per_step = clip.ticks_per_beat / options.steps_per_beat
+    origin = _anchor(clip, ticks_per_step)
 
     if len(clip.source_tracks) > 1 or len(clip.channels) > 1:
         collector.add(
@@ -217,12 +639,6 @@ def quantise(clip: Clip, *, step_count: int, options: ImportOptions | None = Non
             f"{_listed(tuple(c + 1 for c in clip.channels))} and were merged into one "
             "pattern; --midi-track picks just one",
         )
-
-    # A pattern is a loop with no room for a lead-in, so the clip is anchored:
-    # its first note becomes step 1. DAWs routinely export a clip from bar 5
-    # with its ticks intact, and without this every note lands past the end.
-    first = min((note.tick for note in clip.notes), default=0)
-    origin = round(first / ticks_per_step) * ticks_per_step
     if origin:
         collector.add(
             Code.CLIP_ANCHORED,
@@ -231,25 +647,9 @@ def quantise(clip: Clip, *, step_count: int, options: ImportOptions | None = Non
             "keep a lead-in",
         )
 
-    # Highest pitch wins the step. Sorting descending means the first note
-    # reaching a step is the one kept, and every later one is a drop.
-    by_step: dict[int, PlacedNote] = {}
-    moved = 0
-    dropped_chord = 0
-    dropped_past_end = 0
-
-    for note in sorted(clip.notes, key=lambda n: (n.tick, -n.pitch)):
-        step = round((note.tick - origin) / ticks_per_step) + 1
-        if (step - 1) * ticks_per_step != note.tick - origin:
-            moved += 1
-        if step > step_count:
-            dropped_past_end += 1
-            continue
-        if step in by_step:
-            dropped_chord += 1
-            continue
-        by_step[step] = PlacedNote(step=step, pitch=note.pitch, velocity=note.velocity)
-
+    swing = _fit_swing(clip, ticks_per_step, origin) if options.fit_swing else _STRAIGHT
+    snapped = _snap(clip, ticks_per_step, origin, swing)
+    moved = sum(1 for entry in snapped if entry.residual)
     if moved:
         collector.add(
             Code.NOTES_QUANTISED,
@@ -257,62 +657,333 @@ def quantise(clip: Clip, *, step_count: int, options: ImportOptions | None = Non
             "and were moved to the nearest one",
             subjects=moved,
         )
-    if dropped_chord:
-        collector.add(
-            Code.CHORD_REDUCED,
-            f"{dropped_chord} note(s) shared a step with a higher one and were dropped; "
-            "this conversion is monophonic",
-            subjects=dropped_chord,
-        )
-    if dropped_past_end:
+
+    within = [entry for entry in snapped if 0 <= entry.step < step_count]
+    dropped = len(snapped) - len(within)
+    if dropped:
         collector.add(
             Code.PAST_PATTERN_END,
-            f"{dropped_past_end} note(s) fall past step {step_count} and were dropped; "
+            f"{dropped} note(s) fall past step {step_count} and were dropped; "
             "the device disables notes past the last step rather than playing them",
-            subjects=dropped_past_end,
-        )
-    if by_step:
-        collector.add(
-            Code.GATE_NOT_CARRIED,
-            "note lengths are not carried; every note is written at gate "
-            f"{constants.DEFAULT_GATE_LENGTH:g} steps, what a freshly placed note has "
-            "on the device",
-        )
-        collector.add(
-            Code.TEMPO_NOT_CARRIED,
-            f"the source plays at {clip.tempo_bpm:g} BPM; tempo is not carried, so the "
-            "project keeps the one its template holds",
+            subjects=dropped,
         )
 
-    return Placement(
-        notes=tuple(by_step[step] for step in sorted(by_step)),
+    placement = _place(
+        within,
         step_count=step_count,
-        steps_per_beat=options.steps_per_beat,
+        pattern=1,
+        ticks_per_step=ticks_per_step,
+        ticks_per_beat=clip.ticks_per_beat,
+        options=options,
+        drum_map=None,
+        site=Site(),
+        collector=collector,
+        swing=swing,
+    )
+    return Placement(
+        notes=placement.notes,
+        step_count=placement.step_count,
+        steps_per_beat=placement.steps_per_beat,
+        pattern=placement.pattern,
+        swing_percent=placement.swing_percent,
         diagnostics=collector.report(),
     )
 
 
-def apply(
-    raw: Mapping[str, int | str],
-    placement: Placement,
+def plan_track(
+    clip: Clip,
     *,
     track: int,
-    pattern: int,
-) -> dict[str, int | str]:
-    """Write *placement* into a copy of *raw*, one ``place_note`` per note."""
-    result = dict(raw)
-    for note in placement.notes:
-        result = mutate.place_note(
-            result,
-            track=track,
-            pattern=pattern,
-            step=note.step,
-            pitch=note.pitch,
-            velocity=note.velocity,
+    collector: Collector,
+    options: ImportOptions | None = None,
+    is_drum: bool = False,
+    drum_map: DrumMap | None = None,
+    first_pattern: int = 1,
+    steps_per_bar: int = 16,
+) -> TrackPlan:
+    """Lay one source track out across as many patterns as it needs.
+
+    The track's length is its content rounded up to a whole bar, then cut into
+    64-step patterns -- the device's ceiling. Nothing is truncated: a sequence
+    too long for one pattern becomes several, chained.
+    """
+    options = options or ImportOptions()
+    ticks_per_step = clip.ticks_per_beat / options.steps_per_beat
+    origin = _anchor(clip, ticks_per_step)
+    site = Site(track=track, kind="drum" if is_drum else "seq")
+
+    if origin:
+        collector.add(
+            Code.CLIP_ANCHORED,
+            f"track {track}'s clip starts {origin:g} tick(s) into the file; its first note was "
+            "placed on step 1 and the rest moved with it",
+            site=site,
         )
-    return mutate.set_step_size(
-        result, track=track, pattern=pattern, steps_per_beat=placement.steps_per_beat
+
+    # Fitted once for the track rather than once per pattern: a groove belongs
+    # to the performance, not to which 64-step window of it a pattern holds,
+    # and the steps a pattern is cut on cannot be known until it is fitted.
+    swing = _fit_swing(clip, ticks_per_step, origin) if options.fit_swing else _STRAIGHT
+    snapped = _snap(clip, ticks_per_step, origin, swing)
+    moved = sum(1 for entry in snapped if entry.residual)
+    if moved:
+        collector.add(
+            Code.NOTES_QUANTISED,
+            f"{moved} note(s) on track {track} did not land on a 1/"
+            f"{options.steps_per_beat * 4} step and were moved to the nearest one",
+            site=site,
+            subjects=moved,
+        )
+
+    # The last step any note reaches, rounded up to the bar so a loop stays
+    # musical and every track's patterns line up against each other.
+    ends = [entry.step + entry.note.duration_ticks / ticks_per_step for entry in snapped]
+    total = max(1, -(-round(max(ends, default=1)) // steps_per_bar) * steps_per_bar)
+
+    count = -(-total // constants.MAX_STEPS)
+    available = constants.PATTERNS_PER_TRACK - first_pattern + 1
+    if count > available:
+        collector.add(
+            Code.PAST_PATTERN_END,
+            f"track {track} needs {count} patterns but only {available} are free from pattern "
+            f"{first_pattern}; the tail was dropped",
+            site=site,
+            subjects=count - available,
+        )
+        count = available
+
+    placements = []
+    for index in range(count):
+        offset = index * constants.MAX_STEPS
+        steps = min(constants.MAX_STEPS, total - offset)
+        inside = [entry for entry in snapped if offset <= entry.step < offset + steps]
+        placements.append(
+            _place(
+                inside,
+                step_count=steps,
+                pattern=first_pattern + index,
+                ticks_per_step=ticks_per_step,
+                ticks_per_beat=clip.ticks_per_beat,
+                options=options,
+                drum_map=drum_map if is_drum else None,
+                site=Site(track=track, pattern=first_pattern + index, kind=site.kind),
+                collector=collector,
+                swing=swing,
+                offset=offset,
+            )
+        )
+
+    if count > 1:
+        collector.add(
+            Code.PATTERN_SPLIT,
+            f"track {track} runs {total} steps, past the device's {constants.MAX_STEPS}; it was "
+            f"split across patterns {first_pattern}-{first_pattern + count - 1} and chained",
+            site=site,
+        )
+
+    return TrackPlan(
+        track=track,
+        placements=tuple(placements),
+        is_drum=is_drum,
+        source_track=clip.source_tracks[0] if clip.source_tracks else None,
     )
+
+
+def fit_drum_map(clip: Clip) -> DrumMap:
+    """A chromatic map covering *clip*'s pitches, low note first.
+
+    The device's real map is a global setting the project file does not carry
+    (spec 3.2.1), so importing drums means assuming one. Assuming the factory
+    default would silently drop every source that does not start at MIDI 36,
+    which is most of them; fitting to what is actually there converts the file
+    and says which map it used.
+    """
+    pitches = [note.pitch for note in clip.notes]
+    low = min(pitches, default=drum_map_module.DEFAULT_CHROMATIC_LOW)
+    return DrumMap.chromatic(
+        max(drum_map_module.MIN_NOTE, min(low, drum_map_module.MAX_CHROMATIC_LOW))
+    )
+
+
+def _assign(
+    song: Song, options: ImportOptions, collector: Collector, first_track: int = 1
+) -> list[tuple[Clip, int, bool]]:
+    """Which device track each source clip goes to, and which one is drums.
+
+    Melodic clips fill the tracks from *first_track* upwards in source order. A
+    drum clip goes to Track 1 whatever that is, because item 123 is the only
+    one carrying a drum parameter set.
+    """
+    drum: Clip | None = None
+    if options.drum_track is not None:
+        drum = next(
+            (clip for clip in song.clips if clip.source_tracks == (options.drum_track,)),
+            None,
+        )
+        if drum is None:
+            raise ValueError(
+                f"track {options.drum_track} of the source holds no notes; --drum-track counts "
+                "every track of the file from 1, including ones that carry only tempo or a name"
+            )
+    else:
+        drum = next((clip for clip in song.clips if clip.is_percussion), None)
+
+    melodic = [clip for clip in song.clips if clip is not drum]
+    assigned: list[tuple[Clip, int, bool]] = []
+    if drum is not None:
+        assigned.append((drum, 1, True))
+
+    # Only Track 1 carries a drum set, so it is spoken for when there is one.
+    free = [
+        n for n in range(first_track, len(constants.TRACK_ITEM_IDS) + 1) if drum is None or n != 1
+    ]
+    for clip, track in zip(melodic, free, strict=False):
+        assigned.append((clip, track, False))
+
+    dropped = len(melodic) - len(free)
+    if dropped > 0:
+        collector.add(
+            Code.TRACKS_DROPPED,
+            f"{dropped} source track(s) had nowhere to go; the device has "
+            f"{len(constants.TRACK_ITEM_IDS)} tracks",
+            subjects=dropped,
+        )
+    return assigned
+
+
+def plan_song(
+    song: Song,
+    options: ImportOptions | None = None,
+    *,
+    first_pattern: int = 1,
+    first_track: int = 1,
+    scene: int = 1,
+) -> SongPlan:
+    """Decide everything the conversion will write, without writing any of it."""
+    options = options or ImportOptions()
+    collector = Collector()
+    assigned = _assign(song, options, collector, first_track)
+
+    drum_map = options.drum_map
+    drum_clip = next((clip for clip, _, is_drum in assigned if is_drum), None)
+    if drum_clip is not None and drum_map is None:
+        drum_map = fit_drum_map(drum_clip)
+        collector.add(
+            Code.DRUM_MAP_FITTED,
+            f"no drum map was given, so one was fitted to the source: {drum_map.describe()}. "
+            "The real map is a device setting the project file does not carry",
+        )
+
+    steps_per_bar = song.steps_per_bar(options.steps_per_beat)
+    tracks = [
+        plan_track(
+            clip,
+            track=track,
+            collector=collector,
+            options=options,
+            is_drum=is_drum,
+            drum_map=drum_map,
+            first_pattern=first_pattern,
+            steps_per_bar=steps_per_bar,
+        )
+        for clip, track, is_drum in assigned
+    ]
+
+    tempo = None
+    if options.carry_tempo and song.clips:
+        tempo = song.tempo_bpm
+        collector.add(
+            Code.TEMPO_CARRIED,
+            f"the project tempo was set to the source's {song.tempo_bpm:g} BPM",
+        )
+        if song.tempo_changes > 1:
+            collector.add(
+                Code.TEMPO_CHANGES_IGNORED,
+                f"the source changes tempo {song.tempo_changes} time(s); the device stores one "
+                f"tempo per project, so {song.tempo_bpm:g} BPM was taken and the rest ignored",
+            )
+
+    return SongPlan(
+        tracks=tuple(tracks),
+        tempo_bpm=tempo,
+        drum_map=drum_map,
+        scene=scene,
+        diagnostics=collector.report(),
+    )
+
+
+# --- Layer 3: writing ------------------------------------------------------
+
+
+def apply(raw: Mapping[str, int | str], plan: SongPlan) -> dict[str, int | str]:
+    """Write *plan* into a copy of *raw*.
+
+    One copy for the whole conversion rather than one per note: the scalars go
+    through the ordinary ``mutate`` functions, and the notes -- of which there
+    may be hundreds -- through the delta form onto this dict.
+    """
+    result = dict(raw)
+
+    for track_plan in plan.tracks:
+        track = track_plan.track
+        drum = track_plan.is_drum
+        result = mutate.set_drum_mode(result, track=track, on=drum)
+
+        for placement in track_plan.placements:
+            pattern = placement.pattern
+            result = mutate.set_step_size(
+                result,
+                track=track,
+                pattern=pattern,
+                steps_per_beat=placement.steps_per_beat,
+                drum=drum,
+            )
+            result = mutate.set_step_count(
+                result, track=track, pattern=pattern, steps=placement.step_count, drum=drum
+            )
+            result = mutate.set_swing(
+                result, track=track, pattern=pattern, percent=placement.swing_percent, drum=drum
+            )
+
+            for note in placement.notes:
+                if drum:
+                    if note.lane is None:
+                        continue
+                    updates = mutate.drum_note_updates(
+                        result,
+                        pattern=pattern,
+                        lane=note.lane,
+                        step=note.step,
+                        velocity=note.velocity,
+                        gate=note.gate,
+                        time_shift=note.time_shift,
+                    )
+                else:
+                    updates = mutate.note_updates(
+                        result,
+                        track=track,
+                        pattern=pattern,
+                        step=note.step,
+                        pitch=note.pitch,
+                        velocity=note.velocity,
+                        gate=note.gate,
+                        time_shift=note.time_shift,
+                    )
+                mutate.merge_updates(result, updates)
+
+        # Only a split track needs a chain. Every sample project leaves all 16
+        # slots at the sentinel and still plays, so a chain is what makes
+        # several patterns one sequence -- not what makes one pattern play.
+        # Writing one anyway would rewrite the scene of a project that was
+        # only ever asked to take a clip.
+        if len(track_plan.placements) > 1:
+            result = mutate.set_chain(
+                result, scene=plan.scene, track=track, patterns=track_plan.patterns
+            )
+
+    if plan.tempo_bpm is not None:
+        result = mutate.set_tempo(result, bpm=plan.tempo_bpm)
+    return result
 
 
 def saveable(raw: Mapping[str, int | str]) -> dict[str, int | str]:
@@ -340,15 +1011,18 @@ def pattern_step_count(raw: Mapping[str, int | str], *, track: int, pattern: int
     return stored + constants.STEP_COUNT_OFFSET
 
 
-def pattern_is_empty(raw: Mapping[str, int | str], *, track: int, pattern: int) -> bool:
-    """Whether a melodic pattern's note pool holds nothing.
+def pattern_is_empty(
+    raw: Mapping[str, int | str], *, track: int, pattern: int, drum: bool = False
+) -> bool:
+    """Whether a pattern's note pool holds nothing.
 
-    Existence is ``50 != 127`` and nothing else -- never velocity (spec 4).
+    Existence is ``50 != 127`` -- ``54`` on the drum side -- and nothing else,
+    never velocity (spec 4).
     """
     item = item_for_track(track)
+    param = constants.P_DRUM_NOTE_STEP if drum else constants.P_SEQ_NOTE_STEP
     return all(
-        get_int(raw, item, constants.P_SEQ_NOTE_STEP, pattern, slot, ordinal)
-        in (constants.SENTINEL, None)
+        get_int(raw, item, param, pattern, slot, ordinal) in (constants.SENTINEL, None)
         for slot in range(1, constants.POOL_SLOTS + 1)
         for ordinal in range(1, constants.MAX_STEPS + 1)
     )
@@ -365,6 +1039,28 @@ def track_is_melodic(raw: Mapping[str, int | str], *, track: int) -> bool:
     return not (bits or 0) & (1 << constants.DRUM_MODE_BIT)
 
 
+def _check_targets(raw: Mapping[str, int | str], plan: SongPlan) -> None:
+    """Refuse the whole conversion if any target pattern already holds notes.
+
+    Checked before anything is written, so a file is never left half converted.
+    Appending to an occupied pool would interleave two takes, and emptying one
+    means writing sentinels, which no hardware capture covers.
+    """
+    for track_plan in plan.tracks:
+        for placement in track_plan.placements:
+            if not pattern_is_empty(
+                raw,
+                track=track_plan.track,
+                pattern=placement.pattern,
+                drum=track_plan.is_drum,
+            ):
+                kind = "drum" if track_plan.is_drum else "melodic"
+                raise ValueError(
+                    f"track {track_plan.track} pattern {placement.pattern} already holds notes "
+                    f"in its {kind} pool; pick an empty pattern"
+                )
+
+
 def convert(
     midi: mido.MidiFile,
     raw: Mapping[str, int | str],
@@ -373,13 +1069,15 @@ def convert(
     pattern: int = 1,
     options: ImportOptions | None = None,
 ) -> ImportResult:
-    """Convert *midi* into a copy of the template *raw*.
+    """Convert one clip of *midi* into one pattern of the template *raw*.
+
+    The single-target path: everything lands on *track* and *pattern*, at the
+    length that pattern already declares. :func:`convert_song` is the one that
+    reads a whole file.
 
     Raises:
         ValueError: if the target track is not in a melodic mode, or its
-            pattern already holds notes. Appending to an occupied pool would
-            interleave two takes, and emptying one means writing sentinels,
-            which no hardware capture covers.
+            pattern already holds notes.
     """
     options = options or ImportOptions()
     if not track_is_melodic(raw, track=track):
@@ -398,14 +1096,43 @@ def convert(
         step_count=pattern_step_count(raw, track=track, pattern=pattern),
         options=options,
     )
-    return ImportResult(
-        raw=apply(raw, placement, track=track, pattern=pattern),
-        notes=placement.notes,
-        track=track,
-        pattern=pattern,
-        step_count=placement.step_count,
+    plan = SongPlan(
+        tracks=(TrackPlan(track=track, placements=(placement,)),),
         diagnostics=placement.diagnostics,
     )
+    return ImportResult(
+        raw=apply(raw, plan),
+        plan=plan,
+        diagnostics=placement.diagnostics,
+    )
+
+
+def convert_song(
+    midi: mido.MidiFile,
+    raw: Mapping[str, int | str],
+    *,
+    options: ImportOptions | None = None,
+    first_pattern: int = 1,
+    first_track: int = 1,
+) -> ImportResult:
+    """Convert every note-bearing track of *midi* into the template *raw*.
+
+    Raises:
+        ValueError: if any target pattern already holds notes, or the source
+            names a drum track that carries none.
+    """
+    options = options or ImportOptions()
+    song = read_song(midi, options)
+    scene = get_int(raw, constants.ITEM_PROJECT, constants.P_CURRENT_SCENE) or 0
+    plan = plan_song(
+        song,
+        options,
+        first_pattern=first_pattern,
+        first_track=first_track,
+        scene=scene + 1,
+    )
+    _check_targets(raw, plan)
+    return ImportResult(raw=apply(raw, plan), plan=plan, diagnostics=plan.diagnostics)
 
 
 def _listed(values: Sequence[int]) -> str:

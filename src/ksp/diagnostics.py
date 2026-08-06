@@ -67,12 +67,20 @@ class Code(StrEnum):
 
     # --- import ---
     CLIP_ANCHORED = "clip-anchored"
-    CHORD_REDUCED = "chord-reduced"
     NOTES_QUANTISED = "notes-quantised"
     PAST_PATTERN_END = "past-pattern-end"
-    GATE_NOT_CARRIED = "gate-not-carried"
-    TEMPO_NOT_CARRIED = "tempo-not-carried"
     MULTIPLE_SOURCES = "multiple-sources"
+    PATTERN_SPLIT = "pattern-split"
+    POOL_OVERFLOW = "pool-overflow"
+    TRACKS_DROPPED = "tracks-dropped"
+    GATE_APPROXIMATED = "gate-approximated"
+    GATE_PAST_END = "gate-past-end"
+    TEMPO_CARRIED = "tempo-carried"
+    TEMPO_CHANGES_IGNORED = "tempo-changes-ignored"
+    SWING_FITTED = "swing-fitted"
+    TIMING_RESIDUAL = "timing-residual"
+    DRUM_MAP_FITTED = "drum-map-fitted"
+    DRUM_PITCH_UNMAPPED = "drum-pitch-unmapped"
 
 
 @dataclass(frozen=True)
@@ -200,9 +208,6 @@ SUMMARIES: Mapping[Code, Summary] = {
         "step 1 and the rest moved with it. A pattern is a loop, so it has nowhere to keep "
         "the lead-in",
     ),
-    Code.CHORD_REDUCED: Summary(
-        "{subjects} share a step with a higher one and were dropped; this conversion is monophonic",
-    ),
     Code.NOTES_QUANTISED: Summary(
         "{subjects} did not land on a step and were moved to the nearest one",
     ),
@@ -210,16 +215,49 @@ SUMMARIES: Mapping[Code, Summary] = {
         "{subjects} fall past the pattern's last step and were dropped; the device disables "
         "notes beyond it, so writing them would put silent notes in the file",
     ),
-    Code.GATE_NOT_CARRIED: Summary(
-        "note lengths are not carried; every note is written at the gate a freshly placed one "
-        "has on the device",
-    ),
-    Code.TEMPO_NOT_CARRIED: Summary(
-        "the source tempo is not carried; the project keeps the tempo its template holds",
-    ),
     Code.MULTIPLE_SOURCES: Summary(
         "notes were taken from more than one source track or channel and merged into one "
         "pattern; --midi-track picks just one",
+    ),
+    Code.PATTERN_SPLIT: Summary(
+        "{sites} run longer than the device's 64-step maximum and were split across consecutive "
+        "patterns, chained in the current scene so they play as one sequence",
+        site="track",
+    ),
+    Code.POOL_OVERFLOW: Summary(
+        "{subjects} did not fit; a pattern holds 192 events and the firmware refuses the rest",
+    ),
+    Code.TRACKS_DROPPED: Summary(
+        "{subjects} had nowhere to go; the device has four tracks",
+        subject="source track",
+    ),
+    Code.GATE_APPROXIMATED: Summary(
+        "{subjects} have a length the gate ladder cannot express exactly and took the nearest "
+        "rung; the ladder is coarse above 3 steps",
+    ),
+    Code.GATE_PAST_END: Summary(
+        "{subjects} are held past the pattern's last step; the device wraps the loop rather than "
+        "sustaining them",
+    ),
+    Code.TEMPO_CARRIED: Summary("the project tempo was set from the source file"),
+    Code.TEMPO_CHANGES_IGNORED: Summary(
+        "the source changes tempo partway through; the device stores one tempo per project, so "
+        "only the first was taken",
+    ),
+    Code.SWING_FITTED: Summary(
+        "{sites} carry a groove that was fitted to the device's per-pattern swing",
+        site="pattern",
+    ),
+    Code.TIMING_RESIDUAL: Summary(
+        "{subjects} sit further off the grid than swing and time shift together can express, and "
+        "were left at the nearest representable position",
+    ),
+    Code.DRUM_MAP_FITTED: Summary(
+        "no drum map was given, so one was fitted to the source pitches. The real map lives in "
+        "device settings and is not in the project file",
+    ),
+    Code.DRUM_PITCH_UNMAPPED: Summary(
+        "{subjects} fall outside the 24 lanes the drum map covers and were dropped",
     ),
 }
 

@@ -414,6 +414,17 @@ def decode_gate(stored: int) -> float | None:
     return GATE_TABLE.get(stored)
 
 
+def encode_gate(length: float) -> int:
+    """The ladder rung nearest *length* steps, for a writer carrying durations.
+
+    The ladder is coarse above 3 steps and its runs are not uniform, so an
+    arbitrary MIDI duration rarely lands on a rung. Returning the nearest one
+    and letting the caller compare it against what it asked for is what keeps
+    the approximation reportable rather than silent.
+    """
+    return min(GATE_TABLE, key=lambda stored: (abs(GATE_TABLE[stored] - length), stored))
+
+
 #: How the four sequences run: as **repeats**, not pages. Measured by ear over
 #: eight loops during T5.8 -- a 16-step pattern with one note per mask played
 #: beat 1 on pass 1, beat 5 on pass 2, beat 9 on pass 3, beat 13 on pass 4,

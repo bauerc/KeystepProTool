@@ -12,8 +12,8 @@ loaded in MIDI Control Center, transferred to a KeyStep Pro, and played what the
 Three commands ship: `ksp-dump` reads a project, `ksp2midi` exports one as MIDI, and `midi2ksp`
 converts a MIDI clip into a playable pattern.
 
-`midi2ksp` is deliberately an MVP: one track, one pattern, monophonic, default note lengths. Real
-multi-track material, drums and polyphony are milestone 6 — see [`ROADMAP.md`](./ROADMAP.md).
+`midi2ksp` converts a whole file: every note-bearing track onto the device's four, chords, a drum
+track, note lengths, tempo, and sequences too long for one pattern split and chained.
 
 ## Install
 
@@ -186,17 +186,21 @@ reading — see protocol test T5.8.
 
 ## `midi2ksp`
 
-Turn a MIDI clip into a KeyStep Pro pattern:
+Turn a MIDI file into KeyStep Pro patterns:
 
 ```sh
-uv run midi2ksp my_riff.mid -o my_riff.KeyStepPro
+uv run midi2ksp my_song.mid --drum-track 3 -o my_song.KeyStepPro
 ```
 
 ```
-midi2ksp: warning: note lengths are not carried; every note is written at gate 0.5 steps, what a freshly placed note has on the device
-midi2ksp: warning: the source plays at 120 BPM; tempo is not carried, so the project keeps the one its template holds
-wrote my_riff.KeyStepPro
-  16 note(s) onto track 1, pattern 1 (16 steps)
+midi2ksp: warning: no drum map was given, so one was fitted to the source: chromatic from 31 (assumed - not in file). The real map is a device setting the project file does not carry
+midi2ksp: warning: track 4 (seq): track 4 runs 128 steps, past the device's 64; it was split across patterns 1-2 and chained
+midi2ksp: warning: the project tempo was set to the source's 120 BPM
+wrote my_song.KeyStepPro
+  track 1 [drum]: 64 note(s), pattern 1 (64 steps)
+  track 2: 160 note(s), pattern 1 (48 steps)
+  track 3: 3 note(s), pattern 1 (32 steps)
+  track 4: 64 note(s), patterns 1-2 (64, 64 steps)
 ```
 
 Drop the result in `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/`, restart MCC, and
@@ -205,11 +209,16 @@ it appears in the Project Browser ready to send to the device.
 | Option | Effect |
 |---|---|
 | `-o PATH` | Destination (default: the input file with a `.KeyStepPro` suffix) |
-| `--track N` | KeyStep Pro track 1–4 to write to (default 1) |
-| `--pattern N` | Pattern 1–16 to write to (default 1). It must be empty |
+| `--track N` | First KeyStep Pro track 1–4 to fill (default 1) |
+| `--pattern N` | First pattern 1–16 to write to (default 1). Every target must be empty |
 | `--template PATH` | Project to write into (default: MCC's factory default) |
-| `--midi-track N` | Read only track N of the source file (default: all of them) |
+| `--midi-track N` | Convert only track N of the source, into the one `--track`/`--pattern` names |
+| `--drum-track N` | Write source track N as drums, onto KeyStep Pro track 1 |
+| `--drum-map SPEC` | `chromatic:N` or `custom:a,b,c,…` (default: fitted to the source) |
 | `--steps-per-beat N` | Step size to quantise to (default 4, i.e. 1/16 steps). Written into the pattern |
+| `--no-tempo` | Keep the template's tempo instead of the source's |
+| `--no-swing-fit` | Leave patterns straight instead of fitting the source's groove |
+| `--no-time-shift` | Quantise hard, instead of carrying each note's leftover |
 | `--dry-run` | Report what would be written, and write nothing |
 | `--force` | Overwrite an existing output file |
 | `--quiet` | Suppress the stdout summary. Warnings still go to stderr |
@@ -224,22 +233,37 @@ interleave two takes.
 
 ### What the conversion decides, and says
 
-- **The clip is anchored.** A pattern is a loop with nowhere to keep a lead-in, so the first note
-  lands on step 1 whatever tick the clip starts at. DAWs routinely export a clip with its session
+- **Each track is anchored.** A pattern is a loop with nowhere to keep a lead-in, so the first note
+  lands on step 1 whatever tick the file starts at. DAWs routinely export a clip with its session
   ticks intact.
-- **Notes are quantised** to the step grid, nearest step wins.
-- **One note per step.** Where several sound together the highest is kept and the rest are
-  dropped, with a count. Chords are M6.
-- **Notes past the pattern's last step are dropped**, not written. The device disables them rather
-  than playing them, so writing them would put notes in the file that no hardware makes a sound
-  for. The pattern's length comes from the template, so `--template` is also how you convert a
-  clip longer than 16 steps.
-- **Note lengths are not carried.** Every note gets the gate a freshly placed note has on the
-  device, half a step. The gate ladder is fully measured, so carrying real durations is possible —
-  it is scope, not an unknown, and it belongs to M6.
-- **Tempo is not carried.** The project keeps its template's.
+- **Tracks map in file order.** The drum track takes KeyStep Pro track 1, because item 123 is the
+  only one carrying a drum parameter set; the rest fill the tracks after it. A fifth is reported
+  and dropped.
+- **A track's length is its content rounded up to the bar**, then cut into 64-step patterns — the
+  device's maximum. A split track's patterns are **chained** in the current scene, which is what
+  makes them play as one sequence. Nothing is truncated.
+- **Chords are kept whole.** Notes sharing a step are consecutive entries in the pattern's pool,
+  and the only ceiling is 192 events per pattern, which the firmware enforces. Anything past it is
+  dropped with a count.
+- **Note lengths become gates**, snapped to the nearest rung of the measured 128-rung ladder. The
+  ladder is coarse above 3 steps, so a length it cannot express exactly is reported.
+- **Tempo is carried** from the source. A file that changes tempo partway keeps only the first, as
+  the device stores one per project.
+- **Groove is fitted to swing first, then to time shift.** Swing is one value for a whole pattern
+  and time shift is a scarce 60 ticks per note, so a systematic groove goes to the former and only
+  the leftover to the latter. Anything neither can express is reported, never silently absorbed.
 
 Pitch and velocity pass through unchanged; both are 7-bit on each side.
+
+**Drums need a map, and the map is not in the file.** A drum note stores a *lane*, and which MIDI
+note a lane plays is a global device setting (see `ksp-dump` above). Reading one back can fall
+through to Arturia's default and say so; writing one cannot, because a source whose drums sit
+anywhere but 36–59 would have every hit dropped. So an unconfigured import **fits** a chromatic map
+to the source's own pitches and reports which one it used. `--drum-map` overrides it, and a map in
+`~/.config/keysteppro/drum_map.json` is used ahead of fitting.
+
+A drum track is found on MIDI channel 10, which is what General MIDI reserves. Plenty of files put
+drums on an ordinary channel instead, and for those `--drum-track N` names it explicitly.
 
 **The project's name comes from the template**, because a project name is stored as an integer
 parameter whose encoding we have not decoded. In MCC's Project Browser a converted project may
