@@ -314,12 +314,19 @@ No console entry point is declared until the milestone lands, per CLAUDE.md.
 
 ### Open items
 
-- **Project selection is unresolved.** Nothing in the address tuple identifies a project slot, so
-  a read returns **whichever project is currently loaded** — `ksp.bulk_read.read_raw` says so in
-  its docstring and every caller must say so to the user. H4.1 settles whether a select command
-  exists at all.
-- **The write direction is undecoded.** Phase 0 is read-only; nothing here says how to send a
-  project *to* the device.
+- **Project selection is decoded but unconfirmed.** Byte 7 of every frame is the project slot
+  ([spec 7.4](./analysis/format/SysEx_Direct_Transfer_Path.md)) — four captures track it against
+  the project, and nothing else in an import stream names the destination. But `ksp.sysex` still
+  sends the constant `1`, every probe so far sent `1`, and **no test has shown the device honours
+  it**. So `read_raw` returns whichever project is loaded until H4.1 says otherwise, its docstring
+  must keep saying so, and threading a slot parameter through `sysex`/`bulk_plan`/`bulk_read` is
+  work that should follow the probe rather than precede it.
+- **The write direction is decoded but unimplemented.** A write is the read protocol with the
+  reply opcodes sent as requests, over the same 8,951 addresses in the same order — so
+  `ksp.bulk_plan` is already the write plan ([spec 7.5](./analysis/format/SysEx_Direct_Transfer_Path.md)).
+  Phase 0 remains read-only and nothing in `ksp/` encodes a write. Two things block one: `06 <slot>`
+  looks like a commit and is untested, and a value read as `0xFF` **cannot be sent back** — MCC's
+  attempt stalled the device (spec 7.6).
 - **`0xFF` is the device's unset sentinel**, and `247` is MCC's corruption of it in transit. A
   *file* writer must keep emitting `247`; a *device* writer must not. See
   [per-pattern scalars](./analysis/format/Parameters_Pattern_Scalars.md).

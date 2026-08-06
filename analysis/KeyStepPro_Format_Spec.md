@@ -103,7 +103,7 @@ Section numbers are the stable address: roughly fifty references across `src/`, 
 | 5 | [`Resolved_Mode_Flags_And_Bitmasks.md`](./format/Resolved_Mode_Flags_And_Bitmasks.md) | The `52` layout; drum mode is `86` bit 6, not `100`; ARP octave; `116`/`99` bit 2 Mono/Poly |
 | 6 | [`Time_Shift_And_Swing.md`](./format/Time_Shift_And_Swing.md) | Time shift and swing as measured, and the one timing quantity still missing |
 | 6.1 | [`Gate_Length_Ladder.md`](./format/Gate_Length_Ladder.md) | Gate as a 128-rung index ladder, `stored = detent − 1` |
-| 7 | [`SysEx_Direct_Transfer_Path.md`](./format/SysEx_Direct_Transfer_Path.md) | The `arturia_v2` bulk stream — future path, not needed for file conversion |
+| 7 | [`SysEx_Direct_Transfer_Path.md`](./format/SysEx_Direct_Transfer_Path.md) | The `arturia_v2` bulk stream, both directions, and the project slot byte — future path, not needed for file conversion |
 | 8 | [`Corrections_And_Prior_Art.md`](./format/Corrections_And_Prior_Art.md) | What the earlier analysis got wrong, and the prior art |
 | 9 | [`Reproducing_Findings_And_Index_Shapes.md`](./format/Reproducing_Findings_And_Index_Shapes.md) | A minimal parser; how `bulkOperation` gives the index shapes |
 

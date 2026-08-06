@@ -4,9 +4,10 @@ Run these with the device attached and MIDI Control Center closed, then write
 what they print into the ledger in analysis/Hardware_Test_Protocol.md. Each is
 a few seconds; none of them writes to the device.
 
-Nothing in the read protocol's address tuple identifies a project slot, so
-every read here targets whichever project is loaded on the panel. H4.1 settles
-whether a select command exists at all.
+Byte 7 of every frame is the project slot (spec 7.4), but these all send the
+constant 1 and so read whichever project is loaded on the panel -- which is why
+they cannot tell the two apart. H4.1 is the probe that can, and it needs that
+byte to be settable.
 """
 
 import argparse

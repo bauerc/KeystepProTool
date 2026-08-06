@@ -42,5 +42,9 @@ project_files/captures/
 #Scratch Notebooks
 scratch.ipynb
 
+# USB captures. Multi-megabyte and irreproducible without the device, so each
+# is distilled to a tracked tape under tests/fixtures/ by tools/make_recall_tape.py.
 usb_midi_investigation/recall_sysex.jsonl
+usb_midi_investigation/recall_project_2.jsonl
+usb_midi_investigation/import_to_project_3.jsonl
 .serena
