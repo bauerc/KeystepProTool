@@ -13,6 +13,31 @@ Frame 5849 | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 21 10 f7
 Frame 5851 | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 31 10 f7
 Frame XXXX | f0 00 20 6b 7f 42 0b 01 6d 03 7c 01 01 01 10 f7
 Frame TEST | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 40 f7
-Frame PAT1 | f0 00 20 6b 7f 42 0b 01 6d 03 7c 02 01 01 40 f7
+Frame PAT1 | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 40 f7
+Frame PAT2 | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 60 f7
 Frame ACTI | f0 00 20 6b 7f 42 0b 01 30 03 7c 02 01 01 10 f7
 Frame PROJ | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 10 f7
+Frame A-41 | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 41 f7
+Frame A-60 | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 60 f7
+Frame A-7F | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 7f f7
+Frame A-00 | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 00 f7
+# --- B: does the innermost index space run past 64? ---
+Frame B-S41 | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 41 10 f7
+Frame B-S00 | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 00 10 f7
+Frame B-I2  | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 02 01 40 f7
+# --- C: fewer dimensions — the real shot at a bulk dump ---
+Frame C-N2-10 | f0 00 20 6b 7f 42 0b 01 6d 02 7b 01 01 10 f7
+Frame C-N2-40 | f0 00 20 6b 7f 42 0b 01 6d 02 7b 01 01 40 f7
+Frame C-N1-10 | f0 00 20 6b 7f 42 0b 01 6d 01 7b 01 10 f7
+# --- D: can the count be widened? ---
+Frame D-EXTRA | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 7f 01 f7
+Frame D-N4    | f0 00 20 6b 7f 42 0b 01 6d 04 7b 01 01 01 01 40 f7
+# --- E: control — proves the device still answers after the probes ---
+Frame E-CTRL | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 10 f7
+# --- F: the literal 255. RUN LAST. 0xff is MIDI System Reset; expect the
+#     sysex to abort, and possibly the device to reset. A-7F already settles
+#     the byte ceiling, so this is optional confirmation. Delete this line to skip.
+Frame F-FF | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 ff f7
+Frame G-S41-7F | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 41 7f f7
+Frame G-S01-6A | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 6a f7
+Frame G-CTRL   | f0 00 20 6b 7f 42 0b 01 6d 03 7b 01 01 01 10 f7
