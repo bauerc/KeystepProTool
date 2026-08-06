@@ -9,7 +9,7 @@
 
 | paramId | Meaning |
 |---|---|
-| `97` / `114` | Seq / DRUM swing % — stored with a **+25 offset** (±25% → 0…50) |
+| `97` / `114` | Seq / DRUM swing % — stored with a **+25 offset**, so 25 → 50 % (straight) and 50 → 75 % (maximum). An **absolute percentage**, not the signed offset MCC's label claims — see [time shift and swing](./Time_Shift_And_Swing.md) |
 | `98` / `115` | Seq / DRUM step count — **0-based** (15 = 16 steps) |
 | `99` / `116` | Bitfield: step size, triplet, polyrhythm, playback direction. **Measured in full** — one layout for both halves, see below |
 | `100` | Bitfield. Dictionary says ARP/Drum mode, ARP type, ARP octave; only **ARP octave (bits 4–6)** is hardware-confirmed, as `stored = octave + 1` (see [resolved mode flags](./Resolved_Mode_Flags_And_Bitmasks.md)). Drum mode is `86` bit 6, not here |
@@ -81,7 +81,13 @@ The evidence, capture by capture:
 
 **Swing is not in this field.** MCC's dictionary names a *swing offset state* among its contents,
 but `T5-99-swingoffset` leaves `99` untouched and moves `124_97_1` 25 → 50 instead. The per-pattern
-swing parameter is the only thing that toggle writes.
+swing parameter is the only thing that toggle writes. Tier 7 confirmed it from the other direction:
+`T7-swing-pattern-max` and `T7-swing-drum` both move swing to its maximum and leave `99` / `116`
+sitting at their defaults, so there is no override bit here in either half.
+
+**Swing really is indexed by pattern.** The device displays it under a "Track" heading, which
+suggests one value per track, but `T7-swing-pattern-max` moved `124_97_1` alone — patterns 2–16 of
+that track, and all patterns of every other track, were untouched. Drum `114` behaves the same.
 
 #### Root note and scale — measured
 

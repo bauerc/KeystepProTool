@@ -2,7 +2,7 @@
 
 **Spec section:** §6.1 — part of [`KeyStepPro_Format_Spec.md`](../KeyStepPro_Format_Spec.md)
 **Covers:** Gate length as a 128-rung index ladder, `stored = detent − 1`, measured across 0.0625–64 steps and identical on the drum side.
-**Related:** The unmeasured half of §6 is in [time shift and swing](./Time_Shift_And_Swing_Unmeasured.md).
+**Related:** The rest of §6 is in [time shift and swing](./Time_Shift_And_Swing.md).
 
 ---
 

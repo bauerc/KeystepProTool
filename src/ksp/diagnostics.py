@@ -53,6 +53,7 @@ class Code(StrEnum):
     DISABLED_EXPORTED = "disabled-exported"
     STALE_NOTE_SET = "stale-note-set"
     SWING_UNVERIFIED = "swing-unverified"
+    GLOBAL_SWING_NOT_APPLIED = "global-swing-not-applied"
     DISABLED_PAST_LAST_STEP = "disabled-past-last-step"
     GATE_SHORTENED = "gate-shortened"
     GATE_OFF_LADDER = "gate-off-ladder"
@@ -143,8 +144,12 @@ SUMMARIES: Mapping[Code, Summary] = {
         "was exported (--include-stale exports both)",
     ),
     Code.SWING_UNVERIFIED: Summary(
-        "{sites} carry swing; exported with the standard swing interpretation, "
-        "which is not measured against the device",
+        "{sites} carry swing; which steps move is measured (the even ones) but how far is not, "
+        "so the standard shuffle formula was used",
+    ),
+    Code.GLOBAL_SWING_NOT_APPLIED: Summary(
+        "the project sets a global swing (parameter 74); how it combines with the per-pattern "
+        "value is not measured, so only the per-pattern value was applied",
     ),
     Code.DISABLED_PAST_LAST_STEP: Summary(
         "{subjects} across {sites} are disabled (past the last step) and were not exported; "

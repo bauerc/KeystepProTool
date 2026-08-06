@@ -206,18 +206,21 @@ Gate is **done** (issue #9): the encoding is an index, `stored = detent − 1`, 
 *consecutive* run of detents was captured rather than scattered samples — the lesson the rest of the
 tier inherits.
 
-The remainder resolves in one session, except tier 8, which needs a rig that can record MIDI:
+Tier 7 is **done** (2026-08-05), which leaves only tier 8 and the rig that can record MIDI:
 
-- **Time shift range and linearity** (`112` / `120`) — **#42**, protocol T7.1–T7.3. The centre of 49
-  is confirmed but nothing establishes the range; `project_5`'s ±4 may not be the limit. T7.1 is a
-  **go/no-go that jumps the queue**: if the range really is ±4, most of this and of tier 8 is not
-  worth running.
-- **Swing semantics** (`74`, `97` / `114`) — **#43**, protocol T7.4–T7.7. **Never exercised in any
-  sample file**, so it cannot be decoded at the desk at all. Also settles whether `reader._swing` is
-  right to read the per-pattern value as absolute rather than a signed offset.
-- **Randomness** (`113`) — **#44**, protocol T7.8. Probability, or timing jitter? A fresh note
-  defaults to 100; if that means jitter, every timing measurement is measuring noise. **Gates tier 8
-  entirely.**
+- **Time shift range and linearity** (`112` / `120`) — **#42**, protocol T7.1–T7.3. ✅ The range is
+  displayed −49…+50, stored **0–99**, and `stored = 49 + displayed` holds at every one of the twelve
+  points captured — no compression at the extremes, and drum `120` is identical to `112`. The
+  go/no-go came back green: shift spans nearly the whole gap to the next step, so it is a usable
+  quantization target for M5 rather than something to round away.
+- **Swing semantics** (`74`, `97` / `114`) — **#43**, protocol T7.4–T7.7. ✅ An **absolute**
+  percentage, 50–75 %, where 50 is both default and minimum, stored **per pattern** with the +25
+  offset, displacing the even steps only. `reader._swing` was right and **MCC's own field label is
+  wrong.** One piece is still owed: `T7-swing-both` was a duplicate capture, so how the global and
+  per-pattern values combine is unresolved and `ksp2midi` reports the global rather than applying it.
+- **Randomness** (`113`) — **#44**, protocol T7.8. ✅ A **play probability**, not timing jitter:
+  100 always sounds, 50 about half the time, the minimum never, and onsets never wander. The fresh
+  default of 100 therefore means "always plays", which is what makes tier 8 measurable at all.
 - **What one time-shift unit is worth in time** — **#45**, protocol tier 8. Needs a recording of the
   device's MIDI output rather than an export, because the quantity is not in the file.
 
@@ -329,5 +332,5 @@ Both are understood; neither has reached the code.
   `ksp2midi` renders those patterns forward and warns. Rendering a plausible random order would be
   inventing a performance the device did not give us.
 
-**Hardware captures worth doing in one session:** M7's tiers 7–8. Ranked in
-[`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md).
+**Hardware captures worth doing in one session:** M7's tier 8, plus the two swing recaptures tier 7
+still owes. Ranked in [`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md).

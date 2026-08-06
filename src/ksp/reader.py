@@ -322,10 +322,8 @@ def _step_count(raw: dict[str, Any], item_id: int, param: int, pattern: int) -> 
 def _swing(raw: dict[str, Any], item_id: int, param: int, pattern: int) -> int:
     """Swing is stored with a +25 offset: 25 means 50%, i.e. no swing.
 
-    Unverified: MCC labels 97/114 a *signed offset* (-25%..+25%), which would
-    make this an offset from the global 74 rather than an absolute percentage.
-    Both readings agree while the global is 50 -- true of every sample file --
-    so nothing here distinguishes them. Protocol T7.5 decides it.
+    MCC labels 97/114 a signed -25%..+25% offset; the device displays an
+    absolute 50-75%, so the label is wrong and this reading is right.
     """
     return (
         _scalar(raw, item_id, param, pattern, default=constants.SWING_OFFSET)

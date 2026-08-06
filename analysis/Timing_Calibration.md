@@ -1,9 +1,10 @@
 # Timing Calibration: Time Shift and Swing
 
-**Status:** investigation complete, encodings **unmeasured**. This document defines the model and
-the experiments; it does not claim a calibration constant.
-**Companion:** [`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md) — **tiers 7 and 8** are
-the captures that produce the missing numbers.
+**Status:** the **stored** encodings are measured (tier 7, 2026-08-05); the **unit** — what one
+time-shift step is worth in time — is not. This document defines the model and the experiments, and
+still claims no calibration constant.
+**Companion:** [`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md) — **tier 8** is what
+remains; tier 7 is closed and its findings are in [the spec](./format/Time_Shift_And_Swing.md).
 **Prerequisite:** [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md).
 
 ---
@@ -54,7 +55,14 @@ The closest available behaviour is a **gate of one step or longer**, which overl
 note so that an *external* monophonic synth applies its own portamento. That is gate length
 (`110` / `118`), now measured (spec §6.1), not a separate parameter.
 
-### 1.2 Swing is present but completely unexercised
+### 1.2 Swing was completely unexercised — until tier 7 exercised it
+
+> **Measured 2026-08-05.** Everything in this subsection describes the state of the *corpus*, which
+> is still swing-neutral and still useful as a baseline. The questions it raises are answered in
+> [the spec](./format/Time_Shift_And_Swing.md): `97` / `114` hold an **absolute** percentage
+> (50–75 %, stored +25 offset) **per pattern**, MCC's "signed offset" label is wrong, and only the
+> even-numbered steps are displaced. What remains open is how `74` combines with `97`.
+
 
 | Parameter | Meaning | Observed |
 |---|---|---|
@@ -80,12 +88,17 @@ documented in `project_5_description.txt` and confirmed on the hardware display:
 |---|---|---|---|---|---|---|---|---|---|
 | Stored (`112`) | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52 | 53 |
 
-So the centre is 49 and the display maps 1:1 to the stored value **over this window**. That is
-the entire evidence base. `initial_project` — real user material — stores `49` for all 405
-melodic notes and all 412 drum notes; the encoder was never touched.
+So the centre is 49 and the display maps 1:1 to the stored value **over this window**. That was
+the entire evidence base until tier 7. `initial_project` — real user material — stores `49` for all
+405 melodic notes and all 412 drum notes; the encoder was never touched.
 
-**Unknown:** the range (`D_min` / `D_max`), the unit (what one step of the encoder is worth in
-time), and whether the mapping stays 1:1 beyond ±4.
+**Measured 2026-08-05 (T7.1–T7.3):** the range is displayed **−49 … +50** (stored **0–99**) and the
+1:1 mapping holds across all of it, with no compression at the extremes. Drum `120` is identical.
+The ±4 window was not the limit — it was just all anyone had happened to set. See
+[the spec](./format/Time_Shift_And_Swing.md).
+
+**Still unknown:** the unit `U` — what one step of the encoder is worth in time. That is tier 8's,
+and it is not recoverable from any export.
 
 ### 1.4 Step size and triplet are measured
 
@@ -129,13 +142,18 @@ standard maximum shuffle. At `S` = 50 % the term vanishes.
 
 ### 2.1 The two unknowns
 
-**`S` — which parameter actually governs swing.** Three candidates, and the capture decides:
+**`S` — which parameter actually governs swing.** Three candidates:
 
 1. `74` alone (global only, per-pattern `97` inert),
 2. `74 + (97 − 25)` — global plus a signed per-pattern offset,
 3. `97 − 25` applied only when the `99` "swing offset state" bit is set, else `74`.
 
-Candidate 3 is the most likely reading of the parameter names, but naming is not evidence.
+Tier 7 knocked out **candidate 3**: there is no swing bit in `99` / `116` — it does not move when
+swing does. It also established that `97` is an absolute percentage rather than a signed offset,
+which is candidate 2's premise. What it did **not** establish is whether a non-default `74` and a
+non-default `97` interact at all, because `T7-swing-both` turned out to be a duplicate of the
+global-only capture. So `S` is narrowed but not resolved, and a capture holding both values
+non-default is still owed.
 
 **`U` — what one Time Shift unit is worth.** Three candidate encodings:
 
@@ -149,18 +167,21 @@ Candidate 3 is the most likely reading of the parameter names, but naming is not
 that. BPM separates C from the other two. **Both levers are required.** This is the central
 analytical point of the investigation.
 
-### 2.2 A falsifiable prediction
+### 2.2 A falsifiable prediction — and how it came out
 
-`112` is a 7-bit field centred on 49. If the range is symmetric — `D` ∈ [−49, +49] — and model A
-holds with `N` = 98, then `D_max * U` is *exactly* half a step: Time Shift would cover the entire
-gap between adjacent steps with no unreachable band, which is a coherent thing for a designer to
-choose (a full step of shift would be ambiguous with the neighbouring step).
+`112` is a 7-bit field centred on 49. The prediction was that if the range came out near-symmetric
+and model A held with `N` ≈ 98, then `D_max * U` would be *exactly* half a step: Time Shift would
+cover the whole gap between adjacent steps with no unreachable band, which is a coherent thing for
+a designer to choose (a full step of shift would be ambiguous with the neighbouring step).
 
-The opposite outcome matters more. If the range is only ±4, as `project_5` weakly hints, Time
-Shift spans roughly ±4 % of a step and is **useless as a quantization target** — M5 would snap to
-the grid and report the timing loss rather than pretend to represent it. **Measuring the range is
-therefore the first experiment and the cheapest**, because it decides whether the rest is worth
-doing.
+**The range came out −49 … +50** (T7.1), which is that shape, off-centre by one detent. So the
+half-step reading survives and model A with `N` = 98 remains the natural candidate — but the range
+alone cannot confirm it, because A and B agree on every export. Tier 8 still has to separate them.
+
+The outcome that would have mattered more did not happen: had the range been only ±4, as
+`project_5` weakly hinted, Time Shift would span roughly ±4 % of a step and be **useless as a
+quantization target**, and M5 would have had to snap to the grid and report the loss. Measuring the
+range first was the cheap way to find that out, and it came back saying the rest is worth doing.
 
 ---
 
@@ -269,14 +290,20 @@ All test IDs refer to [`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md)
 
 | # | Question | Resolved by | Blocks |
 |---|---|---|---|
-| 1 | Time Shift range `D_min` / `D_max` | **T7.1** (2 captures) | whether shift is worth implementing at all |
-| 2 | Is display→stored 1:1 across the whole range? | **T7.2** (1 capture) | shift encode/decode |
-| 3 | Is `randomness` probability or timing jitter? | **T7.8** | the validity of every timing measurement |
-| 4 | Which parameter governs effective swing (`S`) | **T7.4–T7.6** | swing encode/decode, and `reader._swing` |
-| 5 | Does drum shift/swing match melodic? | **T7.3**, **T7.7** | the drum path in M5/M6 |
+| 1 | Time Shift range `D_min` / `D_max` | **T7.1** ✅ −49…+50 (stored 0–99) | whether shift is worth implementing at all |
+| 2 | Is display→stored 1:1 across the whole range? | **T7.2** ✅ yes, exactly | shift encode/decode |
+| 3 | Is `randomness` probability or timing jitter? | **T7.8** ✅ probability; no jitter | the validity of every timing measurement |
+| 4 | Is per-pattern swing absolute or a signed offset? | **T7.5** ✅ absolute 50–75 %, per pattern | `reader._swing` — confirmed right |
+| 5 | Does drum shift/swing match melodic? | **T7.3**, **T7.7** ✅ identical | the drum path in M5/M6 |
 | 6 | `99` / `116` bit layout — step size, triplet, polyrhythm, direction | **T5.1–T5.5** ✅ **measured** (spec §3.3) | `t_step`, hence everything here |
 | 7 | Time Shift unit `U`, and which of models A/B/C | **Tier 8**, recordings R1–R3 | accurate placement both directions |
 | 8 | Do swing and shift add, or interact? | **Tier 8**, recording R5 | the M5 fitting algorithm |
+| 9 | How do global `74` and per-pattern `97` combine? | **owed** — `T7-swing-both` was a duplicate capture | whether `ksp2midi` may apply the global at all |
+
+Question 9 is what is left of the old "which parameter governs `S`". Tier 7 ruled out the
+`99`-bit override and settled the stored meaning of `97`, but never got a file holding both a
+non-default global and a non-default per-pattern value. Until one exists, `ksp2midi` applies the
+per-pattern value and reports the global instead of folding it in.
 
 ### 6.1 Tier 8 Recording Capture Ledger
 
@@ -343,13 +370,13 @@ tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
 offset (ticks)   mean -0.38   sd 32.99   min -60   max +58
 offset (ms)      mean -1.56   sd 137.45
 ```
-### One loose end this investigation turned up
+### One loose end this investigation turned up — now closed
 
-**`src/ksp/reader.py::_swing` may be wrong.** It computes `stored + 25`, treating `97` / `114` as an
-absolute percentage (default 25 → 50 %). MCC's field label calls it a **signed offset**, −25 % to
-+25 %. If it is an offset from the global `74`, `seq_swing_percent` is wrong whenever the global is
-not 50. The two readings coincide at the defaults, which is exactly why no test catches it and why
-every swing-neutral sample file hides it. **T7.5 decides this.**
+**`src/ksp/reader.py::_swing` was right.** It computes `stored + 25`, treating `97` / `114` as an
+absolute percentage (default 25 → 50 %), while MCC's field label calls it a **signed offset**,
+−25 % to +25 %. The two readings coincide at the defaults, which is why no test caught it and every
+swing-neutral sample file hid it. T7.5 settled it: the device displays an absolute 50–75 % and
+stores 50 at the maximum, so the reader's arithmetic holds and **the dictionary label is wrong.**
 
 (A `--time-shift approx` flag was considered for M2 and deliberately not shipped: there is no
 documented guess to opt into until tier 8 measures the unit.)

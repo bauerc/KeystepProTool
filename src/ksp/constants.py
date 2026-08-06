@@ -109,6 +109,10 @@ PATTERN_HAS_DATA: Final = 3
 #: is 75%. Spec section 3.3.
 SWING_OFFSET: Final = 25
 
+#: The displayed swing range. 50% is straight, and is both the minimum and the
+#: default, so swing only ever delays.
+SWING_RANGE_PERCENT: Final = (50, 75)
+
 #: Step counts are 0-based: stored 15 means a 16-step pattern.
 STEP_COUNT_OFFSET: Final = 1
 
@@ -228,7 +232,7 @@ P_SEQ_PITCH: Final = 109
 P_SEQ_GATE: Final = 110
 P_SEQ_VELOCITY: Final = 111
 P_SEQ_TIME_SHIFT: Final = 112
-P_SEQ_RANDOMNESS: Final = 113
+P_SEQ_RANDOMNESS: Final = 113  # play probability, not timing jitter
 
 # --- Drum note parameters, item 123 only (spec section 3.2) ---------------
 
@@ -296,18 +300,22 @@ G_DRUM_MAP_NOTE_1: Final = 83  # ..106 = Note 1..Note 24, custom mode
 # --- Value encodings -------------------------------------------------------
 
 #: Time shift is an offset around a centre of 49, so stored 50 is +1 and
-#: stored 48 is -1. Confirmed by the +1..+4 / -1..-4 ramp in project_5.
+#: stored 48 is -1. The drum field 120 shares it.
 TIME_SHIFT_CENTRE: Final = 49
 
-#: The displayed range of time shift. Unmeasured -- project_5's ramp only
-#: reaches +-4 and nothing establishes it is the limit. Protocol T7.1.
-TIME_SHIFT_RANGE: Final[tuple[int, int] | None] = None
+#: The displayed range of time shift, in steps of 1. Asymmetric by one: there
+#: is no displayed -50.
+TIME_SHIFT_RANGE: Final[tuple[int, int]] = (-49, 50)
+
+#: The same bounds as stored in 112 / 120.
+TIME_SHIFT_STORED_MIN: Final = TIME_SHIFT_CENTRE + TIME_SHIFT_RANGE[0]
+TIME_SHIFT_STORED_MAX: Final = TIME_SHIFT_CENTRE + TIME_SHIFT_RANGE[1]
 
 #: What one unit of time shift is worth, as a fraction of a step. Unmeasured:
 #: it may instead be a fixed tick count or an absolute time, which needs a
-#: recording of the device's MIDI output to tell apart (protocol tier 8; see
-#: analysis/Timing_Calibration.md). None until then, and never guessed -- a
-#: wrong timing constant produces files that load cleanly and play wrong.
+#: recording of the device's MIDI output to tell apart. None until then, and
+#: never guessed -- a wrong timing constant produces files that load cleanly
+#: and play wrong.
 TIME_SHIFT_UNIT: Final[float | None] = None
 
 
