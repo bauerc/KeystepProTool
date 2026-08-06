@@ -69,3 +69,23 @@ def test_a_reply_that_underdelivers_is_refused() -> None:
 def test_the_short_form_refuses_indices() -> None:
     with pytest.raises(ValueError, match="short form"):
         sysex.build_read_request(sysex.ReadRequest(item=120, param=37, indices=(1,), count=None))
+
+
+def test_the_identity_reply_gives_the_firmware_version(identity_reply: bytes) -> None:
+    """Frame 9 of the capture. Nothing in the read protocol carries the version,
+    so this request is what makes a byte-identical file possible."""
+    assert sysex.parse_identity(identity_reply) == "2.5.20"
+
+
+@pytest.mark.parametrize(
+    "frame",
+    [
+        "f000206b7f420201257803f7",  # a read reply, not an identity one
+        "f07e7f060200206b0200090025140502",  # no terminator
+        "f07e7f06020001610200090025140502f7",  # a different manufacturer
+        "f07e7f060200206b02000900251405f7",  # a byte short
+    ],
+)
+def test_a_frame_that_is_not_an_identity_reply_is_refused(frame: str) -> None:
+    with pytest.raises(ValueError):
+        sysex.parse_identity(bytes.fromhex(frame))

@@ -24,6 +24,14 @@ request form for `paramId 37, itemId 120` (`25` = 37, `78` = 120), and its reply
 `f0 00 20 6b 7f 42 02 01 25 78 03 f7` carries that key's value, `3`. Frames 7 and 11 are the
 genuine handshake. See [§7 of the format spec](analysis/format/SysEx_Direct_Transfer_Path.md).
 
+**Correction — there is no handshake at all.** Frames 7 and 11 are not required either. H1.4 ran
+`120_37` against a cold device under all four combinations of the two frames on 2026-08-06, and
+every one returned `3`. Frame 11 does not "unlock or mode switch" anything; it is something MCC
+sends, not something the device waits for. Frame 7 is a universal identity request and remains
+useful for one reason only — it is the sole source of the firmware version, which no read in the
+protocol carries. See the H1.4 row in
+[the hardware protocol](analysis/Hardware_Test_Protocol.md).
+
 |[Frame Number] | [Clean SysEx Bytes] | [What it actually is] |
 | ------- | -----------| --- |
 | Frame 13 | f0 00 20 6b 7f 42 01 01 25 78 f7 | The first read, not a setup call |

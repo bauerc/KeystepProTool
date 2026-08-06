@@ -4,6 +4,7 @@ Tests resolve repository data through these rather than hardcoding paths, so
 that moving sample files is a one-line change here.
 """
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -188,3 +189,18 @@ def replay_transport(
         return ReplayTransport(recall_tape if pairs is None else pairs)
 
     return build
+
+
+@pytest.fixture(scope="session")
+def identity_reply(repo_root: Path) -> bytes:
+    """Frame 9 of the capture, the device's answer to the identity request.
+
+    Read from the tracked truncated capture rather than recall_sysex.jsonl,
+    which is gitignored and would make this skip silently in a worktree.
+    """
+    capture = repo_root / "usb_midi_investigation" / "sysex_until_project_1_track_1_pattern_1.jsonl"
+    for line in capture.read_text().splitlines():
+        frame = json.loads(line)
+        if frame["frame_number"] == 9:
+            return bytes.fromhex(frame["sysex_hex"])
+    raise AssertionError(f"no frame 9 in {capture}")

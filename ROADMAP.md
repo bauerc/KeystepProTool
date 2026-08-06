@@ -278,12 +278,36 @@ vendor-declared plan also reproduces MCC's 8,951 requests byte-for-byte and in o
 **Green here is not verified on hardware.** Phase 0 proves the codec and the plan against a
 recording. The device's live output remains the sole ground truth.
 
-### Phases 1–4 — pending hardware
+### Phase 1 — the real transport ✅ **done, verified on hardware 2026-08-06**
 
-- **Phase 1 — the real transport.** Needs `ksp_cli/usb_transport.py`, which Phase 0 does **not**
-  build, plus `ksp_cli/pull.py`. `tools/usb_test.py` already holds a working libusb /
-  interface-2 / kernel-detach recipe to build it from. H1.1/H1.2 cannot run until it exists, so
-  this is the next piece of work — before anyone takes the device out.
+**Artifact:** `ksp_cli/usb_transport.py` (libusb, interface 2, USB-MIDI packet framing) and
+`tools/usb_probe.py`, one subcommand per probe. `ksp.sysex` gained the identity request and the
+`0x05` prologue frame, so the firmware version no longer has to be assumed.
+
+**Tested without a device:** framing round-trips all 8,951 captured request and reply frames, and
+de-framing by code index number keeps the padding zeros out — the bug the investigation script has,
+visible as `f7 00 f0` in its log. `parse_identity` decodes the captured reply to `2.5.20`.
+
+**All five probes ran on 2026-08-06 and all five confirm** — ledger and raw output in
+[the hardware protocol](./analysis/Hardware_Test_Protocol.md). The identity reply came back
+byte-identical to the capture's, `120_37` read `3`, and the `0xFF` sentinel arrived raw on patterns
+1–13, so the `247` in every project file is confirmed as MCC's corruption of it. On macOS the
+probes need `sudo`: the system binds its own USB-MIDI driver to interface 2 and will not release
+it to an unprivileged process.
+
+Two probes changed what later phases should do:
+
+- **H1.4 — there is no handshake.** A read succeeds with neither the identity request nor the
+  `0x05` frame, so `bulk_read` sends no prologue. The identity request is still needed for the
+  version string, but not to open the conversation.
+- **H1.3 — `count=64` is honoured and free.** The per-request period does not move with payload
+  size (3.994 ms at 16, 3.998 ms at 64), so a full dump drops from 38.3 s to 9.6 s. **Not taken
+  yet:** it rewrites the request stream `test_bulk_plan.py` pins to MCC's, and counts that overrun
+  a parameter's extent are untested. It belongs to Phase 3, behind H3.2's byte-diff.
+
+`ksp_cli/pull.py` is **not** part of this phase. The full-dump CLI is what Phase 3's H3.1 gates,
+and writing it before there is a live read to point it at leaves it unexercised.
+
 - **Phases 2–4** — live read against the device, then the questions only hardware settles.
 
 No console entry point is declared until the milestone lands, per CLAUDE.md.
