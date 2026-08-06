@@ -42,10 +42,13 @@ ack             F0 00 20 6B 7F 42 1C 00    F7
 `<slot>` is the project number — see [7.4](#74-the-project-slot-is-byte-7). The ack is the only
 frame that does not carry it; its `00` is a constant, not a slot.
 
-The reply **echoes the request header verbatim**, count byte included, which is what makes a
-desynchronised stream detectable rather than silently misfiled. A long read walks its *last*
-index forward by `count`; the other indices are fixed. Traffic is strictly serialised — request,
-reply, ack — so one outstanding request at a time is the whole flow control.
+The reply **echoes the request address verbatim**, which is what makes a desynchronised stream
+detectable rather than silently misfiled. The count byte is echoed as *honoured*, not as asked —
+it differs from the request whenever the request exceeded 100, so desync is a comparison of the
+address and the count is the device's answer rather than a copy of the question. See
+[7.7](#77-request-limits-measured-at-the-device). A long read walks its *last* index forward by
+`count`; the other indices are fixed. Traffic is strictly serialised — request, reply, ack — so
+one outstanding request at a time is the whole flow control.
 
 Values are 7-bit. The single exception is the device's unset sentinel `0xFF`, which is a MIDI
 System Reset byte; see the `123_117_<pat>` row in
@@ -72,7 +75,7 @@ writer omits — so the hardware is a second producer of the same flat dict `ksp
 consumes, and nothing downstream changes.
 
 That is a recording, not the device. `ksp.bulk_read` has not been run end to end against live
-hardware — the five H1 probes exercised pieces of it, not the whole walk.
+hardware — the six H1 probes exercised pieces of it, not the whole walk.
 
 The two questions this section used to leave open — how a project slot is named, and how a write
 is framed — are answered by the captures in 7.4 and 7.5, and **not** by hardware. What 7.4 proves
@@ -165,3 +168,38 @@ Re-emitting it verbatim stalls the link. A file writer's rule is unchanged and o
 keep emitting `247`, MCC's in-transit corruption of the same byte; see the `123_117_<pat>` row in
 [per-pattern scalars](./Parameters_Pattern_Scalars.md). What a device writer *should* send instead
 is unknown; the capture shows only what MCC failed to send.
+
+### 7.7 Request limits, measured at the device
+
+MCC never sends a `count` above 16 and its longest reply in any capture is 32 bytes, so every
+limit below is outside what the captures could show. H1.6 pushed each field until the device
+objected:
+
+| Request | What the device does |
+| ------- | -------------------- |
+| `count` ≤ 100 | honoured exactly |
+| `count` > 100 | **clamped to 100**, and the reply echoes `0x64` |
+| `count` = 0 | well-formed reply, zero data bytes |
+| a byte appended after `count` | ignored; the count is one 7-bit byte and there is no wide form |
+| start index `0` | answers `0x00` filler — indices are **1-based**, and starting at 0 wastes a slot |
+| start + `count` past the item's extent | **full count returned**, padded — no error, no short reply |
+| `nIdx` = 4 | **no reply and no ack**; only 1, 2 and 3 are accepted |
+
+The clamp is a transfer-buffer size, not an end-of-extent clamp: a request starting at index 65
+and asking for 127 clamped to 100 exactly as one starting at index 1 did. So 100 values may be
+read from any address.
+
+**An overrun is safe to send and unsafe to store.** Asking past an item's extent is not an error,
+but the padding is the item's own unset value — `0x7f` for the 64-step `7b` items, `0x00` for the
+`nIdx=2` items — which is precisely what a real unset entry reads as. Nothing in the reply
+distinguishes the two. `bulk_read` must therefore clip every reply to the extent the plan
+declares, and must never infer an extent from reply length or from where sentinel values start:
+reply length is always `min(count, 100)` whatever the address.
+
+There is also no error frame in the protocol. A malformed request produces silence, so a reader
+detects one only by timing out.
+
+None of this is a speedup on its own. The 64-step items are already covered by a single
+`count=64`, so the headroom above 64 only helps items whose extent exceeds it — the 240-entry
+parameters that H1.3's note singles out as the ones that do not divide evenly. What a raised count
+does to the full-dump time has not been measured, and H1.3's 9.6 s stands as the only figure.
