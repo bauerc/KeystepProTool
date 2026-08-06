@@ -1,24 +1,25 @@
 # Time shift and swing
 
 **Spec section:** §6 (excluding §6.1) — part of [`KeyStepPro_Format_Spec.md`](../KeyStepPro_Format_Spec.md)
-**Covers:** The two encodings that displace a note in time — time shift and swing — what tier 7 measured about each, and the one quantity still missing.
+**Covers:** The two encodings that displace a note in time — time shift and swing — what each stores and what one unit of it is worth in time.
 **Related:** Gate length, the third encoding, is measured: see [the gate ladder](./Gate_Length_Ladder.md) for §6.1.
 
 ---
 
 ## 6. The timing encodings
 
-Three encodings move a note. Gate length is **resolved** (see [the gate ladder](./Gate_Length_Ladder.md)); the other two were
-measured by protocol tier 7 on 2026-08-05, except for one quantity that no export can carry —
-what a shift unit is worth **in time** — which needs a recording of the device rather than a file.
-See [`Timing_Calibration.md`](../Timing_Calibration.md) for the model.
+Three encodings move a note, and all three are now measured. Gate length is in [the gate
+ladder](./Gate_Length_Ladder.md); the stored form of the other two came from protocol tier 7 on
+2026-08-05, and the one quantity no export can carry — what a shift unit is worth **in time** —
+from tier 8's recordings on 2026-08-04. See [`Timing_Calibration.md`](../Timing_Calibration.md) for
+the model and the raw readings.
 
 | Encoding | Parameters | State |
 |---|---|---|
 | Gate length | `110` / `118` | **measured** — 128-entry ladder, one derived entry |
 | Time shift range and linearity | `112` / `120` | **measured** — centre 49, stored 0–99, linear throughout |
 | Swing value and scope | `74`, `97` / `114` | **measured** — absolute percentage, 50–75 %, per pattern |
-| Time shift unit (ticks? ms?) | `112` / `120` | **open** — tier 8, needs a recording |
+| Time shift unit | `112` / `120` | **measured** — 1/400 of a beat, fixed; see §6.4 |
 | How global and per-pattern swing combine | `74` with `97` / `114` | **open** — see §6.3 |
 
 ### 6.2 Time shift is a plain offset, and the drum field shares it
@@ -78,11 +79,44 @@ per-pattern value was never carried into it — so T7.6's stated question went u
 capture that really holds both non-default values exists, `ksp2midi` applies the per-pattern value
 and **reports the global rather than folding it in** (`global-swing-not-applied`).
 
-### 6.4 Unresolved: how long one time-shift unit is
+### 6.4 One time-shift unit is 1/400 of a beat
 
-The centre, range and linearity of `112` / `120` are measured, so a stored value decodes to a
-signed shift. What that shift is worth **in time** is not in the file at all — it may be a fraction
-of a step, a fixed tick count, or an absolute duration, and only recording the device's MIDI output
-separates the three. `ksp.constants.TIME_SHIFT_UNIT` stays `None` until then, M2 places every note
-on the flat grid and warns, and **no formula is fitted to a plausible-looking pattern**: a wrong
-timing constant produces files that load cleanly and play wrong, with nothing to signal the error.
+Measured by protocol tier 8 on 2026-08-04, recordings R1–R3 and R6. This is the quantity no export
+can carry, so it came from recording the device's MIDI output against a reference track on a second
+channel — every figure is a difference between the two, which cancels interface latency and clock
+drift.
+
+```
+one unit  = 1/400 of a quarter note = 1.2 ticks at 480 PPQN
+max (+50) = 60 ticks = a 1/32 note
+```
+
+**Positive shift delays.** The measured sweep, at 480 ticks per beat:
+
+| Displayed | −49 | −25 | −1 | 0 | +1 | +25 | +50 |
+|---|---|---|---|---|---|---|---|
+| Offset (ticks) | −58 | −30 | −1 | 0 | +1 | +30 | +60 |
+
+The two negative extremes came back a tick short of their mirror, which is inside the ±1-tick
+jitter the reference track itself shows.
+
+**It is a fraction of the beat, not of the step.** That is the whole finding, and it took two step
+sizes to see: a displayed +50 moved a note 60 ticks at a 1/4 step (R1) and 60 ticks again at a 1/16
+step (R3). A tempo change leaves the tick count alone too (R2, 120 BPM, +59), so it is not an
+absolute duration either. R6 reproduced R1 exactly.
+
+> **The trap.** At the device's default 1/16 grid the maximum shift is exactly half a step, so a
+> step-relative reading fits every sample project in this repository and is still wrong. It
+> diverges at every other step size — at 1/4 the maximum is an eighth of a step, and **at 1/32 it
+> is a whole step**, enough to land a note on top of its neighbour. Any code clamping shift must
+> account for that rather than assuming half a step.
+
+`ksp.constants.TIME_SHIFT_UNITS_PER_BEAT` holds the 400 and `time_shift_ticks` applies it; 480 is
+not divisible by 400, so each note's displacement rounds, by under half a tick and without
+accumulating. `ksp2midi` applies the shift by default and `--no-time-shift` returns the flat grid.
+
+**Swing was confirmed in the same session.** At a 1/16 step, 63 % delayed the even steps by 31
+ticks and 75 % by 60 — exactly what the standard formula gives (`t_step × (2S/100 − 1)`), so
+`midi_export._swing_delay` is measured rather than assumed. R5 set swing and shift together and got
+their exact sum, so **the two are additive**. Both were measured at one step size only; whether the
+swing displacement is step-relative is untested.

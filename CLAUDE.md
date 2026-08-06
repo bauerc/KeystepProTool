@@ -21,8 +21,8 @@ multi-track material, drums and polyphony wait for M6.
 - [KeyStep Pro Format Spec](analysis/KeyStepPro_Format_Spec.md) — authoritative format reference. **Read it before touching
   format code.**
 - [Implementation Road Map](ROADMAP.md) — milestones M1–M9 and current status. `README.md` — CLI usage and options Cohosted on Github Issues for this repo.
-- [Timing Calibration](analysis/Timing_Calibration.md), [Hardware Test Protocol](analysis/Hardware_Test_Protocol.md) — the unmeasured
-  quantities and how they get measured.
+- [Timing Calibration](analysis/Timing_Calibration.md), [Hardware Test Protocol](analysis/Hardware_Test_Protocol.md) — how the timing
+  encodings were measured, and the one question left for the device.
 
 ## Commands
 

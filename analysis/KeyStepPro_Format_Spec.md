@@ -67,9 +67,9 @@ enforced by `tests/test_reader.py`.
   drum ladder identical. `tests/test_gate_ladder.py` holds `GATE_TABLE` against the transcription.
 - **Time shift and swing are measured** (see [time shift and swing](./format/Time_Shift_And_Swing.md)): shift is a plain offset,
   `stored = 49 + displayed`, stored 0–99, drum identical; swing is an absolute 50–75 %, stored per
-  pattern, delaying the even steps only. **What one shift unit is worth in time is still unmeasured**
-  — M7 tier 8, needs a recording, not an export. Until then stay on the grid and warn: a guessed
-  timing constant produces files that load fine and play wrong.
+  pattern, delaying the even steps only. **One shift unit is 1/400 of a beat** — a fixed count, not
+  a fraction of the step, so it does not change with the step size. What is still unmeasured is how
+  the global swing `74` combines with the per-pattern value; that one stays reported, not applied.
 
 
 Keep the unknowns user-visible: each is an `ExportOptions` field with a documented default, never

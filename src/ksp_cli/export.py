@@ -131,6 +131,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="ignore per-pattern swing and place every step on a flat grid",
     )
     parser.add_argument(
+        "--no-time-shift",
+        action="store_false",
+        dest="apply_time_shift",
+        help="ignore each note's time shift and place every step on a flat grid",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="report what would be written, and write nothing",
@@ -208,6 +214,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             drum_channel=args.drum_channel - 1,
             default_gate=args.default_gate,
             apply_swing=args.apply_swing,
+            apply_time_shift=args.apply_time_shift,
             include_stale=args.include_stale,
             include_disabled=args.include_disabled,
         )

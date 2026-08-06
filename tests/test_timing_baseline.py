@@ -5,8 +5,9 @@ Swing has never been set in any sample project and time shift appears only in
 these tests pin it, so the first capture that moves a timing parameter shows up
 unmistakably in a diff instead of blending into noise nobody characterised.
 
-They also hold the no-guessing rule for the unmeasured constants -- the same
-discipline ``decode_gate`` already enforces.
+They also pin the measured constants to the readings they came from, so a
+constant cannot drift from its evidence without a test failing -- the same
+discipline ``tests/test_gate_ladder.py`` applies to the gate table.
 """
 
 import sys
@@ -90,10 +91,36 @@ def test_drum_shift_matches_the_confirmed_display(project_files_dir: Path) -> No
     assert shifts == [-1, 1]
 
 
-def test_the_unmeasured_unit_still_refuses_to_guess() -> None:
-    """What one unit is worth in time is not measured, so it stays None."""
-    assert constants.TIME_SHIFT_UNIT is None
-    assert constants.time_shift_fraction(4) is None
+#: Displayed time shift -> the offset it produced, in ticks at 480 per beat.
+#: Read off tier 8's recordings R1 and R6 (analysis/Timing_Calibration.md
+#: 6.1), which swept these eight values across one pattern. -49 and -25 came
+#: back a tick short of the mirror, inside the jitter the reference track
+#: itself shows, so the table below is what the arithmetic gives rather than
+#: what was literally recorded at those two points.
+MEASURED_SHIFT_TICKS = {0: 0, 1: 1, 25: 30, 50: 60, -1: -1, -25: -30, -49: -59}
+
+
+def test_the_shift_unit_matches_the_recordings() -> None:
+    """R1/R6 at 480 ticks per beat, the resolution the recordings were made at."""
+    assert {
+        shift: constants.time_shift_ticks(shift, 480) for shift in MEASURED_SHIFT_TICKS
+    } == MEASURED_SHIFT_TICKS
+
+
+def test_the_shift_unit_does_not_scale_with_the_step() -> None:
+    """R1 at a 1/4 step and R3 at a 1/16 step both moved +50 by 60 ticks.
+
+    This is the whole of tier 8's finding: a step-relative unit would have
+    given 240 ticks at 1/4, and it is indistinguishable from this one at the
+    1/16 default that every sample project uses.
+    """
+    assert constants.time_shift_ticks(50, 480) == 60
+
+
+def test_the_shift_unit_scales_with_the_resolution() -> None:
+    """It is a fraction of a beat, so a finer PPQ buys proportionally more."""
+    assert constants.time_shift_ticks(50, 960) == 120
+    assert constants.time_shift_ticks(-49, 960) == -118
 
 
 def test_time_shift_range_is_the_measured_one() -> None:
@@ -168,6 +195,27 @@ def test_reduce_timing_recovers_a_known_offset(tmp_path: Path) -> None:
     assert read_ppq == ppq
     assert bpm == pytest.approx(120)
 
-    pairings = reduce_timing.pair_onsets(onsets, ref_channel=3, test_channel=1, window=240)
+    pairings, ambiguous = reduce_timing.pair_onsets(
+        onsets, ref_channel=3, test_channel=1, window=240
+    )
     assert len(pairings) == 8
+    assert ambiguous == 0
     assert {p.offset_ticks for p in pairings} == {offset}
+
+
+def test_reduce_timing_refuses_a_note_exactly_between_two_references() -> None:
+    """Half a step is equidistant, and picking a side invents a measurement.
+
+    This is what turned tier 8's R3 -- a clean +60 on all 32 notes -- into a
+    reported mean of +56.25 with a spread that read as jitter.
+    """
+    step = 120
+    onsets = [reduce_timing.Onset(tick=beat * step, pitch=60, channel=3) for beat in range(4)] + [
+        reduce_timing.Onset(tick=step // 2, pitch=64, channel=1)
+    ]
+
+    pairings, ambiguous = reduce_timing.pair_onsets(
+        onsets, ref_channel=3, test_channel=1, window=240
+    )
+    assert pairings == []
+    assert ambiguous == 1

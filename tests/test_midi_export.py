@@ -34,6 +34,23 @@ TICKS_PER_STEP = 120  # the 480/4 default: 1/16 steps at 480 ticks per beat
 #: pattern's own content has to say which repeat it means.
 ONE_PASS = ExportOptions(passes=1)
 
+#: Grid only. For tests whose subject is the step size, not the groove.
+FLAT = ExportOptions(apply_time_shift=False)
+
+#: project_5 Track 3 pattern 1, 0-based. The tenth note sits at step 13, which
+#: is what proves the two index spaces are different.
+PROJECT_5_STEPS = (0, 1, 2, 3, 4, 5, 6, 7, 8, 12)
+
+#: The same notes' time shifts (+1..+4, -1..-4, 0, +2) in ticks, at the unit
+#: tier 8 measured -- 1/400 of a beat, so 1.2 ticks each at 480, rounded.
+PROJECT_5_RAMP_TICKS = (1, 2, 4, 5, -1, -2, -4, -5, 0, 2)
+
+#: Where those notes land once the shift is applied, which is the default.
+RAMPED_STARTS = [
+    step * TICKS_PER_STEP + shift
+    for step, shift in zip(PROJECT_5_STEPS, PROJECT_5_RAMP_TICKS, strict=True)
+]
+
 
 @dataclass(frozen=True)
 class PlayedNote:
@@ -99,6 +116,17 @@ def exported_5(project_5: Project) -> ExportResult:
     return export_project(project_5, ExportOptions(passes=1))
 
 
+@pytest.fixture
+def exported_5_flat(project_5: Project) -> ExportResult:
+    """The same, with the time shift left off.
+
+    project_5 is the only sample carrying a shift, so every test whose subject
+    is something else -- gate, drum mapping, step size -- reads the grid here
+    rather than the groove.
+    """
+    return export_project(project_5, ExportOptions(passes=1, apply_time_shift=False))
+
+
 def test_tempo_and_resolution_come_from_the_project(exported_5: ExportResult) -> None:
     conductor = exported_5.midi.tracks[0]
     tempo = next(m for m in conductor if m.type == "set_tempo")
@@ -129,8 +157,7 @@ def test_melodic_notes_match_the_documented_description(exported_5: ExportResult
 
     assert [n.note for n in notes] == [48] * 4 + [49] * 4 + [50, 50]
     assert [n.velocity for n in notes] == [60, 70, 90, 100, 60, 70, 90, 100, 60, 120]
-    steps = (0, 1, 2, 3, 4, 5, 6, 7, 8, 12)  # 0-based; the tenth note sits at step 13
-    assert [n.start for n in notes] == [step * TICKS_PER_STEP for step in steps]
+    assert [n.start for n in notes] == RAMPED_STARTS
     assert {n.channel for n in notes} == {2}  # Track 3 -> MIDI channel 3
 
 
@@ -149,25 +176,25 @@ def test_gate_becomes_note_length_in_steps(exported_5: ExportResult) -> None:
 
 
 def test_a_gate_running_into_the_next_note_is_shortened_not_overlapped(
-    exported_5: ExportResult,
+    exported_5_flat: ExportResult,
 ) -> None:
     """Beat 1 has gate 2 but beat 2 repeats the same pitch.
 
     The device retriggers; MIDI would be left holding one note-on too many.
     Shortening the earlier note is what keeps the two equivalent.
     """
-    first, second = played(exported_5.midi, "Track 3")[:2]
+    first, second = played(exported_5_flat.midi, "Track 3")[:2]
     assert first.note == second.note == 48
     assert first.duration == TICKS_PER_STEP
     assert first.start + first.duration == second.start
-    assert any("shortened" in w for w in exported_5.warnings)
+    assert any("shortened" in w for w in exported_5_flat.warnings)
 
 
 def test_drum_lanes_map_onto_the_general_midi_percussion_channel(
-    exported_5: ExportResult,
+    exported_5_flat: ExportResult,
 ) -> None:
     """Kick on beats 1 and 5, velocities 127 and 50, gates 1 and 2."""
-    notes = played(exported_5.midi, "Track 1 (drum)")
+    notes = played(exported_5_flat.midi, "Track 1 (drum)")
 
     # Lane 0 under the default chromatic-36 map is the GM bass drum.
     assert [n.note for n in notes] == [DEFAULT_CHROMATIC_LOW, DEFAULT_CHROMATIC_LOW]
@@ -196,13 +223,65 @@ def test_a_custom_drum_map_moves_the_exported_notes(project_5: Project) -> None:
     assert any("custom (assumed - not in file)" in w for w in result.warnings)
 
 
-def test_unapplied_time_shift_is_reported(exported_5: ExportResult) -> None:
-    """project_5's melodic notes ramp +1..+4 and -1..-4.
+def test_time_shift_moves_notes_off_the_grid(
+    exported_5: ExportResult, exported_5_flat: ExportResult
+) -> None:
+    """project_5's melodic notes ramp +1..+4 and -1..-4, and the export says so.
 
-    How many ticks a shift unit is worth has never been measured, so the
-    export leaves the grid alone and says so rather than inventing a scale.
+    Measured by tier 8 as 1/400 of a beat per unit, so at 480 the ramp is worth
+    one to five ticks either side of the step.
     """
-    assert any("time shift" in w for w in exported_5.warnings)
+    shifted = [n.start for n in played(exported_5.midi, "Track 3")]
+    flat = [n.start for n in played(exported_5_flat.midi, "Track 3")]
+
+    assert [s - f for s, f in zip(shifted, flat, strict=True)] == list(PROJECT_5_RAMP_TICKS)
+    assert flat == [step * TICKS_PER_STEP for step in PROJECT_5_STEPS]
+
+
+def test_the_shift_does_not_scale_with_the_step_size(project_5: Project) -> None:
+    """The whole of tier 8: R1 at 1/4 and R3 at 1/16 gave the same tick count.
+
+    Re-clocking the pattern to 1/8 moves the steps but must leave each note's
+    displacement alone.
+    """
+    eighths = export_project(_with_bits(project_5, raw=12), ExportOptions(passes=1))
+    flat = export_project(
+        _with_bits(project_5, raw=12), ExportOptions(passes=1, apply_time_shift=False)
+    )
+
+    offsets = [
+        s.start - f.start
+        for s, f in zip(played(eighths.midi, "Track 3"), played(flat.midi, "Track 3"), strict=True)
+    ]
+    assert offsets == list(PROJECT_5_RAMP_TICKS)
+
+
+def test_a_shift_before_the_start_is_held_at_it(exported_5: ExportResult) -> None:
+    """project_5's first kick carries -1, and tick -1 does not exist in MIDI.
+
+    The note keeps its length and the export reports the clip rather than
+    moving an onset quietly.
+    """
+    assert played(exported_5.midi, "Track 1 (drum)")[0].start == 0
+    assert Code.TIME_SHIFT_CLIPPED in {d.code for d in exported_5.diagnostics}
+
+
+def test_swing_and_time_shift_add(project_5: Project) -> None:
+    """R5: swing 75% and shift +50 together came to exactly their sum."""
+    swung = _with_swing(project_5, 75)
+    both = export_project(swung, ExportOptions(passes=1))
+    swing_only = export_project(swung, ExportOptions(passes=1, apply_time_shift=False))
+    shift_only = export_project(project_5, ExportOptions(passes=1))
+    flat = export_project(project_5, ExportOptions(passes=1, apply_time_shift=False))
+
+    def starts(result: ExportResult) -> list[int]:
+        return [n.start for n in played(result.midi, "Track 3")]
+
+    swing_alone = [a - b for a, b in zip(starts(swing_only), starts(flat), strict=True)]
+    shift_alone = [a - b for a, b in zip(starts(shift_only), starts(flat), strict=True)]
+    together = [a - b for a, b in zip(starts(both), starts(flat), strict=True)]
+
+    assert together == [x + y for x, y in zip(swing_alone, shift_alone, strict=True)]
 
 
 def test_patterns_are_laid_end_to_end_and_stay_aligned_across_tracks(
@@ -411,19 +490,19 @@ def _with_swing(project: Project, percent: int) -> Project:
 
 def test_step_size_comes_from_the_pattern_itself(project_5: Project) -> None:
     """Bits 3-4 of 99, measured by T5.1 -- so nobody has to supply it."""
-    eighths = export_project(_with_bits(project_5, raw=12))
+    eighths = export_project(_with_bits(project_5, raw=12), FLAT)
     assert [n.start for n in played(eighths.midi, "Track 3")][:2] == [0, 240]
 
 
 def test_a_triplet_pattern_renders_two_thirds_of_the_step(project_5: Project) -> None:
     """Bit 0, and why the default resolution is divisible by 3."""
-    triplets = export_project(_with_bits(project_5, raw=21))
+    triplets = export_project(_with_bits(project_5, raw=21), FLAT)
     assert [n.start for n in played(triplets.midi, "Track 3")][:2] == [0, 80]
 
 
 def test_a_non_forward_direction_is_reported_not_reordered(project_5: Project) -> None:
     """Rand and Walk have no MIDI equivalent, so the export says so (T5.5)."""
-    walking = export_project(_with_bits(project_5, raw=84))
+    walking = export_project(_with_bits(project_5, raw=84), FLAT)
     assert [n.start for n in played(walking.midi, "Track 3")][:2] == [0, TICKS_PER_STEP]
     assert any("walk" in w for w in walking.warnings)
 
@@ -488,9 +567,7 @@ class TestRenderLayer:
         assert rendering.length_ticks == 16 * TICKS_PER_STEP
         assert rendering.midi_track_name == "Track 3"
         assert [n.pitch for n in rendering.notes] == [48] * 4 + [49] * 4 + [50, 50]
-        assert [n.tick for n in rendering.notes] == [
-            step * TICKS_PER_STEP for step in (0, 1, 2, 3, 4, 5, 6, 7, 8, 12)
-        ]
+        assert [n.tick for n in rendering.notes] == RAMPED_STARTS
         assert [n.velocity for n in rendering.notes] == [60, 70, 90, 100, 60, 70, 90, 100, 60, 120]
         assert {n.channel for n in rendering.notes} == {2}
 

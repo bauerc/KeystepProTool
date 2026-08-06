@@ -311,19 +311,22 @@ TIME_SHIFT_RANGE: Final[tuple[int, int]] = (-49, 50)
 TIME_SHIFT_STORED_MIN: Final = TIME_SHIFT_CENTRE + TIME_SHIFT_RANGE[0]
 TIME_SHIFT_STORED_MAX: Final = TIME_SHIFT_CENTRE + TIME_SHIFT_RANGE[1]
 
-#: What one unit of time shift is worth, as a fraction of a step. Unmeasured:
-#: it may instead be a fixed tick count or an absolute time, which needs a
-#: recording of the device's MIDI output to tell apart. None until then, and
-#: never guessed -- a wrong timing constant produces files that load cleanly
-#: and play wrong.
-TIME_SHIFT_UNIT: Final[float | None] = None
+#: One unit is 1/400 of a beat -- a fraction of the *beat*, not of the step, so
+#: the full +50 is 60 ticks at 480 PPQN whatever the step size. Measured
+#: 2026-08-04 by tier 8, recordings R1-R3 and R6 (analysis/Timing_Calibration.md
+#: section 6.1). At the 1/16 default that equals half a step, which is why a
+#: step-relative reading fits the whole corpus and is still wrong.
+TIME_SHIFT_UNITS_PER_BEAT: Final = 400
 
 
-def time_shift_fraction(shift: int) -> float | None:
-    """Return *shift* as a fraction of a step, or ``None`` while unmeasured."""
-    if TIME_SHIFT_UNIT is None:
-        return None
-    return shift * TIME_SHIFT_UNIT
+def time_shift_ticks(shift: int, ticks_per_beat: int) -> int:
+    """Return the displacement of a signed *shift*, in MIDI ticks.
+
+    Positive delays. The result is rounded because the usual 480 ticks per beat
+    is not divisible by 400; the error is under half a tick, per note, and does
+    not accumulate across a pattern.
+    """
+    return round(shift * ticks_per_beat / TIME_SHIFT_UNITS_PER_BEAT)
 
 
 #: Step skip is a 4-bit mask over the four 16-step sequences a pattern can run

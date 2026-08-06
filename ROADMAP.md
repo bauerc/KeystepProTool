@@ -95,11 +95,10 @@ reader.
 names. The export expands the cycle by default and `--passes 1` flattens it. Step size and triplet
 came out of the same tier, so `--steps-per-beat` is gone from `ksp2midi` — the file says.
 
-**One option is still deliberately unshipped**, because the number it needs has never been measured
-and a wrong one produces a file that loads cleanly and plays wrong:
-
-- **`--time-shift approx`** waits on **tier 8**. The centre of `112`/`120` is confirmed but the
-  duration of one unit is not, so there is nothing to scale by that we would not be inventing.
+**Time shift now ships applied.** Tier 8 measured the unit — a fixed 1/400 of a beat — so the
+export displaces each note by its own `112`/`120` value instead of flattening it and warning.
+`--no-time-shift` returns the flat grid. The long-deferred `--time-shift approx` never shipped and
+never will: there is nothing to approximate now that the real number exists.
 
 **The layout decision.** The device stores no arrangement — 4 tracks × 16 independent loops — so a
 linear MIDI file has to invent one. Patterns holding notes are laid end to end in pattern order, and
@@ -195,6 +194,20 @@ than 64 steps split across pattern slots. Real musical material instead of toy c
   what a writer should do when source material exceeds it — split across patterns, or drop and warn.
   Track 1's slot 4 stays zero-filled even when a 4th chord voice is added; never write there.
 
+**Sub-issue — fit timing on import.** `ksp2midi` applies swing and time shift; `midi2ksp` still
+quantizes hard to the grid and reports what it moved. Now that the shift unit is measured the
+inverse is buildable, and [`analysis/Timing_Calibration.md`](./analysis/Timing_Calibration.md) §3.2
+specifies it: snap to the nearest step, estimate the pattern's swing once from the aggregate
+residual (median over odd steps minus median over even), then give each note's leftover to
+`112`/`120` as `clamp(round(residual / unit), -49, +50)`, and **report every residual that could
+not be represented**. Fit swing before shift — one pattern-level value expresses a systematic
+groove for free, and spending per-note shift budget on it wastes a scarce field.
+
+Two things this must respect. The shift range is a **fixed 60 ticks at 480 PPQN either way, not
+half a step**, so at a 1/4 grid it covers only an eighth of a step and most residuals will not fit;
+at 1/32 it covers a whole one. And swing only moves even-numbered steps, so an odd step's residual
+belongs entirely to shift.
+
 ### M7 — Timing calibration
 
 **Artifact:** the measured constants for the encodings that place a note in time — gate length, time
@@ -206,7 +219,8 @@ Gate is **done** (issue #9): the encoding is an index, `stored = detent − 1`, 
 *consecutive* run of detents was captured rather than scattered samples — the lesson the rest of the
 tier inherits.
 
-Tier 7 is **done** (2026-08-05), which leaves only tier 8 and the rig that can record MIDI:
+Tier 7 is **done** (2026-08-05) and tier 8 (2026-08-04) with it, which closes this milestone bar one
+owed capture:
 
 - **Time shift range and linearity** (`112` / `120`) — **#42**, protocol T7.1–T7.3. ✅ The range is
   displayed −49…+50, stored **0–99**, and `stored = 49 + displayed` holds at every one of the twelve
@@ -221,8 +235,16 @@ Tier 7 is **done** (2026-08-05), which leaves only tier 8 and the rig that can r
 - **Randomness** (`113`) — **#44**, protocol T7.8. ✅ A **play probability**, not timing jitter:
   100 always sounds, 50 about half the time, the minimum never, and onsets never wander. The fresh
   default of 100 therefore means "always plays", which is what makes tier 8 measurable at all.
-- **What one time-shift unit is worth in time** — **#45**, protocol tier 8. Needs a recording of the
-  device's MIDI output rather than an export, because the quantity is not in the file.
+- **What one time-shift unit is worth in time** — **#45**, protocol tier 8. ✅ **1/400 of a beat**
+  — 1.2 ticks at 480 PPQN, so the full +50 is 60 ticks, a 1/32 note. A **fixed count**: the same
+  +50 displaced a note by 60 ticks at both a 1/4 and a 1/16 step (R1 against R3), and held its tick
+  count across a fourfold tempo change (R2). Swing came out of the same recordings — the standard
+  formula, matched to the tick at 63 % and 75 % — and swing and shift are **additive** (R5).
+  `constants.TIME_SHIFT_UNITS_PER_BEAT` holds it and `ksp2midi` applies it.
+
+  The trap worth remembering: at the 1/16 grid every sample project uses, the maximum shift is
+  exactly half a step, so a step-relative reading fits the whole corpus and is wrong at every other
+  step size. Only recording a second step size showed it.
 
 See [`analysis/Timing_Calibration.md`](./analysis/Timing_Calibration.md) for the model and the
 arithmetic. **Do not guess any of it** — a wrong timing constant produces files that load fine and
@@ -332,5 +354,6 @@ Both are understood; neither has reached the code.
   `ksp2midi` renders those patterns forward and warns. Rendering a plausible random order would be
   inventing a performance the device did not give us.
 
-**Hardware captures worth doing in one session:** M7's tier 8, plus the two swing recaptures tier 7
-still owes. Ranked in [`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md).
+**Hardware captures still worth doing:** the two swing recaptures tier 7 owes, and nothing else —
+every other tier is closed. Both are ordinary exports; see
+[`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md).

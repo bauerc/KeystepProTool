@@ -1,10 +1,11 @@
 # Timing Calibration: Time Shift and Swing
 
-**Status:** the **stored** encodings are measured (tier 7, 2026-08-05); the **unit** — what one
-time-shift step is worth in time — is not. This document defines the model and the experiments, and
-still claims no calibration constant.
-**Companion:** [`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md) — **tier 8** is what
-remains; tier 7 is closed and its findings are in [the spec](./format/Time_Shift_And_Swing.md).
+**Status:** **complete.** The stored encodings were measured by tier 7 (2026-08-05) and the unit —
+what one time-shift step is worth in time — by tier 8 (2026-08-04). This document carries the model,
+the experiments and the raw readings; the findings themselves are in
+[the spec](./format/Time_Shift_And_Swing.md).
+**Companion:** [`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md), which now holds no
+timing work: both tiers are closed and removed.
 **Prerequisite:** [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md).
 
 ---
@@ -19,16 +20,18 @@ The KeyStep Pro places notes on a step grid, and then offers exactly two ways to
 | **Time Shift** | `112` (Seq) / `120` (DRUM) | **per note** |
 | **Swing** | `74` (global), `97` (Seq) / `114` (DRUM) per pattern | **per pattern / project** |
 
-Both displace note onsets in time. Neither is calibrated — we do not know how many ticks or
-milliseconds one unit of either is worth. Until that is measured:
+Both displace note onsets in time, and for a long while neither was calibrated: nothing said how
+many ticks or milliseconds one unit of either was worth. While that held, **M2 (`ksp2midi`)** could
+only write notes hard on the grid and **M5 (`midi2ksp`)** could only quantize hard to it.
 
-- **M2 (`ksp2midi`)** can only write notes hard on the grid, discarding the groove.
-- **M5 (`midi2ksp`)** can only quantize hard to the grid, discarding it in the other direction.
+Both are now measured — tier 7 for what the file stores, tier 8 for what it is worth in time — and
+`ksp2midi` applies the shift. M5's inverse, fitting a residual back onto per-note shift, is the
+piece still to be built (§3.2).
 
-This was the same class of problem as the gate length table (spec §6.1) and is governed by the same
+This was the same class of problem as the gate length table (spec §6.1) and was governed by the same
 rule: **a wrong timing constant produces files that load cleanly and play wrong**, with nothing
-to signal the error. So this document measures rather than infers, and the code refuses to
-interpolate until the measurements exist.
+to signal the error. So this document measures rather than infers, and the code refused to
+interpolate until the measurements existed.
 
 Gate has since been resolved, and how is worth carrying over: the six scattered points looked like
 a non-linear curve and invited a formula, but they were really six samples of an **index** —
@@ -97,8 +100,8 @@ the entire evidence base until tier 7. `initial_project` — real user material 
 The ±4 window was not the limit — it was just all anyone had happened to set. See
 [the spec](./format/Time_Shift_And_Swing.md).
 
-**Still unknown:** the unit `U` — what one step of the encoder is worth in time. That is tier 8's,
-and it is not recoverable from any export.
+**Measured 2026-08-04 (tier 8):** the unit `U` is **1/400 of a beat** — 1.2 ticks at 480 PPQN, so
+the full +50 is 60 ticks, a 1/32 note. It is not recoverable from any export; it took a recording.
 
 ### 1.4 Step size and triplet are measured
 
@@ -140,7 +143,7 @@ d_shift(D) = D * U                        where D = stored - 49
 Sanity check on the swing term: at `S` = 75 % the odd steps land half a step late, which is the
 standard maximum shuffle. At `S` = 50 % the term vanishes.
 
-### 2.1 The two unknowns
+### 2.1 The two unknowns, and how they came out
 
 **`S` — which parameter actually governs swing.** Three candidates:
 
@@ -165,7 +168,12 @@ non-default is still owed.
 
 **A and B are both tempo-invariant**, so BPM alone cannot separate them; the step-size lever does
 that. BPM separates C from the other two. **Both levers are required.** This is the central
-analytical point of the investigation.
+analytical point of the investigation, and pulling both is what tier 8 did:
+
+**`U` came out as model B — a fixed `k` = 1/400 of a beat**, 1.2 ticks at 480 PPQN. R2 pulled the
+tempo lever and the tick count held, killing C; R1 against R3 pulled the step-size lever and the
+tick count held again, killing A. Had only the tempo lever been pulled, A would have survived and
+fitted every file in the corpus (§2.2).
 
 ### 2.2 A falsifiable prediction — and how it came out
 
@@ -174,9 +182,17 @@ and model A held with `N` ≈ 98, then `D_max * U` would be *exactly* half a ste
 cover the whole gap between adjacent steps with no unreachable band, which is a coherent thing for
 a designer to choose (a full step of shift would be ambiguous with the neighbouring step).
 
-**The range came out −49 … +50** (T7.1), which is that shape, off-centre by one detent. So the
-half-step reading survives and model A with `N` = 98 remains the natural candidate — but the range
-alone cannot confirm it, because A and B agree on every export. Tier 8 still has to separate them.
+**The range came out −49 … +50** (T7.1), which is that shape, off-centre by one detent — so the
+half-step reading survived T7 and model A looked like the natural candidate.
+
+**Tier 8 falsified it.** The prediction was half right in the most misleading way available: at the
+device's default 1/16 step the maximum shift really is exactly half a step, which is why model A
+fits every sample project in the corpus. But R1 at a 1/4 step and R3 at a 1/16 step both displaced
+a +50 note by the same **60 ticks**, so the unit does not scale with the step at all. **Model B**:
+a fixed 1/400 of a beat. At 1/4 the maximum is an eighth of a step, and at 1/32 it is a whole one.
+
+The lesson is the same one gate taught (§0): a quantity sampled at a single setting of the lever
+that matters will fit whatever curve you had in mind.
 
 The outcome that would have mattered more did not happen: had the range been only ±4, as
 `project_5` weakly hinted, Time Shift would span roughly ±4 % of a step and be **useless as a
@@ -296,8 +312,8 @@ All test IDs refer to [`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md)
 | 4 | Is per-pattern swing absolute or a signed offset? | **T7.5** ✅ absolute 50–75 %, per pattern | `reader._swing` — confirmed right |
 | 5 | Does drum shift/swing match melodic? | **T7.3**, **T7.7** ✅ identical | the drum path in M5/M6 |
 | 6 | `99` / `116` bit layout — step size, triplet, polyrhythm, direction | **T5.1–T5.5** ✅ **measured** (spec §3.3) | `t_step`, hence everything here |
-| 7 | Time Shift unit `U`, and which of models A/B/C | **Tier 8**, recordings R1–R3 | accurate placement both directions |
-| 8 | Do swing and shift add, or interact? | **Tier 8**, recording R5 | the M5 fitting algorithm |
+| 7 | Time Shift unit `U`, and which of models A/B/C | **Tier 8** ✅ model **B**, 1/400 beat | accurate placement both directions |
+| 8 | Do swing and shift add, or interact? | **Tier 8** ✅ they add, exactly (R5) | the M5 fitting algorithm |
 | 9 | How do global `74` and per-pattern `97` combine? | **owed** — `T7-swing-both` was a duplicate capture | whether `ksp2midi` may apply the global at all |
 
 Question 9 is what is left of the old "which parameter governs `S`". Tier 7 ruled out the
@@ -305,71 +321,45 @@ Question 9 is what is left of the old "which parameter governs `S`". Tier 7 rule
 non-default global and a non-default per-pattern value. Until one exists, `ksp2midi` applies the
 per-pattern value and reports the global instead of folding it in.
 
-### 6.1 Tier 8 Recording Capture Ledger
+### 6.1 Tier 8 recording ledger
 
-R1 Results - Shift 0, 1, 25, 50, 0, -1, -25, -49
-```
-pairs            8
-tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
-offset (ticks)   mean -0.38   sd 32.99   min -60   max +58
-offset (ms)      mean -1.56   sd 137.45
-```
+Six recordings, 2026-08-04, all at 480 ticks per beat. Reference track on channel 2 (Track 3, every
+parameter at its default), test track on channel 1 (Track 2). **Offsets are test − reference, so a
+positive number means the note played late.**
 
-R2 Results - Shift 50
-```
-pairs            8
-tempo            120 BPM, 480 ticks/beat (1.0417 ms/tick)
-offset (ticks)   mean -59.00   sd 0.00   min -59   max -59
-offset (ms)      mean -61.46   sd 0.00
-```
+| ID | BPM | Step | Varying | Measured offset (ticks) |
+|---|---|---|---|---|
+| R1 | 30 | 1/4 | shift 0, +1, +25, +50, 0, −1, −25, −49 | 0, +1, +30, +60, 0, −1, −30, −58 |
+| R2 | 120 | 1/4 | shift +50 | +59 on all 8, sd 0 |
+| R3 | 30 | 1/16 | shift +50 | +60 on all 32, sd 0 |
+| R4 | 30 | 1/16 | track swing 50 % / 63 % / 75 %, even steps | 0 / +31 / +60, sd 0 |
+| R5 | 30 | 1/16 | swing 75 % **and** shift +50 | +120, sd 0 |
+| R6 | 30 | 1/4 | repeat of R1 | identical to R1 |
 
-R3 Results - Shift 50
-```
-pairs            32
-tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
-offset (ticks)   mean +56.25   sd 20.88   min -60   max +60
-offset (ms)      mean +234.38   sd 87.00
-```
+**What each one settles.** R1 against R3 is the whole result: the same +50 displaces a note by 60
+ticks at both a 1/4 and a 1/16 step, so the unit is a fixed count and not a fraction of the step.
+R2 holds the tick count across a fourfold tempo change, ruling out an absolute duration — 60 ticks
+is 250 ms at 30 BPM and 61 ms at 120. R6 reproduces R1 exactly, so the rig was not drifting. R4
+matches `t_step × (2S/100 − 1)` at both non-default settings (75 % → 60, 63 % → 31.2 → 31). R5 is
+the sum of its two parts to the tick, so swing and shift are additive.
 
-R4 Results - Track Swing 50% (only used even notes 2, 6, etc).
-```
-pairs            8
-tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
-offset (ticks)   mean +0.00   sd 0.00   min +0   max +0
-offset (ms)      mean +0.00   sd 0.00
-```
+The one-tick shortfalls — R2's +59 where R1 gives +60, and R1's −58 and −30 against a mirror of −59
+and −30 — sit inside the ±1-tick jitter the reference track shows on its own onsets.
 
-R4 Results - Track Swing 63% (only used even notes 2, 6, etc).
-```
-pairs            8
-tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
-offset (ticks)   mean -31.00   sd 0.00   min -31   max -31
-offset (ms)      mean -129.17   sd 0.00
-```
+#### Two defects in the first reduction, both fixed
 
-R4 Results - Track Swing 75% (only used even notes 2, 6, etc).
-```
-pairs            8
-tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
-offset (ticks)   mean -60.00   sd 0.00   min -60   max -60
-offset (ms)      mean -250.00   sd 0.00
-```
+Recorded because the numbers they produced were written down and believed for a while.
 
-R5 Results - Track Swing 75% and Timeshift 50
-```
-pairs            8
-tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
-offset (ticks)   mean -120.00   sd 0.50   min -121   max -119
-offset (ms)      mean -500.00   sd 2.08
-```
+- **`tools/reduce_timing.py` mis-paired at half a step.** It matched each test note to the *nearest*
+  reference, and at R3's 120-tick step a 60-tick displacement is exactly equidistant between two of
+  them. R3's true reading is +60 on all 32 notes; the tool reported mean +56.25, sd 20.88, min −60,
+  and its own "spread exceeds one tick" warning was read as jitter rather than as a pairing
+  failure. It now refuses an equidistant match and says why.
+- **Every sign was inverted.** The tool computes `test − reference`, but the run passed the
+  reference channel as `--test-channel`. That is what made the first ledger read "+50 shift → −60
+  ticks", i.e. a positive shift playing a note *early*. The `--ref-channel` help now says which
+  track is which.
 
-R6 Results
-```
-pairs            8
-tempo            30 BPM, 480 ticks/beat (4.1667 ms/tick)
-offset (ticks)   mean -0.38   sd 32.99   min -60   max +58
-offset (ms)      mean -1.56   sd 137.45
-```
 ### One loose end this investigation turned up — now closed
 
 **`src/ksp/reader.py::_swing` was right.** It computes `stored + 25`, treating `97` / `114` as an

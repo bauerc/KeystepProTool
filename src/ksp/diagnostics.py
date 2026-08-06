@@ -57,7 +57,7 @@ class Code(StrEnum):
     DISABLED_PAST_LAST_STEP = "disabled-past-last-step"
     GATE_SHORTENED = "gate-shortened"
     GATE_OFF_LADDER = "gate-off-ladder"
-    TIME_SHIFT_NOT_APPLIED = "time-shift-not-applied"
+    TIME_SHIFT_CLIPPED = "time-shift-clipped"
     STEP_SKIP_SINGLE_PASS = "step-skip-single-pass"
     STEP_SKIP_EXPANDED = "step-skip-expanded"
     DIRECTION_NOT_APPLIED = "direction-not-applied"
@@ -167,9 +167,9 @@ SUMMARIES: Mapping[Code, Summary] = {
         "exported at the default length",
         subject="encoding",
     ),
-    Code.TIME_SHIFT_NOT_APPLIED: Summary(
-        "notes carry a non-zero time shift; its timing encoding is not measured, "
-        "so the shift was not applied",
+    Code.TIME_SHIFT_CLIPPED: Summary(
+        "{subjects} are shifted to before the start of the export and were held at it",
+        subject="note",
     ),
     Code.STEP_SKIP_SINGLE_PASS: Summary(
         "notes are set to play on only some of the 16/32/48/64 sequences, which the device "

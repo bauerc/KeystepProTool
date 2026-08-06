@@ -42,9 +42,7 @@ def test_message_prefixes_the_site() -> None:
 
 
 def test_message_omits_an_empty_site() -> None:
-    assert Diagnostic(Code.TIME_SHIFT_NOT_APPLIED, "shift not applied").message == (
-        "shift not applied"
-    )
+    assert Diagnostic(Code.TIME_SHIFT_CLIPPED, "shift not applied").message == ("shift not applied")
 
 
 def test_at_fills_in_site_parts_without_losing_the_rest() -> None:
@@ -59,7 +57,7 @@ def test_at_fills_in_site_parts_without_losing_the_rest() -> None:
 def test_exact_repeats_are_dropped() -> None:
     collector = Collector()
     for _ in range(3):
-        collector.add(Code.TIME_SHIFT_NOT_APPLIED, "shift not applied")
+        collector.add(Code.TIME_SHIFT_CLIPPED, "shift not applied")
     assert len(collector.report()) == 1
 
 
@@ -74,7 +72,7 @@ def test_the_same_code_at_different_sites_survives() -> None:
 def test_insertion_order_is_kept() -> None:
     collector = Collector()
     collector.add(Code.GATE_SHORTENED, "first")
-    collector.add(Code.TIME_SHIFT_NOT_APPLIED, "second")
+    collector.add(Code.TIME_SHIFT_CLIPPED, "second")
     assert collector.report().messages == ("first", "second")
 
 
@@ -96,14 +94,14 @@ def report() -> Report:
         site=Site(track=1, pattern=9, kind="drum"),
         subjects=2,
     )
-    collector.add(Code.TIME_SHIFT_NOT_APPLIED, "notes carry a non-zero time shift")
+    collector.add(Code.TIME_SHIFT_CLIPPED, "notes carry a non-zero time shift")
     return collector.report()
 
 
 def test_grouping_is_by_code_in_first_appearance_order(report: Report) -> None:
     assert [g.code for g in report.grouped()] == [
         Code.DISABLED_STEP_OFF,
-        Code.TIME_SHIFT_NOT_APPLIED,
+        Code.TIME_SHIFT_CLIPPED,
     ]
 
 
@@ -142,7 +140,7 @@ def test_the_note_says_how_much_was_hidden(report: Report) -> None:
 def test_no_note_when_nothing_collapsed() -> None:
     collector = Collector()
     collector.add(Code.GATE_SHORTENED, "one")
-    collector.add(Code.TIME_SHIFT_NOT_APPLIED, "two")
+    collector.add(Code.TIME_SHIFT_CLIPPED, "two")
     assert collector.report().note() is None
 
 
