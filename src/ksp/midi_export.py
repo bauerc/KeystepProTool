@@ -348,11 +348,11 @@ def render_pattern(
             f"not stored in the project file (spec 3.2.1)",
         )
         collector.extend(options.drum_map.diagnostics)
-    if options.apply_swing and swing != 50:
+    if options.apply_swing and swing != constants.SWING_RANGE_PERCENT[0]:
         collector.add(
             Code.SWING_UNVERIFIED,
-            f"uses {swing}% swing; exported with the standard swing interpretation, "
-            f"which is not measured against the device",
+            f"uses {swing}% swing; the device delays the even steps, which is what was "
+            f"exported, but how far one percent moves them is not measured",
             site=Site(pattern=pattern.number),
         )
     # A pattern the reader could not fully resolve produces MIDI that is
@@ -716,6 +716,18 @@ def render_project(project: Project, options: ExportOptions | None = None) -> tu
 
 
 def _result(arrangement: Arrangement, project: Project, options: ExportOptions) -> ExportResult:
+    diagnostics = arrangement.diagnostics
+    # Tier 7 showed 74 holds a live percentage of its own, so a non-default
+    # global is real groove being dropped rather than an inert field. It is not
+    # applied because T7.6 never established how it combines with the
+    # per-pattern value, and guessing would be the wrong kind of wrong.
+    if options.apply_swing and project.global_swing_percent != constants.SWING_RANGE_PERCENT[0]:
+        global_swing = Diagnostic(
+            Code.GLOBAL_SWING_NOT_APPLIED,
+            f"project sets a {project.global_swing_percent}% global swing (parameter 74); how it "
+            f"combines with the per-pattern value is not measured, so it was not applied",
+        )
+        diagnostics = Report((global_swing, *diagnostics))
     return ExportResult(
         midi=build_midi_file(
             arrangement,
@@ -726,6 +738,6 @@ def _result(arrangement: Arrangement, project: Project, options: ExportOptions) 
         note_count=arrangement.note_count,
         pattern_numbers=arrangement.pattern_numbers,
         track_names=tuple(t.name for t in arrangement.tracks),
-        diagnostics=arrangement.diagnostics,
+        diagnostics=diagnostics,
         track_numbers=arrangement.track_numbers,
     )

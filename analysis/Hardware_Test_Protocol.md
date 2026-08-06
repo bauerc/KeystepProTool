@@ -17,15 +17,18 @@ re-initialising to that state; do not re-derive it.
 
 **What is genuinely unknown and needs the device:**
 
-| Question                                                      | Blocks                                     | Tier |
-| ------------------------------------------------------------- | ------------------------------------------ | ---- |
-| Time Shift range and linearity (`112` / `120`)                | M7; whether shift is usable at all         | 7    |
-| Which parameter governs effective swing (`74` / `97` / `114`) | M7, and `reader._swing` may be wrong       | 7    |
-| Whether `113` randomness is probability or timing jitter      | the validity of every timing measurement   | 7    |
-| What one Time Shift unit is worth in time                     | M2's grid-quantise warning, M5's quantiser | 8    |
+| Question                                                | Blocks                                     | Tier |
+| ------------------------------------------------------- | ------------------------------------------ | ---- |
+| What one Time Shift unit is worth in time               | M2's grid-quantise warning, M5's quantiser | 8    |
+| How global `74` and per-pattern `97` swing combine      | whether `ksp2midi` may apply the global    | 8    |
 
-The last four are the subject of [`Timing_Calibration.md`](./Timing_Calibration.md), which carries
-the model and the arithmetic; tiers 7 and 8 below are the captures that feed it.
+Both are the subject of [`Timing_Calibration.md`](./Timing_Calibration.md), which carries the model
+and the arithmetic; tier 8 below is the recordings that feed it.
+
+**Tier 7 is complete** (2026-08-05) and has been removed. It measured the Time Shift range and
+linearity, the swing encoding and scope, and the meaning of randomness; the findings are in
+[the spec](./format/Time_Shift_And_Swing.md). Two of its captures need redoing — see the note under
+tier 8.
 
 ---
 
@@ -127,8 +130,8 @@ _perform_ one of the tests below.
 **The one-change rule above applies to captures that are read by diffing.** A _sweep_ capture is
 not read that way, and holding it to the same rule is what made the gate sweep — the former Tier 2,
 now complete (spec §6.1) — unrunnable for months: one export per encoder detent is ~128
-sync-and-save cycles through MCC. Batching collapsed it to a single capture, and **Tier 7's shift
-sweep should be run the same way.**
+sync-and-save cycles through MCC. Batching collapsed it to a single capture, and Tier 7's shift
+linearity sweep was read the same way: seven values on seven steps in one export.
 
 One export contains every pattern of every track, and every note's parameter has its own key —
 `124_110_<pattern>_1_<ordinal>`. So one export can carry hundreds of independent readings, read
@@ -194,170 +197,26 @@ the current assumption · what falsifies it · what to do if falsified.**
 
 ---
 
-## Tier 7 — Time Shift and Swing encodings
-
-**~13 captures.** Ordinary export-and-diff captures, same workflow as every tier above. These
-resolve what the _stored_ values mean; Tier 8 resolves what they are worth in time. Background and
-the model are in [`Timing_Calibration.md`](./Timing_Calibration.md).
-
-Two things make this tier necessary. **Time Shift has never been swept** — the only non-default
-values in the whole corpus are `project_5`'s ±1…±4 ramp, so the range is unknown and ±4 is merely
-the largest value anyone has seen. And **swing has never been set at all**: `74` reads 50 and
-`97` / `114` read 25 in all 16 patterns of all four tracks of all five sample files, so there is
-zero observational data on it.
-
-> **Set swing to 0 for the whole of T7.1–T7.3, and place shift test notes on odd-numbered steps
-> (1, 3, 5 …).** Swing displaces even-numbered steps, so a stray swing setting cannot contaminate
-> the shift captures if the notes sit where swing does not reach.
-
-### T7.1 — Time Shift range
-
-- [x] not yet run
-
-- **Resolves:** `D_min` and `D_max`. **Run this first** — it decides whether the rest of the tier is
-  worth doing. If the range is only ±4, Time Shift spans roughly ±4 % of a step and is useless as a
-  quantization target, so M5 would snap to the grid and report the loss instead of pretending to
-  represent it. If it is ±49, shift covers the entire gap between steps.
-- **Device:** from the baseline. Track 2, pattern 1. Place one note at beat 1 Turn Time Shift **all the way
-  down** until the display stops moving. Place a note at beat 5, turn timeshift **all the way up**, export.
-- **Captures:** `T7-shift.KeyStepPro`
-- **Diff against:** `T1-note-place.KeyStepPro` (or the baseline plus the note)
-- **Keys:** `124_112_1_1_1`, `124_112_1_1_5` only
-- **Confirms if:** the two stored values sit symmetrically
-  about 49.
-- **Falsified if:** the range is asymmetric about 49, or the stored value leaves 0–127.
-- **Record the displayed value at both extremes.** That is the deliverable — the stored number is
-  in the file, the displayed one exists only in your notes.
-
-### T7.2 — Time Shift linearity
-
-- [x] not yet run
-
-- **Resolves:** whether display → stored stays 1:1 across the whole range, which is only known
-  today over `project_5`'s ±4 window.
-- **Device:** from the baseline. Track 2, pattern 1. Place notes on **steps 1, 3, 5, 7, 9, 11, 13** and set
-  each to a different Time Shift spread across the range found in T7.1 — both extremes, both
-  half-way points, ±1, and 0. One capture holds the whole curve.
-- **Capture:** `T7-shift-linearity.KeyStepPro`
-- **Keys:** `124_112_1_1_<1..7>`, and `124_50_1_1_<1..7>` to confirm which note is on which step
-- **Confirms if:** stored = 49 + displayed at every point.
-- **Falsified if:** the mapping compresses at the extremes, the way gate does above 3.0.
-- **If falsified:** it becomes lookup data like the gate table. Sweep every detent and record the
-  full mapping — **do not fit a formula to it.**
-- **Write down each note's displayed shift against its step number.** Note ordinal and step number
-  are different index spaces (spec §4) and the mapping is not recoverable afterwards.
-
-### T7.3 — Drum Time Shift
-
-- [x] not yet run
-
-- **Resolves:** whether `120` shares the melodic centre of 49 and the same range. `project_5`'s two
-  kicks, read off the display, pin the centre at −1/+1 only; everything past ±1 is untested on the
-  drum side.
-- **Device:** from the baseline. Track 1 in drum mode, an untouched pattern. Place a Kick at beat 1, 3, 5, 7, 9. Set
-  Time Shift to -49, −1, 0, +1, 50, export.
-- **Captures:** `T7-drumshift.KeyStepPro`
-- **Keys:** `123_120_<pattern>_1_1`, etc
-- **Confirms if:** the stored values match the melodic mapping from T7.1/T7.2 at the same displayed
-  values.
-- **Falsified if:** they differ at any point.
-- **If falsified:** drum shift needs its own full sweep against its own centre. `project_5`'s
-  displayed −1/+1 stays true either way — it just stops implying that stored 48/50 means the same
-  thing everywhere else.
-
-### T7.4 — Global swing alone
-
-- [x] not yet run
-
-- **Resolves:** what `74` stores, and how the device displays it. The KeyStep Pro manual gives the
-  swing range as 50 %–75 %, and `74` reads 50 in every sample file, so it is probably the percentage
-  directly — but nothing has ever tested it.
-- **Device:** from the baseline. Change **only** the global Swing encoder. Export at three settings: the
-  minimum, something near the middle, and the maximum. Touch no per-pattern swing.
-- **Captures:** `T7-swing-global-<display>.KeyStepPro`
-- **Keys:** `120_74`, and **watch whether `97` / `114` move too** — they should not.
-- **Confirms if:** `120_74` alone tracks the displayed percentage.
-- **Falsified if:** per-pattern keys move as well, or the stored value is not the displayed one.
-- **Record the minimum and maximum the encoder will reach.** If the minimum is below 50, swing is
-  signed in both directions and the −25 % end of MCC's label is real.
-
-### T7.5 — Per-pattern swing alone
-
-- [x] not yet run
-
-- **Resolves:** the single most consequential question in this tier. MCC labels `97` / `114`
-  _"swing (%) (an offset of 25 is applied to be send by MIDI) (−25 % to +25 %)"_ — a **signed
-  offset**. But `src/ksp/reader.py::_swing` reads it as an **absolute percentage** (`stored + 25`,
-  so the default 25 → 50 %). Both readings agree when the global is 50, which is why every sample
-  file hides the difference and no test catches it.
-- **Device:** from the baseline, global swing left at its default. On **Track 2, pattern 1 only**, set the
-  per-pattern swing (SHIFT + Swing encoder) to its maximum. Export. Then its minimum. Export.
-- **Captures:** `T7-swing-pattern-max.KeyStepPro`, `T7-swing-pattern-min.KeyStepPro`
-- **Keys:** `124_97_1`; also check `124_97_2` and `125_97_1` are untouched, so the scope really is
-  one pattern of one track, and check `124_99_1` for the "swing offset state" bit.
-- **Confirms if:** only pattern 1 of track 2 moves, and `99` bit changes when a non-default
-  per-pattern swing exists — which would mean the flag marks "this pattern overrides the global".
-- **Falsified if:** `99` does not move, or other patterns follow.
-- **Record the displayed percentage.** If the display reads an absolute 50–75 %, the reader is
-  right; if it reads a signed ±N %, the reader is wrong and `_swing` needs fixing.
-
-### T7.6 — Global and per-pattern together
-
-- [x] not yet run
-
-- **Resolves:** which of the three candidates governs the effective swing: `74` alone,
-  `74 + (97 − 25)`, or `97 − 25` overriding `74` when the `99` flag is set.
-- **Device:** from T7.5's max capture, now **also** move the global Swing to a non-default value
-  distinct from the per-pattern one. Export.
-- **Capture:** `T7-swing-both.KeyStepPro`
-- **Keys:** `120_74`, `124_97_1`, `124_99_1`
-- **Confirms if:** both keys hold their own value independently.
-- **Then listen.** Play the pattern and judge whether its shuffle matches the global setting, the
-  per-pattern setting, or something between. **This listening note is the actual result** — the
-  stored values cannot distinguish the three candidates on their own, only the audible behaviour
-  can. Tier 8 measures it precisely; this is the cheap version.
-
-### T7.7 — Drum swing spot-check
-
-- [x] not yet run
-
-- **Resolves:** whether `114` behaves like `97`.
-- **Device:** from the baseline. Track 1 in drum mode. Set per-pattern swing to maximum. Export.
-- **Capture:** `T7-swing-drum.KeyStepPro`
-- **Keys:** `123_114_<pattern>`, `123_116_<pattern>`
-- **Confirms if:** it mirrors T7.5 with the drum parameter pair.
-- **Falsified if:** it does not — then drum swing needs its own sweep.
-
-### T7.8 — Randomness control
-
-- [x] not yet run
-
-- **Resolves:** whether `113` is play-probability or timing jitter. **This gates Tier 8 entirely.**
-  A fresh note defaults to randomness 100, and if that means "randomise timing by 100" then every
-  timing measurement in this document is measuring noise.
-- **Device:** from the baseline. Track 2, pattern 1, four notes at beats 1, 5, 9, 13, all at default
-  randomness. Play the pattern for a minute and **listen**: do notes ever fail to sound, and does
-  the timing wander? Then set randomness to its **minimum** on all four and listen again. Export
-  both.
-- **Captures:** `T7-random-default.KeyStepPro`, `T7-random-min.KeyStepPro`
-- **Keys:** `124_113_1_1_<1..4>`
-- **Confirms if:** at 100 every note sounds every pass with steady timing — i.e. 100 means "always
-  plays" and randomness is probability.
-- **Falsified if:** notes drop out at 100, or onsets wander audibly.
-- **If it is timing jitter:** set randomness to its minimum for **every** Tier 8 capture and say so
-  in the ledger. If it is probability, minimum randomness may mean "never plays" — check which end
-  is safe before relying on it.
-
----
-
 ## Tier 8 — Live timing capture
 
 **~6 recordings.** The only tier that does not work by exporting files. Everything above reads what
 the device _stores_; this measures what the device _does_, because the quantity we need — what one
 Time Shift unit is worth in time — does not appear in the file at all.
 
-Run this **after Tier 7**, which supplies the range to sweep, and **after T7.8**, which says whether
-the measurement is meaningful.
+**Tier 7 cleared the way for this.** It supplies the range to sweep — displayed −49…+50, stored
+0–99 — and it established that randomness is a play probability rather than timing jitter, so a
+recording taken at the default randomness of 100 measures the device and not noise. Had that gone
+the other way, every number below would have been meaningless.
+
+**Two captures are still owed from tier 7**, and they belong in whatever session runs this:
+
+- `T7-swing-both` — must hold a non-default global **and** a non-default per-pattern swing at once.
+  The file of that name is byte-identical to `T7-swing-global-75`, so the per-pattern value never
+  made it in and the question of how the two combine is still open. Start from
+  `T7-swing-pattern-max`, then move the global encoder, then export.
+- `T7-swing-pattern-min` — byte-identical to the baseline. The displayed minimum is 50 %, which is
+  also the default, so a genuine export may well be a no-op; recapture only to confirm that, and if
+  it comes back identical again, record that as the finding rather than a failure.
 
 ### How to run a recording
 
@@ -431,47 +290,40 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 
 Rows for the completed tiers have been removed along with their procedures. The values those
 captures owed were collected in a separate gaps ledger, which is now **closed** — every row was
-answered and folded into the spec on 2026-08-01.
+answered and folded into the spec on 2026-08-01. **Tier 7's rows went the same way on 2026-08-05**;
+its findings are in [the spec](./format/Time_Shift_And_Swing.md).
 
-| Test ID | Date | Displayed value / setting  | Stored value | Notes                                                                                                                                                                                                                                                                                   |
-| ------- | ---- | -------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T7.1    |      | shift min / max displayed  |              | **the range — run first** Min -49, Max 50. Increments by 1                                                                                                                                                                                                                              |
-| T7.2    |      | shift per step:            |              | beat 1 -49, beat 3 -25, beat 5 -1, beat 7 0, beat 9 1, beat 11 25, beat 13 50                                                                                                                                                                                                           |
-| T7.3    |      | drum shift =               |              | Time shift ranges matches, -49 to 50 at 1 increments                                                                                                                                                                                                                                    |
-| T7.4    |      | global swing =             |              | min/max the encoder reaches: Min is 50%, max is 75%. Not exporting 50% since it is the min AND the default                                                                                                                                                                              |
-| T7.5    |      | pattern swing =            |              | absolute %. Display shows two sections when moving, global and Track. Track swing has a default of 50%, min of 50%, and a max of 75%                                                                                                                                                    |
-| T7.6    |      | global + pattern swing     |              | **which one did you hear?** Neither, swing only affects even numbered steps (step 2, 4, etc). When I changed the to even steps, I could hear the difference. The odd notes played on exact beat while the even notes were pushed later. Exact timing can be seen in the R4 timing test. |
-| T7.7    |      | drum swing =               |              | It is a per track, not per pattern, same as melody, and the min and default is 50 and the max is 75.                                                                                                                                                                                    |
-| T7.8    |      | randomness 100 then min    |              | **notes drop? timing wander?** This has nothing to do with timing whatsoever. This is all about if a note plays or not. At 0, note never plays. At 50% it play half the time. At 100 it plays all the time. No timing jitter ever.                                                      |
-| R1      |      | 30 BPM, 1/4, shift sweep   |              | measured offset per unit:                                                                                                                                                                                                                                                               |
-| R2      |      | 120 BPM, 1/4               |              | same ticks as R1?                                                                                                                                                                                                                                                                       |
-| R3      |      | 30 BPM, 1/16               |              | same ms as R1?                                                                                                                                                                                                                                                                          |
-| R4      |      | 30 BPM, swing sweep        |              |                                                                                                                                                                                                                                                                                         |
-| R5      |      | swing + shift together     |              | additive?                                                                                                                                                                                                                                                                               |
-| R6      |      | repeat of R1               |              | reproduced?                                                                                                                                                                                                                                                                             |
+| Test ID | Date | Displayed value / setting | Stored value | Notes                                                                    |
+| ------- | ---- | ------------------------- | ------------ | ------------------------------------------------------------------------ |
+| R1      |      | 30 BPM, 1/4, shift sweep  |              | measured offset per unit: See [`Timing_Calibration.md`](./Timing_Calibration.md) |
+| R2      |      | 120 BPM, 1/4              |              | same ticks as R1? See [`Timing_Calibration.md`](./Timing_Calibration.md)  |
+| R3      |      | 30 BPM, 1/16              |              | same ms as R1? See [`Timing_Calibration.md`](./Timing_Calibration.md)     |
+| R4      |      | 30 BPM, swing sweep       |              | See [`Timing_Calibration.md`](./Timing_Calibration.md)                    |
+| R5      |      | swing + shift together    |              | additive? See [`Timing_Calibration.md`](./Timing_Calibration.md)          |
+| R6      |      | repeat of R1              |              | reproduced? See [`Timing_Calibration.md`](./Timing_Calibration.md)        |
 
 ## Effort summary
 
-Remaining work only. B0, tiers 1–6 and the two write tiers are complete and are not listed.
+Remaining work only. B0, tiers 1–7 and the two write tiers are complete and are not listed.
 
-| Tier | Captures left       | Resolves                                | Milestone |
-| ---- | ------------------- | --------------------------------------- | --------- |
-| 7    | ~13                 | Time Shift range, swing semantics       | M7, M5    |
-| 8    | ~6 recordings       | what a Time Shift unit is worth in time | M2, M5    |
-|      | **~19 left** of ~59 |                                         |           |
+| Tier | Captures left      | Resolves                                | Milestone |
+| ---- | ------------------ | --------------------------------------- | --------- |
+| 8    | ~6 recordings      | what a Time Shift unit is worth in time | M2, M5    |
+|      | + 2 recaptures     | how global and per-pattern swing combine | M2       |
+|      | **~8 left** of ~59 |                                         |           |
 
 Each tier is independently useful — stopping after any one leaves a coherent result rather than a
 half-finished one.
 
-**Remaining ranking: T7.1 → rest of Tier 7 → Tier 8.**
+**Tier 8 is all that is left**, and it is last for the reason it always was: it is the only tier
+needing a recording rig rather than just the device and MCC. The two owed swing recaptures are
+ordinary exports and should be done in the same session, since the rig is irrelevant to them.
 
-- **T7.1 leads** and is two captures, because it is a go/no-go: if the Time Shift range is
-  only ±4, the rest of Tier 7's shift work and most of Tier 8 are not worth running at all.
-- **T7.5 is now the one place the shipped code may be wrong** — `reader._swing` and MCC's own field label
-  disagree about whether per-pattern swing is absolute or a signed offset, and no existing test can
-  tell, because every sample file is swing-neutral.
-- **Tier 8 is last** because it is the only tier needing a recording rig rather than just the device
-  and MCC, and because Tier 7 supplies the range it sweeps.
+Tier 7 earned its place at the front of the queue. T7.1 was a two-capture go/no-go — had the Time
+Shift range come back as ±4, most of tier 8 would not have been worth running — and it came back
+±49-ish, so the range is usable and the rest is worth doing. T7.5 was called out as "the one place
+the shipped code may be wrong", and it turned out the code was right and MCC's field label was
+wrong, which is a result worth having either way.
 
 This ordering has a track record. The previous version put D1 and Tier 3 first as "the two places
 where the current code is arguably wrong", and both were: D1 found the export emitting silent

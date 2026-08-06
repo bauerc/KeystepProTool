@@ -65,9 +65,11 @@ enforced by `tests/test_reader.py`.
   states which map it assumed.
 - **Gate is measured** (see [the gate ladder](./format/Gate_Length_Ladder.md)): an index, `stored = detent − 1`, 128 rungs, 0.0625–64 steps,
   drum ladder identical. `tests/test_gate_ladder.py` holds `GATE_TABLE` against the transcription.
-- **Time shift and swing encodings are still unmeasured**
-  (see [time shift and swing](./format/Time_Shift_And_Swing_Unmeasured.md)) — M7, needs hardware. Stay on the grid
-  and warn — a guessed encoding produces files that load fine and play wrong.
+- **Time shift and swing are measured** (see [time shift and swing](./format/Time_Shift_And_Swing.md)): shift is a plain offset,
+  `stored = 49 + displayed`, stored 0–99, drum identical; swing is an absolute 50–75 %, stored per
+  pattern, delaying the even steps only. **What one shift unit is worth in time is still unmeasured**
+  — M7 tier 8, needs a recording, not an export. Until then stay on the grid and warn: a guessed
+  timing constant produces files that load fine and play wrong.
 
 
 Keep the unknowns user-visible: each is an `ExportOptions` field with a documented default, never
@@ -99,7 +101,7 @@ Section numbers are the stable address: roughly fifty references across `src/`, 
 | 5 | [`Worked_Example_Project_5.md`](./format/Worked_Example_Project_5.md) | `project_5` decoded against its hardware-confirmed description |
 | 5 | [`Step_Skip_Mask_And_Passes.md`](./format/Step_Skip_Mask_And_Passes.md) | `49`/`53` as a 4-bit mask over four passes — repeats, not pages |
 | 5 | [`Resolved_Mode_Flags_And_Bitmasks.md`](./format/Resolved_Mode_Flags_And_Bitmasks.md) | The `52` layout; drum mode is `86` bit 6, not `100`; ARP octave; `116`/`99` bit 2 Mono/Poly |
-| 6 | [`Time_Shift_And_Swing_Unmeasured.md`](./format/Time_Shift_And_Swing_Unmeasured.md) | The two timing encodings still unmeasured, and why guessing is unsafe |
+| 6 | [`Time_Shift_And_Swing.md`](./format/Time_Shift_And_Swing.md) | Time shift and swing as measured, and the one timing quantity still missing |
 | 6.1 | [`Gate_Length_Ladder.md`](./format/Gate_Length_Ladder.md) | Gate as a 128-rung index ladder, `stored = detent − 1` |
 | 7 | [`SysEx_Direct_Transfer_Path.md`](./format/SysEx_Direct_Transfer_Path.md) | The `arturia_v2` bulk stream — future path, not needed for file conversion |
 | 8 | [`Corrections_And_Prior_Art.md`](./format/Corrections_And_Prior_Art.md) | What the earlier analysis got wrong, and the prior art |

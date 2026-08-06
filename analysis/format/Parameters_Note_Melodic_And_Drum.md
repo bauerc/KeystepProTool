@@ -20,8 +20,18 @@ keys use **`paramId`**. Confusing the two is an easy mistake.
 | `109` | Seq note pitch | **note** | MIDI note 0–127 |
 | `110` | Seq note gate length | **note** | non-linear, see [the gate ladder](./Gate_Length_Ladder.md) |
 | `111` | Seq note velocity | **note** | 0–127 **directly** |
-| `112` | Seq note time shift | **note** | offset, **centre = 49** |
-| `113` | Seq note randomness | **note** | 0–100 |
+| `112` | Seq note time shift | **note** | offset, **centre = 49**, stored 0–99 (displayed −49…+50) |
+| `113` | Seq note randomness | **note** | 0–100, a **play probability** — see below |
+
+**`113` / `121` is a probability, not a timing jitter.** Established by ear in tier 7 (T7.8): at
+100 the note sounds on every pass, at 50 on roughly half of them, at the minimum never, and the
+onset does not wander at any setting. The name invites the opposite reading, and it mattered —
+a fresh note defaults to **100**, so had this been jitter every timing measurement taken at the
+defaults would have been measuring noise. It is not, so the default means "always plays".
+
+No capture sweeps the stored values, so the displayed-to-stored mapping is taken as 1:1 on the
+strength of the observed range alone. A note stored below 100 sounds only some of the time, which
+`ksp2midi` cannot represent — it renders every note as certain (see [existence versus audibility](./Existence_Versus_Audibility.md)).
 
 **`109` is a raw MIDI note number, and the device's own note names are C3 = 60.** Capture
 `D2-chord4-tr3` stores 48, 52, 55, 59 for a chord the operator played and named **C2, E2, G2,
@@ -43,6 +53,10 @@ and the drum set's `117` is a lane index rather than a pitch (§3.2).
 | `119` | DRUM note velocity | **note** |
 | `120` | DRUM note time shift | **note** |
 | `121` | DRUM note randomness | **note** |
+
+**`120` and `121` carry the melodic encodings unchanged.** Tier 7 (T7.3) swept drum time shift end
+to end and it matched `112` at every point — same centre of 49, same stored 0–99 — so the two
+parameter sets need one decoder between them rather than a drum-specific centre.
 
 Track 1 plays the drum set *or* the sequencer set depending on its mode. That mode is documented
 as living in the `100` bitfield, which does not work — the flag is **`86` bit 6**, per [resolved mode flags](./Resolved_Mode_Flags_And_Bitmasks.md).

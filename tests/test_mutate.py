@@ -205,6 +205,10 @@ def test_place_note_refuses_track_1_slot_4(load_sample: Loader) -> None:
         ({"pitch": -1}, "pitch -1"),
         ({"velocity": 128}, "velocity 128"),
         ({"slot": 4}, "slot 4"),
+        # Narrower than the 7-bit field: tier 7 found the encoder stops at
+        # stored 0 and 99, so 100 is a value no display can reach.
+        ({"time_shift": 100}, "time shift 100"),
+        ({"time_shift": -1}, "time shift -1"),
     ],
 )
 def test_place_note_refuses_out_of_range(
@@ -213,6 +217,15 @@ def test_place_note_refuses_out_of_range(
     args: dict[str, int] = {"track": 2, "pattern": 1, "step": 1, "pitch": 60, **kwargs}
     with pytest.raises(ValueError, match=match):
         mutate.place_note(load_sample("baseline.KeyStepPro"), **args)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("stored", [0, 99])
+def test_place_note_accepts_both_time_shift_extremes(load_sample: Loader, stored: int) -> None:
+    """The ends of the measured range are reachable, not off-by-one rejected."""
+    raw = mutate.place_note(
+        load_sample("baseline.KeyStepPro"), track=2, pattern=1, step=1, pitch=60, time_shift=stored
+    )
+    assert raw[f"124_{constants.P_SEQ_TIME_SHIFT}_1_1_1"] == stored
 
 
 def test_place_note_refuses_a_seventeenth_note_on_one_step(load_sample: Loader) -> None:

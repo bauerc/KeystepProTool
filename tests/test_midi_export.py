@@ -380,6 +380,26 @@ def test_swing_delays_the_second_step_of_each_pair(project_5: Project) -> None:
     assert any("75% swing" in w for w in result.warnings)
 
 
+def test_a_global_swing_is_reported_rather_than_applied(project_5: Project) -> None:
+    """74 is a live percentage (T7.4), but how it combines with 97 is not measured.
+
+    So it must be named in the warnings and must not move a single note --
+    silently applying a guessed combination is the failure this guards.
+    """
+    swung = replace(project_5, global_swing_percent=63)
+    result = export_project(swung, ONE_PASS)
+    baseline = export_project(project_5, ONE_PASS)
+
+    assert any("63% global swing" in w for w in result.warnings)
+    assert [n.start for n in played(result.midi, "Track 3")] == [
+        n.start for n in played(baseline.midi, "Track 3")
+    ]
+
+
+def test_a_straight_global_swing_is_not_reported(project_5: Project) -> None:
+    assert not any("global swing" in w for w in export_project(project_5, ONE_PASS).warnings)
+
+
 def _with_swing(project: Project, percent: int) -> Project:
     """A copy of *project* with one pattern's melodic swing overridden.
 

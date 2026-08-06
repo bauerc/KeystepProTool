@@ -35,9 +35,11 @@ diff actually touches** — never the whole set. Each trap below names its file.
 - **Gate is a measured index** (`stored = detent - 1`, 128 rungs) — flag any code computing gate
   values without going through `GATE_TABLE` / `tests/test_gate_ladder.py`'s data.
   → `format/Gate_Length_Ladder.md` and `analysis/gate_ladder.txt`
-- **Time shift and swing are still unmeasured** (M7) — flag any code that guesses an encoding for
-  these instead of staying on the grid and emitting a warning via `ExportOptions`.
-  → `format/Time_Shift_And_Swing_Unmeasured.md`
+- **Time shift and swing are measured; the shift unit is not** (M7) — shift is `stored = 49 +
+  displayed` over stored 0–99, drum identical; swing is an absolute 50–75 % per pattern, delaying
+  even steps. Flag any code that guesses what one shift unit is worth **in time**, or that folds
+  the global swing `74` into the per-pattern value, instead of staying on the grid and warning.
+  → `format/Time_Shift_And_Swing.md`
 - **Fixed key set**: format writers must never add/remove keys relative to the
   `Default.KeyStepPro` template — flag any code path that does.
   → `format/File_Dialect_And_Write_Fidelity.md`

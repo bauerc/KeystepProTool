@@ -70,6 +70,19 @@ def _check_value(name: str, value: int) -> None:
         raise ValueError(f"{name} {value} out of range 0-{constants.SENTINEL}")
 
 
+def _check_time_shift(stored: int) -> None:
+    # Narrower than the 7-bit field: tier 7 swept the encoder end to end and it
+    # stops at stored 0 and 99, so anything outside that is a value the device
+    # cannot be made to display.
+    low, high = constants.TIME_SHIFT_STORED_MIN, constants.TIME_SHIFT_STORED_MAX
+    if not low <= stored <= high:
+        displayed = stored - constants.TIME_SHIFT_CENTRE
+        raise ValueError(
+            f"time shift {stored} (displayed {displayed:+d}) out of range {low}-{high} "
+            f"(displayed {constants.TIME_SHIFT_RANGE[0]:+d}..{constants.TIME_SHIFT_RANGE[1]:+d})"
+        )
+
+
 def _with_values(raw: Mapping[str, int | str], updates: Mapping[str, int]) -> dict[str, int | str]:
     """Copy *raw* with *updates* applied, refusing any key it does not hold.
 
@@ -202,10 +215,10 @@ def place_note(
         ("pitch", pitch),
         ("velocity", velocity),
         ("gate", gate),
-        ("time shift", time_shift),
         ("randomness", randomness),
     ):
         _check_value(name, value)
+    _check_time_shift(time_shift)
 
     per_slot = [_slot_steps(raw, item, pattern, s) for s in range(1, _SLOTS + 1)]
     if len(per_slot[slot - 1]) >= constants.MAX_STEPS:
