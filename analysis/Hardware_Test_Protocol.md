@@ -7,28 +7,28 @@ export back out.
 
 **Audience:** a human at the device, and an agent re-reading this later to interpret the captures.
 
-> **This document contains only unfinished work.** What is found is in
-> [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md), which is the authoritative record —
-> not here.
+> **This document holds no unfinished work.** Every tier it once carried has been answered and
+> removed; what survives is the *method*, for the next question that needs the device. Findings live
+> in [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md), which is the authoritative record —
+> never here.
 
 **The baseline every test below starts from** is `B0-baseline.KeyStepPro` — an initialised,
 untouched project, already captured. Where a test says "from the baseline", start by loading or
 re-initialising to that state; do not re-derive it.
 
-**What is genuinely unknown and needs the device:**
+**What is genuinely unknown and needs the device: nothing.** Every question this programme opened
+has been answered, and the procedures have been removed as each tier closed. What is left below is
+the method — how to run a capture, the export and import routes, the device operating notes, the
+rules — kept because the next format question will need all of it, and because reconstructing it
+from memory is exactly how a capture gets taken wrongly.
 
-| Question                                                | Blocks                                     | Tier |
-| ------------------------------------------------------- | ------------------------------------------ | ---- |
-| What one Time Shift unit is worth in time               | M2's grid-quantise warning, M5's quantiser | 8    |
-| How global `74` and per-pattern `97` swing combine      | whether `ksp2midi` may apply the global    | 8    |
-
-Both are the subject of [`Timing_Calibration.md`](./Timing_Calibration.md), which carries the model
-and the arithmetic; tier 8 below is the recordings that feed it.
-
-**Tier 7 is complete** (2026-08-05) and has been removed. It measured the Time Shift range and
-linearity, the swing encoding and scope, and the meaning of randomness; the findings are in
-[the spec](./format/Time_Shift_And_Swing.md). Two of its captures need redoing — see the note under
-tier 8.
+**Tiers 7 and 8 are complete and have been removed.** Tier 7 (2026-08-05) measured the Time Shift
+range and linearity, the swing encoding and scope, and the meaning of randomness. Tier 8
+(2026-08-04) measured the one quantity no export can carry — what a Time Shift unit is worth in
+time, which is **1/400 of a beat**, fixed, independent of both step size and tempo. The findings
+are in [the spec](./format/Time_Shift_And_Swing.md) and the recordings are reduced in
+[`Timing_Calibration.md`](./Timing_Calibration.md) §6.1. T7.6 also settled the last of it by ear:
+**the per-pattern swing takes precedence over the global**, so `74` is never folded in.
 
 ---
 
@@ -205,92 +205,13 @@ the current assumption · what falsifies it · what to do if falsified.**
 
 ---
 
-## Tier 8 — Live timing capture
+## Nothing is owed
 
-**~6 recordings.** The only tier that does not work by exporting files. Everything above reads what
-the device _stores_; this measures what the device _does_, because the quantity we need — what one
-Time Shift unit is worth in time — does not appear in the file at all.
-
-**Tier 7 cleared the way for this.** It supplies the range to sweep — displayed −49…+50, stored
-0–99 — and it established that randomness is a play probability rather than timing jitter, so a
-recording taken at the default randomness of 100 measures the device and not noise. Had that gone
-the other way, every number below would have been meaningless.
-
-**Two captures are still owed from tier 7**, and they belong in whatever session runs this:
-
-- `T7-swing-both` — must hold a non-default global **and** a non-default per-pattern swing at once.
-  The file of that name is byte-identical to `T7-swing-global-75`, so the per-pattern value never
-  made it in and the question of how the two combine is still open. Start from
-  `T7-swing-pattern-max`, then move the global encoder, then export.
-- `T7-swing-pattern-min` — byte-identical to the baseline. The displayed minimum is 50 %, which is
-  also the default, so a genuine export may well be a no-op; recapture only to confirm that, and if
-  it comes back identical again, record that as the finding rather than a failure.
-
-### How to run a recording
-
-Different from a capture. A recording is:
-
-1. **Rig:** KeyStep Pro MIDI out → interface → DAW. Set the DAW's tempo to the value under test and
-   **lock it**; do not let it chase incoming clock.
-2. **Reference track.** Track 3, pattern 1: four notes at beats 1, 5, 9, 13, everything at default —
-   swing 0, shift 0. Put it on its own MIDI channel. **Every measurement is a difference between a
-   test note and its reference note**, which cancels interface latency and clock drift exactly.
-   Never measure an absolute onset.
-3. **Test track.** Track 2, pattern 1, carrying whatever shift or swing the row calls for, on a
-   different channel.
-4. **Record at least 8 bars** so per-cell variance is visible rather than averaged away.
-5. **Export the recording** as `analysis/captures/<recording-id>.mid` and reduce it with
-   `uv run python tools/reduce_timing.py`, which pairs the two channels and prints offsets in both
-   ticks and milliseconds.
-6. **Log the row** in the ledger: recording ID, BPM, step size, displayed shift/swing, measured
-   offset, observed spread.
-
-### The matrix
-
-| ID  | BPM | Step size | Varying                              | Resolves                                           |
-| --- | --- | --------- | ------------------------------------ | -------------------------------------------------- |
-| R1  | 30  | 1/4       | shift = 0, ±1, ±half, ±max           | the unit `U` at maximum resolution                 |
-| R2  | 120 | 1/4       | same shift values                    | is `U` tempo-invariant?                            |
-| R3  | 30  | 1/16      | same shift values                    | is `U` a fraction of a step or a fixed tick count? |
-| R4  | 30  | 1/4       | swing at min / mid / max, shift 0    | the swing formula, and which parameter governs it  |
-| R5  | 30  | 1/4       | swing max **and** shift max together | do they add, or interact?                          |
-| R6  | 30  | 1/4       | repeat of R1, fresh session          | reproducibility                                    |
-
-- [x] R1 — 30 BPM, 1/4, shift sweep
-- [x] R2 — 120 BPM, 1/4
-- [x] R3 — 30 BPM, 1/16
-- [x] R4 — 30 BPM, swing sweep
-- [x] R5 — swing and shift together
-- [x] R6 — repeat of R1
-
-**Start at 30 BPM with 1/4-note steps.** That makes a step 2000 ms, so even a very fine shift unit
-is tens of milliseconds — comfortably above MIDI jitter. At 120 BPM with 1/16 steps a step is
-125 ms and a fine unit would be around a millisecond, which is at or below the noise floor. **The
-slow, coarse setting is what makes this measurable at all.**
-
-### Reading the result
-
-Three candidate encodings, and the matrix separates all three:
-
-| Model                      | What one unit is      | Signature in the data                                                       |
-| -------------------------- | --------------------- | --------------------------------------------------------------------------- |
-| **A** — fraction of a step | `t_step / N`          | R1 ≡ R2 in _ticks_; R3 differs from R1 in ms by exactly the step-size ratio |
-| **B** — fixed clock ticks  | a constant tick count | R1 ≡ R2 in ticks; **R3 ≡ R1 in ms**                                         |
-| **C** — absolute time      | a constant in ms      | **R1 ≡ R2 in ms**, not in ticks                                             |
-
-- **R1 vs R2 separates C** from the other two: only under C does a tempo change leave the
-  millisecond offset unchanged.
-- **R1 vs R3 separates A from B.** This is why BPM alone is not enough — A and B are both
-  tempo-invariant, and only changing the step size tells them apart.
-- **If R6 does not reproduce R1**, stop. Something in the rig is drifting and no result from this
-  tier can be trusted until it is found.
-
-Record the outcome in [`Timing_Calibration.md`](./Timing_Calibration.md) §6 and put the constant in
-`ksp.constants.TIME_SHIFT_UNIT`, which is `None` until this tier produces a number. **Do not fill it
-in from a plausible-looking pattern in one recording** — the failure mode is a file that loads
-cleanly and plays with wrong timing, and nothing errors.
-
----
+Every capture this programme called for has been taken and read. `T7-swing-pattern-min` and
+`T7-swing-both` both came back byte-identical to files they were meant to differ from — the first
+because 50 % is both the minimum and the default so the export really is a no-op, the second
+because the per-pattern value never made it into the capture. Neither is worth redoing: the
+question they served was answered at the device instead.
 
 ## Capture ledger
 
@@ -298,40 +219,32 @@ Fill in as you go. This table is the record; the `.KeyStepPro` files are the evi
 
 Rows for the completed tiers have been removed along with their procedures. The values those
 captures owed were collected in a separate gaps ledger, which is now **closed** — every row was
-answered and folded into the spec on 2026-08-01. **Tier 7's rows went the same way on 2026-08-05**;
-its findings are in [the spec](./format/Time_Shift_And_Swing.md).
+answered and folded into the spec on 2026-08-01. **Tier 7's rows went the same way on 2026-08-05,
+and tier 8's on 2026-08-06**; the findings are in [the spec](./format/Time_Shift_And_Swing.md), and
+tier 8's six recordings stay reduced in
+[`Timing_Calibration.md`](./Timing_Calibration.md) §6.1 because that is where the arithmetic lives.
 
-| Test ID | Date | Displayed value / setting | Stored value | Notes                                                                    |
-| ------- | ---- | ------------------------- | ------------ | ------------------------------------------------------------------------ |
-| R1      |      | 30 BPM, 1/4, shift sweep  |              | measured offset per unit: See [`Timing_Calibration.md`](./Timing_Calibration.md) |
-| R2      |      | 120 BPM, 1/4              |              | same ticks as R1? See [`Timing_Calibration.md`](./Timing_Calibration.md)  |
-| R3      |      | 30 BPM, 1/16              |              | same ms as R1? See [`Timing_Calibration.md`](./Timing_Calibration.md)     |
-| R4      |      | 30 BPM, swing sweep       |              | See [`Timing_Calibration.md`](./Timing_Calibration.md)                    |
-| R5      |      | swing + shift together    |              | additive? See [`Timing_Calibration.md`](./Timing_Calibration.md)          |
-| R6      |      | repeat of R1              |              | reproduced? See [`Timing_Calibration.md`](./Timing_Calibration.md)        |
+The table is empty because the programme is finished. Add a row when a new question sends someone
+back to the device.
 
 ## Effort summary
 
-Remaining work only. B0, tiers 1–7 and the two write tiers are complete and are not listed.
-
-| Tier | Captures left      | Resolves                                | Milestone |
-| ---- | ------------------ | --------------------------------------- | --------- |
-| 8    | ~6 recordings      | what a Time Shift unit is worth in time | M2, M5    |
-|      | + 2 recaptures     | how global and per-pattern swing combine | M2       |
-|      | **~8 left** of ~59 |                                         |           |
-
-Each tier is independently useful — stopping after any one leaves a coherent result rather than a
-half-finished one.
-
-**Tier 8 is all that is left**, and it is last for the reason it always was: it is the only tier
-needing a recording rig rather than just the device and MCC. The two owed swing recaptures are
-ordinary exports and should be done in the same session, since the rig is irrelevant to them.
+**Nothing remains.** B0, tiers 1–8 and the two write tiers are all complete — roughly 59 captures
+and 6 recordings, and every question they were opened to answer has been answered and folded into
+[the spec](./KeyStepPro_Format_Spec.md).
 
 Tier 7 earned its place at the front of the queue. T7.1 was a two-capture go/no-go — had the Time
 Shift range come back as ±4, most of tier 8 would not have been worth running — and it came back
-±49-ish, so the range is usable and the rest is worth doing. T7.5 was called out as "the one place
+±49-ish, so the range is usable and the rest was worth doing. T7.5 was called out as "the one place
 the shipped code may be wrong", and it turned out the code was right and MCC's field label was
 wrong, which is a result worth having either way.
+
+Tier 8 then earned the effort of building a rig. Its result could not have come from any export,
+and it overturned the reading the files supported: a Time Shift unit looked like a fraction of a
+step, because at the 1/16 grid every sample project uses, the maximum shift is exactly half a step.
+Recording a second step size showed the unit is a fixed count instead. **A quantity sampled at one
+setting of the lever that matters will fit whatever curve you had in mind** — the same lesson gate
+taught in tier 2, learned again.
 
 This ordering has a track record. The previous version put D1 and Tier 3 first as "the two places
 where the current code is arguably wrong", and both were: D1 found the export emitting silent

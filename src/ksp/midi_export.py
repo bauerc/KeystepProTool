@@ -84,6 +84,11 @@ class ExportOptions:
     one (the first of each step pair takes that share of the pair), which has
     not been measured against the device. Turn it off to get a flat grid."""
 
+    apply_time_shift: bool = True
+    """Displace each note by its stored time shift, measured by tier 8 as a
+    fixed 1/400 of a beat per unit. Turn it off to get a flat grid -- useful
+    for reading a pattern's written positions rather than its groove."""
+
     include_stale: bool = False
     """Export both note sets of a pattern that holds both, rather than the one
     parameter 86 bit 6 says the device plays. Off by default: the point of a
@@ -426,15 +431,13 @@ def _render_note(
             return None
         pitch = options.drum_map.note_for_lane(note.pitch)
 
-    if note.time_shift:
-        collector.add(
-            Code.TIME_SHIFT_NOT_APPLIED,
-            "note(s) carry a non-zero time shift; its timing encoding is not measured, "
-            "so the shift was not applied",
-        )
     tick = (note.step - 1) * step_ticks
     if options.apply_swing:
         tick += _swing_delay(note.step, swing, step_ticks)
+    if options.apply_time_shift:
+        # Independent of the step size, so it is taken from the beat rather
+        # than from step_ticks (tier 8, R1 against R3).
+        tick += constants.time_shift_ticks(note.time_shift, options.ticks_per_beat)
 
     gate = note.gate
     if gate is None:
@@ -460,6 +463,25 @@ def _swing_delay(step: int, swing_percent: int, ticks_per_step: int) -> int:
     if step % 2:
         return 0
     return round(ticks_per_step * (2 * swing_percent / 100 - 1))
+
+
+def _placed(note: RenderedNote, offset: int, collector: Collector) -> RenderedNote:
+    """Move *note* onto the timeline, holding it at tick 0 if it lands before it.
+
+    Only a negative time shift on the first step of the first pattern can go
+    negative, and MIDI has nowhere to put it. The note keeps its length and is
+    reported, because silently moving an onset is the failure this whole tier
+    exists to avoid.
+    """
+    tick = note.tick + offset
+    if tick >= 0:
+        return replace(note, tick=tick)
+    collector.add(
+        Code.TIME_SHIFT_CLIPPED,
+        f"a note's time shift places it {-tick} tick(s) before the start of the export; "
+        f"it was held at the start instead",
+    )
+    return replace(note, tick=0)
 
 
 def arrange(renderings: Sequence[Rendering]) -> Arrangement:
@@ -489,7 +511,7 @@ def arrange(renderings: Sequence[Rendering]) -> Arrangement:
     ):
         offset = offsets[rendering.pattern_number]
         groups.setdefault(rendering.midi_track_name, []).extend(
-            replace(n, tick=n.tick + offset) for n in rendering.notes
+            _placed(n, offset, collector) for n in rendering.notes
         )
 
     _warn_on_unequal_tracks(renderings, collector)
@@ -717,13 +739,14 @@ def render_project(project: Project, options: ExportOptions | None = None) -> tu
 
 def _result(arrangement: Arrangement, project: Project, options: ExportOptions) -> ExportResult:
     diagnostics = arrangement.diagnostics
-    # How the global combines with the per-pattern value is not measured, so
-    # it is reported rather than folded in.
+    # The per-pattern value takes precedence on the device (T7.6), so the
+    # global is reported rather than folded in -- the export is not dropping
+    # groove here, it is doing what the hardware does.
     if options.apply_swing and project.global_swing_percent != constants.SWING_RANGE_PERCENT[0]:
         global_swing = Diagnostic(
             Code.GLOBAL_SWING_NOT_APPLIED,
-            f"project sets a {project.global_swing_percent}% global swing (parameter 74); how it "
-            f"combines with the per-pattern value is not measured, so it was not applied",
+            f"project sets a {project.global_swing_percent}% global swing (parameter 74); the "
+            f"per-pattern value takes precedence on the device, so the global was not applied",
         )
         diagnostics = Report((global_swing, *diagnostics))
     return ExportResult(

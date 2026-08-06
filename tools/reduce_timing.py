@@ -62,31 +62,52 @@ def read_onsets(path: Path) -> tuple[list[Onset], int, float]:
 
 def pair_onsets(
     onsets: Sequence[Onset], *, ref_channel: int, test_channel: int, window: int
-) -> list[Pairing]:
+) -> tuple[list[Pairing], int]:
     """Match each test onset to the nearest reference onset within *window* ticks.
+
+    Returns the pairings and how many test onsets were refused as ambiguous.
 
     Nearest-match rather than index-match on purpose: if a note fails to sound
     (randomness, spec §6 of the calibration doc) the sequences desynchronise,
     and index-matching would silently pair the wrong notes.
+
+    A displacement of half a step lands exactly between two reference notes,
+    and picking either one turns a clean constant offset into a ±half-step
+    split that reads as jitter. That is not a measurement, so it is refused
+    rather than guessed -- it cost tier 8's R3 its reading once already.
     """
     references = [o.tick for o in onsets if o.channel == ref_channel]
     if not references:
-        return []
+        return [], 0
 
     pairings: list[Pairing] = []
+    ambiguous = 0
     for onset in onsets:
         if onset.channel != test_channel:
             continue
-        nearest = min(references, key=lambda r: abs(onset.tick - r))
-        if abs(onset.tick - nearest) <= window:
-            pairings.append(Pairing(reference_tick=nearest, test_tick=onset.tick))
-    return pairings
+        distances = sorted(references, key=lambda r: abs(onset.tick - r))
+        nearest = distances[0]
+        if abs(onset.tick - nearest) > window:
+            continue
+        runner_up = distances[1] if len(distances) > 1 else None
+        if runner_up is not None and abs(onset.tick - nearest) == abs(onset.tick - runner_up):
+            ambiguous += 1
+            continue
+        pairings.append(Pairing(reference_tick=nearest, test_tick=onset.tick))
+    return pairings, ambiguous
 
 
-def report(pairings: Sequence[Pairing], *, ppq: int, bpm: float) -> Iterator[str]:
+def report(
+    pairings: Sequence[Pairing], *, ppq: int, bpm: float, ambiguous: int = 0
+) -> Iterator[str]:
     """Yield the measured offset, with spread so jitter stays visible."""
     if not pairings:
         yield "no test notes paired with a reference note -- check the channel numbers"
+        if ambiguous:
+            yield (
+                f"{ambiguous} test note(s) sat exactly between two reference notes. "
+                f"The displacement is half a step; use a longer step size to resolve it."
+            )
         return
 
     offsets = [p.offset_ticks for p in pairings]
@@ -102,6 +123,13 @@ def report(pairings: Sequence[Pairing], *, ppq: int, bpm: float) -> Iterator[str
     )
     yield f"offset (ms)      mean {mean * ms_per_tick:+.2f}   sd {spread * ms_per_tick:.2f}"
 
+    if ambiguous:
+        yield ""
+        yield (
+            f"{ambiguous} test note(s) sat exactly between two reference notes and were "
+            f"dropped -- the displacement is half a step, so re-run at a longer step size."
+        )
+
     if spread > 1.0:
         yield ""
         yield (
@@ -116,7 +144,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("recording", type=Path, help="the .mid exported from the DAW")
     parser.add_argument(
-        "--ref-channel", type=int, default=3, help="0-based channel of the reference track"
+        "--ref-channel",
+        type=int,
+        default=3,
+        help=(
+            "0-based channel of the reference track -- the one at defaults. Getting this the "
+            "wrong way round negates every offset reported, so check it against a known shift"
+        ),
     )
     parser.add_argument(
         "--test-channel", type=int, default=1, help="0-based channel of the track under test"
@@ -130,13 +164,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     onsets, ppq, bpm = read_onsets(args.recording)
-    pairings = pair_onsets(
+    pairings, ambiguous = pair_onsets(
         onsets,
         ref_channel=args.ref_channel,
         test_channel=args.test_channel,
         window=args.window,
     )
-    for line in report(pairings, ppq=ppq, bpm=bpm):
+    for line in report(pairings, ppq=ppq, bpm=bpm, ambiguous=ambiguous):
         print(line)
     return 0
 
