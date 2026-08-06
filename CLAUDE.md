@@ -7,6 +7,7 @@ Guidance for Claude Code working in this repository.
 - Comment concisely. Large docstrings on methods should NOT be used.
 - Claude plan files committed to this repository are deleted as part of the implementing task.
 - Use subagents
+- DO NOT reply to PR comments
 
 ## What this is
 
