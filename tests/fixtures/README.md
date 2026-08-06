@@ -10,10 +10,19 @@ than against a reimplementation of the same expectations. See ROADMAP.md M1.
 | `project_9.expected.json` | The three targeted single-note tests in `project_9` |
 | `empty_projects.expected.json` | The two baselines that must decode to nothing at all |
 | `recall_tape.txt` | MCC's Recall To exchange with the device, 8,951 request/reply frame pairs |
+| `recall_project_2_tape.txt` | The same exchange against **project 2**, so the slot byte is pinned against a second value |
+| `import_project_3_tape.txt` | MCC writing that data back into **project 3** — the write direction, 8,951 write/ack pairs |
 
-`recall_tape.txt` is distilled by `tools/make_recall_tape.py` from
-`usb_midi_investigation/recall_sysex.jsonl`, which is gitignored — the tape is
-tracked so the replay tests cannot skip silently on a fresh clone.
+All three are distilled by `tools/make_recall_tape.py` from captures under
+`usb_midi_investigation/`, which are gitignored — the tapes are tracked so the
+replay tests cannot skip silently on a fresh clone. Each line is
+`<sent> <received>`, whitespace-separated hex.
+
+The import tape's received column can be `-`, meaning the device sent no ack.
+It happens exactly once, and it is a finding rather than a capture glitch: the
+truncated `0xFF` write at `123_117_1` stalled the link and MCC recovered with a
+fresh identity request. Keeping it in the data rather than only in prose is why
+`test_capture_evidence.py` can assert it. See spec section 7.6.
 
 ## Provenance, and why it matters
 

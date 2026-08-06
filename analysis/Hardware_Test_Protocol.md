@@ -229,9 +229,12 @@ unprivileged process, so every command below needs `sudo`. Each probe is a few s
 sudo uv run python tools/usb_probe.py <probe> [--save project_files/captures/H1-x.jsonl]
 ```
 
-Nothing in the read protocol's address tuple identifies a project slot, so every probe reads
-**whichever project is loaded on the panel**. Note which one that is in the ledger — H4.1 is what
-settles whether a slot can be selected at all.
+Byte 7 of every frame is the **project slot** as far as the captures go
+([spec 7.4](./format/SysEx_Direct_Transfer_Path.md)), but every probe below sent `01` and read
+whichever project happened to be loaded, so none of them separates "byte 7 selects the slot" from
+"byte 7 is inert and the panel decides". Note the loaded project in the ledger. **H4.1** is what
+separates the two, and until it runs a reader must still warn that it may be reading the panel's
+project rather than the one it asked for.
 
 ### H1.1 — Identity
 
@@ -330,6 +333,46 @@ Recall To capture was taken from. Raw output in `usb_probe_results.txt`.
   parameter's extent has never been tested. **Phase 3 work, gated on H3.2's byte-diff**, not a
   drive-by change to a passing plan.
 
+**One caveat the captures added afterwards.** H1.4's "no handshake required" was measured with
+byte 7 = `01` throughout. It stands as measured — the reads succeeded without a prologue — but the
+`0x05` frame is now known to carry the slot number ([spec 7.5](./format/SysEx_Direct_Transfer_Path.md)),
+so what H1.4 rules out is a prologue *for reading slot 1*. If H4.1 shows the device honours byte 7,
+whether `0x05` is also needed to switch slots is a separate question this probe never asked.
+
+---
+
+## Phase 2 — the project slot
+
+One probe, and it is the last thing standing between the read path and a project chooser.
+
+### H4.1 — Does the device honour byte 7?
+
+- [ ] **not run.**
+
+- **Resolves:** whether byte 7 selects the project, or merely labels a transfer whose real target
+  is whatever the panel has loaded. Four captures show MCC varying it with the project
+  ([spec 7.4](./format/SysEx_Direct_Transfer_Path.md)) and nothing else in an import stream names
+  the destination — but every probe so far sent `01`, so the device's side of this is untested.
+  Until it is settled, `bulk_read` must keep warning that it may be reading the panel's project.
+- **Setup:** two slots whose `120_37` **differs**, so the answer is not the same either way. Read
+  it from each with the panel on that project first and record both values; if they match, pick a
+  different scalar or change one. Then load project **A** on the panel and leave it there.
+- **Command:** the H1.2 scalar read against `120_37`, with byte 7 set to **B**'s slot number while
+  **A** is loaded. `usb_probe.py` sends `SUBCOMMAND = 0x01` today, so this needs the byte to be
+  settable — one parameter, no protocol change.
+- **Confirms if:** the value comes back as **B**'s. Byte 7 selects, a slot can be named, and the
+  read path can offer a project chooser.
+- **Falsified if:** the value comes back as **A**'s. Byte 7 is inert on the read, the slot is panel
+  state, and MCC must be selecting the project by some route outside the SysEx stream — in which
+  case say so in spec 7.4 and keep the warning permanently.
+- **Also worth noting:** whether the device answers at all when byte 7 names an *empty* slot, and
+  whether it answers when byte 7 is `00` or `11` (17, past the 16 slots). Neither is required to
+  settle the question; both are cheap once the byte is settable.
+
+**Do not extend this to the write direction.** Confirming byte 7 on a read costs nothing. Testing
+it on a write means sending 8,951 frames to a slot, and spec 7.5 flags `06 <slot>` as an untested
+commit — that needs its own protocol entry and a slot the user is willing to lose.
+
 ---
 
 ## Capture ledger
@@ -348,9 +391,13 @@ back to the device.
 
 ## Effort summary
 
-**Nothing remains.** B0, tiers 1–8 and the two write tiers are all complete — roughly 59 captures
-and 6 recordings, and every question they were opened to answer has been answered and folded into
-[the spec](./KeyStepPro_Format_Spec.md).
+**One probe remains: H4.1.** B0, tiers 1–8, the two write tiers and Phase 1 are all complete —
+roughly 59 captures and 6 recordings, and every question they were opened to answer has been
+answered and folded into [the spec](./KeyStepPro_Format_Spec.md).
+
+H4.1 reopened the programme on 2026-08-06, not because a tier missed something but because two new
+USB captures decoded a byte that had been carried as a constant. It is a single scalar read and it
+needs no `.KeyStepPro` export, so it does not belong to a tier.
 
 Tier 7 earned its place at the front of the queue. T7.1 was a two-capture go/no-go — had the Time
 Shift range come back as ±4, most of tier 8 would not have been worth running — and it came back
