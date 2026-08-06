@@ -307,11 +307,38 @@ project rather than the one it asked for.
 - **Falsified if:** every pattern reads `247`, or the reads that should be unset come back empty.
   Then the sentinel is being eaten below `deframe` and the transport, not MCC, is the lossy part.
 
+### H1.6 — Count ceiling and extent overrun
+
+- [x] **run 2026-08-06 — confirmed, and the ceiling is 100, not 127.** A `count` of `0x7f` came
+  back echoing `0x64` with exactly 100 values. 65 and 96 were honoured exactly. Reading past an
+  item's extent is **silent**: 106 values requested from index 1 of a 64-step item returned the 64
+  real values followed by 36 × `0x7f`, with no error and no short reply. `nIdx=4` drew no reply at
+  all. Full account in [spec 7.7](./format/SysEx_Direct_Transfer_Path.md).
+
+- **Resolves:** how far `count` may be pushed above the 64 H1.3 confirmed, and — the question
+  H1.3's note left open — what happens when a count overruns a parameter's extent. Both gate any
+  future raise of the count in `ksp.bulk_plan`.
+- **Command:** none. **This probe has no `usb_probe.py` subcommand**, unlike H1.1–H1.5. It was run
+  by appending request lines to `outbound_sysex_sequence.txt` and replaying them with
+  `usb_midi_investigation/replay_handshake.py`; raw output is in `ksp_clean_bytes_log.txt` and
+  `ksp_raw_packets_log.txt`. Giving it a subcommand is the obvious way to make it repeatable.
+- **Two script faults to fix before the next replay run.** `send_and_read` reads with `timeout=2`
+  — two milliseconds — so a reply arriving with any gap is truncated and looks exactly like a
+  device-imposed cap. And the flush condition `line_idx % 100 == 0` never fires past line 0 on a
+  short file, so a probe that wedges the device loses every result after the first.
+- **Confirms if:** a `count` above 100 comes back echoing `0x64` with 100 values, and an overrunning
+  read returns the full count padded rather than erroring or returning short.
+- **Falsified if:** a large count errors, returns short, or the echoed count matches what was asked.
+  A *smaller* echo for a request starting further into the item would mean the clamp follows the
+  extent rather than being a fixed buffer — that was tested directly (start 65, count 127) and it
+  clamped to 100 the same as start 1, so the cap is flat.
+
 ### Probe ledger
 
-**All five run 2026-08-06 and all five confirm.** The loaded project answered `120_37 = 3` with
+**All six run 2026-08-06 and all six confirm.** The loaded project answered `120_37 = 3` with
 patterns 1–13 unset, which is what `initial_project.KeyStepPro` holds — the same project the
-Recall To capture was taken from. Raw output in `usb_probe_results.txt`.
+Recall To capture was taken from. Raw output in `usb_probe_results.txt`, and for H1.6 in
+`ksp_clean_bytes_log.txt`.
 
 | Probe | Date       | Loaded project | Result |
 | ----- | ---------- | -------------- | ------ |
@@ -320,8 +347,15 @@ Recall To capture was taken from. Raw output in `usb_probe_results.txt`.
 | H1.3  | 2026-08-06 | initial_project | count=64 **honoured**, 64 values. Median 3.994 ms at 16, 3.998 ms at 64 — flat. Full dump 38.3 s → 9.6 s |
 | H1.4  | 2026-08-06 | initial_project | **all four rows succeeded.** No handshake is required — neither the identity request nor the `0x05` frame |
 | H1.5  | 2026-08-06 | initial_project | patterns 1–13 read **255** raw; 14–16 read 60. The sentinel survives raw USB |
+| H1.6  | 2026-08-06 | initial_project (restored) | `count` clamps to **100**; the reply echoes the honoured count, not the requested one. Overrun is **silent** — 106 asked, 64 real values then 36 × `0x7f`. Indices are 1-based; `nIdx=4` draws no reply |
 
-**Two findings change later phases.**
+**H1.6 ran across two device states.** The first pass went out while track 1 had been deleted from
+the panel, so every `7b` value in it reads `0x7f` and it establishes lengths only. The project was
+reloaded to `initial_project` before the overrun probes, and the 64 real values they returned are
+byte-identical to the populated `count=64` reply from the first session — which is what makes
+"64 real values then padding" a reading of the extent rather than of an empty track.
+
+**Three findings change later phases.**
 
 - **H1.4 removes the prologue.** `bulk_read` sends no handshake. The `0x05` frame is MCC's habit,
   not the device's requirement, and the "unlock or mode switch" guess in
@@ -329,9 +363,15 @@ Recall To capture was taken from. Raw output in `usb_probe_results.txt`.
 - **H1.3 offers a 4× dump, and it is deliberately not taken yet.** `bulk_plan.py` is generated to
   reproduce MCC's request stream byte-for-byte, and `test_bulk_plan.py` holds it there. Raising the
   count rewrites that stream, so it needs its own verification — the tail chunks of the 24-lane and
-  240-entry parameters do not divide by 64 the way the 64-step ones do, and a count that overruns a
-  parameter's extent has never been tested. **Phase 3 work, gated on H3.2's byte-diff**, not a
-  drive-by change to a passing plan.
+  240-entry parameters do not divide by 64 the way the 64-step ones do. **Phase 3 work, gated on
+  H3.2's byte-diff**, not a drive-by change to a passing plan.
+- **H1.6 answers the overrun half of that, and moves the risk.** Overrunning a parameter's extent
+  is no longer untested: the device pads to the full count with the item's own unset value and
+  neither errors nor returns short. So an overrunning request is safe to *send* and unsafe to
+  *store* — the padding is indistinguishable from a real unset entry, and a raised count must clip
+  by the plan's declared extent rather than by anything in the reply. The ceiling is 100, not 64,
+  so the tail chunks have more room than H1.3 assumed. See
+  [spec 7.7](./format/SysEx_Direct_Transfer_Path.md).
 
 **One caveat the captures added afterwards.** H1.4's "no handshake required" was measured with
 byte 7 = `01` throughout. It stands as measured — the reads succeeded without a prologue — but the
