@@ -43,5 +43,3 @@ if ! uv run pytest -n auto -m "not slow and not hardware"; then
     echo "Claude: You broke existing runtime logic. Review the failing test above."
     exit 2
 fi
-
-exit 0
