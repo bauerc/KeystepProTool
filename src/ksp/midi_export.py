@@ -739,13 +739,14 @@ def render_project(project: Project, options: ExportOptions | None = None) -> tu
 
 def _result(arrangement: Arrangement, project: Project, options: ExportOptions) -> ExportResult:
     diagnostics = arrangement.diagnostics
-    # How the global combines with the per-pattern value is not measured, so
-    # it is reported rather than folded in.
+    # The per-pattern value takes precedence on the device (T7.6), so the
+    # global is reported rather than folded in -- the export is not dropping
+    # groove here, it is doing what the hardware does.
     if options.apply_swing and project.global_swing_percent != constants.SWING_RANGE_PERCENT[0]:
         global_swing = Diagnostic(
             Code.GLOBAL_SWING_NOT_APPLIED,
-            f"project sets a {project.global_swing_percent}% global swing (parameter 74); how it "
-            f"combines with the per-pattern value is not measured, so it was not applied",
+            f"project sets a {project.global_swing_percent}% global swing (parameter 74); the "
+            f"per-pattern value takes precedence on the device, so the global was not applied",
         )
         diagnostics = Report((global_swing, *diagnostics))
     return ExportResult(

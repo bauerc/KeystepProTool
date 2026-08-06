@@ -151,12 +151,19 @@ standard maximum shuffle. At `S` = 50 % the term vanishes.
 2. `74 + (97 − 25)` — global plus a signed per-pattern offset,
 3. `97 − 25` applied only when the `99` "swing offset state" bit is set, else `74`.
 
-Tier 7 knocked out **candidate 3**: there is no swing bit in `99` / `116` — it does not move when
-swing does. It also established that `97` is an absolute percentage rather than a signed offset,
-which is candidate 2's premise. What it did **not** establish is whether a non-default `74` and a
-non-default `97` interact at all, because `T7-swing-both` turned out to be a duplicate of the
-global-only capture. So `S` is narrowed but not resolved, and a capture holding both values
-non-default is still owed.
+**Resolved: `S` is the per-pattern value.** Tier 7 knocked out **candidate 3** — there is no swing
+bit in `99` / `116`; it does not move when swing does — and disproved candidate 2's premise by
+showing `97` holds an absolute percentage rather than a signed offset. T7.6 knocked out
+**candidate 1** at the device: a track set to 75 % plays at 75 % with the global at its default
+50 %, so `97` is plainly not inert. Raising the global to 75 % as well changes nothing, so the two
+do not add either.
+
+**The per-pattern value takes precedence over the global, always.** `S = 97 + 25`, and `74` is not
+consulted. `midi_export._swing_delay` already reads it that way.
+
+The capture that was supposed to settle this (`T7-swing-both`) is byte-identical to
+`T7-swing-global-75`, so it never held both values; the answer came from listening instead, which
+is the ground truth this project runs on anyway.
 
 **`U` — what one Time Shift unit is worth.** Three candidate encodings:
 
@@ -314,12 +321,11 @@ All test IDs refer to [`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md)
 | 6 | `99` / `116` bit layout — step size, triplet, polyrhythm, direction | **T5.1–T5.5** ✅ **measured** (spec §3.3) | `t_step`, hence everything here |
 | 7 | Time Shift unit `U`, and which of models A/B/C | **Tier 8** ✅ model **B**, 1/400 beat | accurate placement both directions |
 | 8 | Do swing and shift add, or interact? | **Tier 8** ✅ they add, exactly (R5) | the M5 fitting algorithm |
-| 9 | How do global `74` and per-pattern `97` combine? | **owed** — `T7-swing-both` was a duplicate capture | whether `ksp2midi` may apply the global at all |
+| 9 | How do global `74` and per-pattern `97` combine? | **T7.6** ✅ per-pattern takes precedence | whether `ksp2midi` may apply the global at all |
 
-Question 9 is what is left of the old "which parameter governs `S`". Tier 7 ruled out the
-`99`-bit override and settled the stored meaning of `97`, but never got a file holding both a
-non-default global and a non-default per-pattern value. Until one exists, `ksp2midi` applies the
-per-pattern value and reports the global instead of folding it in.
+Question 9 was the last of the old "which parameter governs `S`", and it closes the list: the
+per-pattern value wins outright, so `ksp2midi` applies it and reports a non-default global rather
+than folding it in. **Every question in this table is now answered.**
 
 ### 6.1 Tier 8 recording ledger
 

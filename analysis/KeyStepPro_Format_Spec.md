@@ -68,8 +68,8 @@ enforced by `tests/test_reader.py`.
 - **Time shift and swing are measured** (see [time shift and swing](./format/Time_Shift_And_Swing.md)): shift is a plain offset,
   `stored = 49 + displayed`, stored 0–99, drum identical; swing is an absolute 50–75 %, stored per
   pattern, delaying the even steps only. **One shift unit is 1/400 of a beat** — a fixed count, not
-  a fraction of the step, so it does not change with the step size. What is still unmeasured is how
-  the global swing `74` combines with the per-pattern value; that one stays reported, not applied.
+  a fraction of the step, so it does not change with the step size. The **per-pattern swing takes
+  precedence over the global `74`**, which is therefore reported rather than applied.
 
 
 Keep the unknowns user-visible: each is an `ExportOptions` field with a documented default, never

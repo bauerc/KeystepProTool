@@ -20,7 +20,7 @@ the model and the raw readings.
 | Time shift range and linearity | `112` / `120` | **measured** — centre 49, stored 0–99, linear throughout |
 | Swing value and scope | `74`, `97` / `114` | **measured** — absolute percentage, 50–75 %, per pattern |
 | Time shift unit | `112` / `120` | **measured** — 1/400 of a beat, fixed; see §6.4 |
-| How global and per-pattern swing combine | `74` with `97` / `114` | **open** — see §6.3 |
+| How global and per-pattern swing combine | `74` with `97` / `114` | **measured** — per-pattern wins; see §6.3 |
 
 ### 6.2 Time shift is a plain offset, and the drum field shares it
 
@@ -72,12 +72,26 @@ dictionary has misdescribed a field it names (see [corrections and prior art](./
 
 Captures `T7-swing-global-63`, `T7-swing-global-75`, `T7-swing-pattern-max`, `T7-swing-drum`.
 
-**Still open: how the two combine.** `74` and `97` are independent stored values, and nothing yet
-says whether the device adds them, lets the pattern override the project, or ignores one. The
-capture meant to settle it (`T7-swing-both`) is byte-identical to `T7-swing-global-75` — the
-per-pattern value was never carried into it — so T7.6's stated question went unanswered. Until a
-capture that really holds both non-default values exists, `ksp2midi` applies the per-pattern value
-and **reports the global rather than folding it in** (`global-swing-not-applied`).
+**How the two combine: the per-pattern value wins.** `74` and `97` are independent stored values,
+and the device gives `97` precedence. Established at the device (T7.6): with a track set to 75 % the
+pattern plays at 75 % whether the global sits at its default 50 % or is raised to 75 % as well. The
+global does not add to it and does not override it.
+
+They are **not** independent on the display, which shows the global and Track figures together as
+one linked readout — which is what makes this easy to mis-read as a single value. The file settles
+the format question: they are two keys and each moves alone.
+
+So `ksp2midi` applies the per-pattern value and **reports a non-default global rather than folding
+it in** (`global-swing-not-applied`), which matches what the hardware plays rather than merely
+being cautious.
+
+> Not exercised: a non-default global with the track left at its 50 % default. Precedence as stated
+> makes that straight, and since 50 % is also the track minimum there is no "unset" track value for
+> the global to fall through to.
+
+`T7-swing-both`, the capture meant to hold both values, is byte-identical to `T7-swing-global-75` —
+the per-pattern value never made it in. The question was answered by ear instead, so the capture is
+no longer owed.
 
 ### 6.4 One time-shift unit is 1/400 of a beat
 

@@ -219,8 +219,8 @@ Gate is **done** (issue #9): the encoding is an index, `stored = detent − 1`, 
 *consecutive* run of detents was captured rather than scattered samples — the lesson the rest of the
 tier inherits.
 
-Tier 7 is **done** (2026-08-05) and tier 8 (2026-08-04) with it, which closes this milestone bar one
-owed capture:
+Tier 7 is **done** (2026-08-05) and tier 8 (2026-08-04) with it, which **closes this milestone** —
+every timing encoding is now measured:
 
 - **Time shift range and linearity** (`112` / `120`) — **#42**, protocol T7.1–T7.3. ✅ The range is
   displayed −49…+50, stored **0–99**, and `stored = 49 + displayed` holds at every one of the twelve
@@ -230,8 +230,9 @@ owed capture:
 - **Swing semantics** (`74`, `97` / `114`) — **#43**, protocol T7.4–T7.7. ✅ An **absolute**
   percentage, 50–75 %, where 50 is both default and minimum, stored **per pattern** with the +25
   offset, displacing the even steps only. `reader._swing` was right and **MCC's own field label is
-  wrong.** One piece is still owed: `T7-swing-both` was a duplicate capture, so how the global and
-  per-pattern values combine is unresolved and `ksp2midi` reports the global rather than applying it.
+  wrong.** The **per-pattern value takes precedence over the global `74`**: a track at 75 % plays at
+  75 % whether the global sits at 50 % or 75 %, so the two neither add nor swap. `ksp2midi` applies
+  the per-pattern value and reports a non-default global, which is what the hardware does.
 - **Randomness** (`113`) — **#44**, protocol T7.8. ✅ A **play probability**, not timing jitter:
   100 always sounds, 50 about half the time, the minimum never, and onsets never wander. The fresh
   default of 100 therefore means "always plays", which is what makes tier 8 measurable at all.
@@ -354,6 +355,6 @@ Both are understood; neither has reached the code.
   `ksp2midi` renders those patterns forward and warns. Rendering a plausible random order would be
   inventing a performance the device did not give us.
 
-**Hardware captures still worth doing:** the two swing recaptures tier 7 owes, and nothing else —
-every other tier is closed. Both are ordinary exports; see
-[`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md).
+**Hardware captures still worth doing: none.** Every tier of
+[`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md) is closed and its
+procedures removed; what is left there is the method, for whatever question comes next.

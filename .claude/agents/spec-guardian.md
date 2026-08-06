@@ -38,9 +38,9 @@ diff actually touches** — never the whole set. Each trap below names its file.
 - **Time shift and swing are measured** (M7) — shift is `stored = 49 + displayed` over stored 0–99,
   drum identical, and one unit is **1/400 of a beat**: a fixed tick count, so flag any code scaling
   a shift by the step size or by `t_step` rather than going through
-  `constants.time_shift_ticks`. Swing is an absolute 50–75 % per pattern, delaying even steps.
-  Still open: flag any code that folds the global swing `74` into the per-pattern value instead of
-  reporting it.
+  `constants.time_shift_ticks`. Swing is an absolute 50–75 % per pattern, delaying even steps, and
+  the **per-pattern value takes precedence over the global `74`** — flag any code that folds the
+  global in or applies it as a fallback.
   → `format/Time_Shift_And_Swing.md`
 - **Fixed key set**: format writers must never add/remove keys relative to the
   `Default.KeyStepPro` template — flag any code path that does.

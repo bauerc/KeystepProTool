@@ -148,8 +148,8 @@ SUMMARIES: Mapping[Code, Summary] = {
         "so the standard shuffle formula was used",
     ),
     Code.GLOBAL_SWING_NOT_APPLIED: Summary(
-        "the project sets a global swing (parameter 74); how it combines with the per-pattern "
-        "value is not measured, so only the per-pattern value was applied",
+        "the project sets a global swing (parameter 74); the per-pattern value takes precedence "
+        "on the device, so only the per-pattern value was applied",
     ),
     Code.DISABLED_PAST_LAST_STEP: Summary(
         "{subjects} across {sites} are disabled (past the last step) and were not exported; "

@@ -460,7 +460,11 @@ def test_swing_delays_the_second_step_of_each_pair(project_5: Project) -> None:
 
 
 def test_a_global_swing_is_reported_rather_than_applied(project_5: Project) -> None:
-    """It must be named in the warnings and must not move a single note."""
+    """The per-pattern value takes precedence on the device (T7.6).
+
+    So leaving the global out is what the hardware does, not caution -- but it
+    still gets named, because a user who set it expects to hear it.
+    """
     swung = replace(project_5, global_swing_percent=63)
     result = export_project(swung, ONE_PASS)
     baseline = export_project(project_5, ONE_PASS)
