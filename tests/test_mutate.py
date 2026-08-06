@@ -237,12 +237,40 @@ def test_place_note_refuses_a_seventeenth_note_on_one_step(load_sample: Loader) 
         mutate.place_note(project, track=2, pattern=1, step=1, pitch=60)
 
 
-def test_place_note_refuses_a_full_slot(load_sample: Loader) -> None:
+def test_a_full_slot_spills_into_the_next_chunk(load_sample: Loader) -> None:
+    """``idx2`` chunks one flat pool, so the 65th note is slot 2 ordinal 1.
+
+    Not a fourth voice and not an error: the pool is 3 x 64 and only the 193rd
+    event reaches a firmware ceiling (spec 4).
+    """
+    project = load_sample("baseline.KeyStepPro")
+    for step in range(1, constants.MAX_STEPS + 1):
+        project = mutate.place_note(project, track=2, pattern=1, step=step, pitch=60)
+
+    project = mutate.place_note(project, track=2, pattern=1, step=1, pitch=72)
+
+    assert project[f"124_{constants.P_SEQ_NOTE_STEP}_1_2_1"] == 0
+    assert project[f"124_{constants.P_SEQ_PITCH}_1_2_1"] == 72
+
+
+def test_place_note_refuses_a_full_slot_it_was_told_to_use(load_sample: Loader) -> None:
+    """Naming the slot opts out of spilling, so a full one is an error."""
     project = load_sample("baseline.KeyStepPro")
     for step in range(1, constants.MAX_STEPS + 1):
         project = mutate.place_note(project, track=2, pattern=1, step=step, pitch=60)
 
     with pytest.raises(ValueError, match="is full"):
+        mutate.place_note(project, track=2, pattern=1, step=1, pitch=60, slot=1)
+
+
+def test_place_note_refuses_the_hundred_and_ninety_third_event(load_sample: Loader) -> None:
+    """The pool holds 192 and the firmware refuses the next (capture T4.6)."""
+    project = load_sample("baseline.KeyStepPro")
+    for index in range(constants.POOL_CAPACITY):
+        step = index % constants.MAX_STEPS + 1
+        project = mutate.place_note(project, track=2, pattern=1, step=step, pitch=60)
+
+    with pytest.raises(ValueError, match="per-pattern limit"):
         mutate.place_note(project, track=2, pattern=1, step=1, pitch=60)
 
 
@@ -281,3 +309,96 @@ def test_set_pitch_reproduces_the_devices_own_pitch_edit(
 
     edited = mutate.set_pitch(source, track=2, pattern=1, note=1, pitch=64)
     assert lenient_json.dumps(edited) == lenient_json.dumps(expected)
+
+
+# --- M6: the drum set and the scalars a converter writes -------------------
+
+#: The drum twin of PLACEMENT_RECIPE, against ``Default.KeyStepPro``. Only four
+#: keys move because that template already carries a fresh note's gate,
+#: velocity, shift and randomness on every empty entry -- the writer sets all
+#: six regardless, which is what makes it work against project_5 too.
+DRUM_PLACEMENT = {
+    "123_40_1": (0, 3),
+    "123_52_1_1_21": (0, 16),
+    "123_54_1_1_1": (127, 4),
+    "123_117_1_1_1": (60, 2),
+}
+
+
+def test_placing_a_drum_hit_writes_the_drum_set(load_sample: Loader) -> None:
+    """Lane 2 at step 5: the pool entry, the packed 52 bit and the data latch.
+
+    ``117`` holds a lane index where the melodic ``109`` holds a pitch, and
+    ``52`` is addressed by lane rather than by step (spec 3.2, 4).
+    """
+    base = load_sample("Default.KeyStepPro")
+    result = mutate.place_drum_note(base, pattern=1, lane=2, step=5)
+
+    assert changed(base, result) == DRUM_PLACEMENT
+
+
+def test_the_drum_step_active_bit_is_packed_seven_to_an_entry(load_sample: Loader) -> None:
+    """Two hits on one lane share an entry, so the second must not clear the
+    first. Lane 0 steps 1 and 5 are what project_5 stores as 17."""
+    project = load_sample("Default.KeyStepPro")
+    project = mutate.place_drum_note(project, pattern=1, lane=0, step=1)
+    project = mutate.place_drum_note(project, pattern=1, lane=0, step=5)
+
+    assert project["123_52_1_1_1"] == 0b10001
+
+
+def test_a_drum_hit_refuses_a_lane_the_device_does_not_have(load_sample: Loader) -> None:
+    with pytest.raises(ValueError, match="drum lane"):
+        mutate.place_drum_note(
+            load_sample("Default.KeyStepPro"), pattern=1, lane=constants.DRUM_LANE_COUNT, step=1
+        )
+
+
+def test_step_count_is_stored_zero_based(load_sample: Loader) -> None:
+    base = load_sample("Default.KeyStepPro")
+
+    assert mutate.set_step_count(base, track=2, pattern=1, steps=48)["124_98_1"] == 47
+    assert mutate.set_step_count(base, track=1, pattern=1, steps=64, drum=True)["123_115_1"] == 63
+
+
+def test_swing_is_stored_with_its_offset(load_sample: Loader) -> None:
+    """50% is straight and stores 25; the device's range tops out at 75%."""
+    base = load_sample("Default.KeyStepPro")
+
+    assert mutate.set_swing(base, track=2, pattern=1, percent=50)["124_97_1"] == 25
+    assert mutate.set_swing(base, track=2, pattern=1, percent=75)["124_97_1"] == 50
+    with pytest.raises(ValueError, match="out of range"):
+        mutate.set_swing(base, track=2, pattern=1, percent=76)
+
+
+def test_drum_mode_moves_bit_six_and_nothing_else(load_sample: Loader) -> None:
+    base = load_sample("Default.KeyStepPro")
+    before = base["123_86"]
+    assert isinstance(before, int)
+
+    on = mutate.set_drum_mode(base, track=1, on=True)
+    assert on["123_86"] == before | 1 << constants.DRUM_MODE_BIT
+    assert mutate.set_drum_mode(on, track=1, on=False)["123_86"] == before
+
+
+def test_drum_mode_is_refused_on_a_track_with_no_drum_set(load_sample: Loader) -> None:
+    """Bit 6 is ARP on tracks 2-4, so setting it there selects notes we did
+    not write (spec 5)."""
+    with pytest.raises(ValueError, match="no drum parameter set"):
+        mutate.set_drum_mode(load_sample("Default.KeyStepPro"), track=2, on=True)
+
+
+def test_tempo_round_trips_through_its_three_chunks(load_sample: Loader) -> None:
+    """project_5 stores 120 BPM as 96, 93, 0 -- the encoding this inverts."""
+    result = mutate.set_tempo(load_sample("Default.KeyStepPro"), bpm=120)
+
+    assert (result["120_70"], result["120_71"], result["120_72"]) == (96, 93, 0)
+    assert reader.read_project(result, source_name="tempo").tempo_bpm == 120.0
+
+
+def test_a_chain_is_zero_based_and_sentinel_filled(load_sample: Loader) -> None:
+    """Capture T5-chain-3's shape: patterns in order, then 127 to the end."""
+    result = mutate.set_chain(load_sample("Default.KeyStepPro"), scene=1, track=4, patterns=[1, 2])
+
+    stored = [result[f"121_84_1_4_{slot}"] for slot in range(1, constants.CHAIN_SLOTS + 1)]
+    assert stored == [0, 1] + [constants.SENTINEL] * 14

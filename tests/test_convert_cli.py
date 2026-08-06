@@ -127,7 +127,7 @@ def test_warnings_go_to_stderr_and_the_summary_to_stdout(
     assert main([str(simple_clip), "-o", str(tmp_path / "out.KeyStepPro")]) == 0
 
     captured = capsys.readouterr()
-    assert "note lengths are not carried" in captured.err
+    assert "the project tempo was set" in captured.err
     assert "midi2ksp: warning:" not in captured.out
     assert "wrote" in captured.out
 
@@ -143,12 +143,29 @@ def test_quiet_keeps_the_warnings(
 
 
 def test_verbose_lists_every_warning(
-    chord_clip: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    m6_song: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    argv = [str(chord_clip), "-o", str(tmp_path / "out.KeyStepPro"), "-v"]
+    argv = [str(m6_song), "-o", str(tmp_path / "out.KeyStepPro"), "--drum-track", "3", "-v"]
     assert main(argv) == 0
 
-    assert "shared a step with a higher one" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "fitted to the source" in err
+    assert "split across patterns" in err
+
+
+def test_a_chord_keeps_every_note(
+    chord_clip: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """M5 kept the top line. The pool is an event list, so M6 keeps the chord."""
+    destination = tmp_path / "out.KeyStepPro"
+    assert main([str(chord_clip), "-o", str(destination)]) == 0
+
+    notes = reader.load(destination).track(1).pattern(1).notes_of(NoteKind.SEQ)
+    assert len(notes) == 26
+    assert sorted(note.pitch for note in notes if note.step == 1) == [60, 64, 67]
+    # The four-voice chord too: nothing about the pool caps a step at three.
+    assert sorted(note.pitch for note in notes if note.step == 13) == [60, 61, 62, 63]
+    assert "shared a step" not in capsys.readouterr().err
 
 
 def test_a_missing_input_is_a_runtime_error(

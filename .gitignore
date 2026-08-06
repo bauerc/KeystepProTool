@@ -21,10 +21,11 @@ htmlcov/
 
 #MIDI Files
 *.mid
-# ...except the M5 conversion fixtures. They are inputs, not output: a clean
-# 16-step monophonic clip and a chordal one, both a couple of hundred bytes.
+# ...except the conversion fixtures. They are inputs, not output: a clean
+# 16-step monophonic clip, a chordal one, and M6's four-track song. All small.
 !project_files/test_file_simple.mid
 !project_files/test_file.mid
+!project_files/m6-test-file.mid
 
 #IDE
 .vscode/

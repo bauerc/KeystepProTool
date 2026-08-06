@@ -440,7 +440,17 @@ def _read_slot(
     random = column(p_random)
     # Melodic step skip is step-indexed; the drum equivalent is note-indexed.
     # This asymmetry is not a typo -- it is what the files consistently show.
-    skip = column(constants.P_DRUM_STEP_SKIP if drum else constants.P_SEQ_STEP_SKIP)
+    # Being step-indexed, the melodic array is one entry per step and so fills
+    # chunk 1 exactly, like 48: every sample file holds 15 across chunk 1 and 0
+    # across chunks 2-3. Reading it from the note's own chunk would report a
+    # pattern's 65th note as playing on no pass at all.
+    skip = (
+        column(constants.P_DRUM_STEP_SKIP)
+        if drum
+        else read_array(
+            raw, item_id, constants.P_SEQ_STEP_SKIP, pattern, 1, length=constants.MAX_STEPS
+        )
+    )
 
     notes: list[Note] = []
     diagnostics: list[Diagnostic] = []

@@ -168,45 +168,63 @@ lengths are not carried (scope, not an unknown: the gate ladder is measured), an
 is an integer parameter we have not decoded, so a converted project inherits its template's name in
 MCC's Project Browser.
 
-### M6 — Full conversion
+### M6 — Full conversion ✅ **done**
 
-**Artifact:** multi-track (1–4), polyphony, drum track, tempo/swing/step count, and patterns longer
-than 64 steps split across pattern slots. Real musical material instead of toy clips.
+**Artifact:** `midi2ksp` converts a whole file — every note-bearing track onto the device's four,
+chords, a drum track, note lengths, tempo, fitted swing and time shift, and sequences longer than
+64 steps split across pattern slots and chained. Real musical material instead of toy clips.
 
-**Test:** convert a real multi-track MIDI file and verify on the device.
+**Delivered:** `ksp.midi_import` widened from one clip to a song — `read_song` → `plan_song` →
+`apply`, the same three layers inverted from M2 — plus the write primitives M4 left for it in
+`ksp.mutate`: `place_drum_note`, `set_step_count`, `set_swing`, `set_drum_mode`, `set_tempo` and
+`set_chain`. `tests/test_midi_import.py` converts `project_files/m6-test-file.mid` and reads the
+result back through M1 with nothing to report.
 
-**Watch for:**
+**What it decided.**
 
-- Track 1 in DRUM mode uses a completely different parameter set (spec §3.2), and the mode flag —
-  **`86` bit 6**, not `100` — must match whichever set you write.
-- Both step-active arrays must be written consistently with the note list, because **the device
-  plays the flags, not the pool**. A pooled note whose flag is clear is silent.
-- Anything over 64 steps must be split and chained, never silently truncated. The chain format is
-  measured (spec §3.3.1): `121_84_<scene>_<track>_<slot>`, 0-based pattern numbers in order, the
-  rest left at the sentinel. The reader decodes chains; nothing writes one yet.
-- Each pattern's step size, triplet and direction live in `99` / `116` (spec §3.3), so a writer
-  that changes the grid must move bits 3–4 with it — `ksp.mutate.set_step_size` is the only thing
-  that should. A pattern imported at one grid and left declaring another plays at the wrong speed
-  with nothing to signal it.
-- `idx2` is a **64-entry pool chunk, not a polyphony voice**, so chords sit in one chunk as
-  consecutive ordinals sharing a step and there is no 3- or 4-note ceiling. The real limit is **192
-  events per pattern**, which the firmware enforces with an on-screen error. The open question is
-  what a writer should do when source material exceeds it — split across patterns, or drop and warn.
-  Track 1's slot 4 stays zero-filled even when a 4th chord voice is added; never write there.
+- **Track 1 takes the drum track**, because item 123 is the only one carrying a drum set; the rest
+  fill the tracks after it, and a fifth source track is reported and dropped. The mode flag `86`
+  bit 6 is written to match whichever set the track holds.
+- **A drum map is fitted to the source** when none is given, rather than falling through to the
+  factory default. Reading a lane back can assume 36–59 and say so; writing one cannot, because a
+  source whose drums sit anywhere else would have every hit dropped as unmapped.
+- **A track's length is its content rounded up to the bar**, then cut into 64-step patterns. A loop
+  that stops mid-bar drifts against every other track.
+- **A chain is written only for a split track.** Every sample project leaves all 16 slots at the
+  sentinel and still plays, so a chain is what makes several patterns one sequence — not what makes
+  one pattern play. Writing one anyway would rewrite the scene of a project that was only asked to
+  take a clip.
+- **`place_note` picks its own pool chunk.** `idx2` is a 64-entry chunk of one flat pool, not a
+  voice, so the 65th note spills into slot 2 and a chord may straddle the boundary. The only
+  ceiling is 192 events per pattern; over it, the tail is dropped and counted. Track 1's slot 4
+  stays zero-filled.
+- **Placement got a delta form.** `note_updates` / `drum_note_updates` return the keys instead of a
+  copy, because copying 153,495 keys per note turns a 300-note conversion into a wait.
 
-**Sub-issue — fit timing on import.** `ksp2midi` applies swing and time shift; `midi2ksp` still
-quantizes hard to the grid and reports what it moved. Now that the shift unit is measured the
-inverse is buildable, and [`analysis/Timing_Calibration.md`](./analysis/Timing_Calibration.md) §3.2
-specifies it: snap to the nearest step, estimate the pattern's swing once from the aggregate
-residual (median over odd steps minus median over even), then give each note's leftover to
-`112`/`120` as `clamp(round(residual / unit), -49, +50)`, and **report every residual that could
-not be represented**. Fit swing before shift — one pattern-level value expresses a systematic
-groove for free, and spending per-note shift budget on it wastes a scarce field.
+**A reader bug fell out of it, and it was silent until now.** The melodic step skip `49` was read
+from the note's own pool chunk. Like `48` it is step-indexed, so one entry per step fills chunk 1
+exactly and chunks 2–3 are padding — 0 across all 1024 entries of every sample file, and Arturia's
+descriptor fixes the middle index of both at `[1]` (spec §4). A pattern's 65th note therefore read
+as playing on *no* pass. Nothing before M6 could put a note there, so nothing caught it. The
+"16/32/48/64" warning `initial_project` used to raise was this artifact: every `49` entry it
+actually uses holds 15. `project_5`'s real step skips are in chunk 1 and decode unchanged.
 
-Two things this must respect. The shift range is a **fixed 60 ticks at 480 PPQN either way, not
-half a step**, so at a 1/4 grid it covers only an eighth of a step and most residuals will not fit;
-at 1/32 it covers a whole one. And swing only moves even-numbered steps, so an odd step's residual
-belongs entirely to shift.
+**The swing fit is a search, not an inverted median.**
+[`analysis/Timing_Calibration.md`](./analysis/Timing_Calibration.md) §3.2 specifies snapping to the
+nearest step and estimating swing from the aggregate residual. That breaks at the top of the
+device's range: at 75 % a delayed step sits exactly half a step late, so nearest-step snapping puts
+it on the *next* step and collapses each pair onto one. Scoring all 26 storable percentages against
+the notes is exact at 75 %, still cheap, and still fits swing before spending any time shift. A
+groove is also only believed with at least three notes on delayed steps — otherwise one late note
+would be explained as swing and displace every other. Held to `ksp2midi` → `midi2ksp` round trips
+at 50, 58, 66 and 75 %, so the two directions agree end to end rather than by construction.
+
+**Not verified on hardware.** Green tests mean the file is well-formed, not that it plays. The
+device check is [`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md)'s to
+record.
+
+**The M8/M9 decision point is now open.** The CLI does everything the format allows; whether a GUI
+is worth building is the question this milestone was meant to answer.
 
 ### M7 — Timing calibration
 

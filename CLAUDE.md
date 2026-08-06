@@ -14,9 +14,10 @@ Guidance for Claude Code working in this repository.
 Converts Standard MIDI files ↔ Arturia KeyStep Pro `.KeyStepPro` project files. MIDI Control
 Center has no MIDI export for this device, so `ksp2midi` is the only one that exists — and there
 is no reference render to check against: **the hardware's live MIDI output is the sole ground
-truth**. Reading and MIDI export work; `ksp.mutate` places a note or overwrites one value in an
-existing project (M4); `ksp.midi_import` converts a clip into one melodic pattern (M5). Real
-multi-track material, drums and polyphony wait for M6.
+truth**. Reading and MIDI export work; `ksp.mutate` writes notes and pattern scalars into an
+existing project (M4, M6); `ksp.midi_import` converts a whole MIDI file — multi-track, chords,
+drums, gates, tempo, fitted swing and time shift, and long sequences split across chained
+patterns (M5, M6). What is left is packaging and a possible GUI (M8–M9).
 
 - [KeyStep Pro Format Spec](analysis/KeyStepPro_Format_Spec.md) — authoritative format reference. **Read it before touching
   format code.**

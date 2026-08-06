@@ -45,6 +45,16 @@ def simple_clip(project_files_dir: Path) -> Path:
 
 
 @pytest.fixture(scope="session")
+def m6_song(project_files_dir: Path) -> Path:
+    """M6's conversion fixture: four note-bearing tracks of real material.
+
+    One drum track on an ordinary channel, one of 3- and 4-note chords, one of
+    tied notes, and one running past what a single pattern holds.
+    """
+    return project_files_dir / "m6-test-file.mid"
+
+
+@pytest.fixture(scope="session")
 def chord_clip(project_files_dir: Path) -> Path:
     """The same length of material with three-note chords in it."""
     return project_files_dir / "test_file.mid"
