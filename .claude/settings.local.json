@@ -11,6 +11,9 @@
   "attribution": {
     "sessionUrl": false
   },
+  "worktree": {
+    "baseRef": "head"
+  },
   "allowedTools": [
     "python -m compileall -q .",
     "mypy ."
