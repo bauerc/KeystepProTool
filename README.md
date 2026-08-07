@@ -301,3 +301,7 @@ locally.
 Command Line Tools. `./scripts/validate.sh` runs both toolchains and skips the
 Swift half where `swift` is not on `PATH`; run it rather than `swift test`,
 which needs extra flags to find Swift Testing on a machine without Xcode.
+
+**New to the Mac toolchain?** [`swift/README.md`](./swift/README.md) explains
+it from a Python/Java starting point — toolchain, SwiftPM, dependencies and
+the layout of this package.

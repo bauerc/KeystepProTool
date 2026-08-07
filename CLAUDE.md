@@ -37,7 +37,8 @@ uv run pytest -m "not hardware"  # as CI runs it
 uv run ruff check . && uv run mypy
 ```
 
-Swift 6.2, Command Line Tools only — no Xcode until M13. From `swift/`:
+Swift 6.2, Command Line Tools only — no Xcode until M13. [`swift/README.md`](swift/README.md)
+covers the toolchain, SwiftPM and dependency management from a Python starting point. From `swift/`:
 
 ```sh
 swift format --in-place --recursive --parallel Sources Tests Package.swift
