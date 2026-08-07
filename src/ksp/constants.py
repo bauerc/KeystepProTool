@@ -88,6 +88,11 @@ P_CURRENT_SCENE: Final = 75
 TEMPO_CHUNK: Final = 128
 TEMPO_SCALE: Final = 100
 
+#: What the device itself will run at. The three chunks reach about 20,971 BPM,
+#: so the field's width is no guide: anything outside this is a project the
+#: hardware cannot play, however cleanly it stores.
+TEMPO_RANGE_BPM: Final = (30.0, 240.0)
+
 # --- Per-pattern scalars (spec section 3.3), indexed by pattern 1-16 -------
 
 P_PATTERN_DATA_STATE: Final = 40

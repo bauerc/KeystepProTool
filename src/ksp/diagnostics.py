@@ -81,6 +81,9 @@ class Code(StrEnum):
     TIMING_RESIDUAL = "timing-residual"
     DRUM_MAP_FITTED = "drum-map-fitted"
     DRUM_PITCH_UNMAPPED = "drum-pitch-unmapped"
+    TRACK_SPLIT_BY_CHANNEL = "track-split-by-channel"
+    CONTROLLERS_DROPPED = "controllers-dropped"
+    TEMPO_OUT_OF_RANGE = "tempo-out-of-range"
 
 
 @dataclass(frozen=True)
@@ -258,6 +261,19 @@ SUMMARIES: Mapping[Code, Summary] = {
     ),
     Code.DRUM_PITCH_UNMAPPED: Summary(
         "{subjects} fall outside the 24 lanes the drum map covers and were dropped",
+    ),
+    Code.TRACK_SPLIT_BY_CHANNEL: Summary(
+        "{subjects} shared one source track and each became a device track of its own; a type 0 "
+        "file tells its instruments apart by channel and nothing else",
+        subject="channel",
+    ),
+    Code.CONTROLLERS_DROPPED: Summary(
+        "{subjects} are not notes and were dropped; the device's patterns store notes only",
+        subject="event",
+    ),
+    Code.TEMPO_OUT_OF_RANGE: Summary(
+        "the source's tempo is outside the 30-240 BPM the device runs at, and was held to the "
+        "nearest end of it",
     ),
 }
 

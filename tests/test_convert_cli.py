@@ -185,6 +185,36 @@ def test_a_file_that_is_not_midi_is_a_runtime_error(
     assert "not a readable MIDI file" in capsys.readouterr().err
 
 
+def one_note(type: int = 0) -> mido.MidiFile:
+    midi = mido.MidiFile(type=type)
+    track = mido.MidiTrack()
+    midi.tracks.append(track)
+    track.append(mido.Message("note_on", note=60, velocity=100, time=0))
+    track.append(mido.Message("note_off", note=60, velocity=64, time=120))
+    return midi
+
+
+def test_a_timecode_file_is_refused(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """It converted in silence, with the whole clip piled onto step 1."""
+    source = tmp_path / "smpte.mid"
+    midi = one_note()
+    midi.ticks_per_beat = -7600
+    midi.save(source)
+
+    assert main([str(source), "-o", str(tmp_path / "out.KeyStepPro")]) == 1
+    assert "SMPTE timecode" in capsys.readouterr().err
+    assert not (tmp_path / "out.KeyStepPro").exists()
+
+
+def test_a_type_two_file_is_refused(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    source = tmp_path / "async.mid"
+    one_note(type=2).save(source)
+
+    assert main([str(source), "-o", str(tmp_path / "out.KeyStepPro")]) == 1
+    assert "type 2" in capsys.readouterr().err
+    assert not (tmp_path / "out.KeyStepPro").exists()
+
+
 def test_a_clip_with_no_notes_is_refused(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

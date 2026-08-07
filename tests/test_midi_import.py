@@ -413,11 +413,18 @@ def test_the_simple_clip_round_trips_through_the_reader(
 
 
 def song_of(
-    tracks: list[list[tuple[int, int, int]]], *, length: int = TICKS_PER_STEP
+    tracks: list[list[tuple[int, int, int]]],
+    *,
+    length: int = TICKS_PER_STEP,
+    channels: list[int] | None = None,
 ) -> mido.MidiFile:
-    """A type 1 file, one track per list of ``(tick, pitch, velocity)``."""
+    """A type 1 file, one track per list of ``(tick, pitch, velocity)``.
+
+    *channels* gives one channel per track, counting from 0.
+    """
     midi = mido.MidiFile(type=1, ticks_per_beat=TICKS_PER_BEAT)
-    for events in tracks:
+    for number, events in enumerate(tracks):
+        channel = channels[number] if channels else 0
         track = mido.MidiTrack()
         midi.tracks.append(track)
         timed: list[tuple[int, str, int, int]] = []
@@ -427,7 +434,9 @@ def song_of(
         previous = 0
         for tick, kind, pitch, velocity in sorted(timed):
             track.append(
-                mido.Message(kind, note=pitch, velocity=velocity, time=tick - previous, channel=0)
+                mido.Message(
+                    kind, note=pitch, velocity=velocity, time=tick - previous, channel=channel
+                )
             )
             previous = tick
     return midi
@@ -791,3 +800,182 @@ def test_the_m6_song_never_adds_or_removes_a_key(m6_song: Path, load_sample: Loa
     )
 
     assert result.raw.keys() == template.keys()
+
+
+# --- M6: source shapes the device cannot take at face value ----------------
+
+
+def mixed_of(
+    events: list[tuple[int, int, int]], *, length: int = TICKS_PER_STEP, type: int = 0
+) -> mido.MidiFile:
+    """A one-track file from ``(tick, pitch, channel)`` triples.
+
+    The shape of a type 0 file off the internet: every instrument on one track,
+    told apart only by its channel.
+    """
+    midi = mido.MidiFile(type=type, ticks_per_beat=TICKS_PER_BEAT)
+    track = mido.MidiTrack()
+    midi.tracks.append(track)
+
+    timed: list[tuple[int, str, int, int]] = []
+    for tick, pitch, channel in events:
+        timed.append((tick, "note_on", pitch, channel))
+        timed.append((tick + length, "note_off", pitch, channel))
+
+    previous = 0
+    for tick, kind, pitch, channel in sorted(timed):
+        velocity = 100 if kind == "note_on" else 64
+        track.append(
+            mido.Message(kind, note=pitch, velocity=velocity, time=tick - previous, channel=channel)
+        )
+        previous = tick
+    return midi
+
+
+def test_a_track_that_enters_late_keeps_its_place_against_the_others(
+    load_sample: Loader,
+) -> None:
+    """Anchoring each track on its own first note stacked them all on step 1.
+
+    The anchor belongs to the song: one origin for the file, so a part that
+    comes in at bar 3 still comes in at bar 3.
+    """
+    bar = 16 * TICKS_PER_STEP
+    midi = song_of([[(0, 60, 100)], [(2 * bar, 72, 100)]])
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
+
+    first, second = result.plan.tracks
+    assert [(n.step, n.pitch) for n in first.notes] == [(1, 60)]
+    assert [(n.step, n.pitch) for n in second.notes] == [(33, 72)]
+
+
+def test_a_part_past_the_first_pattern_lands_in_a_later_one(load_sample: Loader) -> None:
+    """Past 64 steps the offset can only be kept by leaving patterns empty."""
+    bar = 16 * TICKS_PER_STEP
+    midi = song_of([[(0, 60, 100)], [(5 * bar, 72, 100)]])
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
+
+    second = result.plan.tracks[1]
+    assert second.patterns == (1, 2)
+    assert [len(p.notes) for p in second.placements] == [0, 1]
+    assert second.placements[1].notes[0].step == 17
+
+
+def test_a_short_track_keeps_its_own_length_beside_a_long_one(load_sample: Loader) -> None:
+    """The device loops each track's chain on its own, so a one-bar part under
+    an eight-bar one repeats against it. That is the sequencer working, not a
+    drift to be padded out to a common length."""
+    events = [(step * TICKS_PER_STEP, 60, 100) for step in range(128)]
+    midi = song_of([events, [(0, 72, 100)]])
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
+
+    long_part, short_part = result.plan.tracks
+    assert long_part.patterns == (1, 2)
+    assert [p.step_count for p in long_part.placements] == [64, 64]
+    assert short_part.patterns == (1,)
+    assert [p.step_count for p in short_part.placements] == [16]
+
+
+def test_a_track_holding_several_channels_becomes_one_device_track_each(
+    load_sample: Loader,
+) -> None:
+    """A type 0 file tells its instruments apart by channel and nothing else.
+
+    Merged, they became one track of interleaved parts -- and the percussion
+    channel went in as melodic pitches.
+    """
+    midi = mixed_of([(0, 60, 0), (0, 72, 1), (TICKS_PER_STEP, 62, 0)])
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
+
+    assert [[n.pitch for n in plan.notes] for plan in result.plan.tracks] == [[60, 62], [72]]
+    split = [d for d in result.diagnostics if d.code is Code.TRACK_SPLIT_BY_CHANNEL]
+    assert [d.subjects for d in split] == [2]
+
+
+def test_the_percussion_channel_of_a_mixed_track_is_still_found(load_sample: Loader) -> None:
+    midi = mixed_of([(0, 60, 0), (0, 36, 9)])
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
+
+    drum = next(plan for plan in result.plan.tracks if plan.is_drum)
+    assert drum.track == 1
+    assert [note.lane for note in drum.notes] == [0]
+    assert not any(plan.is_drum for plan in result.plan.tracks if plan.track != 1)
+
+
+def test_a_named_drum_track_keeps_every_channel_it_holds(load_sample: Loader) -> None:
+    """--drum-track names a track of the file, so splitting it by channel must
+    not leave half its kit behind on another device track."""
+    midi = mixed_of([(0, 36, 0), (TICKS_PER_STEP, 38, 3)])
+    options = ImportOptions(drum_track=1, drum_map=DrumMap.chromatic(36))
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    assert [plan.is_drum for plan in result.plan.tracks] == [True]
+    assert [note.lane for note in result.notes] == [0, 2]
+
+
+def test_more_notes_on_a_step_than_the_firmware_holds_is_refused_in_planning(
+    load_sample: Loader,
+) -> None:
+    """The writer refused this from underneath, after every decision was made.
+
+    Refusing it while planning is what names the step the user has to thin.
+    """
+    events = [(0, 40 + voice, 100) for voice in range(constants.MAX_NOTES_PER_STEP + 1)]
+
+    with pytest.raises(ValueError, match="step 1"):
+        midi_import.convert_song(song_of([events]), load_sample("Default.KeyStepPro"))
+
+
+def test_a_timecode_division_file_is_refused() -> None:
+    """mido reads the division field signed, so an SMPTE file arrives with a
+    negative ticks_per_beat and every tick calculation inverts. Unguarded, it
+    converted in silence with the whole clip piled onto step 1."""
+    midi = song_of([[(0, 60, 100), (TICKS_PER_STEP, 62, 100)]])
+    midi.ticks_per_beat = -7600
+
+    with pytest.raises(ValueError, match="timecode"):
+        midi_import.read_song(midi)
+
+
+def test_a_type_two_file_is_refused() -> None:
+    """Its tracks are independent sequences, not parts of one arrangement."""
+    midi = mixed_of([(0, 60, 0)], type=2)
+
+    with pytest.raises(ValueError, match="type 2"):
+        midi_import.read_song(midi)
+
+
+@pytest.mark.parametrize(
+    ("source", "written"),
+    [(20.0, 30.0), (300.0, 240.0), (30.0, 30.0), (240.0, 240.0)],
+)
+def test_a_tempo_the_device_cannot_run_is_held_to_its_range(
+    source: float, written: float, load_sample: Loader
+) -> None:
+    """The three chunks store about 20,971 BPM, so the field is no guide to
+    what the hardware will play."""
+    midi = song_of([[(0, 60, 100)]])
+    midi.tracks[0].insert(0, mido.MetaMessage("set_tempo", tempo=mido.bpm2tempo(source), time=0))
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
+
+    assert reader.read_project(result.raw, source_name="tempo").tempo_bpm == written
+    held = [d for d in result.diagnostics if d.code is Code.TEMPO_OUT_OF_RANGE]
+    assert bool(held) is (source != written)
+
+
+def test_events_the_device_cannot_store_are_reported(load_sample: Loader) -> None:
+    midi = song_of([[(0, 60, 100)]])
+    midi.tracks[0].insert(0, mido.Message("control_change", control=7, value=100, time=0))
+    midi.tracks[0].insert(0, mido.Message("pitchwheel", pitch=2000, time=0))
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
+
+    dropped = [d for d in result.diagnostics if d.code is Code.CONTROLLERS_DROPPED]
+    assert [d.subjects for d in dropped] == [2]

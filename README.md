@@ -233,22 +233,33 @@ interleave two takes.
 
 ### What the conversion decides, and says
 
-- **Each track is anchored.** A pattern is a loop with nowhere to keep a lead-in, so the first note
-  lands on step 1 whatever tick the file starts at. DAWs routinely export a clip with its session
-  ticks intact.
+- **The song is anchored, once.** A pattern is a loop with nowhere to keep a lead-in, so the file's
+  first note lands on step 1 whatever tick it sits at — DAWs routinely export a clip with its
+  session ticks intact. The whole file moves together, so a part that enters at bar 3 still enters
+  at bar 3, in a later pattern of its track if that is where bar 3 falls.
 - **Tracks map in file order.** The drum track takes KeyStep Pro track 1, because item 123 is the
   only one carrying a drum parameter set; the rest fill the tracks after it. A fifth is reported
   and dropped.
-- **A track's length is its content rounded up to the bar**, then cut into 64-step patterns — the
-  device's maximum. A split track's patterns are **chained** in the current scene, which is what
-  makes them play as one sequence. Nothing is truncated.
-- **Chords are kept whole.** Notes sharing a step are consecutive entries in the pattern's pool,
-  and the only ceiling is 192 events per pattern, which the firmware enforces. Anything past it is
-  dropped with a count.
+- **A source track holding several channels becomes one device track each.** A type 0 file — one
+  track, everything on it — tells its instruments apart by channel and nothing else, so merging
+  them would put a whole arrangement on one track with the percussion in it as melodic pitches.
+  `--drum-track N` still means the whole of source track N, channels and all.
+- **A track's length is its own content rounded up to the bar**, then cut into 64-step patterns —
+  the device's maximum. A split track's patterns are **chained** in the current scene, which is
+  what makes them play as one sequence. Tracks are not padded to a common length: the device loops
+  each track's chain on its own, so a one-bar part under an eight-bar one repeats against it,
+  which is what the sequencer is for. Nothing is truncated until the 16 pattern slots run out, and
+  then it is reported.
+- **Chords are kept whole.** Notes sharing a step are consecutive entries in the pattern's pool.
+  Two firmware ceilings apply: 192 events per pattern, past which the tail is dropped with a
+  count, and 16 notes on any one step, which is refused outright — the conversion stops and names
+  the step, since silently thinning a chord changes what you wrote.
 - **Note lengths become gates**, snapped to the nearest rung of the measured 128-rung ladder. The
   ladder is coarse above 3 steps, so a length it cannot express exactly is reported.
-- **Tempo is carried** from the source. A file that changes tempo partway keeps only the first, as
-  the device stores one per project.
+- **Tempo is carried** from the source, held to the 30–240 BPM the device runs at. A file that
+  changes tempo partway keeps only the first, as the device stores one per project. The three
+  chunks the tempo is stored in reach about 20,971 BPM, so the file would take anything — the
+  bound is the hardware's, and being held to it is reported.
 - **Groove is fitted to swing first, then to time shift.** Swing is one value for a whole pattern
   and time shift is a scarce 60 ticks per note, so a systematic groove goes to the former and only
   the leftover to the latter. Anything neither can express is reported, never silently absorbed.
