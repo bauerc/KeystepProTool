@@ -11,10 +11,15 @@ name: check
 # Pushes to a branch with an open PR would otherwise trigger `push` and
 # `pull_request` separately, billing two minutes for one commit. Restricting
 # `push` to main means branch work is covered once, via the PR.
+#
+# `paths-ignore` keeps Swift-only commits off this job. Actions has no per-job path filter, so the
+# Swift half lives in its own workflow (swift.yml) with the mirror-image filter.
 on:
   push:
     branches: [main]
+    paths-ignore: ["swift/**", ".github/workflows/swift.yml"]
   pull_request:
+    paths-ignore: ["swift/**", ".github/workflows/swift.yml"]
 
 # Superseded runs are cancelled rather than left to finish and bill.
 concurrency:

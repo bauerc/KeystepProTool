@@ -344,17 +344,29 @@ No console entry point is declared until the milestone lands, per CLAUDE.md.
 ### M8 — Swift package skeleton and CI wiring
 
 **Artifact:** a `swift/` package that builds, tests and lints alongside the Python, with
-[`swift-midi-file`](https://github.com/orchetect/swift-midi-file) resolved and spiked. Three targets:
-`KSPKit` (the port of `ksp/`), `ksp-swift-cli` (so the port is testable headlessly long before there
-is a GUI), and tests. Path-scope pre-commit, ruff, mypy and `check.yml` so the two toolchains ignore
-each other.
+[`swift-midi-file`](https://github.com/orchetect/swift-midi-file) 1.0.2 resolved and spiked. Ruff,
+pre-commit and `check.yml` are path-scoped so the two toolchains ignore each other; mypy already was.
 
-**Two things to settle here, because they move later milestones:** whether `KSPKit` builds on Linux
-(if so its tests run on the 1× runner and only M13–M14 need macOS), and whether Swift Testing works
-without full Xcode — it was not found in this machine's Command Line Tools.
+**Four targets, not three, because `swift-midi-file` is Apple-only** — its compatibility table
+lists Linux as WIP, unlike `swift-midi-core` and `swift-timecode` underneath it. So `KSPKit` (the
+format core, M9–M11) takes no third-party dependencies and `KSPMIDI` (M12) holds the one import,
+splitting where M12 already drew the line. `Package.swift` gates `KSPMIDI`, `KSPSwiftCLI` and
+`KSPMIDITests` off on Linux, which puts the bulk of the port on the 1× runner; only M13–M14 need
+macOS. The cost is that those three targets are checked by `./scripts/validate.sh` alone —
+`swift.yml` cannot see them, and **M12 must add a `macos-latest` job** when they gain real code.
 
-**Test:** `swift build`, `swift test` and `swift format --lint` pass; `./scripts/validate.sh` runs
-both toolchains.
+**Swift Testing works without Xcode, but not out of the box.** The Command Line Tools do ship it,
+as `Testing.framework` under `$(xcode-select -p)/Library/Developer/Frameworks` — the earlier "not
+found" was a search of the wrong directory. What they do not do is put it on the compiler's search
+path or the runtime's, and the `_Testing_Foundation` cross-import overlay has no `.swiftinterface`
+there at all, so any test importing both `Testing` and `Foundation` fails to build. Three flags
+bridge it (`-F`, `-Xfrontend -disable-cross-import-overlays`, `-Xlinker -rpath`), and
+`scripts/validate.sh` adds them only when the developer directory is a CLT install. XCTest is not
+in the CLT in any form, so it was never the fallback the issue assumed.
+
+**Test:** `swift test` and `swift format lint --strict` pass; `./scripts/validate.sh` runs both
+toolchains. Note there is no `swift format --lint` flag — `lint` is a subcommand, and without
+`--strict` it exits 0 on a violation.
 
 ### M9 — Swift port: constants, keys, lenient JSON, diagnostics
 
@@ -459,7 +471,7 @@ without touching a terminal or reading setup instructions.
 | M5 MVP convert | ✅ done | **Yes** (done) | M3 |
 | M6 Full convert | ✅ done | No (desk-testable) | M5, M1.5 |
 | M7 Timing calibration | ✅ done | **Yes** (done) | M3 |
-| M8 Swift skeleton | | No | M6 |
+| M8 Swift skeleton | ✅ done | No | M6 |
 | M9 Swift leaf layers | | No | M8 |
 | M10 Swift reader | | No | M9 |
 | M11 Swift writer | | No | M10 |

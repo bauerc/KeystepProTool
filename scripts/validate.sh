@@ -46,7 +46,7 @@ fail() {
 }
 
 # 1. AUTO-FORMAT & LINT (Using uv to run Ruff)
-banner "=== [1/5] Auto-formatting with Ruff ==="
+banner "=== [1/6] Auto-formatting with Ruff ==="
 run_step uv run ruff format .
 if ! run_step uv run ruff check --fix .; then
     fail "❌ LINT VIOLATIONS REMAIN" \
@@ -55,7 +55,7 @@ fi
 
 # 2. SECRET SCANNING (Independent system binary check)
 if command -v gitleaks &> /dev/null; then
-    banner "\n=== [2/5] Scanning for exposed API keys ==="
+    banner "\n=== [2/6] Scanning for exposed API keys ==="
     if ! run_step gitleaks detect --no-git --verbose; then
         fail "❌ ALERT: Hardcoded credentials or API keys detected!" \
             "Claude: remove the secret and use an environment variable instead."
@@ -63,7 +63,7 @@ if command -v gitleaks &> /dev/null; then
 fi
 
 # 3. PARALLEL SYNTAX CHECK (Using uv's python environment)
-banner "\n=== [3/5] Running Parallel Syntax Check ==="
+banner "\n=== [3/6] Running Parallel Syntax Check ==="
 if ! run_step uv run python -m compileall -q -j 0 src tests tools; then
     fail "❌ SYNTAX ERROR DETECTED" \
         "Claude: Fix the broken syntax or indentation shown above."
@@ -71,17 +71,53 @@ fi
 banner "✅ Syntax passes."
 
 # 4. TYPE CHECK (Using uv to run Mypy)
-banner "\n=== [4/5] Running Fast Type Check ==="
+banner "\n=== [4/6] Running Fast Type Check ==="
 if ! run_step uv run mypy; then
     fail "❌ TYPE MISMATCH DETECTED" \
         "Claude: Review the Mypy trace above and correct variable assignments."
 fi
 
 # 5. PARALLEL UNIT TESTS (Using uv to run Pytest with xdist parallel cores)
-banner "\n=== [5/5] Running Parallel Unit Tests ==="
+banner "\n=== [5/6] Running Parallel Unit Tests ==="
 if ! run_step uv run pytest -n auto -m "not slow and not hardware"; then
     fail "❌ UNIT TEST FAILURE" \
         "Claude: You broke existing runtime logic. Review the failing test above."
+fi
+
+# 6. SWIFT PACKAGE (M8 port; skipped where the toolchain is absent, as with gitleaks above)
+if command -v swift &> /dev/null; then
+    banner "\n=== [6/6] Linting and testing the Swift package ==="
+
+    # Command Line Tools ship Swift Testing as a framework but, unlike a full Xcode, leave it off
+    # the compiler's search path and off the runtime's. Worse, the _Testing_Foundation cross-import
+    # overlay has no .swiftinterface there at all, so any test importing both Testing and Foundation
+    # fails to build without the frontend flag. Measured on CLT 6.2.3; under Xcode this stays empty.
+    swift_flags=()
+    developer_dir=$(xcode-select -p 2> /dev/null)
+    clt_frameworks="$developer_dir/Library/Developer/Frameworks"
+    if [[ $developer_dir == */CommandLineTools && -d $clt_frameworks/Testing.framework ]]; then
+        swift_flags=(
+            -Xswiftc -F -Xswiftc "$clt_frameworks"
+            -Xswiftc -Xfrontend -Xswiftc -disable-cross-import-overlays
+            -Xlinker -rpath -Xlinker "$clt_frameworks"
+        )
+    fi
+
+    swift_lint() {
+        (cd swift && swift format lint --strict --recursive --parallel Sources Tests Package.swift)
+    }
+    swift_tests() { (cd swift && swift test "${swift_flags[@]}"); }
+
+    if ! run_step swift_lint; then
+        fail "❌ SWIFT FORMAT VIOLATIONS" \
+            "Claude: from swift/, run 'swift format --in-place --recursive --parallel Sources Tests Package.swift'."
+    fi
+    if ! run_step swift_tests; then
+        fail "❌ SWIFT TEST FAILURE" \
+            "Claude: Review the failing Swift test above. 'swift test' builds, so this covers the build too."
+    fi
+else
+    banner "\n=== [6/6] No swift on PATH -- skipping the swift/ package ==="
 fi
 
 exit 0

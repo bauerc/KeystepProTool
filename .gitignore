@@ -56,3 +56,10 @@ usb_midi_investigation/recall_sysex.jsonl
 usb_midi_investigation/recall_project_2.jsonl
 usb_midi_investigation/import_to_project_3.jsonl
 .serena
+
+# Swift. `swift/Package.resolved` is deliberately NOT ignored, for the same
+# reason as uv.lock above: it is what pins swift-midi-file and its transitive
+# dependencies to the revisions CI and this machine actually built against.
+swift/.build/
+DerivedData/
+*.xcuserdatad
