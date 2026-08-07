@@ -43,7 +43,6 @@ dev = [
     "ruff>=0.6",
     "pre-commit>=3.8",
     "pyusb>=1.3.1",
-    # "python-rtmidi>=1.5.8",
 ]
 
 [tool.ruff]
@@ -74,8 +73,24 @@ files = ["src", "tests", "tools"]
 
 # These ship no py.typed, so strict mode rejects the import outright.
 [[tool.mypy.overrides]]
-module = ["mido.*", "rtmidi.*", "usb.*"]
+module = ["mido.*", "usb.*"]
 ignore_missing_imports = true
+
+# Hand-run investigation scripts that nothing imports. Strict mode charged
+# annotation work here for no safety in return -- there is no caller to protect.
+# The other tools stay strict: tests import usb_probe, reduce_timing and
+# timing_diff, so those do have callers.
+[[tool.mypy.overrides]]
+module = [
+    "bifurcate_log",
+    "convert_sysex_json_to_jsonl",
+    "ksp_proxy",
+    "sysex_diff",
+    "usb_test",
+]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
 
 
 [tool.pytest.ini_options]
@@ -84,5 +99,4 @@ addopts = "--strict-markers -q --tb=short --maxfail=1"
 markers = [
     "hardware: requires a physical KeyStep Pro (deselect with -m 'not hardware')",
     "slow: marks tests as slow integration/e2e tests (skipped during AI validation)",
-    "fast: marks explicit core unit tests"
 ]

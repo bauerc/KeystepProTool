@@ -236,9 +236,9 @@ Phase 0 needs no device. Phases 1–4 are one command each at the hardware, size
   the decoded protocol, and record that the read plan is vendor-declared.
 - `analysis/KeyStepPro_Format_Spec.md` §4 — the slot-1-only rule for `48` is vendor-declared, and
   also holds for `49`.
-- `usb_midi_investigation/keysteppro_usb_investigation.md` — frame 13 is described as "a wait or
-  flush signal". It is the first real read in the plan: `paramId 37, itemId 120`, and its reply
-  carries that key's actual value.
+- The early USB investigation note described frame 13 as "a wait or flush signal". It is the first
+  real read in the plan: `paramId 37, itemId 120`, and its reply carries that key's actual value.
+  (That note has since been retired; its findings are folded into this document and the protocol.)
 
 ## Out of scope
 

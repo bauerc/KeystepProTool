@@ -51,7 +51,7 @@ from ksp.diagnostics import EMPTY_REPORT, Code, Collector, Report, Site
 from ksp.drum_map import DrumMap
 from ksp.keys import get_int, item_for_track
 from ksp.lenient_json import canonical
-from ksp.midi_export import RenderedNote
+from ksp.midi_export import RenderedNote, swing_delay
 
 #: MIDI's own default when a file carries no ``set_tempo``: 500,000
 #: microseconds per beat, i.e. 120 BPM.
@@ -399,17 +399,6 @@ def _anchor(clip: Clip, ticks_per_step: float) -> float:
     return round(first / ticks_per_step) * ticks_per_step
 
 
-def _swing_delay(step: int, percent: int, ticks_per_step: float) -> float:
-    """Ticks the device delays *step* (0-based) by, at *percent* swing.
-
-    Rounded exactly as ``midi_export._swing_delay`` rounds it, so a groove that
-    survives one direction survives the other.
-    """
-    if not step % 2:
-        return 0.0
-    return float(round(ticks_per_step * (2 * percent / 100 - 1)))
-
-
 def _assign_step(offset: float, ticks_per_step: float, percent: int) -> tuple[int, float]:
     """The step *offset* belongs to under *percent* swing, and what is left.
 
@@ -423,7 +412,7 @@ def _assign_step(offset: float, ticks_per_step: float, percent: int) -> tuple[in
     for step in (base - 1, base, base + 1):
         if step < 0:
             continue
-        residual = offset - (step * ticks_per_step + _swing_delay(step, percent, ticks_per_step))
+        residual = offset - (step * ticks_per_step + swing_delay(step, percent, ticks_per_step))
         if best is None or abs(residual) < abs(best[1]):
             best = (step, residual)
     return best if best is not None else (0, offset)

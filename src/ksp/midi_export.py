@@ -433,7 +433,7 @@ def _render_note(
 
     tick = (note.step - 1) * step_ticks
     if options.apply_swing:
-        tick += _swing_delay(note.step, swing, step_ticks)
+        tick += round(swing_delay(note.step - 1, swing, step_ticks))
     if options.apply_time_shift:
         # Independent of the step size, so it is taken from the beat rather
         # than from step_ticks (tier 8, R1 against R3).
@@ -456,13 +456,18 @@ def _render_note(
     )
 
 
-def _swing_delay(step: int, swing_percent: int, ticks_per_step: int) -> int:
-    """Delay applied to the second step of each pair."""
+def swing_delay(step: int, swing_percent: int, ticks_per_step: float) -> float:
+    """Ticks the device delays *step* by. **0-based**: step 1 is the second of the pair.
+
+    Both directions share this, so a groove that survives one survives the other.
+    Callers holding a 1-based step index must subtract one -- the note parameter
+    numbers steps from 1, this does not.
+    """
     # Standard swing: at p percent the first step of a pair takes p of the
     # pair, so the second starts 2*p/100 - 1 steps late. 50% is no swing.
-    if step % 2:
-        return 0
-    return round(ticks_per_step * (2 * swing_percent / 100 - 1))
+    if not step % 2:
+        return 0.0
+    return float(round(ticks_per_step * (2 * swing_percent / 100 - 1)))
 
 
 def _placed(note: RenderedNote, offset: int, collector: Collector) -> RenderedNote:

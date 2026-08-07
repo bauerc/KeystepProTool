@@ -24,6 +24,7 @@ from ksp.midi_export import (
     export_split,
     render_pattern,
     render_project,
+    swing_delay,
 )
 from ksp.model import NoteKind, Pattern, PatternBits, Project
 from ksp.reader import load
@@ -457,6 +458,19 @@ def test_swing_delays_the_second_step_of_each_pair(project_5: Project) -> None:
     steps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 13]
     assert offsets == [TICKS_PER_STEP // 2 if step % 2 == 0 else 0 for step in steps]
     assert any("75% swing" in w for w in result.warnings)
+
+
+def test_swing_delay_is_0_based_and_both_directions_share_it() -> None:
+    """Pins the index space, because export and import count steps differently.
+
+    The note parameter numbers steps from 1 and export subtracts one before
+    calling; the import planner is already 0-based and calls it directly.
+    Aligning the parity to either caller alone silently unswings the other.
+    """
+    assert swing_delay(0, 75, 120) == 0
+    assert swing_delay(1, 75, 120) == 60
+    assert swing_delay(2, 75, 120) == 0
+    assert swing_delay(0, 50, 120) == swing_delay(1, 50, 120) == 0
 
 
 def test_a_global_swing_is_reported_rather_than_applied(project_5: Project) -> None:

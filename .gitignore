@@ -36,6 +36,13 @@ project_files/captures/
 #Profiling
 *.stats
 
+# Scratch output from the USB investigation scripts, written to the repo root.
+# Regenerable from a capture or a project file, and one of them is 3 MB.
+initial_project_hex_map.txt
+ksp_clean_bytes_log.txt
+ksp_handshake_replay_log.txt
+ksp_raw_packets_log.txt
+
 # NOTE: uv.lock is deliberately NOT ignored. It is committed so that
 # `uv sync --locked` reproduces an identical environment everywhere.
 .aider*

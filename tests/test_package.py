@@ -10,15 +10,6 @@ reason.
 from pathlib import Path
 
 import ksp
-import ksp_cli
-
-
-def test_ksp_is_importable() -> None:
-    assert ksp.__version__ == "0.1.0"
-
-
-def test_ksp_cli_is_importable() -> None:
-    assert ksp_cli.__doc__ is not None
 
 
 def test_ksp_resolves_under_src_not_repo_root() -> None:

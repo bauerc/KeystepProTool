@@ -268,9 +268,9 @@ project rather than the one it asked for.
   Phase 3 note below.
 
 - **Resolves:** whether `count` may exceed the 16 MCC never goes above. At 16 a full dump is ~36 s;
-  at 64 it would be ~10 s. **This is a re-confirmation, not a discovery** —
-  `keysteppro_usb_investigation.md` already records a live `count=0x40` request answered with 64
-  bytes. That note predates the protocol decode, which is why it is being run again.
+  at 64 it would be ~10 s. **This was a re-confirmation, not a discovery** — an early investigation
+  note had already sent a live `count=0x40` request and been answered with 64 bytes, but it predated
+  the protocol decode, which is why it was run again properly.
 - **Command:** `usb_probe.py throughput`
 - **Confirms if:** the `count=64` row returns 64 values and its median period is close to the
   `count=16` row's — throughput is per-request, not per-byte.
@@ -358,8 +358,8 @@ byte-identical to the populated `count=64` reply from the first session — whic
 **Three findings change later phases.**
 
 - **H1.4 removes the prologue.** `bulk_read` sends no handshake. The `0x05` frame is MCC's habit,
-  not the device's requirement, and the "unlock or mode switch" guess in
-  `usb_midi_investigation/keysteppro_usb_investigation.md` is wrong.
+  not the device's requirement, and the early investigation note's "unlock or mode switch" guess is
+  wrong.
 - **H1.3 offers a 4× dump, and it is deliberately not taken yet.** `bulk_plan.py` is generated to
   reproduce MCC's request stream byte-for-byte, and `test_bulk_plan.py` holds it there. Raising the
   count rewrites that stream, so it needs its own verification — the tail chunks of the 24-lane and
@@ -426,8 +426,9 @@ and tier 8's on 2026-08-06**; the findings are in [the spec](./format/Time_Shift
 tier 8's six recordings stay reduced in
 [`Timing_Calibration.md`](./Timing_Calibration.md) §6.1 because that is where the arithmetic lives.
 
-The table is empty because the programme is finished. Add a row when a new question sends someone
-back to the device.
+The table is empty because every tier is closed — **H4.1 above is the one probe still outstanding**,
+and it is the next row this table expects. Add a row when a new question sends someone back to the
+device.
 
 ## Effort summary
 

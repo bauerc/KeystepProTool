@@ -108,9 +108,9 @@ def probe_scalar(args: argparse.Namespace, recorder: Recorder) -> int:
 def probe_throughput(args: argparse.Namespace, recorder: Recorder) -> int:
     """H1.3. Whether count may exceed the 16 MCC never goes above.
 
-    keysteppro_usb_investigation.md already records a live count=0x40 answered
-    in full, but that note predates the protocol decode. This re-confirms it and
-    puts a number on what it buys.
+    An early investigation note had already seen a live count=0x40 answered in
+    full, but it predated the protocol decode. This re-confirms it and puts a
+    number on what it buys.
     """
     print(f"{'count':>6}  {'ok':>3}  {'median ms':>9}  {'full dump':>10}")
     for count in (16, 64):
