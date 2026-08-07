@@ -203,3 +203,42 @@ None of this is a speedup on its own. The 64-step items are already covered by a
 `count=64`, so the headroom above 64 only helps items whose extent exceeds it — the 240-entry
 parameters that H1.3's note singles out as the ones that do not divide evenly. What a raised count
 does to the full-dump time has not been measured, and H1.3's 9.6 s stands as the only figure.
+
+### 7.8 The same addresses in a ninth of the requests
+
+MCC's stream is what `bulk_plan` reproduces and what the tapes pin down, so it stays. `ksp.bulk_fast`
+derives a second walk from the identical `PLAN`: same 117,783 addresses, different frames. Two
+things account for the whole saving.
+
+**Coalescing.** Every contiguous run over the walking index becomes one request. All 2,004 runs in
+the plan are contiguous and none exceeds 64 values, so **8,911 long reads become 2,004** — the
+extent binds long before the 100 of 7.7 does. Two details only a plan-wide view catches: MCC's
+per-pattern scalars each walk the *group* index, so sixteen `count=1` reads of `122_90` are one
+16-entry range; and `121_83` is read scene 5 first, so a run is a range whatever order it arrived
+in.
+
+**The melodic gate.** `50` and `109`–`113` share a note ordinal, so a 64-entry chunk of `50` that is
+all `127` settles all five per-note parameters at once. Both tapes agree without exception —
+59,415 and 61,120 such values, every one `127`. And notes reach a chunk only once the chunk before
+it is full, so a sentinel in chunk 1 proves chunks 2 and 3 empty and `50` need not be read for them
+either. `bulk_fast` emits the existence array ahead of the parameters it gates; MCC's leaf order
+puts it after.
+
+| walk | project 1 | project 2 |
+| ---- | --------- | --------- |
+| `bulk_plan`, MCC's stream | 8,951 | 8,951 |
+| `bulk_fast`, coalesced | 2,044 | 2,044 |
+| `bulk_fast` + the gate | **1,007** | **976** |
+
+> **The drum pool is not gateable, and assuming otherwise destroys bytes.** Where `54` is `127`,
+> `117`–`121` are `127` in some patterns and the default row `60/7/100/49/100` in others *within one
+> project*: 10,420 against 2,880 on project 1, and 960 against 14,400 on project 2. A drum entry is
+> a hole that keeps what was there, not an empty one — see
+> [the note pool](./Note_Pool_Sentinels_And_Capacity.md). Nothing derives those values; they are
+> fetched.
+
+Both figures above are counted against the tapes, not the device. `tests/test_bulk_fast.py` answers
+both walks out of one model of the tape's values and requires the resulting projects to be equal,
+which is what makes the saving checkable without hardware. **No timing here is measured**: H1.3's
+9.6 s remains the only figure taken off the device, and what the gate does to wall-clock is
+untested.

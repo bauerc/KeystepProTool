@@ -22,6 +22,12 @@ CMD_ACK: Final = 0x1C
 #: Follows every command byte in a request. Its meaning is untested.
 SUBCOMMAND: Final = 0x01
 
+#: H1.6 measured the ceiling on a long read's count. Above it the device clamps
+#: and echoes the count it honoured rather than the one asked for, so an
+#: over-long request comes back looking like a reply to a different question --
+#: refuse it here instead. MCC never sends above 16. See spec section 7.7.
+MAX_READ_COUNT: Final = 100
+
 ACK: Final = HEADER + bytes((CMD_ACK, 0x00, END))
 
 #: MCC sends this once before the first read and the device never answers it.
@@ -62,6 +68,8 @@ def build_read_request(request: ReadRequest) -> bytes:
     else:
         if not 1 <= len(request.indices) <= 3:
             raise ValueError(f"{len(request.indices)} indices, expected 1 to 3")
+        if not 0 <= request.count <= MAX_READ_COUNT:
+            raise ValueError(f"count {request.count}, expected 0 to {MAX_READ_COUNT}")
         body = (
             CMD_READ,
             SUBCOMMAND,
