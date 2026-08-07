@@ -17,11 +17,11 @@ is no reference render to check against: **the hardware's live MIDI output is th
 truth**. Reading and MIDI export work; `ksp.mutate` writes notes and pattern scalars into an
 existing project (M4, M6); `ksp.midi_import` converts a whole MIDI file — multi-track, chords,
 drums, gates, tempo, fitted swing and time shift, and long sequences split across chained
-patterns (M5, M6). What is left is packaging and a possible GUI (M8–M9).
+patterns (M5, M6). What is left is the Swift port, a GUI and packaging (M8–M14).
 
 - [KeyStep Pro Format Spec](analysis/KeyStepPro_Format_Spec.md) — authoritative format reference. **Read it before touching
   format code.**
-- [Implementation Road Map](ROADMAP.md) — milestones M1–M9 and current status. `README.md` — CLI usage and options Cohosted on Github Issues for this repo.
+- [Implementation Road Map](ROADMAP.md) — milestones M1–M14 and current status. `README.md` — CLI usage and options Cohosted on Github Issues for this repo.
 - [Timing Calibration](analysis/Timing_Calibration.md), [Hardware Test Protocol](analysis/Hardware_Test_Protocol.md) — how the timing
   encodings were measured, and the one question left for the device.
 
@@ -50,7 +50,7 @@ path, so installing from a worktree blocks commits repo-wide once that worktree 
 
 - **`ksp/`** — pure format, model and MIDI logic. No `ksp_cli` import, no printing, no `sys.argv`,
   no deciding where files live. The same logic must work behind a CLI, a frozen binary and an
-  M8–M9 Swift port, so the port stays a translation of pure functions.
+  Swift port (M8–M12), so the port stays a translation of pure functions.
 - **`ksp_cli/`** — args, path resolution, terminal output. No format logic.
 
 `ksp.midi_export` has three layers that must stay separate: `render_pattern` (pattern → tick

@@ -1,7 +1,7 @@
 """M1's regression test: the reader must reproduce the hardware-confirmed data.
 
 Expected values come from JSON fixtures rather than from assertions written
-inline, for two reasons. The Swift port at M8/M9 can be checked against the
+inline, for two reasons. The Swift port (M10) can be checked against the
 same files instead of a translated copy of these expectations; and the
 fixtures were transcribed by hand from the descriptions in ``analysis/``, so
 what they encode is what a person read off the KeyStep Pro's display, not what

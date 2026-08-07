@@ -3,7 +3,7 @@
 Pure encode and decode: no I/O, no transport, no pyusb. The layout was decoded
 from a 26,856-frame capture of MIDI Control Center performing Recall To -- see
 docs/superpowers/specs/2026-08-05-usb-sysex-project-read-design.md and spec
-section 7. Keeping this free of I/O is what lets the M8-M9 Swift port reuse it
+section 7. Keeping this free of I/O is what lets the Swift port reuse it
 against CoreMIDI.
 """
 

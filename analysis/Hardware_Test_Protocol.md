@@ -215,7 +215,7 @@ question they served was answered at the device instead.
 
 ## Phase 1 — USB read probes
 
-**Not a tier and not part of M1–M9.** These do not go through MIDI Control Center and produce no
+**Not a tier and not part of M1–M14.** These do not go through MIDI Control Center and produce no
 `.KeyStepPro` file: they talk to the device directly over raw USB and print what came back. The
 protocol they exercise is read-only — nothing here writes to the device — so the one-change rule
 and the export route above do not apply. Design and phase numbering live in
