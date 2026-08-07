@@ -44,11 +44,6 @@ Run `pre-commit install` **only from the main checkout**, never from `.claude/wo
 worktrees share `.git/hooks`, and the generated hook hard-codes the installing `.venv`'s absolute
 path, so installing from a worktree blocks commits repo-wide once that worktree is deleted.
 
-`.claude/settings.local.json` sets `worktree.baseRef: "head"`, so new worktrees branch from local
-`main` rather than the `origin/main` tracking ref. Commits made straight to `main` are frequent
-here and are often unpushed; the default (`fresh`) silently left them out. Neither setting fetches,
-so `git pull` on `main` before starting work is still what makes a worktree current with the remote.
-
 ## Architecture
 
 `src/` layout, strict one-way dependency:
