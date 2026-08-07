@@ -23,7 +23,7 @@ What the conversion still decides for the user, and says so on every run:
   device settings, not the file (spec 3.2.1), so a map is either given or
   fitted to the source pitches, and either way it is reported.
 
-The work is in three layers, matching the export direction so the M8/M9 Swift
+The work is in three layers, matching the export direction so the Swift
 port translates arithmetic rather than a MIDI library:
 
 1. :func:`read_song` -- a ``mido.MidiFile`` becomes plain

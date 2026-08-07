@@ -564,7 +564,7 @@ def test_options_that_cannot_produce_exact_timing_are_rejected(
 class TestRenderLayer:
     """The arithmetic layer, asserted as plain data rather than parsed MIDI.
 
-    This is the half the M8/M9 Swift port has to reproduce; keeping it free of
+    This is the half the Swift port has to reproduce; keeping it free of
     ``mido`` is what makes the port a translation rather than a redesign.
     """
 

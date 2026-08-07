@@ -97,7 +97,7 @@ class Summary:
 
 
 #: One entry per Code. Kept as data so that adding a diagnostic does not mean
-#: adding a branch, and so the Swift port (M8-M9) can carry the same table.
+#: adding a branch, and so the Swift port can carry the same table.
 SUMMARIES: Mapping[Code, Summary] = {
     Code.NO_VERSION_KEY: Summary("no 'version' key (factory template rather than a saved project)"),
     Code.MIXED_NOTE_SETS: Summary(

@@ -25,7 +25,7 @@ to the nearest rung -- and step size and triplet in the ``99``/``116`` bitfield
 (spec 3.3, protocol tier 5), which the export reads per pattern rather than
 asking the user to name a grid the file already knows.
 
-The work is in three layers, so the M8/M9 Swift port translates arithmetic
+The work is in three layers, so the Swift port translates arithmetic
 rather than a MIDI library:
 
 1. :func:`render_pattern` -- one pattern's notes become plain

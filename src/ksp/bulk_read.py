@@ -1,7 +1,7 @@
 """Reading a whole project off the device, one address at a time.
 
 The transport is injected: this module never imports pyusb and never opens a
-port, so the read path is testable against a captured exchange and the M8-M9
+port, so the read path is testable against a captured exchange and the Swift port
 Swift port can hand it CoreMIDI instead. What comes out is the same flat dict
 lenient_json produces from a file, so ksp.reader and the whole export path are
 unchanged -- the hardware is simply a second producer of it.

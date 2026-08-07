@@ -1,7 +1,7 @@
 # Expected-value fixtures
 
 Expected values live here as **data**, not as hardcoded Python assertions, so
-that the Swift port at M8/M9 can be checked against the identical files rather
+that the Swift port (M10) can be checked against the identical files rather
 than against a reimplementation of the same expectations. See ROADMAP.md M1.
 
 | File | What it pins down |

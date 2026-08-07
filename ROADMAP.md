@@ -32,13 +32,20 @@ can *listen to* rather than merely diff.
 exploratory work — the kind where a REPL matters. `mido` handles MIDI file parsing for free, which
 has no equivalent in the Swift standard toolchain (CoreMIDI is real-time I/O, not file parsing).
 
-**M8–M9 in Swift.** By then the core is a proven set of rules, so porting is mechanical translation
+**M8–M14 in Swift.** By then the core is a proven set of rules, so porting is mechanical translation
 rather than reverse engineering. Swift wins decisively on distribution: a signed `.app` versus
 asking other KeyStep Pro owners to manage a Python environment.
 
-**A caveat worth stating up front:** the workflow is inherently batch-shaped — convert a file, drop
-it in MCC's Templates folder, restart MCC. That is not interactive, so the CLI may simply be
-sufficient and M9 may never be worth building. Decide after M6.
+The port itself is M8–M12 and is most of the work — roughly 5,500 lines of Python, likely 7,000–8,000
+of Swift. It ships no user-visible artifact, which is why it is broken into five milestones that each
+end in a byte-comparison against the Python rather than in a feature. The Python does not retire when
+Swift lands; it becomes the reference implementation the port is checked against, which is why both
+live in this repo. M13 is the GUI and M14 is distribution.
+
+**The port has no discovery risk and real translation risk.** Nothing is left to reverse-engineer,
+but thousands of lines of hand-converted bit arithmetic will contain bugs that look correct on
+inspection — Python and Swift disagree on negative `%` and on integer overflow. The differential
+harness in M12 is the answer to that, and it gets built at the start of M12, not the end.
 
 ---
 
@@ -54,7 +61,7 @@ one left behind, not the story of building it.
 
 **The constraint:** the expected values in `tests/fixtures/` are **hand-transcribed from
 `analysis/project_5_description.txt` and `project_9_tests.txt`**, not generated from the reader.
-That is what makes them independent ground truth and what lets the M8–M9 Swift port be checked
+That is what makes them independent ground truth and what lets the Swift port (M10) be checked
 against identical files. **Never regenerate them from the code.**
 
 ### M1.5 — Drum map ✅ **done**
@@ -200,8 +207,9 @@ expect four in a row. Faithful to the intervals, not to the intent. Worth an opt
 distinct pitches onto consecutive lanes instead; nothing in the format prevents it, and it is the
 sort of thing that is obvious once a GM file is converted and invisible until then.
 
-**The M8/M9 decision point is now open.** The CLI does everything the format allows; whether a GUI
-is worth building is the question this milestone was meant to answer.
+**The GUI decision is settled: build it.** The CLI does everything the format allows, so what is left
+is reach — a full Swift port (M8–M12), a drag-and-drop app (M13), and a signed `.dmg` (M14). No
+embedded Python.
 
 ### M7 — Timing calibration
 
@@ -248,9 +256,9 @@ play wrong, with nothing to signal the error.
 
 ## Direct device read over USB SysEx
 
-**Not part of the M1–M9 ladder.** It is an additional input path, not a step toward the existing
+**Not part of the M1–M14 ladder.** It is an additional input path, not a step toward the existing
 milestones: it makes the hardware a second producer of the same flat dict `ksp.reader.read_project`
-already consumes, so nothing downstream changes. M1–M9 stand whether or not this ever lands.
+already consumes, so nothing downstream changes. M1–M14 stand whether or not this ever lands.
 
 Today `ksp2midi` can only read a project MCC has already exported. This reads one off the device
 directly. The protocol is decoded in
@@ -262,7 +270,7 @@ section keeps.
 
 **Artifact:** `ksp.sysex` (frame codec), `ksp.bulk_plan` (the generated read plan) and
 `ksp.bulk_read` (walks the plan against an injected transport and assembles the dict). No `pyusb`
-anywhere in `ksp/`, so the M8–M9 Swift port swaps in CoreMIDI and reuses all three unchanged.
+anywhere in `ksp/`, so the Swift port swaps in CoreMIDI and reuses all three unchanged.
 
 **Test, and it passes:** replaying a captured MCC Recall To exchange
 (`tests/fixtures/recall_tape.txt`, 8,951 request/reply pairs) reconstructs **all 153,497 keys of
@@ -333,22 +341,109 @@ No console entry point is declared until the milestone lands, per CLAUDE.md.
   *file* writer must keep emitting `247`; a *device* writer must not. See
   [per-pattern scalars](./analysis/format/Parameters_Pattern_Scalars.md).
 
-### M8 — Distribution
+### M8 — Swift package skeleton and CI wiring
 
-**Artifact:** a signed, notarised thing another KeyStep Pro owner can actually run. Until this
-exists the tool only works for people willing to set up a Python environment.
+**Artifact:** a `swift/` package that builds, tests and lints alongside the Python, with
+[`swift-midi-file`](https://github.com/orchetect/swift-midi-file) resolved and spiked. Three targets:
+`KSPKit` (the port of `ksp/`), `ksp-swift-cli` (so the port is testable headlessly long before there
+is a GUI), and tests. Path-scope pre-commit, ruff, mypy and `check.yml` so the two toolchains ignore
+each other.
 
-**Test:** hand it to someone else with a KeyStep Pro and have them convert a file without touching a
-terminal or reading setup instructions.
+**Two things to settle here, because they move later milestones:** whether `KSPKit` builds on Linux
+(if so its tests run on the 1× runner and only M13–M14 need macOS), and whether Swift Testing works
+without full Xcode — it was not found in this machine's Command Line Tools.
 
-### M9 — Native GUI
+**Test:** `swift build`, `swift test` and `swift format --lint` pass; `./scripts/validate.sh` runs
+both toolchains.
 
-**Artifact:** drag-and-drop macOS app that writes straight into MCC's Templates directory.
+### M9 — Swift port: constants, keys, lenient JSON, diagnostics
 
-**Why last:** it removes the terminal from the workflow but adds no capability. Revisit whether it
-is worth building after M6 — see the caveat under **Stack**.
+**Artifact:** the leaf layers — everything `reader.py` stands on. `constants.py`, `keys.py`,
+`lenient_json.py` (read side only) and `diagnostics.py`, in that dependency order.
+
+**Where the bugs will be:** Swift integers *trap* on overflow rather than wrapping, so the bit
+manipulation in `constants.py` needs explicit widths and `&<<` where wrapping is intended. And
+Python's `//` and `%` floor while Swift's truncate toward zero — `-7 // 4` is `-2` in Python and `-1`
+in Swift, which reaches `time_shift_ticks` and the gate and swing arithmetic.
+
+**Test:** the corresponding Python unit tests, ported, asserting the same values.
+
+### M10 — Swift port: drum map, model and reader
+
+**Artifact:** `ksp-swift-cli dump` reads a real `.KeyStepPro` and reproduces the Python's tree.
+`drum_map.py`, `model.py`, `reader.py`, and enough of `dump.py` to emit `--json`.
+
+**Test, and this is the milestone's whole point:** output matches
+`tests/fixtures/project_5.expected.json`, `project_9.expected.json` and `empty_projects.expected.json`
+— the files M1 hand-transcribed from the hardware display *specifically* so a Swift port could be
+checked against identical data. Never regenerate them from either implementation.
+
+### M11 — Swift port: byte-identical writer
+
+**Artifact:** the Swift equivalent of M3 — `lenient_json.dumps` and `canonical`, reproducing MCC's
+bytes: tab indentation, no final newline, and — from `canonical` — `device`, `version`, then the
+numeric keys **sorted as strings**, so `126_99_16` precedes `126_99_2`. Keep the two functions split
+the same way: `dumps` preserves the mapping's own order so the round-trip test proves something, and
+imposing MCC's order is `canonical`'s job, chosen by the caller.
+
+**The writer omits MCC's trailing comma**, exactly as the Python does. T6.2 established MCC does not
+need it, so output is strict JSON differing from a known-good export by that one byte. The *reader*
+still accepts it, because every file that exists has one.
+
+**Its own milestone because `JSONEncoder` cannot do this job.** It emits spaces, adds a newline, and
+gives no key-order guarantee — and none of that will look wrong in the output. It needs a
+hand-written serialiser. The one thing making that cheap: values are only `int` or `str`, never
+nested, float or bool, so it is a flat map and a string builder.
+
+**Test:** read → write → `cmp` against MCC's bytes minus the comma, for all five samples in
+`project_files/`, plus the Swift twin of
+`test_output_differs_from_mcc_by_exactly_the_trailing_comma`. And the Swift output matches the
+Python's byte for byte.
+
+### M12 — Swift port: MIDI export, import and the differential harness
+
+**Artifact:** parity with the Python CLI. `midi_export.py` and `midi_import.py` keep their three
+layers exactly as they stand — only `buildMIDIFile` and `readSong` touch `swift-midi-file` — plus
+`mutate.py`. Tests assert on `Rendering` and `Placement` values, never on parsed MIDI.
+
+**Build the harness first.** A short script running both implementations over every fixture and
+`cmp`ing the output catches nearly every porting slip for far less effort than re-deriving each unit
+test. `bulk_read`, `sysex` and `usb_transport` stay out of scope — CoreMIDI SysEx is its own
+learning curve and the `Transport` protocol already isolates it.
+
+**Test:** zero diffs across every fixture in both directions, and any legitimate difference written
+down.
+
+### M13 — Native GUI
+
+**Artifact:** drag-and-drop macOS app. Templates path confirmed on 2026-08-07:
+`/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/`, mode `0777`, no elevation needed.
+
+**v1 is drag-and-drop only** — one window, no options. The larger app in
+`project_requirements/project_requirements.md` (preview, per-track routing, segmentation, loop
+counts) needs its own specs. Sandbox off, since a sandbox cannot write into another app's directory
+and Developer ID distribution permits it. Full Xcode required from here.
+
+**Start Apple Developer Program enrolment now**, not at M14 — it can take days.
 
 **Test:** drag a `.mid` onto the app, restart MCC, pattern is there.
+
+### M14 — Distribution
+
+**Artifact:** a signed, notarised `.dmg` another KeyStep Pro owner can actually run. Until this
+exists the tool only works for people willing to set up a Python environment.
+
+**Last, not first.** The old ordering assumed distribution might mean freezing the Python CLI; with
+the full port decided there is no Python artifact to ship and nothing to notarise until M13 exists.
+
+**Signing is a post-build step, so it does not gate anything before it.** M8–M13 build and run
+unsigned for free. Paying the $99/yr Apple Developer Program later requires no rebuild — `codesign
+--force` replaces whatever signature is there, including none. But there is no free notarisation,
+and macOS 15+ removed the right-click → Open bypass, so unsigned means the recipient must dig through
+System Settings and authenticate as an admin. That fails the test below.
+
+**Test:** hand a downloaded `.dmg` to someone else with a KeyStep Pro and have them convert a file
+without touching a terminal or reading setup instructions.
 
 ---
 
@@ -364,8 +459,13 @@ is worth building after M6 — see the caveat under **Stack**.
 | M5 MVP convert | ✅ done | **Yes** (done) | M3 |
 | M6 Full convert | ✅ done | No (desk-testable) | M5, M1.5 |
 | M7 Timing calibration | ✅ done | **Yes** (done) | M3 |
-| M8 Distribution | | For final check | M6 |
-| M9 GUI | | For final check | M8 |
+| M8 Swift skeleton | | No | M6 |
+| M9 Swift leaf layers | | No | M8 |
+| M10 Swift reader | | No | M9 |
+| M11 Swift writer | | No | M10 |
+| M12 Swift MIDI both ways | | For final listen | M11 |
+| M13 GUI | | For final check | M12 |
+| M14 Distribution | | For final check | M13 |
 
 ---
 
