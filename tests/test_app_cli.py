@@ -6,11 +6,24 @@ isolation but that the group dispatches somewhere else entirely. These tests
 run both ways and compare what came out.
 """
 
+import re
 from pathlib import Path
 
 import pytest
 
 from ksp_cli import app, convert, dump, export
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def plain(text: str) -> str:
+    """Help text without styling.
+
+    Rich colours when it thinks it is on a terminal -- which CI is -- and it
+    styles the dashes of an option separately from its name, so ``--split``
+    is not a contiguous run of characters in the raw stream.
+    """
+    return _ANSI.sub("", text)
 
 
 def test_ksp2midi_is_the_same_command_either_way(
@@ -95,7 +108,7 @@ def test_help_lists_every_subcommand(
 
     assert app.main(["--help"]) == 0
 
-    out = capsys.readouterr().out
+    out = plain(capsys.readouterr().out)
     assert "ksp-dump" in out
     assert "ksp2midi" in out
     assert "midi2ksp" in out
@@ -108,14 +121,18 @@ def test_subcommand_help_is_its_own(
 
     assert app.main(["ksp2midi", "--help"]) == 0
 
-    out = capsys.readouterr().out
+    out = plain(capsys.readouterr().out)
     assert "kspplus ksp2midi" in out  # the usage line names the way in
-    assert "--split" in out
+    # An option no other option's help text mentions, so this cannot pass on prose.
+    assert "--include-disabled" in out
+    # The reason for Typer: seventeen options sorted into panels by what they affect.
+    for panel in ("Selection", "Timing", "Drum mapping", "Output"):
+        assert panel in out
 
 
 def test_an_unknown_subcommand_is_a_usage_error(capsys: pytest.CaptureFixture[str]) -> None:
     assert app.main(["nonesuch"]) == 2
-    assert "nonesuch" in capsys.readouterr().err
+    assert "nonesuch" in plain(capsys.readouterr().err)
 
 
 def test_an_unknown_option_is_a_usage_error(
@@ -124,4 +141,4 @@ def test_an_unknown_option_is_a_usage_error(
     """The path through runner.run that argparse used to take by raising."""
     source = project_files_dir / "project_5.KeyStepPro"
     assert app.main(["ksp2midi", str(source), "--bogus"]) == 2
-    assert "bogus" in capsys.readouterr().err
+    assert "--bogus" in plain(capsys.readouterr().err)
