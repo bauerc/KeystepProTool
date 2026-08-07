@@ -14,11 +14,17 @@ chained.
 
 What the conversion still decides for the user, and says so on every run:
 
-* **The clip is anchored.** A pattern is a loop with nowhere to keep a lead-in,
-  so the first note lands on step 1 whatever tick the file starts at.
-* **A track's length is rounded up to the bar**, then cut into 64-step
-  patterns. The device's ceiling is 64 steps and nothing may be truncated
-  silently.
+* **The song is anchored.** A pattern is a loop with nowhere to keep a lead-in,
+  so the file's first note lands on step 1 whatever tick it sits at. The whole
+  file moves together: a part that enters at bar 3 still enters at bar 3.
+* **A track's length is its own content**, rounded up to the bar and then cut
+  into 64-step patterns. The device's ceiling is 64 steps and nothing may be
+  truncated silently. Tracks are not padded to a common length: the device
+  loops each track's chain on its own, so a one-bar part under an eight-bar one
+  repeats against it, which is what a sequencer is for.
+* **A source track is split by channel.** A type 0 file tells its instruments
+  apart by channel alone, so merging them would put a whole arrangement --
+  percussion included -- on one track as melodic pitches.
 * **The drum map is an assumption.** Which MIDI note a lane plays lives in
   device settings, not the file (spec 3.2.1), so a map is either given or
   fitted to the source pitches, and either way it is reported.
@@ -38,6 +44,7 @@ parsed file and a template and decides where the result goes.
 """
 
 import math
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
@@ -62,6 +69,17 @@ DEFAULT_TIME_SIGNATURE: Final = (4, 4)
 
 #: The MIDI channel GM reserves for percussion, counting from 0.
 DRUM_CHANNEL: Final = 9
+
+#: Message types a pattern has nowhere to put. Counted rather than ignored, so
+#: a source whose expression lives in its controllers is not silently flattened.
+UNSTORABLE_TYPES: Final = (
+    "control_change",
+    "pitchwheel",
+    "program_change",
+    "aftertouch",
+    "polytouch",
+    "sysex",
+)
 
 #: No swing. Both the bottom of the device's range and its default.
 _STRAIGHT: Final = constants.SWING_RANGE_PERCENT[0]
@@ -136,6 +154,8 @@ class Song:
     tempo_bpm: float
     beats_per_bar: float
     tempo_changes: int = 0
+    controllers_dropped: int = 0
+    """Events the device cannot store, counted across every track read."""
 
     def steps_per_bar(self, steps_per_beat: int) -> int:
         return max(1, round(self.beats_per_bar * steps_per_beat))
@@ -241,14 +261,22 @@ class ImportResult:
 # --- Layer 1: reading MIDI -------------------------------------------------
 
 
-def _track_notes(track: Iterable[mido.Message]) -> tuple[list[RenderedNote], int, int]:
-    """Pair one track's note-ons with their note-offs, in absolute ticks.
+@dataclass(frozen=True)
+class _TrackRead:
+    """One source track's notes, and what else went past while pairing them."""
 
-    Also returns the last tick seen and how many tempo changes went past, so
-    the caller can tell a file with a tempo map from one without.
-    """
+    notes: list[RenderedNote]
+    last_tick: int
+    tempo_changes: int
+    dropped: int
+    """Events the device cannot store: controllers, bend, program, pressure."""
+
+
+def _track_notes(track: Iterable[mido.Message]) -> _TrackRead:
+    """Pair one track's note-ons with their note-offs, in absolute ticks."""
     tick = 0
     tempos = 0
+    dropped = 0
     notes: list[RenderedNote] = []
     # (channel, pitch) -> (onset tick, velocity). A second note-on for a pitch
     # already sounding retriggers it, so the earlier one ends here.
@@ -260,6 +288,8 @@ def _track_notes(track: Iterable[mido.Message]) -> tuple[list[RenderedNote], int
             tempos += 1
             continue
         if message.type not in ("note_on", "note_off"):
+            if message.type in UNSTORABLE_TYPES:
+                dropped += 1
             continue
 
         held = (message.channel, message.note)
@@ -291,7 +321,26 @@ def _track_notes(track: Iterable[mido.Message]) -> tuple[list[RenderedNote], int
             )
         )
 
-    return notes, tick, tempos
+    return _TrackRead(notes=notes, last_tick=tick, tempo_changes=tempos, dropped=dropped)
+
+
+def _check_readable(midi: mido.MidiFile) -> None:
+    """Refuse the two file shapes whose ticks mean something else entirely.
+
+    Both convert to nonsense rather than to nothing, which is the reason to
+    stop here: mido reads the division field signed, so a timecode file arrives
+    with a negative ``ticks_per_beat`` and every step calculation inverts.
+    """
+    if midi.ticks_per_beat < 1:
+        raise ValueError(
+            "the file is timed in SMPTE timecode rather than ticks per beat, which has no "
+            "beat to quantise against; re-export it with a PPQ division"
+        )
+    if midi.type == 2:
+        raise ValueError(
+            "a type 2 file holds independent sequences rather than one arrangement, so its "
+            "tracks cannot be played together; pick one with --midi-track"
+        )
 
 
 def _timing(midi: mido.MidiFile) -> tuple[int, tuple[int, int], int]:
@@ -318,6 +367,7 @@ def _timing(midi: mido.MidiFile) -> tuple[int, tuple[int, int], int]:
 def read_clip(midi: mido.MidiFile, options: ImportOptions | None = None) -> Clip:
     """Every selected track's notes, merged into one clip in absolute ticks."""
     options = options or ImportOptions()
+    _check_readable(midi)
     tempo, _, _ = _timing(midi)
 
     notes: list[RenderedNote] = []
@@ -325,7 +375,7 @@ def read_clip(midi: mido.MidiFile, options: ImportOptions | None = None) -> Clip
     for number, track in enumerate(midi.tracks, start=1):
         if options.midi_track is not None and number != options.midi_track:
             continue
-        found, _, _ = _track_notes(track)
+        found = _track_notes(track).notes
         if found:
             sources.append(number)
             notes.extend(found)
@@ -340,32 +390,39 @@ def read_clip(midi: mido.MidiFile, options: ImportOptions | None = None) -> Clip
 
 
 def read_song(midi: mido.MidiFile, options: ImportOptions | None = None) -> Song:
-    """One clip per note-bearing source track, in file order.
+    """One clip per note-bearing source track and channel, in file order.
 
-    A type 0 file puts everything on one track, so it yields a single clip and
-    converts to a single device track. Type 1 files -- what a DAW exports --
-    give one clip per instrument, which is the shape M6 is for.
+    Type 1 files -- what a DAW exports -- give one track per instrument, which
+    is the shape M6 is for. A type 0 file puts everything on one track and
+    tells its instruments apart by channel alone, so a track carrying several
+    is split into one clip each: merged, its percussion would arrive as melodic
+    pitches on whichever device track the rest of it landed on.
     """
     options = options or ImportOptions()
+    _check_readable(midi)
     tempo, (numerator, denominator), changes = _timing(midi)
     tempo_bpm = float(mido.tempo2bpm(tempo))
 
     clips = []
+    dropped = 0
     for number, track in enumerate(midi.tracks, start=1):
         if options.midi_track is not None and number != options.midi_track:
             continue
-        notes, _, _ = _track_notes(track)
-        if not notes:
-            continue
-        notes.sort(key=lambda note: (note.tick, note.pitch))
-        clips.append(
-            Clip(
-                notes=tuple(notes),
-                ticks_per_beat=midi.ticks_per_beat,
-                tempo_bpm=tempo_bpm,
-                source_tracks=(number,),
+        read = _track_notes(track)
+        dropped += read.dropped
+        by_channel: dict[int, list[RenderedNote]] = {}
+        for note in read.notes:
+            by_channel.setdefault(note.channel, []).append(note)
+        for channel in sorted(by_channel):
+            notes = sorted(by_channel[channel], key=lambda note: (note.tick, note.pitch))
+            clips.append(
+                Clip(
+                    notes=tuple(notes),
+                    ticks_per_beat=midi.ticks_per_beat,
+                    tempo_bpm=tempo_bpm,
+                    source_tracks=(number,),
+                )
             )
-        )
 
     return Song(
         clips=tuple(clips),
@@ -374,6 +431,7 @@ def read_song(midi: mido.MidiFile, options: ImportOptions | None = None) -> Song
         # A bar in quarter notes, which is what a beat is here.
         beats_per_bar=numerator * 4 / denominator,
         tempo_changes=changes,
+        controllers_dropped=dropped,
     )
 
 
@@ -393,9 +451,15 @@ class _Snapped:
     note: RenderedNote
 
 
-def _anchor(clip: Clip, ticks_per_step: float) -> float:
-    """The tick the clip's first note is snapped back from."""
-    first = min((note.tick for note in clip.notes), default=0)
+def _anchor(clips: Sequence[Clip], ticks_per_step: float) -> float:
+    """The tick the first note of *clips* is snapped back from.
+
+    Taken across every clip at once on the whole-file path. Anchoring each
+    track on its own first note would slide a part that enters at bar 3 back
+    onto bar 1, which is not a lead-in the pattern cannot hold -- it is the
+    arrangement.
+    """
+    first = min((note.tick for clip in clips for note in clip.notes), default=0)
     return round(first / ticks_per_step) * ticks_per_step
 
 
@@ -582,6 +646,18 @@ def _place(
             subjects=len(unmapped),
         )
 
+    # Refused here rather than by ``mutate`` from underneath, so the message
+    # can name the step to thin and nothing has been written yet.
+    crowded = Counter(note.step for note in notes)
+    step, held = max(crowded.items(), default=(0, 0), key=lambda pair: (pair[1], -pair[0]))
+    if held > constants.MAX_NOTES_PER_STEP:
+        where = f"track {site.track} " if site.track is not None else ""
+        raise ValueError(
+            f"step {step} of {where}pattern {pattern} holds {held} notes; the firmware's limit "
+            f"is {constants.MAX_NOTES_PER_STEP} per step. Thin the chord, or quantise finer with "
+            "--steps-per-beat so its notes fall on steps of their own"
+        )
+
     if len(notes) > constants.POOL_CAPACITY:
         collector.add(
             Code.POOL_OVERFLOW,
@@ -619,7 +695,7 @@ def quantise(clip: Clip, *, step_count: int, options: ImportOptions | None = Non
 
     collector = Collector()
     ticks_per_step = clip.ticks_per_beat / options.steps_per_beat
-    origin = _anchor(clip, ticks_per_step)
+    origin = _anchor((clip,), ticks_per_step)
 
     if len(clip.source_tracks) > 1 or len(clip.channels) > 1:
         collector.add(
@@ -689,31 +765,45 @@ def plan_track(
     drum_map: DrumMap | None = None,
     first_pattern: int = 1,
     steps_per_bar: int = 16,
+    origin: float | None = None,
 ) -> TrackPlan:
     """Lay one source track out across as many patterns as it needs.
 
     The track's length is its content rounded up to a whole bar, then cut into
     64-step patterns -- the device's ceiling. Nothing is truncated: a sequence
-    too long for one pattern becomes several, chained.
+    too long for one pattern becomes several, chained. Lengths are per track,
+    not padded to a common one: the device loops each track's chain on its own,
+    so a one-bar part under an eight-bar one repeats against it.
+
+    *origin* is the tick the grid is counted from. :func:`plan_song` passes one
+    taken across the whole file, so a part that enters at bar 3 stays there;
+    left out, the clip is anchored on its own first note and that is reported.
     """
     options = options or ImportOptions()
     ticks_per_step = clip.ticks_per_beat / options.steps_per_beat
-    origin = _anchor(clip, ticks_per_step)
     site = Site(track=track, kind="drum" if is_drum else "seq")
 
-    if origin:
-        collector.add(
-            Code.CLIP_ANCHORED,
-            f"track {track}'s clip starts {origin:g} tick(s) into the file; its first note was "
-            "placed on step 1 and the rest moved with it",
-            site=site,
-        )
+    if origin is None:
+        origin = _anchor((clip,), ticks_per_step)
+        if origin:
+            collector.add(
+                Code.CLIP_ANCHORED,
+                f"track {track}'s clip starts {origin:g} tick(s) into the file; its first note "
+                "was placed on step 1 and the rest moved with it",
+                site=site,
+            )
 
     # Fitted once for the track rather than once per pattern: a groove belongs
     # to the performance, not to which 64-step window of it a pattern holds,
     # and the steps a pattern is cut on cannot be known until it is fitted.
     swing = _fit_swing(clip, ticks_per_step, origin) if options.fit_swing else _STRAIGHT
     snapped = _snap(clip, ticks_per_step, origin, swing)
+
+    # The last step any note reaches, rounded up to the bar so a loop stays
+    # musical: a track that stops mid-bar drifts against every other one.
+    ends = [entry.step + entry.note.duration_ticks / ticks_per_step for entry in snapped]
+    total = max(1, -(-round(max(ends, default=1)) // steps_per_bar) * steps_per_bar)
+
     moved = sum(1 for entry in snapped if entry.residual)
     if moved:
         collector.add(
@@ -723,11 +813,6 @@ def plan_track(
             site=site,
             subjects=moved,
         )
-
-    # The last step any note reaches, rounded up to the bar so a loop stays
-    # musical and every track's patterns line up against each other.
-    ends = [entry.step + entry.note.duration_ticks / ticks_per_step for entry in snapped]
-    total = max(1, -(-round(max(ends, default=1)) // steps_per_bar) * steps_per_bar)
 
     count = -(-total // constants.MAX_STEPS)
     available = constants.PATTERNS_PER_TRACK - first_pattern + 1
@@ -794,6 +879,21 @@ def fit_drum_map(clip: Clip) -> DrumMap:
     )
 
 
+def _merged(clips: Sequence[Clip]) -> Clip:
+    """Several clips of one source track back into the one the file wrote."""
+    if len(clips) == 1:
+        return clips[0]
+    notes = sorted(
+        (note for clip in clips for note in clip.notes), key=lambda note: (note.tick, note.pitch)
+    )
+    return Clip(
+        notes=tuple(notes),
+        ticks_per_beat=clips[0].ticks_per_beat,
+        tempo_bpm=clips[0].tempo_bpm,
+        source_tracks=clips[0].source_tracks,
+    )
+
+
 def _assign(
     song: Song, options: ImportOptions, collector: Collector, first_track: int = 1
 ) -> list[tuple[Clip, int, bool]]:
@@ -804,20 +904,22 @@ def _assign(
     one carrying a drum parameter set.
     """
     drum: Clip | None = None
+    spoken_for: list[Clip] = []
     if options.drum_track is not None:
-        drum = next(
-            (clip for clip in song.clips if clip.source_tracks == (options.drum_track,)),
-            None,
-        )
-        if drum is None:
+        # --drum-track names a track of the file, so a track split across
+        # channels is put back together rather than leaving half a kit behind.
+        named = [clip for clip in song.clips if clip.source_tracks == (options.drum_track,)]
+        if not named:
             raise ValueError(
                 f"track {options.drum_track} of the source holds no notes; --drum-track counts "
                 "every track of the file from 1, including ones that carry only tempo or a name"
             )
+        drum, spoken_for = _merged(named), named
     else:
         drum = next((clip for clip in song.clips if clip.is_percussion), None)
+        spoken_for = [drum] if drum is not None else []
 
-    melodic = [clip for clip in song.clips if clip is not drum]
+    melodic = [clip for clip in song.clips if not any(clip is taken for taken in spoken_for)]
     assigned: list[tuple[Clip, int, bool]] = []
     if drum is not None:
         assigned.append((drum, 1, True))
@@ -851,6 +953,25 @@ def plan_song(
     """Decide everything the conversion will write, without writing any of it."""
     options = options or ImportOptions()
     collector = Collector()
+
+    split = Counter(clip.source_tracks[0] for clip in song.clips if clip.source_tracks)
+    channels = sum(count for count in split.values() if count > 1)
+    if channels:
+        listed = _listed(sorted(track for track, count in split.items() if count > 1))
+        collector.add(
+            Code.TRACK_SPLIT_BY_CHANNEL,
+            f"source track(s) {listed} carry more than one channel; each channel became a "
+            "device track of its own rather than being merged into one part",
+            subjects=channels,
+        )
+    if song.controllers_dropped:
+        collector.add(
+            Code.CONTROLLERS_DROPPED,
+            f"{song.controllers_dropped} event(s) are control change, pitch bend, program "
+            "change or pressure; a pattern stores notes only, so they were dropped",
+            subjects=song.controllers_dropped,
+        )
+
     assigned = _assign(song, options, collector, first_track)
 
     drum_map = options.drum_map
@@ -864,6 +985,16 @@ def plan_song(
         )
 
     steps_per_bar = song.steps_per_bar(options.steps_per_beat)
+    ticks_per_step = song.ticks_per_beat / options.steps_per_beat
+    origin = _anchor([clip for clip, _, _ in assigned], ticks_per_step)
+    if origin:
+        collector.add(
+            Code.CLIP_ANCHORED,
+            f"the song starts {origin:g} tick(s) into the file; every track was moved back "
+            "together so its first note lands on step 1, because a pattern is a loop with "
+            "nowhere to keep a lead-in",
+        )
+
     tracks = [
         plan_track(
             clip,
@@ -874,17 +1005,26 @@ def plan_song(
             drum_map=drum_map,
             first_pattern=first_pattern,
             steps_per_bar=steps_per_bar,
+            origin=origin,
         )
         for clip, track, is_drum in assigned
     ]
 
     tempo = None
     if options.carry_tempo and song.clips:
-        tempo = song.tempo_bpm
-        collector.add(
-            Code.TEMPO_CARRIED,
-            f"the project tempo was set to the source's {song.tempo_bpm:g} BPM",
-        )
+        low, high = constants.TEMPO_RANGE_BPM
+        tempo = max(low, min(high, song.tempo_bpm))
+        if tempo != song.tempo_bpm:
+            collector.add(
+                Code.TEMPO_OUT_OF_RANGE,
+                f"the source runs at {song.tempo_bpm:g} BPM, outside the {low:g}-{high:g} the "
+                f"device plays; the project was written at {tempo:g} BPM instead",
+            )
+        else:
+            collector.add(
+                Code.TEMPO_CARRIED,
+                f"the project tempo was set to the source's {song.tempo_bpm:g} BPM",
+            )
         if song.tempo_changes > 1:
             collector.add(
                 Code.TEMPO_CHANGES_IGNORED,

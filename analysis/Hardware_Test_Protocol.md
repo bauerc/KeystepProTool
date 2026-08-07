@@ -213,6 +213,26 @@ because 50 % is both the minimum and the default so the export really is a no-op
 because the per-pattern value never made it into the capture. Neither is worth redoing: the
 question they served was answered at the device instead.
 
+## Open from M6 — one the import direction cannot settle
+
+It does not block a conversion: it is a place `midi2ksp` reports rather than decides, because
+deciding would mean inventing a limit the captures do not show.
+
+### H5.1 — Does a gate survive a chain boundary?
+
+**What it resolves.** A note in the last steps of a chained pattern whose gate runs past the
+pattern's last step. `midi_import` warns (`gate-past-end`) that the device "loops the pattern
+rather than sustaining" it, which is measured for a *looping* pattern and assumed for a *chained*
+one. If a chain sustains into the next pattern, a split track can carry ties across the seam and
+the warning is wrong for that case.
+
+**Device steps.** Write two chained patterns on one track. On the first, place a note on step 64
+with a gate of 4 steps. Play the chain and listen to, or record, the first two steps of pattern 2.
+
+**Confirms the assumption.** The note stops at the seam. **Falsifies it.** It sustains into
+pattern 2 — in which case `gate-past-end` should fire only for an unchained pattern, and
+`plan_track` may keep the full gate on a split track's interior patterns.
+
 ## Phase 1 — USB read probes
 
 **Not a tier and not part of M1–M14.** These do not go through MIDI Control Center and produce no

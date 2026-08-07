@@ -47,6 +47,11 @@ bpm = (p70 + p71 * 128 + p72 * 16384) / 100
 120 BPM, which confirms the decode against the device rather than against another file.
 Note the ordering: `70` is the **least** significant chunk.
 
+**The device's range is 30–240 BPM.** The three chunks hold far more than that — a 21-bit field
+scaled by 100 reaches about 20,971 BPM — so the field's width is no guide to what the hardware
+will take. A converter must hold itself to 30–240 and say when it does; the file will store 5,000
+BPM without complaint.
+
 Global *device* settings — CV/gate outputs, MIDI channel routing, sync, drum map, knob
 assignments, velocity/aftertouch curves — are **not** in the project file. They live under
 `deviceGlobalParametersId: 65` and are addressed by `globalParamId`.
