@@ -10,7 +10,7 @@ plan is in [`ROADMAP.md`](./ROADMAP.md).
 Both directions work end to end, and both are **verified on the hardware** — files this tool wrote
 loaded in MIDI Control Center, transferred to a KeyStep Pro, and played what they said they would.
 Three commands ship: `ksp-dump` reads a project, `ksp2midi` exports one as MIDI, and `midi2ksp`
-converts a MIDI clip into a playable pattern.
+converts a MIDI clip into a playable pattern. `kspplus` gathers all three under one name.
 
 `midi2ksp` converts a whole file: every note-bearing track onto the device's four, chords, a drum
 track, note lengths, tempo, and sequences too long for one pattern split and chained.
@@ -22,6 +22,20 @@ Requires Python 3.13 and [uv](https://docs.astral.sh/uv/).
 ```sh
 uv sync
 ```
+
+## `kspplus`
+
+Every command is reachable two ways: under its own name, or as a `kspplus` subcommand. They are the
+same command — same options, same output — so these two lines do the same thing:
+
+```sh
+uv run ksp2midi project_files/project_5.KeyStepPro -o project_5.mid
+uv run kspplus ksp2midi project_files/project_5.KeyStepPro -o project_5.mid
+```
+
+`kspplus --help` lists the three, and `kspplus <command> --help` gives that command's options
+grouped by what they affect — selection, timing, drum mapping, output. The rest of this README uses
+the standalone form for brevity; prefix any of it with `kspplus` and it still works.
 
 ## `ksp-dump`
 

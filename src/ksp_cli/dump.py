@@ -4,11 +4,13 @@ Inspect a project file without opening MIDI Control Center. Everything
 printed here is decoded by :mod:`ksp.reader`; this module only formats.
 """
 
-import argparse
 import json
 import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
+from typing import Annotated
+
+import typer
 
 from ksp.constants import SKIP_SEQUENCES, root_note_name
 from ksp.diagnostics import Collector, Report
@@ -20,7 +22,10 @@ from ksp.reader import load
 # same syntax and the same config file. CONFIG_PATH stays a name in this
 # module so tests can point it somewhere harmless.
 from ksp_cli.drum_map_option import CONFIG_PATH, parse_drum_map, resolve_drum_map
-from ksp_cli.reporting import add_verbose_option
+from ksp_cli.reporting import Verbose
+from ksp_cli.runner import run
+
+PROG = "ksp-dump"
 
 __all__ = ["CONFIG_PATH", "format_project", "main", "parse_drum_map", "resolve_drum_map"]
 
@@ -189,72 +194,77 @@ def format_project(
     return "\n".join(lines)
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="ksp-dump",
-        description="Print the contents of an Arturia KeyStep Pro project file.",
-    )
-    parser.add_argument("path", type=Path, help="a .KeyStepPro project file")
-    parser.add_argument(
-        "--all",
-        action="store_true",
-        help="include patterns that hold no notes (all 16 are always present)",
-    )
-    parser.add_argument("--track", type=int, choices=range(1, 5), help="show only this track")
-    parser.add_argument(
-        "--pattern",
-        type=int,
-        choices=range(1, 17),
-        metavar="{1..16}",
-        help="show only this pattern",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        dest="as_json",
-        help="emit the decoded model as JSON instead of a tree",
-    )
-    parser.add_argument(
-        "--drum-map",
-        metavar="SPEC",
-        help=(
-            "how drum lanes map to MIDI notes: chromatic:N, custom:a,b,c,... or none. "
-            "The device stores this globally and it is not in the project file, so it is "
-            f"always an assumption (default: chromatic:{DEFAULT_CHROMATIC_LOW})"
+HELP = "Print the contents of an Arturia KeyStep Pro project file."
+
+
+def dump(
+    path: Annotated[Path, typer.Argument(help="a .KeyStepPro project file")],
+    show_all: Annotated[
+        bool,
+        typer.Option(
+            "--all", help="include patterns that hold no notes (all 16 are always present)"
         ),
-    )
-    add_verbose_option(parser)
-    return parser
+    ] = False,
+    track: Annotated[
+        int | None, typer.Option(min=1, max=4, metavar="{1..4}", help="show only this track")
+    ] = None,
+    pattern: Annotated[
+        int | None, typer.Option(min=1, max=16, metavar="{1..16}", help="show only this pattern")
+    ] = None,
+    as_json: Annotated[
+        bool, typer.Option("--json", help="emit the decoded model as JSON instead of a tree")
+    ] = False,
+    drum_map_spec: Annotated[
+        str | None,
+        typer.Option(
+            "--drum-map",
+            metavar="SPEC",
+            help=(
+                "how drum lanes map to MIDI notes: chromatic:N, custom:a,b,c,... or none. "
+                "The device stores this globally and it is not in the project file, so it is "
+                f"always an assumption (default: chromatic:{DEFAULT_CHROMATIC_LOW})"
+            ),
+        ),
+    ] = None,
+    verbose: Verbose = False,
+) -> None:
+    try:
+        drum_map = resolve_drum_map(drum_map_spec, CONFIG_PATH)
+    except json.JSONDecodeError as exc:  # a ValueError, so it must come first
+        print(f"{PROG}: drum map: {CONFIG_PATH}: {exc}", file=sys.stderr)
+        raise typer.Exit(2) from None
+    except (OSError, ValueError) as exc:
+        print(f"{PROG}: drum map: {exc}", file=sys.stderr)
+        raise typer.Exit(2) from None
+
+    try:
+        project = load(path)
+    except OSError as exc:
+        print(f"{PROG}: {exc}", file=sys.stderr)
+        raise typer.Exit(1) from None
+    except ValueError as exc:
+        print(f"{PROG}: {path}: {exc}", file=sys.stderr)
+        raise typer.Exit(1) from None
+
+    project = project.select(track=track, pattern=pattern)
+
+    if as_json:
+        print(json.dumps(project.to_dict(drum_map), indent=2))
+    else:
+        print(format_project(project, show_all=show_all, drum_map=drum_map, verbose=verbose))
+
+
+def register(app: typer.Typer) -> None:
+    """Mount this command on *app* -- its own, or the kspplus group."""
+    app.command(name=PROG, help=HELP)(dump)
+
+
+app = typer.Typer(add_completion=False, rich_markup_mode="rich")
+register(app)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
-
-    try:
-        drum_map = resolve_drum_map(args.drum_map, CONFIG_PATH)
-    except json.JSONDecodeError as exc:  # a ValueError, so it must come first
-        print(f"ksp-dump: drum map: {CONFIG_PATH}: {exc}", file=sys.stderr)
-        return 2
-    except (OSError, ValueError) as exc:
-        print(f"ksp-dump: drum map: {exc}", file=sys.stderr)
-        return 2
-
-    try:
-        project = load(args.path)
-    except OSError as exc:
-        print(f"ksp-dump: {exc}", file=sys.stderr)
-        return 1
-    except ValueError as exc:
-        print(f"ksp-dump: {args.path}: {exc}", file=sys.stderr)
-        return 1
-
-    project = project.select(track=args.track, pattern=args.pattern)
-
-    if args.as_json:
-        print(json.dumps(project.to_dict(drum_map), indent=2))
-    else:
-        print(format_project(project, show_all=args.all, drum_map=drum_map, verbose=args.verbose))
-    return 0
+    return run(app, argv, prog_name=PROG)
 
 
 if __name__ == "__main__":  # pragma: no cover

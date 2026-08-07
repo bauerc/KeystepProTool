@@ -60,7 +60,14 @@ data), `arrange` (timeline placement), `build_midi_file` (the only `mido` caller
 `Placement` data the same way.
 
 Console entry points go in `pyproject.toml` only when their milestone lands, so an installed
-command never crashes on invocation. All three are claimed; a new one waits for its milestone.
+command never crashes on invocation. All four are claimed; a new one waits for its milestone.
+
+The CLI is Typer. Each command is a function in its own module with a `register(app)` that mounts
+it, so `ksp2midi ...` and `kspplus ksp2midi ...` are one command reached two ways — add a command
+by writing `register`, never by declaring its options twice. Commands signal failure with
+`typer.Exit(code)`; `ksp_cli.runner.run` turns that back into the `main(argv) -> int` the entry
+points and the tests call. The exit codes are load-bearing: **0 success, 1 file or format failure,
+2 usage failure**.
 
 `midi2ksp` ships MCC's factory default in `src/ksp_cli/templates/`, so the installed command has
 something to overwrite. It is a byte-identical copy of `project_files/Default.KeyStepPro` and a

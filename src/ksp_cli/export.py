@@ -15,11 +15,14 @@ under ``--verbose``; ``--quiet`` suppresses the stdout summary only, never the
 caveats.
 """
 
-import argparse
+import enum
 import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Annotated
+
+import typer
 
 from ksp.constants import DEFAULT_GATE_LENGTH
 from ksp.diagnostics import Report
@@ -34,119 +37,31 @@ from ksp.midi_export import (
 from ksp.model import Project
 from ksp.reader import load
 from ksp_cli.drum_map_option import CONFIG_PATH, DRUM_MAP_HELP, resolve_drum_map
-from ksp_cli.reporting import add_verbose_option, print_report
+from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, print_report
+from ksp_cli.runner import run
 
 PROG = "ksp2midi"
 
+HELP = "Convert an Arturia KeyStep Pro project into Standard MIDI file(s)."
+EPILOG = (
+    "By default patterns that hold notes are laid end to end in pattern order in one "
+    "file, and pattern N starts at the same point on every track. --split writes each "
+    "(track, pattern) to its own file instead."
+)
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog=PROG,
-        description="Convert an Arturia KeyStep Pro project into Standard MIDI file(s).",
-        epilog=(
-            "By default patterns that hold notes are laid end to end in pattern order in one "
-            "file, and pattern N starts at the same point on every track. --split writes each "
-            "(track, pattern) to its own file instead."
-        ),
-    )
-    parser.add_argument("path", type=Path, help="a .KeyStepPro project file")
-    parser.add_argument(
-        "-o",
-        "--output",
-        type=Path,
-        help=(
-            "destination .mid file (default: the input file with a .mid suffix); "
-            "with --split, a directory (default: the input file's own directory)"
-        ),
-    )
-    parser.add_argument(
-        "--split",
-        action="store_true",
-        help=(
-            "write one file per non-empty (track, pattern), named "
-            "<stem>_track{N}_pattern{P}.mid, each starting at its own tick 0"
-        ),
-    )
-    parser.add_argument("--track", type=int, choices=range(1, 5), help="export only this track")
-    parser.add_argument(
-        "--pattern",
-        type=int,
-        choices=range(1, 17),
-        metavar="{1..16}",
-        help="export only this pattern",
-    )
-    parser.add_argument(
-        "--passes",
-        default="auto",
-        choices=("auto", "1", "2", "3", "4"),
-        help=(
-            "how many of the four 16/32/48/64 repeats to render (default: %(default)s -- "
-            "four when a pattern holds a note that does not play on all four, one otherwise)"
-        ),
-    )
-    parser.add_argument(
-        "--ticks-per-beat",
-        type=int,
-        default=DEFAULT_TICKS_PER_BEAT,
-        help="MIDI resolution (default: %(default)s)",
-    )
-    parser.add_argument("--drum-map", metavar="SPEC", help=DRUM_MAP_HELP)
-    parser.add_argument(
-        "--drum-channel",
-        type=int,
-        default=DRUM_CHANNEL + 1,
-        metavar="{1..16}",
-        help="MIDI channel for drum lanes (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--default-gate",
-        type=float,
-        default=DEFAULT_GATE_LENGTH,
-        metavar="STEPS",
-        help=(
-            "note length in steps for a gate value outside the measured 0-127 ladder "
-            "(default: %(default)s, the length a freshly placed note has on the device)"
-        ),
-    )
-    parser.add_argument(
-        "--include-stale",
-        action="store_true",
-        help=(
-            "where a pattern holds both a melodic and a drum note set, export both instead of "
-            "only the one parameter 86 bit 6 says the device plays"
-        ),
-    )
-    parser.add_argument(
-        "--include-disabled",
-        action="store_true",
-        help=(
-            "export notes whose step is turned off; the device does not play them, so they "
-            "are omitted by default"
-        ),
-    )
-    parser.add_argument(
-        "--no-swing",
-        action="store_false",
-        dest="apply_swing",
-        help="ignore per-pattern swing and place every step on a flat grid",
-    )
-    parser.add_argument(
-        "--no-time-shift",
-        action="store_false",
-        dest="apply_time_shift",
-        help="ignore each note's time shift and place every step on a flat grid",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="report what would be written, and write nothing",
-    )
-    parser.add_argument(
-        "--force", action="store_true", help="overwrite the output file if it already exists"
-    )
-    parser.add_argument("--quiet", action="store_true", help="suppress the summary on stdout")
-    add_verbose_option(parser)
-    return parser
+_SELECTION_PANEL = "Selection"
+_TIMING_PANEL = "Timing"
+_DRUM_PANEL = "Drum mapping"
+
+
+class Passes(enum.StrEnum):
+    """How many of the four repeats to render. ``auto`` decides per pattern."""
+
+    AUTO = "auto"
+    ONE = "1"
+    TWO = "2"
+    THREE = "3"
+    FOUR = "4"
 
 
 def _summary(result: ExportResult, destination: Path, dry_run: bool) -> str:
@@ -168,33 +83,179 @@ def _split_name(source: Path, result: ExportResult) -> str:
 
 
 def _plan(
-    args: argparse.Namespace, project: Project, options: ExportOptions
+    project: Project,
+    options: ExportOptions,
+    *,
+    path: Path,
+    output: Path | None,
+    split: bool,
+    track: int | None,
+    pattern: int | None,
 ) -> list[tuple[ExportResult, Path]]:
     """Pair each rendered file with where it goes. Nothing is written yet."""
-    narrowed = project.select(track=args.track, pattern=args.pattern)
-    if args.split:
-        directory = args.output or args.path.parent
+    narrowed = project.select(track=track, pattern=pattern)
+    if split:
+        directory = output or path.parent
         return [
-            (result, directory / _split_name(args.path, result))
+            (result, directory / _split_name(path, result))
             for result in export_split(narrowed, options)
         ]
     result = export_project(narrowed, options)
     if result.is_empty:
         return []
-    return [(result, args.output or args.path.with_suffix(".mid"))]
+    return [(result, output or path.with_suffix(".mid"))]
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
-
+def export(
+    path: Annotated[Path, typer.Argument(help="a .KeyStepPro project file")],
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "-o",
+            "--output",
+            rich_help_panel=OUTPUT_PANEL,
+            help=(
+                "destination .mid file (default: the input file with a .mid suffix); "
+                "with --split, a directory (default: the input file's own directory)"
+            ),
+        ),
+    ] = None,
+    split: Annotated[
+        bool,
+        typer.Option(
+            "--split",
+            rich_help_panel=_SELECTION_PANEL,
+            help=(
+                "write one file per non-empty (track, pattern), named "
+                "<stem>_track{N}_pattern{P}.mid, each starting at its own tick 0"
+            ),
+        ),
+    ] = False,
+    track: Annotated[
+        int | None,
+        typer.Option(
+            min=1,
+            max=4,
+            rich_help_panel=_SELECTION_PANEL,
+            help="export only this track",
+        ),
+    ] = None,
+    pattern: Annotated[
+        int | None,
+        typer.Option(
+            min=1,
+            max=16,
+            rich_help_panel=_SELECTION_PANEL,
+            help="export only this pattern",
+        ),
+    ] = None,
+    passes: Annotated[
+        Passes,
+        typer.Option(
+            rich_help_panel=_SELECTION_PANEL,
+            help=(
+                "how many of the four 16/32/48/64 repeats to render (auto: four when a "
+                "pattern holds a note that does not play on all four, one otherwise)"
+            ),
+        ),
+    ] = Passes.AUTO,
+    ticks_per_beat: Annotated[
+        int, typer.Option(rich_help_panel=_TIMING_PANEL, help="MIDI resolution")
+    ] = DEFAULT_TICKS_PER_BEAT,
+    drum_map_spec: Annotated[
+        str | None,
+        typer.Option("--drum-map", metavar="SPEC", rich_help_panel=_DRUM_PANEL, help=DRUM_MAP_HELP),
+    ] = None,
+    drum_channel: Annotated[
+        int,
+        typer.Option(
+            min=1,
+            max=16,
+            rich_help_panel=_DRUM_PANEL,
+            help="MIDI channel for drum lanes",
+        ),
+    ] = DRUM_CHANNEL + 1,
+    default_gate: Annotated[
+        float,
+        typer.Option(
+            metavar="STEPS",
+            rich_help_panel=_TIMING_PANEL,
+            help=(
+                "note length in steps for a gate value outside the measured 0-127 ladder "
+                "(the default is the length a freshly placed note has on the device)"
+            ),
+        ),
+    ] = DEFAULT_GATE_LENGTH,
+    include_stale: Annotated[
+        bool,
+        typer.Option(
+            "--include-stale",
+            rich_help_panel=_SELECTION_PANEL,
+            help=(
+                "where a pattern holds both a melodic and a drum note set, export both instead "
+                "of only the one parameter 86 bit 6 says the device plays"
+            ),
+        ),
+    ] = False,
+    include_disabled: Annotated[
+        bool,
+        typer.Option(
+            "--include-disabled",
+            rich_help_panel=_SELECTION_PANEL,
+            help=(
+                "export notes whose step is turned off; the device does not play them, so they "
+                "are omitted by default"
+            ),
+        ),
+    ] = False,
+    no_swing: Annotated[
+        bool,
+        typer.Option(
+            "--no-swing",
+            rich_help_panel=_TIMING_PANEL,
+            help="ignore per-pattern swing and place every step on a flat grid",
+        ),
+    ] = False,
+    no_time_shift: Annotated[
+        bool,
+        typer.Option(
+            "--no-time-shift",
+            rich_help_panel=_TIMING_PANEL,
+            help="ignore each note's time shift and place every step on a flat grid",
+        ),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            rich_help_panel=OUTPUT_PANEL,
+            help="report what would be written, and write nothing",
+        ),
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            rich_help_panel=OUTPUT_PANEL,
+            help="overwrite the output file if it already exists",
+        ),
+    ] = False,
+    quiet: Annotated[
+        bool,
+        typer.Option(
+            "--quiet", rich_help_panel=OUTPUT_PANEL, help="suppress the summary on stdout"
+        ),
+    ] = False,
+    verbose: VerboseInPanel = False,
+) -> None:
     try:
-        drum_map = resolve_drum_map(args.drum_map, CONFIG_PATH)
+        drum_map = resolve_drum_map(drum_map_spec, CONFIG_PATH)
     except json.JSONDecodeError as exc:  # a ValueError, so it must come first
         print(f"{PROG}: drum map: {CONFIG_PATH}: {exc}", file=sys.stderr)
-        return 2
+        raise typer.Exit(2) from None
     except (OSError, ValueError) as exc:
         print(f"{PROG}: drum map: {exc}", file=sys.stderr)
-        return 2
+        raise typer.Exit(2) from None
 
     if drum_map is None:
         # ksp-dump can print "lane 0" and leave it unresolved; a MIDI file has
@@ -204,64 +265,78 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"for every drum lane",
             file=sys.stderr,
         )
-        return 2
+        raise typer.Exit(2)
 
     try:
         options = ExportOptions(
-            ticks_per_beat=args.ticks_per_beat,
-            passes=None if args.passes == "auto" else int(args.passes),
+            ticks_per_beat=ticks_per_beat,
+            passes=None if passes is Passes.AUTO else int(passes.value),
             drum_map=drum_map,
-            drum_channel=args.drum_channel - 1,
-            default_gate=args.default_gate,
-            apply_swing=args.apply_swing,
-            apply_time_shift=args.apply_time_shift,
-            include_stale=args.include_stale,
-            include_disabled=args.include_disabled,
+            drum_channel=drum_channel - 1,
+            default_gate=default_gate,
+            apply_swing=not no_swing,
+            apply_time_shift=not no_time_shift,
+            include_stale=include_stale,
+            include_disabled=include_disabled,
         )
     except ValueError as exc:
         print(f"{PROG}: {exc}", file=sys.stderr)
-        return 2
+        raise typer.Exit(2) from None
 
     try:
-        project = load(args.path)
+        project = load(path)
     except OSError as exc:
         print(f"{PROG}: {exc}", file=sys.stderr)
-        return 1
+        raise typer.Exit(1) from None
     except ValueError as exc:
-        print(f"{PROG}: {args.path}: {exc}", file=sys.stderr)
-        return 1
+        print(f"{PROG}: {path}: {exc}", file=sys.stderr)
+        raise typer.Exit(1) from None
 
-    planned = _plan(args, project, options)
+    planned = _plan(
+        project, options, path=path, output=output, split=split, track=track, pattern=pattern
+    )
     if not planned:
         # Writing a MIDI file with no notes in it would look like success.
         print(
-            f"{PROG}: {args.path}: nothing to export (no selected pattern holds notes)",
+            f"{PROG}: {path}: nothing to export (no selected pattern holds notes)",
             file=sys.stderr,
         )
-        return 1
+        raise typer.Exit(1)
 
-    existing = [str(path) for _, path in planned if path.exists()]
-    if existing and not args.force:
+    existing = [str(destination) for _, destination in planned if destination.exists()]
+    if existing and not force:
         print(
             f"{PROG}: {', '.join(existing)} already exists (use --force to overwrite)",
             file=sys.stderr,
         )
-        return 1
+        raise typer.Exit(1)
 
-    if not args.dry_run:
+    if not dry_run:
         try:
-            for _, path in planned:
-                path.parent.mkdir(parents=True, exist_ok=True)
-            for result, path in planned:
-                result.midi.save(path)
+            for _, destination in planned:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+            for result, destination in planned:
+                result.midi.save(destination)
         except OSError as exc:
             print(f"{PROG}: {exc}", file=sys.stderr)
-            return 1
+            raise typer.Exit(1) from None
 
-    print_report(_report(planned), prog=PROG, verbose=args.verbose)
-    if not args.quiet:
-        print("\n".join(_summary(result, path, args.dry_run) for result, path in planned))
-    return 0
+    print_report(_report(planned), prog=PROG, verbose=verbose)
+    if not quiet:
+        print("\n".join(_summary(result, destination, dry_run) for result, destination in planned))
+
+
+def register(app: typer.Typer) -> None:
+    """Mount this command on *app* -- its own, or the kspplus group."""
+    app.command(name=PROG, help=HELP, epilog=EPILOG)(export)
+
+
+app = typer.Typer(add_completion=False, rich_markup_mode="rich")
+register(app)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    return run(app, argv, prog_name=PROG)
 
 
 def _report(planned: Sequence[tuple[ExportResult, Path]]) -> Report:
