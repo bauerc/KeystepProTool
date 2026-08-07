@@ -44,129 +44,77 @@ sufficient and M9 may never be worth building. Decide after M6.
 
 ## Milestones
 
+M1–M5 are complete and their detail lives in the spec; what follows is the standing constraint each
+one left behind, not the story of building it.
+
 ### M1 — Reader and dump ✅ **done**
 
-**Artifact:** `ksp-dump project_5.KeyStepPro` prints a readable tree — tracks → patterns → notes.
-Inspect any project file without opening MCC.
+`ksp.lenient_json` / `keys` / `constants` / `model` / `reader`, and `ksp-dump` (`--all`, `--track`,
+`--pattern`, `--json`, `--drum-map`, `-v`) print any project as tracks → patterns → notes.
 
-**Delivered:** `ksp.lenient_json` / `keys` / `constants` / `model` / `reader`, and the `ksp-dump`
-command (`--all`, `--track`, `--pattern`, `--json`, `--drum-map`, `-v`).
-
-**Test:** output reproduces `analysis/project_5_description.txt` and `analysis/project_9_tests.txt`.
-Expected values live in `tests/fixtures/` as JSON, **transcribed by hand from those documents rather
-than generated from the reader** — that is what makes them independent ground truth, and what lets a
-future Swift port be checked against identical files. Never regenerate them from the code.
-
-**The one description-vs-file discrepancy is closed.** The device was re-read on 2026-08-05
-(protocol T6.1): `project_5`'s two kicks display Time Shift −1 and **+1**, so the description
-carried a transcription slip and now reads what the file stores — see spec §5.
+**The constraint:** the expected values in `tests/fixtures/` are **hand-transcribed from
+`analysis/project_5_description.txt` and `project_9_tests.txt`**, not generated from the reader.
+That is what makes them independent ground truth and what lets the M8–M9 Swift port be checked
+against identical files. **Never regenerate them from the code.**
 
 ### M1.5 — Drum map ✅ **done**
 
-**Artifact:** `ksp.drum_map.DrumMap` — the 24-lane ↔ MIDI note mapping with GM percussion names,
-and `ksp-dump --drum-map`.
+`ksp.drum_map.DrumMap` — the 24-lane ↔ MIDI note mapping with GM percussion names, and
+`ksp-dump --drum-map`. A drum note stores a *lane index* in `117`, not a pitch, so M2 cannot emit
+one and M6 cannot turn an incoming note 36 back into a lane without it.
 
-**Why it was needed:** a drum note stores a *lane index* in `117`, not a pitch, so without a map M2
-cannot emit a drum note and M6 cannot turn an incoming note 36 back into a lane.
-
-**The map is device-global (`paramId 65`) and is not in the project file** — not recoverable from
-one, not writable into one. The tool therefore treats it as *configuration with a documented
-default* (chromatic from 36), never as a decoded fact, and always prints which map it used.
-
-**Measured** (protocol D5): the device's own MIDI output runs 36…59 across the 24 lanes, so the
-factory map is chromatic from 36 and lane *i* plays `low + i`. Chromatic mode takes a low note of
-0–103; custom mode gives all 24 lanes a free note. There is no map in the project file to find,
-which is what D6 asked. The documented default was right and stands — see spec §3.2.1.
+**The constraint:** the map is device-global (`paramId 65`) and **is not in the project file** —
+not recoverable from one, not writable into one. It is treated as *configuration with a documented
+default* (chromatic from 36, measured by D5), never as a decoded fact, and the tool always prints
+which map it used. See spec §3.2.1.
 
 ### M2 — KeyStep Pro → MIDI export ✅ **done**
 
-**Artifact:** `.KeyStepPro` → `.mid`, openable in any DAW. MCC has **no MIDI export at all for the
-KeyStep Pro**, so `ksp2midi` is the only one that exists — which also means there is no reference
-render to diff against, and the hardware's live output is the sole ground truth for timing.
+`ksp.midi_export` and `ksp2midi` (options in `README.md`). MCC has **no MIDI export for the KeyStep
+Pro**, so this is the only one that exists — and there is no reference render to diff against.
+`--passes` expands the 16/32/48/64 repeat cycle, `--no-time-shift` returns the flat grid, `--split`
+sidesteps the layout question.
 
-**Delivered:** `ksp.midi_export` and the `ksp2midi` command (options in `README.md`), in three
-layers that must stay separate — `render_pattern` → `arrange` → `build_midi_file`, the only `mido`
-caller. Tests assert on `Rendering` data, not parsed MIDI. `tests/test_midi_export.py` checks
-`project_5` and `project_9` against the hardware-confirmed descriptions rather than against our own
-reader.
-
-**`--passes` shipped once T5.8 measured what it needed**: the four 16/32/48/64 sequences are
-*repeats* of the pattern, not pages of a long one, so a masked note sounds on the loops its mask
-names. The export expands the cycle by default and `--passes 1` flattens it. Step size and triplet
-came out of the same tier, so `--steps-per-beat` is gone from `ksp2midi` — the file says.
-
-**Time shift now ships applied.** Tier 8 measured the unit — a fixed 1/400 of a beat — so the
-export displaces each note by its own `112`/`120` value instead of flattening it and warning.
-`--no-time-shift` returns the flat grid. The long-deferred `--time-shift approx` never shipped and
-never will: there is nothing to approximate now that the real number exists.
-
-**The layout decision.** The device stores no arrangement — 4 tracks × 16 independent loops — so a
-linear MIDI file has to invent one. Patterns holding notes are laid end to end in pattern order, and
-**pattern N starts at the same tick on every track**, preserving the one relationship the hardware
-does give. `--split` avoids the question entirely.
+**The constraints:** the three layers stay separate — `render_pattern` → `arrange` →
+`build_midi_file`, the only `mido` caller — and tests assert on `Rendering` data, not parsed MIDI.
+The device stores no arrangement, so patterns holding notes are laid end to end and **pattern N
+starts at the same tick on every track**, preserving the one relationship the hardware gives.
 
 ### M3 — Byte-identical round-trip ✅ **done**
 
-**Artifact:** load a project, re-emit it, assert the bytes match. Locks down write fidelity — tab
-indentation, MCC's string-sorted key order, the `version` key — before any real mutation exists to
-confuse the picture.
+`ksp.lenient_json.dumps` / `dump_path` / `canonical`, and `tests/test_round_trip.py` across all
+five samples. `dump_path` writes to a temp file and renames it into place: these are 3.5 MB files
+usually destined for MCC's Templates folder, where a half-written one would be found and parsed.
 
-**Delivered:** `ksp.lenient_json.dumps` / `dump_path` / `canonical`, and `tests/test_round_trip.py`,
-which holds **all five** samples rather than only the factory default. `dump_path` writes to a temp
-file alongside the destination and renames it into place — these are 3.5 MB files whose destination
-is often MCC's Templates folder, where a half-written one would be found and parsed.
-
-Output is **strict JSON**: T6.2 showed MCC does not need the trailing comma, so the round-trip
-target is MCC's bytes minus that one byte, with
-`test_output_differs_from_mcc_by_exactly_the_trailing_comma` pinning the deviation at one byte. The
-reader still accepts the comma, because every file that exists has one.
+**The constraint:** output is **strict JSON**, so it is MCC's bytes minus the trailing comma (T6.2
+showed MCC does not need it), pinned at exactly one byte by
+`test_output_differs_from_mcc_by_exactly_the_trailing_comma`. The reader still accepts the comma,
+because every file that exists has one.
 
 ### M4 — Targeted mutation ✅ **done**
 
-**Artifact:** write a note into a real project from software, load it in MCC, push to the device.
+`ksp.mutate` (`place_note`, `set_pitch`, `pitch_key`) plus the repository's first
+`@pytest.mark.hardware` tests. **Confirmed on the device** 2026-08-01: the readback differed from
+the candidate by zero keys. Melodic only — a drum note's lane is not a comparable write, and M6
+owns that.
 
-**Delivered:** `ksp.mutate` (`place_note`, `set_pitch`, `pitch_key`), `tests/test_mutate.py`, and
-`tests/test_hardware_mutation.py` — the repository's first `@pytest.mark.hardware` tests. No console
-entry point: candidates come from a marker-gated test for the person at the device.
-
-The desk gate is what made a hardware session worth booking: `place_note` applied to
-`baseline.KeyStepPro` reproduces the device's own `T1-note-place` capture **byte for byte**. That
-file is committed for exactly this reason, so the recipe is CI-enforced rather than local to one
-machine.
-
-**Confirmed on the device** 2026-08-01: the readback differs from the candidate by **zero keys**,
-and a pitch we changed landed on the note we meant. Melodic only — a drum note's lane is not a
-comparable write, because the drum step-active array is indexed *by lane*. M6 owns that.
-
-**Placing a melodic note is 8 keys, not one** — recipe in spec §4. `ksp.mutate.place_note` is the
-only thing that should be building that set.
+**The constraint:** placing a melodic note is **8 keys, not one** (recipe in spec §4), and
+`ksp.mutate.place_note` is the only thing that should build that set. The desk gate is that
+`place_note` reproduces the device's own `T1-note-place` capture byte for byte, so the recipe is
+CI-enforced rather than local to one machine.
 
 ### M5 — MIDI → KeyStep Pro (MVP) ✅ **done**
 
-**Artifact:** `midi2ksp in.mid -o out.KeyStepPro` — one track, one pattern, monophonic, default
-gate. **This is the core deliverable.** Everything after it is breadth, not capability.
+`ksp.midi_import` and `midi2ksp` — one track into one pattern, still reachable as `--midi-track`.
+Three layers mirroring M2's, inverted: `read_clip` (the only `mido` caller) → `quantise` → `apply`.
+**Confirmed on the device** 2026-08-01, by ear rather than readback, so
+`test_the_device_kept_the_converted_pattern` still skips.
 
-**Approach:** template-and-overwrite. Start from a project, overwrite values, write back. Never
-synthesise the key set.
-
-**Delivered:** `ksp.midi_import` and the `midi2ksp` command, plus MCC's factory default bundled into
-the wheel so an installed command has something to convert into. Three layers mirroring M2's,
-inverted — `read_clip` (the only `mido` caller) → `quantise` → `apply`.
-
-**Placement is not reimplemented.** `apply` calls `ksp.mutate.place_note`, and `test_midi_import.py`
-asserts that converting a one-note clip reproduces M4's hardware-measured 8-key diff exactly — so a
-regression fails against what the device itself wrote, not against our own idea of what a note is.
-
-**Confirmed on the device** 2026-08-01: the converted clip loaded, transferred and played as
-written. That closes the loop the tool was built for. Confirmed by ear rather than by a readback, so
-`test_the_device_kept_the_converted_pattern` still skips; worth capturing next time the device is
-out, as a regression net rather than an open question.
-
-**Scope discipline:** monophonic and single-pattern on purpose. Sub-issues #30 (drums) and #31
-(unified drum + melodic) stay open for M6. Two limits are user-visible rather than hidden — note
-lengths are not carried (scope, not an unknown: the gate ladder is measured), and a project's *name*
-is an integer parameter we have not decoded, so a converted project inherits its template's name in
-MCC's Project Browser.
+**The constraints:** **template-and-overwrite** — start from a project, overwrite values, write
+back, never synthesise the key set. Placement is not reimplemented: `apply` calls
+`ksp.mutate.place_note`, and a regression therefore fails against what the device itself wrote. A
+project's *name* is an undecoded integer parameter, so a converted project still inherits its
+template's name in MCC's Project Browser.
 
 ### M6 — Full conversion ✅ **done**
 
@@ -414,8 +362,8 @@ is worth building after M6 — see the caveat under **Stack**.
 | M3 Round-trip | ✅ done | No | M1 |
 | M4 Mutation | ✅ done | **Yes** (done) | M3 |
 | M5 MVP convert | ✅ done | **Yes** (done) | M3 |
-| M6 Full convert | | No (desk-testable) | M5, M1.5 |
-| M7 Timing calibration | | **Yes** | M3 |
+| M6 Full convert | ✅ done | No (desk-testable) | M5, M1.5 |
+| M7 Timing calibration | ✅ done | **Yes** (done) | M3 |
 | M8 Distribution | | For final check | M6 |
 | M9 GUI | | For final check | M8 |
 
@@ -440,6 +388,7 @@ Both are understood; neither has reached the code.
   `ksp2midi` renders those patterns forward and warns. Rendering a plausible random order would be
   inventing a performance the device did not give us.
 
-**Hardware captures still worth doing: none.** Every tier of
+**One hardware probe is still outstanding: H4.1**, whether the device honours the project slot in
+byte 7 — the open item above waits on it. Every *tier* of
 [`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md) is closed and its
-procedures removed; what is left there is the method, for whatever question comes next.
+procedures removed; what is left there is H4.1 and the method, for whatever question comes next.

@@ -307,9 +307,11 @@ Controls the protocol must apply:
 
 ---
 
-## 6. Open questions, in priority order
+## 6. Questions this milestone opened, and what answered them
 
-All test IDs refer to [`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md).
+**All nine are closed.** The table is kept as the record of what was asked and what settled it —
+the "resolved by" column is the evidence, not a status board. All test IDs refer to
+[`Hardware_Test_Protocol.md`](./Hardware_Test_Protocol.md).
 
 | # | Question | Resolved by | Blocks |
 |---|---|---|---|

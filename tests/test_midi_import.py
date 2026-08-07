@@ -625,7 +625,7 @@ def swung(percent: int, steps: int = 16) -> mido.MidiFile:
 def test_a_swung_clip_comes_back_as_the_swing_it_was_made_with(
     percent: int, load_sample: Loader
 ) -> None:
-    """The fit inverts ``midi_export._swing_delay``, so the two agree by
+    """The fit inverts ``midi_export.swing_delay``, so the two agree by
     construction rather than by coincidence (Timing_Calibration 3.2)."""
     result = midi_import.convert_song(swung(percent), load_sample("Default.KeyStepPro"))
 
