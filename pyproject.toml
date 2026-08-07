@@ -7,6 +7,9 @@ requires-python = ">=3.13"
 dependencies = [
     "mido>=1.3.3",
     "orjson>=3.11.9",
+    # Rich is not listed: nothing imports it. It is reached only through Typer's
+    # own rich_markup_mode and rich_help_panel arguments, and typer requires it.
+    "typer>=0.15",
 ]
 
 # Reading a project off the device needs raw USB, and libusb is a system
@@ -19,6 +22,7 @@ usb = ["pyusb>=1.3.1"]
 # Declaring one before its module exists would install a command that crashes
 # on invocation, so they are added alongside the code.
 [project.scripts]
+kspplus = "ksp_cli.app:main"
 ksp-dump = "ksp_cli.dump:main"
 ksp2midi = "ksp_cli.export:main"
 midi2ksp = "ksp_cli.convert:main"

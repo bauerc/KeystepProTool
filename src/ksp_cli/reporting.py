@@ -6,17 +6,23 @@ same finding in a dozen patterns and the one-off warnings are the ones worth
 reading.
 """
 
-import argparse
 import sys
-from typing import TextIO
+from typing import Annotated, TextIO
+
+import typer
 
 from ksp.diagnostics import Report
 
 VERBOSE_HELP = "list every diagnostic instead of one summary line per kind"
 
+#: The panel the commands with grouped help put their reporting options in.
+OUTPUT_PANEL = "Output"
 
-def add_verbose_option(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("-v", "--verbose", action="store_true", help=VERBOSE_HELP)
+#: Every command takes -v, so the flag is declared once and annotated in.
+Verbose = Annotated[bool, typer.Option("-v", "--verbose", help=VERBOSE_HELP)]
+VerboseInPanel = Annotated[
+    bool, typer.Option("-v", "--verbose", help=VERBOSE_HELP, rich_help_panel=OUTPUT_PANEL)
+]
 
 
 def print_report(
