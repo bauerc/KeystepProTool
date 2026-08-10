@@ -16,8 +16,6 @@ caveats.
 """
 
 import enum
-import json
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated
@@ -35,10 +33,10 @@ from ksp.midi_export import (
     export_split,
 )
 from ksp.model import Project
-from ksp.reader import load
-from ksp_cli.drum_map_option import CONFIG_PATH, DRUM_MAP_HELP, resolve_drum_map
-from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, print_report
-from ksp_cli.runner import run
+from ksp_cli.drum_map_option import CONFIG_PATH, DRUM_MAP_HELP, resolve_drum_map_or_fail
+from ksp_cli.loading import load_project
+from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
+from ksp_cli.runner import standalone
 
 PROG = "ksp2midi"
 
@@ -248,24 +246,16 @@ def export(
     ] = False,
     verbose: VerboseInPanel = False,
 ) -> None:
-    try:
-        drum_map = resolve_drum_map(drum_map_spec, CONFIG_PATH)
-    except json.JSONDecodeError as exc:  # a ValueError, so it must come first
-        print(f"{PROG}: drum map: {CONFIG_PATH}: {exc}", file=sys.stderr)
-        raise typer.Exit(2) from None
-    except (OSError, ValueError) as exc:
-        print(f"{PROG}: drum map: {exc}", file=sys.stderr)
-        raise typer.Exit(2) from None
-
+    drum_map = resolve_drum_map_or_fail(drum_map_spec, CONFIG_PATH, prog=PROG)
     if drum_map is None:
         # ksp-dump can print "lane 0" and leave it unresolved; a MIDI file has
         # no way to say that, so there is nothing sensible to write.
-        print(
-            f"{PROG}: --drum-map none cannot be exported: a MIDI file has to name a note "
-            f"for every drum lane",
-            file=sys.stderr,
+        fail(
+            "--drum-map none cannot be exported: a MIDI file has to name a note "
+            "for every drum lane",
+            prog=PROG,
+            code=2,
         )
-        raise typer.Exit(2)
 
     try:
         options = ExportOptions(
@@ -280,36 +270,19 @@ def export(
             include_disabled=include_disabled,
         )
     except ValueError as exc:
-        print(f"{PROG}: {exc}", file=sys.stderr)
-        raise typer.Exit(2) from None
+        fail(str(exc), prog=PROG, code=2)
 
-    try:
-        project = load(path)
-    except OSError as exc:
-        print(f"{PROG}: {exc}", file=sys.stderr)
-        raise typer.Exit(1) from None
-    except ValueError as exc:
-        print(f"{PROG}: {path}: {exc}", file=sys.stderr)
-        raise typer.Exit(1) from None
-
+    project = load_project(path, prog=PROG)
     planned = _plan(
         project, options, path=path, output=output, split=split, track=track, pattern=pattern
     )
     if not planned:
         # Writing a MIDI file with no notes in it would look like success.
-        print(
-            f"{PROG}: {path}: nothing to export (no selected pattern holds notes)",
-            file=sys.stderr,
-        )
-        raise typer.Exit(1)
+        fail(f"{path}: nothing to export (no selected pattern holds notes)", prog=PROG, code=1)
 
     existing = [str(destination) for _, destination in planned if destination.exists()]
     if existing and not force:
-        print(
-            f"{PROG}: {', '.join(existing)} already exists (use --force to overwrite)",
-            file=sys.stderr,
-        )
-        raise typer.Exit(1)
+        fail(f"{', '.join(existing)} already exists (use --force to overwrite)", prog=PROG, code=1)
 
     if not dry_run:
         try:
@@ -318,8 +291,7 @@ def export(
             for result, destination in planned:
                 result.midi.save(destination)
         except OSError as exc:
-            print(f"{PROG}: {exc}", file=sys.stderr)
-            raise typer.Exit(1) from None
+            fail(str(exc), prog=PROG, code=1)
 
     print_report(_report(planned), prog=PROG, verbose=verbose)
     if not quiet:
@@ -331,12 +303,7 @@ def register(app: typer.Typer) -> None:
     app.command(name=PROG, help=HELP, epilog=EPILOG)(export)
 
 
-app = typer.Typer(add_completion=False, rich_markup_mode="rich")
-register(app)
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    return run(app, argv, prog_name=PROG)
+main = standalone(register, PROG)
 
 
 def _report(planned: Sequence[tuple[ExportResult, Path]]) -> Report:

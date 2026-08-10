@@ -11,9 +11,15 @@ Typer to render usage errors itself, which is where the Rich error panel comes
 from.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 import typer
+
+
+def new_app(**kwargs: Any) -> typer.Typer:
+    """A Typer app on this project's settings: Rich markup, no completion."""
+    return typer.Typer(add_completion=False, rich_markup_mode="rich", **kwargs)
 
 
 def run(app: typer.Typer, argv: Sequence[str] | None, *, prog_name: str) -> int:
@@ -28,3 +34,18 @@ def run(app: typer.Typer, argv: Sequence[str] | None, *, prog_name: str) -> int:
         # A bare sys.exit() carries None, and argparse-era callers expect an int.
         return exit_.code if isinstance(exit_.code, int) else 0
     return 0
+
+
+def standalone(register: Callable[[typer.Typer], None], prog: str) -> Callable[..., int]:
+    """The ``main`` a command's own entry point calls, around an app of one.
+
+    Built here rather than in each command module so the Typer settings the two
+    ways in share are written once and cannot drift apart.
+    """
+    app = new_app()
+    register(app)
+
+    def main(argv: Sequence[str] | None = None) -> int:
+        return run(app, argv, prog_name=prog)
+
+    return main

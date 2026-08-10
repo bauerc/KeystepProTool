@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 from ksp.drum_map import DEFAULT_CHROMATIC_LOW, DrumMap
+from ksp_cli.reporting import fail
 
 #: Where a user's own drum map lives, if they have one. Path resolution stays
 #: in the CLI: ``ksp`` must not decide where files are.
@@ -61,6 +62,20 @@ def resolve_drum_map(spec: str | None, config_path: Path | None = None) -> DrumM
     if path.is_file():
         return DrumMap.from_dict(json.loads(path.read_text(encoding="utf-8")))
     return DrumMap.chromatic(DEFAULT_CHROMATIC_LOW)
+
+
+def resolve_drum_map_or_fail(spec: str | None, config_path: Path, *, prog: str) -> DrumMap | None:
+    """:func:`resolve_drum_map`, with a bad map reported as the usage error it is.
+
+    *config_path* is passed in for the same reason it is there, and named in the
+    message when it is the config file rather than the flag that is malformed.
+    """
+    try:
+        return resolve_drum_map(spec, config_path)
+    except json.JSONDecodeError as exc:  # a ValueError, so it must come first
+        fail(f"drum map: {config_path}: {exc}", prog=prog, code=2)
+    except (OSError, ValueError) as exc:
+        fail(f"drum map: {exc}", prog=prog, code=2)
 
 
 def resolve_import_drum_map(spec: str | None, config_path: Path | None = None) -> DrumMap | None:
