@@ -17,8 +17,9 @@ is no reference render to check against: **the hardware's live MIDI output is th
 truth**. Reading and MIDI export work; `ksp.mutate` writes notes and pattern scalars into an
 existing project (M4, M6); `ksp.midi_import` converts a whole MIDI file — multi-track, chords,
 drums, gates, tempo, fitted swing and time shift, and long sequences split across chained
-patterns (M5, M6). `swift/` is the port's skeleton, building and testing alongside the Python (M8).
-What is left is the port itself, a GUI and packaging (M9–M14).
+patterns (M5, M6). `swift/` builds and tests alongside the Python and holds the port's leaf layers
+— constants, keys, the JSON reader and diagnostics (M8, M9). What is left is the reader, the
+writer, MIDI, a GUI and packaging (M10–M14).
 
 - [KeyStep Pro Format Spec](analysis/KeyStepPro_Format_Spec.md) — authoritative format reference. **Read it before touching
   format code.**
