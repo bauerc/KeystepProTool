@@ -310,3 +310,12 @@ Tests marked `slow` are the whole-file round-trip sweeps. CI runs them;
 round-trip coverage** — run `uv run pytest -m "not hardware"` before pushing.
 Each sweep keeps one always-on instance, so a byte-level regression still fails
 locally.
+
+`swift/` holds the Swift port of the core (M8–M12), built with Swift 6.2 and the
+Command Line Tools. `./scripts/validate.sh` runs both toolchains and skips the
+Swift half where `swift` is not on `PATH`; run it rather than `swift test`,
+which needs extra flags to find Swift Testing on a machine without Xcode.
+
+**New to the Mac toolchain?** [`swift/README.md`](./swift/README.md) explains
+it from a Python/Java starting point — toolchain, SwiftPM, dependencies and
+the layout of this package.

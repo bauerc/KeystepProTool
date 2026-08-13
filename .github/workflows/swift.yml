@@ -1,0 +1,41 @@
+name: swift
+
+# On Linux at 1x, not macOS at 10x, and that is what the package split buys. `KSPKit` -- the format
+# core, M9-M11, and the bulk of the port -- takes no third-party dependencies, so it builds and
+# tests anywhere Swift runs. See the comment in swift/Package.swift.
+#
+# What this job therefore does NOT cover: `Package.swift` gates `KSPMIDI`, `KSPSwiftCLI` and
+# `KSPMIDITests` off on Linux, because swift-midi-file supports Apple platforms only. Those three
+# targets -- including M8's SMF spike -- are checked by ./scripts/validate.sh on a dev machine and
+# nowhere else. M12 is when they get real code and this needs a macos-latest job beside it.
+#
+# The container image carries swift-format, so no toolchain setup step is needed.
+
+on:
+  push:
+    branches: [main]
+    paths: ["swift/**", ".github/workflows/swift.yml"]
+  pull_request:
+    paths: ["swift/**", ".github/workflows/swift.yml"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    runs-on: ubuntu-latest
+    container: swift:6.2
+    defaults:
+      run:
+        working-directory: swift
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Format
+        run: swift format lint --strict --recursive --parallel Sources Tests Package.swift
+
+      # Package.resolved is committed, so this must not need to re-resolve. `swift test` builds
+      # as a side effect, which is why there is no separate build step.
+      - name: Test
+        run: swift test

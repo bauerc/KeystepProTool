@@ -22,7 +22,12 @@
 #                      Hardware captures distilled to sent/received frame
 #                      pairs. The originals are gitignored, so these cannot be
 #                      regenerated on a machine that does not hold them.
-exclude: ^(project_files/|analysis/.*\.txt$|src/ksp_cli/templates/|tests/fixtures/.*_tape\.txt$)
+#
+# `swift/` is excluded for a different reason -- it is source, not data. One
+# formatter owns that tree, and it is swift-format (see `swift/.swift-format`).
+# trailing-whitespace and end-of-file-fixer would fight it, and check-yaml and
+# check-toml have nothing to say about a Package.swift.
+exclude: ^(project_files/|analysis/.*\.txt$|src/ksp_cli/templates/|tests/fixtures/.*_tape\.txt$|swift/)
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit

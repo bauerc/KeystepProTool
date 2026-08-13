@@ -57,7 +57,12 @@ src = ["src", "tests"]
 # `analysis/` record an externally-defined format and their examples are
 # transcriptions, not code we own the style of -- letting the formatter
 # rewrite them would corrupt the spec.
-extend-exclude = ["*.md"]
+#
+# `swift/` is the M8 port. Ruff only ever lints .py/.pyi/.ipynb so it is inert
+# there today, but `ruff check .` walks the whole tree -- `src` above is import
+# resolution, not file discovery -- so exclude it before a stray script lands.
+# mypy needs no equivalent: `files` below is an explicit list.
+extend-exclude = ["*.md", "swift"]
 
 [tool.ruff.lint]
 select = [
