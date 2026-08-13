@@ -373,12 +373,25 @@ toolchains. Note there is no `swift format --lint` flag — `lint` is a subcomma
 **Artifact:** the leaf layers — everything `reader.py` stands on. `constants.py`, `keys.py`,
 `lenient_json.py` (read side only) and `diagnostics.py`, in that dependency order.
 
-**Where the bugs will be:** Swift integers *trap* on overflow rather than wrapping, so the bit
-manipulation in `constants.py` needs explicit widths and `&<<` where wrapping is intended. And
-Python's `//` and `%` floor while Swift's truncate toward zero — `-7 // 4` is `-2` in Python and `-1`
-in Swift, which reaches `time_shift_ticks` and the gate and swing arithmetic.
+**Where the bugs actually were.** Not overflow: every field in this format is 7 bits, so the bit
+manipulation never comes near `Int`'s edge and no `&<<` is needed. The two that bit are both
+rounding. Python's `//` and `%` floor while Swift's truncate toward zero, which reaches
+`note_name` (`pitch // 12 - 2` under middle C) and `root_note_name`; both go through floored
+helpers. And Python's `round` breaks a tie to even where Swift's `rounded()` breaks it away from
+zero, so `time_shift_ticks` rounds `.toNearestOrEven` — no standard PPQ produces a tie, but a
+pinned test means the port cannot drift onto one.
 
-**Test:** the corresponding Python unit tests, ported, asserting the same values.
+**`JSONSerialization` hands `1` and `true` back as the same `NSNumber`**, and telling them apart
+again means CoreFoundation, which is exactly what `KSPKit` must not carry if it is to stay
+Linux-clean. The reader uses `JSONDecoder` over a dynamic-keyed container instead, and a value
+outside the format's int-or-string shape keeps the name Python gives it so both ports refuse a
+malformed file with the same words. `ValueError` and `TypeError` come across as one `KSPError`
+with two cases, for the same reason.
+
+**Test:** the corresponding Python unit tests, ported, asserting the same values — 77 of them,
+covering all 128 gate rungs against `analysis/gate_ladder.txt`, tier 5's pattern-bits sweep, the
+parameter 52 packing, and every sample project through the loader. The 46-entry summary table was
+diffed against Python's and is byte-identical, template, subject and site.
 
 ### M10 — Swift port: drum map, model and reader
 
@@ -472,7 +485,7 @@ without touching a terminal or reading setup instructions.
 | M6 Full convert | ✅ done | No (desk-testable) | M5, M1.5 |
 | M7 Timing calibration | ✅ done | **Yes** (done) | M3 |
 | M8 Swift skeleton | ✅ done | No | M6 |
-| M9 Swift leaf layers | | No | M8 |
+| M9 Swift leaf layers | ✅ done | No | M8 |
 | M10 Swift reader | | No | M9 |
 | M11 Swift writer | | No | M10 |
 | M12 Swift MIDI both ways | | For final listen | M11 |
