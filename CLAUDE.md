@@ -17,9 +17,9 @@ is no reference render to check against: **the hardware's live MIDI output is th
 truth**. Reading and MIDI export work; `ksp.mutate` writes notes and pattern scalars into an
 existing project (M4, M6); `ksp.midi_import` converts a whole MIDI file — multi-track, chords,
 drums, gates, tempo, fitted swing and time shift, and long sequences split across chained
-patterns (M5, M6). `swift/` builds and tests alongside the Python and holds the port's leaf layers
-— constants, keys, the JSON reader and diagnostics (M8, M9). What is left is the reader, the
-writer, MIDI, a GUI and packaging (M10–M14).
+patterns (M5, M6). `swift/` builds and tests alongside the Python and holds the whole read path —
+constants, keys, the JSON reader, diagnostics, the drum map, the model, the reader and
+`ksp-swift-cli dump` (M8–M10). What is left is the writer, MIDI, a GUI and packaging (M11–M14).
 
 - [KeyStep Pro Format Spec](analysis/KeyStepPro_Format_Spec.md) — authoritative format reference. **Read it before touching
   format code.**
@@ -74,6 +74,14 @@ path, so installing from a worktree blocks commits repo-wide once that worktree 
 `swift-midi-file` is Apple-only, so `Package.swift` gates `KSPMIDI` and everything above it off on
 Linux; keeping `KSPKit` dependency-free is what puts M9–M11's tests on GitHub's 1× runner instead
 of the 10× macOS one. swift-format owns every byte of `swift/` — pre-commit excludes the tree.
+
+**The two CLIs' output is a byte-for-byte contract.** `scripts/port_parity.sh` diffs
+`ksp-swift-cli dump` against `ksp-dump` over every sample project in both output modes, and
+`validate.sh` runs it. A diagnostic's wording, a key's position in the JSON and a number's
+formatting are therefore all load-bearing on both sides: change one, change the other in the same
+commit. The Python is the reference implementation. This is also why the Swift model serialises
+through `JSONNode` rather than `Encodable` — `JSONEncoder` controls neither key order nor the
+`120` vs `120.0` rendering of a whole-numbered `Double`.
 
 `ksp.midi_export` has three layers that must stay separate: `render_pattern` (pattern → tick
 data), `arrange` (timeline placement), `build_midi_file` (the only `mido` caller). Tests assert on

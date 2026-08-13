@@ -182,20 +182,28 @@ private let describedSites = [
         #expect(Diagnostic(code: .gateShortened, detail: "x").severity == .warning)
     }
 
-    @Test func encodesToTheSameShapeAsThePythonDict() throws {
+    @Test func serialisesToTheSameShapeAndOrderAsThePythonDict() {
         let entry = Diagnostic(
             code: .disabledStepOff, detail: "detail",
             site: Site(track: 1, pattern: 9, kind: "drum"), subjects: 2)
 
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        let json = String(decoding: try encoder.encode(entry), as: UTF8.self)
-
-        // The site carries no scene, as `Site.to_dict` does not either.
+        // Key order is the contract, not just the key set: `--json` is byte-compared against the
+        // Python CLI, whose dicts come out in insertion order. The site carries no scene, as
+        // `Site.to_dict` does not either.
         #expect(
-            json == """
-                {"code":"disabled-step-off","detail":"detail","severity":"warning",\
-                "site":{"kind":"drum","pattern":9,"slot":null,"track":1},"subjects":2}
+            entry.toJSON().serialised() == """
+                {
+                  "code": "disabled-step-off",
+                  "severity": "warning",
+                  "site": {
+                    "track": 1,
+                    "pattern": 9,
+                    "kind": "drum",
+                    "slot": null
+                  },
+                  "detail": "detail",
+                  "subjects": 2
+                }
                 """)
     }
 }

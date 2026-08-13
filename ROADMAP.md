@@ -341,7 +341,7 @@ No console entry point is declared until the milestone lands, per CLAUDE.md.
   *file* writer must keep emitting `247`; a *device* writer must not. See
   [per-pattern scalars](./analysis/format/Parameters_Pattern_Scalars.md).
 
-### M8 — Swift package skeleton and CI wiring
+### M8 — Swift package skeleton and CI wiring ✅ **done**
 
 **Artifact:** a `swift/` package that builds, tests and lints alongside the Python, with
 [`swift-midi-file`](https://github.com/orchetect/swift-midi-file) 1.0.2 resolved and spiked. Ruff,
@@ -368,7 +368,7 @@ in the CLT in any form, so it was never the fallback the issue assumed.
 toolchains. Note there is no `swift format --lint` flag — `lint` is a subcommand, and without
 `--strict` it exits 0 on a violation.
 
-### M9 — Swift port: constants, keys, lenient JSON, diagnostics
+### M9 — Swift port: constants, keys, lenient JSON, diagnostics ✅ **done**
 
 **Artifact:** the leaf layers — everything `reader.py` stands on. `constants.py`, `keys.py`,
 `lenient_json.py` (read side only) and `diagnostics.py`, in that dependency order.
@@ -393,15 +393,45 @@ covering all 128 gate rungs against `analysis/gate_ladder.txt`, tier 5's pattern
 parameter 52 packing, and every sample project through the loader. The 46-entry summary table was
 diffed against Python's and is byte-identical, template, subject and site.
 
-### M10 — Swift port: drum map, model and reader
+### M10 — Swift port: drum map, model and reader ✅ **done**
 
-**Artifact:** `ksp-swift-cli dump` reads a real `.KeyStepPro` and reproduces the Python's tree.
-`drum_map.py`, `model.py`, `reader.py`, and enough of `dump.py` to emit `--json`.
+**Artifact:** `ksp-swift-cli dump` reads a real `.KeyStepPro` and reproduces the Python's output —
+both the tree and `--json`.
 
-**Test, and this is the milestone's whole point:** output matches
-`tests/fixtures/project_5.expected.json`, `project_9.expected.json` and `empty_projects.expected.json`
-— the files M1 hand-transcribed from the hardware display *specifically* so a Swift port could be
-checked against identical data. Never regenerate them from either implementation.
+**Delivered:** the second half of the read path in Swift.
+
+- `swift/Sources/KSPKit/DrumMap.swift` — port of `src/ksp/drum_map.py`, plus a `DrumMapConfig` for
+  the config file so path resolution stays in the CLI.
+- `swift/Sources/KSPKit/Model.swift` — port of `src/ksp/model.py`; every type a value type.
+- `swift/Sources/KSPKit/Reader.swift` — port of `src/ksp/reader.py`.
+- `swift/Sources/KSPKit/JSONNode.swift` — an ordered JSON writer, new, with no Python twin.
+  `JSONEncoder` cannot reproduce `json.dumps(indent=2)`: it gives no control over key order and
+  renders an integral `Double` as `120` where Python writes `120.0`. So the model's `toJSON()`
+  methods build a `JSONNode` carrying each Python `to_dict`'s insertion order, and
+  `Diagnostic`/`Site`/`Report` gained the same instead of the `Encodable` conformance M9 left them
+  with, which had ordered its keys differently from the Python.
+- `swift/Sources/KSPSwiftCLI/` — the `dump` subcommand with `--all`, `--track`, `--pattern`,
+  `--json`, `--drum-map` and `-v`, on swift-argument-parser. Exit codes are remapped to this
+  project's 0/1/2 in the `@main` entry point, because ArgumentParser's own default for a usage
+  error is 64.
+
+**Test, and this is the milestone's whole point:** `swift/Tests/KSPKitTests/GroundTruthTests.swift`
+and `EmptyProjectsTests.swift` read `tests/fixtures/project_5.expected.json`,
+`project_9.expected.json` and `empty_projects.expected.json` — the same files the Python's
+`test_ground_truth.py` and `test_empty_projects.py` read, not translations of them. That is what M1
+wrote those fixtures in JSON for. They stay hand-transcribed from the hardware display and must
+never be regenerated from either implementation.
+
+`scripts/port_parity.sh`, new, diffs `ksp-swift-cli dump` against `uv run ksp-dump` over all six
+files in `project_files/`, in both output modes; all twelve comparisons are identical.
+`scripts/validate.sh` gained it as step 7 of 7. CI cannot run it — `KSPSwiftCLI` is gated off Linux
+— so it is a dev-machine gate. The Swift suite is now 191 tests in 15 suites; the Python suite is
+unchanged at 723 passed, 2 skipped.
+
+**The standing constraint:** the two ports' `dump` output is a byte-for-byte contract, held by
+`scripts/port_parity.sh`. Anything that changes what either CLI prints — a diagnostic's wording, a
+key's position in the JSON, a number's formatting — has to change both sides in the same commit.
+The Python remains the reference implementation.
 
 ### M11 — Swift port: byte-identical writer
 
@@ -486,7 +516,7 @@ without touching a terminal or reading setup instructions.
 | M7 Timing calibration | ✅ done | **Yes** (done) | M3 |
 | M8 Swift skeleton | ✅ done | No | M6 |
 | M9 Swift leaf layers | ✅ done | No | M8 |
-| M10 Swift reader | | No | M9 |
+| M10 Swift reader | ✅ done | No | M9 |
 | M11 Swift writer | | No | M10 |
 | M12 Swift MIDI both ways | | For final listen | M11 |
 | M13 GUI | | For final check | M12 |

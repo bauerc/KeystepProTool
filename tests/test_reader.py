@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from ksp import constants
+from ksp.diagnostics import Code
 from ksp.keys import key, read_array
 from ksp.model import NoteKind, PatternMode, Project
 from ksp.reader import load, read_project, slot_is_initialised
@@ -230,15 +231,29 @@ class TestAgainstRealFiles:
         """The redundant step-active array is a free cross-check on the decode.
 
         Where it disagrees the reader warns rather than reconciling, so this
-        asserts the hardware-confirmed projects produce no such warnings.
+        asserts the hardware-confirmed projects produce no such warning.
+
+        Matched on the diagnostic's ``Code``, not on its wording. This test
+        spent M2-M9 searching for the text of a warning that M1's reader
+        raised and ``83ef72f`` deleted, so it matched nothing and could not
+        fail; keying off the enum is what stops a reworded message from
+        silently emptying it again.
+
+        Scoped to the two files whose values came off the device's display,
+        which is what makes a disagreement here mean the decode is wrong. That
+        also bounds it: neither holds a drum pool with holes, so the truncated
+        scan of finding 4 is invisible to it.
+        ``test_pool_holes.test_every_flagged_drum_step_has_a_pooled_note``
+        covers that, across all five samples and against an independent decode
+        of ``52`` rather than the reader's own.
         """
         for name in ("project_5.KeyStepPro", "project_9.KeyStepPro"):
             project = cached_load(project_files_dir / name)
             disagreements = [
-                w
+                d.message
                 for track in project.tracks
                 for pattern in track.patterns
-                for w in pattern.warnings
-                if "step-active flags disagree" in w
+                for d in pattern.diagnostics
+                if d.code is Code.FLAG_WITHOUT_NOTE
             ]
             assert disagreements == [], f"{name}: {disagreements}"
