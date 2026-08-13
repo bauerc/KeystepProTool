@@ -248,9 +248,12 @@ does run on Linux, but it is declared inside the same `#else` because `KSPSwiftC
 target that wants it and that target is gated off there anyway — no reason to make the Linux job
 fetch a package it cannot use.
 
-`KSPSwiftCLITests` tests an executable target, which SwiftPM allows only when the module has an
-`@main` type rather than a `main.swift`. That is why the entry point is a `struct` in
-`KSPSwiftCLI.swift` and not top-level code.
+`KSPSwiftCLI` has no `main.swift`. That is a choice, not a requirement: SwiftPM will happily let
+`KSPSwiftCLITests` `@testable import` an executable target that uses top-level code, and the suite
+passes either way. The entry point is an `@main` type because the exit-code mapping reads better as
+a named `Entry` than as statements at the bottom of a file, and `@main` cannot coexist with
+top-level code — `'main' attribute cannot be used in a module that contains top-level code` — so the
+file name goes with it.
 
 To see the effect, force the branch and dump the manifest:
 
