@@ -8,21 +8,18 @@ names stay installed; this is a way in, not a replacement.
 
 from collections.abc import Sequence
 
-import typer
-
 from ksp_cli import convert, dump, export
-from ksp_cli.runner import run
+from ksp_cli.runner import new_app, run
 
 PROG = "kspplus"
 
-app = typer.Typer(
+app = new_app(
     help="Convert between Standard MIDI files and Arturia KeyStep Pro projects.",
     epilog=(
         "Each subcommand is also installed under its own name, so 'kspplus ksp2midi ...' and "
         "'ksp2midi ...' are the same command. Run 'kspplus COMMAND --help' for its options."
     ),
     no_args_is_help=True,
-    rich_markup_mode="rich",
 )
 
 dump.register(app)

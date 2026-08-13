@@ -13,8 +13,6 @@ Warnings go to stderr and the summary to stdout, the same contract as
 a caveat rather than a failure. ``--quiet`` suppresses the stdout summary only.
 """
 
-import sys
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated
 
@@ -26,8 +24,8 @@ from ksp.constants import DEFAULT_STEPS_PER_BEAT
 from ksp.lenient_json import dump_path, load_path
 from ksp.midi_import import ImportOptions, ImportResult, convert, convert_song, saveable
 from ksp_cli.drum_map_option import DRUM_MAP_HELP, resolve_import_drum_map
-from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, print_report
-from ksp_cli.runner import run
+from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
+from ksp_cli.runner import standalone
 
 PROG = "midi2ksp"
 
@@ -220,40 +218,31 @@ def convert_command(
             fit_time_shift=not no_time_shift,
         )
     except ValueError as exc:
-        print(f"{PROG}: {exc}", file=sys.stderr)
-        raise typer.Exit(2) from None
+        fail(str(exc), prog=PROG, code=2)
 
     # Cheapest checks first: the destination depends only on the arguments, and
     # a bad clip is the likelier mistake. Reading the 3.5 MB template before
     # either would spend a file read and a parse to reject the command anyway.
     destination = output or path.with_suffix(".KeyStepPro")
     if destination.exists() and not force:
-        print(
-            f"{PROG}: {destination} already exists (use --force to overwrite)",
-            file=sys.stderr,
-        )
-        raise typer.Exit(1)
+        fail(f"{destination} already exists (use --force to overwrite)", prog=PROG, code=1)
 
     try:
         midi = mido.MidiFile(path)
     except FileNotFoundError as exc:  # its message already names the file
-        print(f"{PROG}: {exc}", file=sys.stderr)
-        raise typer.Exit(1) from None
+        fail(str(exc), prog=PROG, code=1)
     except (OSError, EOFError, ValueError, IndexError) as exc:
         # mido raises OSError for a file that is not MIDI at all, so this is
         # the same class of failure as a truncated one rather than an IO error.
-        print(f"{PROG}: {path}: not a readable MIDI file: {exc}", file=sys.stderr)
-        raise typer.Exit(1) from None
+        fail(f"{path}: not a readable MIDI file: {exc}", prog=PROG, code=1)
 
     template_path = template or default_template()
     try:
         loaded_template = load_path(template_path)
     except OSError as exc:
-        print(f"{PROG}: template: {exc}", file=sys.stderr)
-        raise typer.Exit(1) from None
+        fail(f"template: {exc}", prog=PROG, code=1)
     except ValueError as exc:
-        print(f"{PROG}: template: {template_path}: {exc}", file=sys.stderr)
-        raise typer.Exit(1) from None
+        fail(f"template: {template_path}: {exc}", prog=PROG, code=1)
 
     # --midi-track narrows the source to one track, which is the whole of the
     # single-target path: that one track, into the one pattern --track and
@@ -270,21 +259,18 @@ def convert_command(
                 first_track=track,
             )
     except ValueError as exc:
-        print(f"{PROG}: {exc}", file=sys.stderr)
-        raise typer.Exit(1) from None
+        fail(str(exc), prog=PROG, code=1)
 
     if not result.note_count:
         # A project with nothing in it looks like success and plays silence.
-        print(f"{PROG}: {path}: no notes to convert", file=sys.stderr)
-        raise typer.Exit(1)
+        fail(f"{path}: no notes to convert", prog=PROG, code=1)
 
     if not dry_run:
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
             dump_path(saveable(result.raw), destination)
         except OSError as exc:
-            print(f"{PROG}: {exc}", file=sys.stderr)
-            raise typer.Exit(1) from None
+            fail(str(exc), prog=PROG, code=1)
 
     print_report(result.diagnostics, prog=PROG, verbose=verbose)
     if not quiet:
@@ -296,12 +282,7 @@ def register(app: typer.Typer) -> None:
     app.command(name=PROG, help=HELP, epilog=EPILOG)(convert_command)
 
 
-app = typer.Typer(add_completion=False, rich_markup_mode="rich")
-register(app)
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    return run(app, argv, prog_name=PROG)
+main = standalone(register, PROG)
 
 
 if __name__ == "__main__":  # pragma: no cover

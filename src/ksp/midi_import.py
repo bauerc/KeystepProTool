@@ -72,13 +72,15 @@ DRUM_CHANNEL: Final = 9
 
 #: Message types a pattern has nowhere to put. Counted rather than ignored, so
 #: a source whose expression lives in its controllers is not silently flattened.
-UNSTORABLE_TYPES: Final = (
-    "control_change",
-    "pitchwheel",
-    "program_change",
-    "aftertouch",
-    "polytouch",
-    "sysex",
+UNSTORABLE_TYPES: Final = frozenset(
+    {
+        "control_change",
+        "pitchwheel",
+        "program_change",
+        "aftertouch",
+        "polytouch",
+        "sysex",
+    }
 )
 
 #: No swing. Both the bottom of the device's range and its default.
@@ -266,8 +268,6 @@ class _TrackRead:
     """One source track's notes, and what else went past while pairing them."""
 
     notes: list[RenderedNote]
-    last_tick: int
-    tempo_changes: int
     dropped: int
     """Events the device cannot store: controllers, bend, program, pressure."""
 
@@ -275,7 +275,6 @@ class _TrackRead:
 def _track_notes(track: Iterable[mido.Message]) -> _TrackRead:
     """Pair one track's note-ons with their note-offs, in absolute ticks."""
     tick = 0
-    tempos = 0
     dropped = 0
     notes: list[RenderedNote] = []
     # (channel, pitch) -> (onset tick, velocity). A second note-on for a pitch
@@ -284,12 +283,10 @@ def _track_notes(track: Iterable[mido.Message]) -> _TrackRead:
 
     for message in track:
         tick += message.time
-        if message.type == "set_tempo":
-            tempos += 1
+        if message.type in UNSTORABLE_TYPES:
+            dropped += 1
             continue
         if message.type not in ("note_on", "note_off"):
-            if message.type in UNSTORABLE_TYPES:
-                dropped += 1
             continue
 
         held = (message.channel, message.note)
@@ -321,7 +318,7 @@ def _track_notes(track: Iterable[mido.Message]) -> _TrackRead:
             )
         )
 
-    return _TrackRead(notes=notes, last_tick=tick, tempo_changes=tempos, dropped=dropped)
+    return _TrackRead(notes=notes, dropped=dropped)
 
 
 def _check_readable(midi: mido.MidiFile) -> None:
@@ -649,8 +646,11 @@ def _place(
     # Refused here rather than by ``mutate`` from underneath, so the message
     # can name the step to thin and nothing has been written yet.
     crowded = Counter(note.step for note in notes)
-    step, held = max(crowded.items(), default=(0, 0), key=lambda pair: (pair[1], -pair[0]))
-    if held > constants.MAX_NOTES_PER_STEP:
+    over = [step for step, held in crowded.items() if held > constants.MAX_NOTES_PER_STEP]
+    if over:
+        # The worst step, and the earliest of those when several tie.
+        step = max(over, key=lambda s: (crowded[s], -s))
+        held = crowded[step]
         where = f"track {site.track} " if site.track is not None else ""
         raise ValueError(
             f"step {step} of {where}pattern {pattern} holds {held} notes; the firmware's limit "
@@ -765,7 +765,7 @@ def plan_track(
     drum_map: DrumMap | None = None,
     first_pattern: int = 1,
     steps_per_bar: int = 16,
-    origin: float | None = None,
+    origin: float,
 ) -> TrackPlan:
     """Lay one source track out across as many patterns as it needs.
 
@@ -775,23 +775,12 @@ def plan_track(
     not padded to a common one: the device loops each track's chain on its own,
     so a one-bar part under an eight-bar one repeats against it.
 
-    *origin* is the tick the grid is counted from. :func:`plan_song` passes one
-    taken across the whole file, so a part that enters at bar 3 stays there;
-    left out, the clip is anchored on its own first note and that is reported.
+    *origin* is the tick the grid is counted from, taken by :func:`plan_song`
+    across the whole file so a part that enters at bar 3 stays there.
     """
     options = options or ImportOptions()
     ticks_per_step = clip.ticks_per_beat / options.steps_per_beat
     site = Site(track=track, kind="drum" if is_drum else "seq")
-
-    if origin is None:
-        origin = _anchor((clip,), ticks_per_step)
-        if origin:
-            collector.add(
-                Code.CLIP_ANCHORED,
-                f"track {track}'s clip starts {origin:g} tick(s) into the file; its first note "
-                "was placed on step 1 and the rest moved with it",
-                site=site,
-            )
 
     # Fitted once for the track rather than once per pattern: a groove belongs
     # to the performance, not to which 64-step window of it a pattern holds,
@@ -904,7 +893,6 @@ def _assign(
     one carrying a drum parameter set.
     """
     drum: Clip | None = None
-    spoken_for: list[Clip] = []
     if options.drum_track is not None:
         # --drum-track names a track of the file, so a track split across
         # channels is put back together rather than leaving half a kit behind.
@@ -914,12 +902,12 @@ def _assign(
                 f"track {options.drum_track} of the source holds no notes; --drum-track counts "
                 "every track of the file from 1, including ones that carry only tempo or a name"
             )
-        drum, spoken_for = _merged(named), named
+        drum = _merged(named)
+        melodic = [clip for clip in song.clips if clip.source_tracks != (options.drum_track,)]
     else:
         drum = next((clip for clip in song.clips if clip.is_percussion), None)
-        spoken_for = [drum] if drum is not None else []
+        melodic = [clip for clip in song.clips if clip is not drum]
 
-    melodic = [clip for clip in song.clips if not any(clip is taken for taken in spoken_for)]
     assigned: list[tuple[Clip, int, bool]] = []
     if drum is not None:
         assigned.append((drum, 1, True))
@@ -955,14 +943,13 @@ def plan_song(
     collector = Collector()
 
     split = Counter(clip.source_tracks[0] for clip in song.clips if clip.source_tracks)
-    channels = sum(count for count in split.values() if count > 1)
-    if channels:
-        listed = _listed(sorted(track for track, count in split.items() if count > 1))
+    multi = {track: count for track, count in split.items() if count > 1}
+    if multi:
         collector.add(
             Code.TRACK_SPLIT_BY_CHANNEL,
-            f"source track(s) {listed} carry more than one channel; each channel became a "
-            "device track of its own rather than being merged into one part",
-            subjects=channels,
+            f"source track(s) {_listed(sorted(multi))} carry more than one channel; each channel "
+            "became a device track of its own rather than being merged into one part",
+            subjects=sum(multi.values()),
         )
     if song.controllers_dropped:
         collector.add(

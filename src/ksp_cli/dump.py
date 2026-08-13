@@ -5,7 +5,6 @@ printed here is decoded by :mod:`ksp.reader`; this module only formats.
 """
 
 import json
-import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Annotated
@@ -14,16 +13,22 @@ import typer
 
 from ksp.constants import SKIP_SEQUENCES, root_note_name
 from ksp.diagnostics import Collector, Report
-from ksp.drum_map import DEFAULT_CHROMATIC_LOW, DrumMap
+from ksp.drum_map import DrumMap
 from ksp.model import Note, NoteKind, Pattern, Project, Track
-from ksp.reader import load
 
 # The --drum-map grammar is shared with ksp2midi so both commands accept the
 # same syntax and the same config file. CONFIG_PATH stays a name in this
 # module so tests can point it somewhere harmless.
-from ksp_cli.drum_map_option import CONFIG_PATH, parse_drum_map, resolve_drum_map
+from ksp_cli.drum_map_option import (
+    CONFIG_PATH,
+    DRUM_MAP_HELP,
+    parse_drum_map,
+    resolve_drum_map,
+    resolve_drum_map_or_fail,
+)
+from ksp_cli.loading import load_project
 from ksp_cli.reporting import Verbose
-from ksp_cli.runner import run
+from ksp_cli.runner import standalone
 
 PROG = "ksp-dump"
 
@@ -216,37 +221,12 @@ def dump(
     ] = False,
     drum_map_spec: Annotated[
         str | None,
-        typer.Option(
-            "--drum-map",
-            metavar="SPEC",
-            help=(
-                "how drum lanes map to MIDI notes: chromatic:N, custom:a,b,c,... or none. "
-                "The device stores this globally and it is not in the project file, so it is "
-                f"always an assumption (default: chromatic:{DEFAULT_CHROMATIC_LOW})"
-            ),
-        ),
+        typer.Option("--drum-map", metavar="SPEC", help=DRUM_MAP_HELP),
     ] = None,
     verbose: Verbose = False,
 ) -> None:
-    try:
-        drum_map = resolve_drum_map(drum_map_spec, CONFIG_PATH)
-    except json.JSONDecodeError as exc:  # a ValueError, so it must come first
-        print(f"{PROG}: drum map: {CONFIG_PATH}: {exc}", file=sys.stderr)
-        raise typer.Exit(2) from None
-    except (OSError, ValueError) as exc:
-        print(f"{PROG}: drum map: {exc}", file=sys.stderr)
-        raise typer.Exit(2) from None
-
-    try:
-        project = load(path)
-    except OSError as exc:
-        print(f"{PROG}: {exc}", file=sys.stderr)
-        raise typer.Exit(1) from None
-    except ValueError as exc:
-        print(f"{PROG}: {path}: {exc}", file=sys.stderr)
-        raise typer.Exit(1) from None
-
-    project = project.select(track=track, pattern=pattern)
+    drum_map = resolve_drum_map_or_fail(drum_map_spec, CONFIG_PATH, prog=PROG)
+    project = load_project(path, prog=PROG).select(track=track, pattern=pattern)
 
     if as_json:
         print(json.dumps(project.to_dict(drum_map), indent=2))
@@ -259,12 +239,7 @@ def register(app: typer.Typer) -> None:
     app.command(name=PROG, help=HELP)(dump)
 
 
-app = typer.Typer(add_completion=False, rich_markup_mode="rich")
-register(app)
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    return run(app, argv, prog_name=PROG)
+main = standalone(register, PROG)
 
 
 if __name__ == "__main__":  # pragma: no cover
