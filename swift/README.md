@@ -235,15 +235,22 @@ Four targets:
 |---|---|---|---|
 | `KSPKit` | the format core; port of `src/ksp/` minus MIDI | **nothing** | yes |
 | `KSPMIDI` | the Standard MIDI File layer | `KSPKit`, `SwiftMIDIFile` | no |
-| `KSPSwiftCLI` | the `ksp-swift-cli` binary; port of `src/ksp_cli/` | `KSPMIDI` | no |
-| `KSPKitTests`, `KSPMIDITests` | tests for each | | respectively |
+| `KSPSwiftCLI` | the `ksp-swift-cli` binary; port of `src/ksp_cli/` | `KSPMIDI`, `ArgumentParser` | no |
+| `KSPKitTests`, `KSPMIDITests`, `KSPSwiftCLITests` | tests for each | | respectively |
 
 `swift-midi-file` supports Apple platforms only. Rather than let that decide where the whole port
 can be tested, `Package.swift` uses `#if os(Linux)` to drop the bottom three rows on Linux. `KSPKit`
 therefore has **zero third-party dependencies**, and the bulk of the port (milestones M9–M11) builds
 and tests on GitHub's Linux runners, which bill at 1× instead of macOS's 10×.
 
-**So do not add a dependency to `KSPKit`.** That is the whole point of it.
+**So do not add a dependency to `KSPKit`.** That is the whole point of it. `swift-argument-parser`
+does run on Linux, but it is declared inside the same `#else` because `KSPSwiftCLI` is the only
+target that wants it and that target is gated off there anyway — no reason to make the Linux job
+fetch a package it cannot use.
+
+`KSPSwiftCLITests` tests an executable target, which SwiftPM allows only when the module has an
+`@main` type rather than a `main.swift`. That is why the entry point is a `struct` in
+`KSPSwiftCLI.swift` and not top-level code.
 
 To see the effect, force the branch and dump the manifest:
 

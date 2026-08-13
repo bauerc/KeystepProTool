@@ -14,4 +14,10 @@ enum RepoData {
 
     static let analysis = root.appending(path: "analysis")
     static let projectFiles = root.appending(path: "project_files")
+
+    /// The expected-value fixtures, read by both toolchains from the one copy. They were
+    /// hand-transcribed from the hardware display rather than generated, which is what makes them
+    /// independent of either implementation -- see `tests/fixtures/README.md`. **Never regenerate
+    /// them from the code.**
+    static let fixtures = root.appending(path: "tests/fixtures")
 }

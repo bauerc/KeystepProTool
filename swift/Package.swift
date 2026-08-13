@@ -12,7 +12,10 @@ import PackageDescription
     let midiTargets: [Target] = []
 #else
     let midiDependencies: [Package.Dependency] = [
-        .package(url: "https://github.com/orchetect/swift-midi-file", from: "1.0.0")
+        .package(url: "https://github.com/orchetect/swift-midi-file", from: "1.0.0"),
+        // Runs on Linux too, but it is only ever needed by KSPSwiftCLI, which is gated off there
+        // anyway -- declaring it here keeps the Linux job from fetching a package it cannot use.
+        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
     ]
     let midiProducts: [Product] = [
         .executable(name: "ksp-swift-cli", targets: ["KSPSwiftCLI"])
@@ -26,8 +29,16 @@ import PackageDescription
                 .product(name: "SwiftMIDIFile", package: "swift-midi-file"),
             ]
         ),
-        .executableTarget(name: "KSPSwiftCLI", dependencies: ["KSPMIDI"]),
+        .executableTarget(
+            name: "KSPSwiftCLI",
+            dependencies: [
+                "KSPMIDI",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]
+        ),
         .testTarget(name: "KSPMIDITests", dependencies: ["KSPMIDI"]),
+        // Tests an executable target, which needs `@main` rather than a `main.swift`.
+        .testTarget(name: "KSPSwiftCLITests", dependencies: ["KSPSwiftCLI"]),
     ]
 #endif
 

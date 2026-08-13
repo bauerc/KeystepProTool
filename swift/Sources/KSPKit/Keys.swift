@@ -39,6 +39,14 @@ public enum Keys {
         try value(raw, key(item, param, indices: indices))
     }
 
+    /// The same, for a caller that already holds its indices in an array. Swift cannot forward a
+    /// variadic parameter, so a helper that takes `Int...` and passes it on needs this overload.
+    public static func getInt(
+        _ raw: RawProject, _ item: Int, _ param: Int, indices: [Int]
+    ) throws -> Int? {
+        try value(raw, key(item, param, indices: indices))
+    }
+
     /// Read a 1-based indexed array as a 0-based Swift array.
     ///
     /// The trailing index in these files runs 1..N (step 1..64, or note ordinal 1..64). The

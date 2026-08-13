@@ -4,10 +4,12 @@ name: swift
 # core, M9-M11, and the bulk of the port -- takes no third-party dependencies, so it builds and
 # tests anywhere Swift runs. See the comment in swift/Package.swift.
 #
-# What this job therefore does NOT cover: `Package.swift` gates `KSPMIDI`, `KSPSwiftCLI` and
-# `KSPMIDITests` off on Linux, because swift-midi-file supports Apple platforms only. Those three
-# targets -- including M8's SMF spike -- are checked by ./scripts/validate.sh on a dev machine and
-# nowhere else. M12 is when they get real code and this needs a macos-latest job beside it.
+# What this job therefore does NOT cover: `Package.swift` gates `KSPMIDI`, `KSPSwiftCLI` and their
+# test targets off on Linux, because swift-midi-file supports Apple platforms only. Those targets
+# -- M8's SMF spike and M10's `dump` command -- are checked by ./scripts/validate.sh on a dev
+# machine and nowhere else, and so is the port-parity diff against the Python CLI that
+# ./scripts/port_parity.sh runs. M12 is when the MIDI layer gets real code and this needs a
+# macos-latest job beside it.
 #
 # The container image carries swift-format, so no toolchain setup step is needed.
 

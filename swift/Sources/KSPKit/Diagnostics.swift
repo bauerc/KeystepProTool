@@ -127,24 +127,21 @@ public struct Site: Sendable, Hashable {
     }
 }
 
-extension Site: Encodable {
+extension Site {
     /// No `scene`, matching `Site.to_dict`. The JSON output is one of the two ports' shared
     /// contracts, so this stays as it is until both sides change together.
-    enum CodingKeys: String, CodingKey {
-        case track, pattern, kind, slot
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(track, forKey: .track)
-        try container.encode(pattern, forKey: .pattern)
-        try container.encode(kind, forKey: .kind)
-        try container.encode(slot, forKey: .slot)
+    public func toJSON() -> JSONNode {
+        .object([
+            ("track", track.map { JSONNode.int($0) } ?? .null),
+            ("pattern", pattern.map { JSONNode.int($0) } ?? .null),
+            ("kind", kind.map { JSONNode.string($0) } ?? .null),
+            ("slot", slot.map { JSONNode.int($0) } ?? .null),
+        ])
     }
 }
 
 /// One occurrence of one problem.
-public struct Diagnostic: Sendable, Hashable, Encodable {
+public struct Diagnostic: Sendable, Hashable {
     public let code: Code
 
     /// The specific, full sentence -- what `--verbose` shows. No site prefix and no "warning:"
@@ -187,6 +184,17 @@ public struct Diagnostic: Sendable, Hashable, Encodable {
                 track: track ?? site.track, pattern: pattern ?? site.pattern,
                 kind: kind ?? site.kind, slot: slot ?? site.slot, scene: site.scene),
             severity: severity, subjects: subjects)
+    }
+
+    /// A port of `Diagnostic.to_dict`, in its key order.
+    public func toJSON() -> JSONNode {
+        .object([
+            ("code", .string(code.rawValue)),
+            ("severity", .string(severity.rawValue)),
+            ("site", site.toJSON()),
+            ("detail", .string(detail)),
+            ("subjects", .int(subjects)),
+        ])
     }
 }
 
@@ -257,6 +265,11 @@ public struct Report: Sendable, Hashable {
         guard entries.count > kinds else { return nil }
         return "\(counted(entries.count, "warning")) collapsed into \(counted(kinds, "kind")); "
             + "--verbose for detail"
+    }
+
+    /// A port of `Report.to_list`: every entry in full, in order.
+    public func toJSON() -> JSONNode {
+        .array(entries.map { $0.toJSON() })
     }
 
     /// Concatenate, dropping anything the result already says.
