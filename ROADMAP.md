@@ -304,9 +304,13 @@ Three probes changed what later phases should do:
   `0x05` frame, so `bulk_read` sends no prologue. The identity request is still needed for the
   version string, but not to open the conversation.
 - **H1.3 — `count=64` is honoured and free.** The per-request period does not move with payload
-  size (3.994 ms at 16, 3.998 ms at 64), so a full dump drops from 38.3 s to 9.6 s. **Not taken
-  yet:** it rewrites the request stream `test_bulk_plan.py` pins to MCC's. It belongs to Phase 3,
-  behind H3.2's byte-diff.
+  size (3.994 ms at 16, 3.998 ms at 64), so a full dump drops from 38.3 s to 9.6 s. **Taken, and
+  without touching MCC's stream:** `ksp.bulk_fast` derives a second walk from the same `PLAN`
+  rather than rewriting the generated one, so `bulk_plan` and the pin `test_bulk_plan.py` holds it
+  to are unchanged. Coalescing each contiguous run into one request and gating the melodic pool
+  takes 8,951 requests to about 1,000 — past the 4× this probe measured
+  ([spec 7.8](./analysis/format/SysEx_Direct_Transfer_Path.md)). What still waits on H3.2 is making
+  it `read_raw`'s **default**: the saving is counted against the tapes, not measured on a device.
 - **H1.6 — the ceiling is 100, and overruns are silent.** `count` clamps to 100 whatever the start
   index, and the reply echoes the count it honoured rather than the one asked for. Reading past a
   parameter's extent is not an error: the device pads to the full count with the item's own unset
