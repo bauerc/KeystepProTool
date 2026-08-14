@@ -433,27 +433,58 @@ unchanged at 723 passed, 2 skipped.
 key's position in the JSON, a number's formatting — has to change both sides in the same commit.
 The Python remains the reference implementation.
 
-### M11 — Swift port: byte-identical writer
+### M11 — Swift port: byte-identical writer ✅ **done**
 
-**Artifact:** the Swift equivalent of M3 — `lenient_json.dumps` and `canonical`, reproducing MCC's
-bytes: tab indentation, no final newline, and — from `canonical` — `device`, `version`, then the
-numeric keys **sorted as strings**, so `126_99_16` precedes `126_99_2`. Keep the two functions split
-the same way: `dumps` preserves the mapping's own order so the round-trip test proves something, and
-imposing MCC's order is `canonical`'s job, chosen by the caller.
+**Artifact:** the Swift equivalent of M3. `KSPKit` reads any sample and writes back MCC's bytes —
+tab indentation, no final newline, and `device`, `version`, then the numeric keys **sorted as
+strings**, so `126_99_16` precedes `126_99_2`.
 
-**The writer omits MCC's trailing comma**, exactly as the Python does. T6.2 established MCC does not
-need it, so output is strict JSON differing from a known-good export by that one byte. The *reader*
-still accepts it, because every file that exists has one.
+**Delivered:** the write half of the dialect, in `swift/Sources/KSPKit/LenientJSON.swift` beside
+the read half, as one module is on the Python side.
 
-**Its own milestone because `JSONEncoder` cannot do this job.** It emits spaces, adds a newline, and
-gives no key-order guarantee — and none of that will look wrong in the output. It needs a
-hand-written serialiser. The one thing making that cheap: values are only `int` or `str`, never
-nested, float or bool, so it is a flat map and a string builder.
+- `LenientJSON.serialise(_:)` — `dumps`. Never sorts: it emits the order it is handed.
+- `LenientJSON.write(_:to:)` — `dump_path`. Atomic, then the mode widened to 0644 as the umask
+  allows, because these files are usually destined for MCC's Templates folder.
+- `LenientJSON.canonical(_:)` — MCC's key order, and the only thing here that orders anything.
+- `JSONNode.quoted(_:)` became internal instead of private. It already reproduced Python's
+  `encode_basestring_ascii` exactly for the dump's `--json`, and Python reaches for that same
+  function from both `json.dumps` and `lenient_json.dumps`, so the port shares one escaper too.
 
-**Test:** read → write → `cmp` against MCC's bytes minus the comma, for all five samples in
-`project_files/`, plus the Swift twin of
-`test_output_differs_from_mcc_by_exactly_the_trailing_comma`. And the Swift output matches the
-Python's byte for byte.
+**`canonical` returns ordered pairs, not a mapping — the one deliberate divergence.** `RawProject`
+is a Swift `Dictionary`, so there is no "the mapping's own iteration order" for `serialise` to
+preserve and relying on one would make the output differ between runs. The split the Python insists
+on survives intact and arguably sharpens: `serialise` genuinely never sorts, and ordering is
+entirely `canonical`'s job. It costs nothing, because **every sample MCC wrote is already in
+canonical order** — checked on all six — so the round trip still lands on its bytes exactly.
+
+**Two Python tests have no faithful Swift twin, and the reason is the same in both cases: Foundation
+has no strict JSON parser.** `JSONSerialization` and `JSONDecoder` both accept MCC's trailing comma,
+measured on this toolchain, so `test_is_not_strict_json` cannot be stated at all and
+`test_dumps_is_strict_json` loses its strictness half — what survives is that the output parses back
+to what went in. The Python holds that premise for both ports; on this side it is carried by byte
+identity with MCC's file instead. `test_round_trip_md5_matches` is also dropped: it restates byte
+equality for issue #5, and CryptoKit's MD5 is Apple-only, which would push a `KSPKit` test off the
+1× Linux runner for nothing.
+
+**Test:** `RoundTripTests.swift` and `FormatInvariantsTests.swift`, ports of
+`tests/test_round_trip.py` and `tests/test_format_invariants.py`, over all six samples — including
+the twin of `test_output_differs_from_mcc_by_exactly_the_trailing_comma`, which is what pins the
+deviation at one byte. The Swift suite is now 212 tests in 17 suites, up from M10's 191 in 15; the
+Python suite is unchanged at 723 passed, 2 skipped.
+
+Parity with the Python needed no new CLI surface: both writers are pinned against the same third
+thing, MCC's bytes minus that comma, so equality is transitive. It was also checked directly, once,
+outside the suites — all six samples through both writers, `cmp`-identical, and each exactly one
+byte from MCC's own export.
+
+**Two things worth knowing for M12.** Swift's `sorted()` agrees with Python's on these keys, checked
+across all 153,495 numeric keys of `project_5` rather than assumed — they are ASCII, where Swift's
+canonical ordering and Python's code-point ordering coincide, so no custom comparator is needed (and
+a hand-written one would be *slower*, since our code is unoptimised in a test build and the stdlib
+is not). And `#expect(a == b)` on 3.5 MB of `Data` renders both sides into the failure message,
+which turns a one-byte drift into minutes of output; `firstDifference` in `TestSupport.swift`
+reports the offset and the line either side of it instead, and every bulk comparison goes through
+it.
 
 ### M12 — Swift port: MIDI export, import and the differential harness
 
@@ -517,7 +548,7 @@ without touching a terminal or reading setup instructions.
 | M8 Swift skeleton | ✅ done | No | M6 |
 | M9 Swift leaf layers | ✅ done | No | M8 |
 | M10 Swift reader | ✅ done | No | M9 |
-| M11 Swift writer | | No | M10 |
+| M11 Swift writer | ✅ done | No | M10 |
 | M12 Swift MIDI both ways | | For final listen | M11 |
 | M13 GUI | | For final check | M12 |
 | M14 Distribution | | For final check | M13 |
