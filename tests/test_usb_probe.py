@@ -68,6 +68,34 @@ def test_the_slot_defaults_to_one_and_is_settable() -> None:
     assert usb_probe.build_parser().parse_args(["--slot", "4", "scalar"]).slot == 4
 
 
+def test_every_option_sits_before_the_subcommand() -> None:
+    """The whole command line, as the protocol document prints it.
+
+    Options split either side of the subcommand is how you get "unrecognized
+    arguments: --slot 2" with the device already on the desk, so the exact
+    invocation the ledger tells an operator to type is pinned here.
+    """
+    args = usb_probe.build_parser().parse_args(
+        [
+            "--save", "frames.jsonl",
+            "--slot", "2",
+            "--other-slot", "3",
+            "--track", "1",
+            "--pattern", "1",
+            "--steps", "1,5,9,13",
+            "--pitches", "60,64,67,72",
+            "--midi-out", "h2_4.mid",
+            "phase2",
+        ]
+    )  # fmt: skip
+
+    assert (args.probe, args.slot, args.other_slot) == ("phase2", 2, 3)
+    assert (args.track, args.pattern) == (1, 1)
+    assert usb_probe.int_list(args.steps) == [1, 5, 9, 13]
+    assert usb_probe.int_list(args.pitches) == [60, 64, 67, 72]
+    assert args.midi_out == Path("h2_4.mid")
+
+
 @pytest.mark.parametrize(
     ("param", "frame"),
     [
@@ -219,11 +247,11 @@ def test_phase_2_runs_end_to_end_against_a_modelled_device(
         [
             "--save",
             str(tmp_path / "frames.jsonl"),
-            "phase2",
             "--other-slot",
             "2",
             "--midi-out",
             str(destination),
+            "phase2",
         ]
     )
 
@@ -250,7 +278,7 @@ def test_the_smoke_run_reports_the_verdicts_it_reached(
     }
     monkeypatch.setattr(usb_probe, "UsbMidiTransport", partial(FakeDevice, slots))
 
-    usb_probe.main(["phase2", "--other-slot", "2"])
+    usb_probe.main(["--other-slot", "2", "phase2"])
     out = capsys.readouterr().out
 
     assert "H2.2  FAIL" in out  # the tape is not the scratch pattern

@@ -430,10 +430,15 @@ One command, over one open transport, runs H2.2, H2.3, H2.4 and H4.1:
 ```sh
 sudo uv run python tools/usb_probe.py \
   --save project_files/captures/H2-phase2.jsonl \
-  phase2 --slot A --other-slot B --track 1 --pattern 1 \
-         --steps 1,5,9,13 --pitches 60,64,67,72 \
-         --midi-out project_files/captures/H2-4.mid
+  --slot A --other-slot B --track 1 --pattern 1 \
+  --steps 1,5,9,13 --pitches 60,64,67,72 \
+  --midi-out project_files/captures/H2-4.mid \
+  phase2
 ```
+
+**Every option goes before the probe name**, as they do for the Phase 1 probes. `phase2 --slot 2`
+is an `unrecognized arguments` error, and the place to find that out is not with the device
+already on the desk.
 
 Nothing here writes to the device.
 
@@ -517,7 +522,7 @@ One probe, and it is the last thing standing between the read path and a project
   different scalar or change one. Then load project **A** on the panel and leave it there.
 - **Command:** byte 7 is settable now — `--slot` and `--other-slot` — so H4.1 no longer needs its
   own invocation. It rides inside the `phase2` command in Phase 2 above: with **A** loaded on the
-  panel, `phase2 --slot A --other-slot B ...` re-reads `120_37` and the `123_50`/`123_109` pair at
+  panel, `--slot A --other-slot B ... phase2` re-reads `120_37` and the `123_50`/`123_109` pair at
   both slots and prints them side by side.
 - **Confirms if:** the value comes back as **B**'s. Byte 7 selects, a slot can be named, and the
   read path can offer a project chooser.

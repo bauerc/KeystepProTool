@@ -485,24 +485,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--repeat", type=int, default=32, help="reads per count in the throughput probe"
     )
-
-    sub = parser.add_subparsers(dest="probe", required=True, metavar="PROBE")
-    parsers = {}
-    for name, probe in PROBES.items():
-        summary = (probe.__doc__ or "").splitlines()[0]
-        parsers[name] = sub.add_parser(name, help=summary, description=probe.__doc__)
-
-    # phase2 is the one probe that has to be told what the panel was built to
-    # show, so its options do not fit on the parent parser the way the rest do.
-    phase2 = parsers["phase2"]
-    phase2.add_argument("--track", type=int, default=1, help="sequencer track, 1-4")
-    phase2.add_argument("--pattern", type=int, default=1, help="pattern within that track, 1-16")
-    phase2.add_argument("--steps", default=DEFAULT_STEPS, help="steps the panel has notes on")
-    phase2.add_argument("--pitches", default=DEFAULT_PITCHES, help="their pitches, in step order")
-    phase2.add_argument(
+    # Likewise phase2's. Splitting them either side of the subcommand is how you
+    # get "unrecognized arguments: --slot 2" with the device already on the desk.
+    parser.add_argument("--track", type=int, default=1, help="sequencer track, 1-4 (phase2)")
+    parser.add_argument("--pattern", type=int, default=1, help="pattern in that track, 1-16")
+    parser.add_argument("--steps", default=DEFAULT_STEPS, help="steps the panel has notes on")
+    parser.add_argument("--pitches", default=DEFAULT_PITCHES, help="their pitches, in step order")
+    parser.add_argument(
         "--other-slot", type=int, help="a second slot whose pattern differs, for H4.1"
     )
-    phase2.add_argument("--midi-out", type=Path, metavar="PATH", help="write H2.4's export here")
+    parser.add_argument("--midi-out", type=Path, metavar="PATH", help="write H2.4's export here")
+
+    sub = parser.add_subparsers(dest="probe", required=True, metavar="PROBE")
+    for name, probe in PROBES.items():
+        summary = (probe.__doc__ or "").splitlines()[0]
+        sub.add_parser(name, help=summary, description=probe.__doc__)
     return parser
 
 
