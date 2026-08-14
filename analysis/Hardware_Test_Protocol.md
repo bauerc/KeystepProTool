@@ -284,8 +284,8 @@ project rather than the one it asked for.
 
 - [x] **run 2026-08-06 — confirmed, and it is free.** 3.994 ms at `count=16`, 3.998 ms at
   `count=64`, 64 values delivered. The period does not move with the payload, so a full dump goes
-  from 38.3 s to 9.6 s for nothing but a different count byte. **Not yet acted on** — see the
-  Phase 3 note below.
+  from 38.3 s to 9.6 s for nothing but a different count byte. **Acted on** by `ksp.bulk_fast`,
+  which went further than this probe measured — see the Phase 1 findings note below.
 
 - **Resolves:** whether `count` may exceed the 16 MCC never goes above. At 16 a full dump is ~36 s;
   at 64 it would be ~10 s. **This was a re-confirmation, not a discovery** — an early investigation
@@ -380,17 +380,24 @@ byte-identical to the populated `count=64` reply from the first session — whic
 - **H1.4 removes the prologue.** `bulk_read` sends no handshake. The `0x05` frame is MCC's habit,
   not the device's requirement, and the early investigation note's "unlock or mode switch" guess is
   wrong.
-- **H1.3 offers a 4× dump, and it is deliberately not taken yet.** `bulk_plan.py` is generated to
-  reproduce MCC's request stream byte-for-byte, and `test_bulk_plan.py` holds it there. Raising the
-  count rewrites that stream, so it needs its own verification — the tail chunks of the 24-lane and
-  240-entry parameters do not divide by 64 the way the 64-step ones do. **Phase 3 work, gated on
-  H3.2's byte-diff**, not a drive-by change to a passing plan.
+- **H1.3 offered a 4× dump, and `ksp.bulk_fast` took about 9×.** The obstacle this probe recorded —
+  that `bulk_plan.py` is generated to reproduce MCC's request stream byte-for-byte, and
+  `test_bulk_plan.py` holds it there — was sidestepped rather than paid: `bulk_fast` derives a
+  second walk from the same `PLAN` and leaves the generated one alone, so MCC's stream and its pin
+  both still hold. Nor do the tail chunks need the fixed count this note feared. A run is coalesced
+  by its own extent, so the 24-lane and 240-entry parameters simply yield shorter requests than the
+  64-step ones. 8,951 requests become 1,007 on tape 1 and 976 on tape 2
+  ([spec 7.8](./format/SysEx_Direct_Transfer_Path.md)). **What remains gated on H3.2's byte-diff is
+  only the default**: `read_raw` still walks MCC's stream unless asked for `fast`, because the
+  saving is counted against the tapes and no full dump has yet been checked against a device.
 - **H1.6 answers the overrun half of that, and moves the risk.** Overrunning a parameter's extent
   is no longer untested: the device pads to the full count with the item's own unset value and
   neither errors nor returns short. So an overrunning request is safe to *send* and unsafe to
   *store* — the padding is indistinguishable from a real unset entry, and a raised count must clip
   by the plan's declared extent rather than by anything in the reply. The ceiling is 100, not 64,
-  so the tail chunks have more room than H1.3 assumed. See
+  so the tail chunks have more room than H1.3 assumed. `bulk_fast` meets this by never spending it:
+  it asks for a run's declared extent and no more, so no reply it draws carries padding to clip.
+  The rule still governs any walk that does overrun. See
   [spec 7.7](./format/SysEx_Direct_Transfer_Path.md).
 
 **One caveat the captures added afterwards.** H1.4's "no handshake required" was measured with
