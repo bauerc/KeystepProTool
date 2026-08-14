@@ -451,7 +451,10 @@ Nothing here writes to the device.
   track item, so Seq mode matters here — otherwise the export takes the drum set), Pattern 1, 16
   steps, notes on steps 1/5/9/13, ascending pitches, one deliberately long gate. **Save the
   project** — the read is of stored data, not the panel's live edit buffer. Slot **B** must be a
-  slot whose Track 1 / Pattern 1 differs from A's (an empty slot is fine). Leave **A** loaded on
+  slot whose Track 1 / Pattern 1 differs from A's, and it should hold **notes of its own** rather
+  than be empty: an empty pool reads back all `127`, which is both the empty marker and what a
+  degraded read returns (H1.6 saw `36 × 0x7f` on an overrun), so an empty B makes a confirm
+  ambiguous. Notes at different steps and pitches make it unmistakable. Leave **A** loaded on
   the panel.
 - **Command:** none — panel work.
 

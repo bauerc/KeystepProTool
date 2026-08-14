@@ -438,6 +438,15 @@ def _byte_seven(
     print(f"H4.1 {outcome}")
     if not differs:
         print("        (or the two slots hold the same thing -- check the panel and re-run)")
+    elif all(entry == EMPTY for entry in other_pool):
+        # 127 is the empty marker and also what a degraded read returns (H1.6
+        # saw 36 x 0x7f on an overrun), so "B is empty" and "B did not really
+        # answer" look identical here. Only the scalar tells them apart.
+        print(f"        caveat: slot {other}'s pool reads entirely {EMPTY}, which is both 'empty'")
+        print("        and what a failed read looks like. 120_37 differing is the load-bearing")
+        print("        half; for a clean result re-run with an --other-slot that holds notes.")
+        if here == there:
+            print("        120_37 matches too, so this confirm rests on the empty pool alone.")
 
     for edge in (0, 17):
         try:
