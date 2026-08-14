@@ -297,7 +297,7 @@ def test_the_smoke_run_reports_the_verdicts_it_reached(
     assert "H2.2  FAIL" in out  # the tape is not the scratch pattern
     assert "H2.3  FAIL" in out
     assert "H2.4 confirms if" in out
-    assert "byte 7 SELECTS the project" in out  # the two tapes differ
+    assert "returns a different project" in out  # the two tapes differ
     assert "slot  0: no reply for slot 0" in out
 
 

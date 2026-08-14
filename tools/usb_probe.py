@@ -4,12 +4,10 @@ Run these with the device attached and MIDI Control Center closed, then write
 what they print into the ledger in analysis/Hardware_Test_Protocol.md. Each is
 a few seconds; none of them writes to the device.
 
-Byte 7 of every frame is the project slot (spec 7.4), so ``--slot`` says which
-project to read; a slot other than the panel's loaded one reads fine. What comes
-back is that slot as stored: unsaved panel edits do not travel.
-
-Some slots answer with the ``0x7f`` filler instead of a project, and which do is
-not established -- ``slots`` sweeps byte 7 to find out.
+``--slot`` says which project to read, and needs no help from the panel: the
+``05 <slot>`` prologue selects it (spec 7.4) and byte 7 names it on every frame
+thereafter. What comes back is that slot as stored -- unsaved panel edits do not
+travel. ``slots`` sweeps all sixteen.
 """
 
 import argparse
@@ -76,7 +74,7 @@ class Recorder:
 
 def slot_note(slot: int) -> str:
     return (
-        f"note: read from project slot {slot} (byte 7), as stored -- "
+        f"note: read from project slot {slot}, as stored -- "
         "edits made on the panel and not saved do not travel"
     )
 
@@ -90,7 +88,7 @@ def device(args: argparse.Namespace, recorder: Recorder) -> Iterator[UsbMidiTran
         if not args.no_prologue:
             # Names args.slot, not 1. H1.4 measured "no prologue needed" while
             # reading the loaded project, which is why it looked optional: what
-            # it does is switch, and a probe reading another slot must send it.
+            # it does is select, and a probe reading another slot must send it.
             select(transport, recorder, args.slot)
         yield transport
 
@@ -100,10 +98,10 @@ def select(transport: UsbMidiTransport, recorder: Recorder, slot: int) -> None:
 
     Each capture carries exactly one: ``05 01`` before the project 1 recall,
     ``05 02`` before the project 2 recall, ``06 03`` closing the project 3
-    import. Byte 7 on the reads that follow then agrees with it throughout, so
-    the captures alone cannot say which of the two does the selecting -- but a
-    sweep that sent one prologue and varied byte 7 got the prologue's project
-    every time. Switching slots means sending this again.
+    import. Byte 7 on the reads then agrees with it throughout, which is why the
+    captures alone could not say which of the two selects. Hardware did: one
+    prologue with byte 7 varied answers for the prologue's project only.
+    Switching slots means sending this again.
     """
     frame = sysex.prologue(slot)
     recorder.note("out", frame)
@@ -254,13 +252,13 @@ def probe_slots(args: argparse.Namespace, recorder: Recorder) -> int:
 
     Put one note on step 1 of track 1 / pattern 1 of every project, at a pitch
     unique to that project, and save each. Then the pitch that comes back names
-    the project the device actually served -- which settles both whether byte 7
-    selects and whether slot N is the panel's project N, neither of which a
-    tempo or a scalar can show when several projects share a value.
+    the project the device actually served -- which is what showed slot N to be
+    the panel's project N. No project-level scalar can do that: 120_37 reads 3
+    in all sixteen slots.
 
     Every slot gets its own ``05 <slot>`` first. Sending one prologue and then
-    varying byte 7 answered for the prologue's project only, which is what makes
-    the prologue -- not byte 7 -- look like the thing that selects.
+    varying byte 7 answers for the prologue's project only -- which is how the
+    prologue, not byte 7, was shown to be what selects.
 
     Four frames per slot, and no interpretation: the table is meant to be read
     against the panel. Pitches print in the device's own C3 convention.
@@ -446,7 +444,7 @@ def probe_phase2(args: argparse.Namespace, recorder: Recorder) -> int:
             print(f"        export failed: {error!r}")
             passed = False
 
-        print("\n== H4.1  does the device honour byte 7? ==")
+        print("\n== H4.1  is another slot still reachable? ==")
         passed &= _byte_seven(transport, recorder, args, item, pool, pitch)
 
     print(f"\nphase 2 {'PASSES' if passed else 'FAILS'}")
@@ -486,11 +484,12 @@ def _byte_seven(
     pool: tuple[int, ...],
     pitch: tuple[int, ...],
 ) -> bool:
-    """H4.1, folded in because the byte is settable and the reads cost nothing.
+    """H4.1, settled 2026-08-14 and kept as the check that it stays settled.
 
-    The panel is on ``--slot`` throughout. If naming ``--other-slot`` returns
-    that slot's contents instead, byte 7 selects the project; if it returns the
-    loaded one again, byte 7 is inert and the panel decides.
+    Selecting ``--other-slot`` and reading it must return a different project
+    from ``--slot``. If the two ever come back identical, selection has stopped
+    working -- which is the failure that would otherwise show up as a dump of
+    the wrong project that looks entirely valid.
     """
     other = args.other_slot
     if other is None or other == args.slot:
@@ -515,15 +514,13 @@ def _byte_seven(
         print(f"{label:>10}  {scalar:>6}  {len(live):>5}  {heads}")
 
     if there == FILLER:
-        # Not a verdict either way: filler is the device declining to answer for
-        # that slot, so it says nothing about whether byte 7 selects.
         print(f"H4.1 INCONCLUSIVE: slot {other} answered filler, not a project")
-        print(f"        120_37 came back {FILLER}, which is not a value any project holds, and")
-        print("        the arrays came back 0x7f then 0x00. Re-run against a slot that answers.")
+        print(f"        120_37 came back {FILLER}, which is not a value any project holds.")
+        print("        Most likely that slot has never been saved. Try one that has.")
     elif (here, pool, pitch) != (there, other_pool, other_pitch):
-        print("H4.1 confirms: byte 7 SELECTS the project")
+        print("H4.1 holds: selecting another slot returns a different project")
     else:
-        print("H4.1 FALSIFIED: byte 7 is inert -- both slots answered identically")
+        print("H4.1 REGRESSED: both slots answered identically -- selection is not working")
         print("        (or the two slots hold the same thing -- check the panel and re-run)")
 
     for edge in (0, 17):

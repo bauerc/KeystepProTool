@@ -322,24 +322,21 @@ Three probes changed what later phases should do:
 `ksp_cli/pull.py` is **not** part of this phase. The full-dump CLI is what Phase 3's H3.1 gates,
 and writing it before there is a live read to point it at leaves it unexercised.
 
-- **Phase 2 is implemented and awaiting its hardware run**: `tools/usb_probe.py phase2` runs
-  H2.2–H2.4 and H4.1 in one invocation over one open transport ([hardware test
-  protocol](./analysis/Hardware_Test_Protocol.md)). H2.1 (building the scratch project by hand) and
-  the device run itself are still outstanding. **Phase 4** then covers whatever hardware settles
-  beyond that.
+- **Phase 2 ran on hardware 2026-08-14 (firmware 2.5.20) and all four probes passed** — H2.1–H2.4
+  ([hardware test protocol](./analysis/Hardware_Test_Protocol.md)). `tools/usb_probe.py phase2`
+  walked 115 requests in 440 ms and reproduced the scratch project's note pool, step-active bits
+  and MIDI export exactly, including the one deliberately long gate. **Phase 4's H4.1 rode along in
+  the same run and settled project selection**: it is the `05 <slot>` prologue that selects the
+  project, confirmed across all sixteen slots
+  ([spec 7.4](./analysis/format/SysEx_Direct_Transfer_Path.md)). A project chooser is therefore
+  possible: `ksp.sysex.prologue(slot)` builds that frame and `ksp.bulk_read.read_raw(..., slot=)`
+  sends it before reading, so naming a slot is sufficient and no caller has to remember the
+  prologue itself.
 
 No console entry point is declared until the milestone lands, per CLAUDE.md.
 
 ### Open items
 
-- **Project selection is decoded and settable, but the device's side is unconfirmed.** Byte 7 of
-  every frame is the project slot ([spec 7.4](./analysis/format/SysEx_Direct_Transfer_Path.md)) —
-  four captures track it against the project, and nothing else in an import stream names the
-  destination. It is now threaded through `sysex.build_read_request` and `bulk_read.read_raw` as
-  `slot`, and `bulk_plan` is untouched because the slot rides beside a request rather than inside
-  it. One hypothesis is closed: a read returns the slot's *stored* project, since an unsaved panel
-  edit does not travel. What is still open is whether byte 7 *selects* or a read simply follows the
-  panel-loaded slot — **H4.1**, now folded into the `phase2` run, is what decides it.
 - **The write direction is decoded but unimplemented.** A write is the read protocol with the
   reply opcodes sent as requests, over the same 8,951 addresses in the same order — so
   `ksp.bulk_plan` is already the write plan ([spec 7.5](./analysis/format/SysEx_Direct_Transfer_Path.md)).
@@ -552,7 +549,7 @@ Both are understood; neither has reached the code.
   `ksp2midi` renders those patterns forward and warns. Rendering a plausible random order would be
   inventing a performance the device did not give us.
 
-**One hardware probe is still outstanding: H4.1**, whether the device honours the project slot in
-byte 7 — the open item above waits on it. Every *tier* of
-[`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md) is closed and its
-procedures removed; what is left there is H4.1 and the method, for whatever question comes next.
+Every *tier* of [`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md) is
+closed, including H2.1–H2.4 and H4.1, which confirmed on hardware 2026-08-14 that the `05 <slot>`
+prologue selects the project. Its procedures are removed; what is left there is the method, for
+whatever question comes next.

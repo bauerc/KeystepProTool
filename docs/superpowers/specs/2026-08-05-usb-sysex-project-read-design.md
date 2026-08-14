@@ -172,15 +172,14 @@ alongside it.
 The test asserts reconstruction against `project_files/initial_project.KeyStepPro` over the keys the
 fixture covers. Green CI still does not mean verified on hardware.
 
-## Open question: project selection
+## Project selection — settled on hardware 2026-08-14
 
-Nothing in the address tuple identifies a project slot. Every read in the capture targets whichever
-project is currently loaded. Dumping project N may therefore require selecting it on the device by
-hand, or there may be a select command that this capture does not contain — MCC's Recall To acts on
-the loaded project, so the capture had no reason to show one.
-
-This is not resolvable by re-reading the capture. H4.1 settles it. Until it is settled, the tool
-reads *the loaded project* and must say so.
+Nothing in the address tuple identifies a project slot; the select command is the `05 <slot>`
+prologue, one frame outside the address tuple. H4.1 confirmed it on hardware, firmware 2.5.20: a
+sweep of byte 7 = 1..16, each preceded by its own `05 <slot>`, read back a distinct, correct
+project for every one of the sixteen slots. Dumping project N needs no panel work — `05 <slot>`
+selects it. See [spec 7.4](../../../analysis/format/SysEx_Direct_Transfer_Path.md) and H4.1 in
+[the hardware test protocol](../../../analysis/Hardware_Test_Protocol.md).
 
 ## Task ladder
 
@@ -204,20 +203,24 @@ Phase 0 needs no device. Phases 1–4 are one command each at the hardware, size
 - **H1.5** Read `123_117_1..16`. Confirms the `0xFF` sentinel live and shows which patterns are
   initialised.
 
-### Phase 2 — correctness against visible ground truth
+### Phase 2 — correctness against visible ground truth ✅ **done, hardware 2026-08-14**
 
 - **H2.1** Build the scratch project by hand: Track 1 Seq, Pattern 1, 16 steps, notes on steps
   1/5/9/13, ascending pitches, one deliberately long gate. The device has 16 freely-chosen slots,
   so a scratch slot costs nothing.
 - **H2.2** Read `123_50` and `123_109` chunk 1. Assert ordinals and pitches match the panel.
-- **H2.3** Read `123_48`. Assert active bits land on steps 1/5/9/13 and nowhere else.
-- **H2.4** Single-pattern read through `read_project` to a MIDI export. Listen to it. **Measured:
-  115 requests** for the coalesced walk (`ksp.bulk_fast.iter_pattern_requests`); MCC's own plan
-  takes 250 for the same keys.
+  **PASS** — 4 notes, ordinals 1–4 on steps 1/5/9/13, pitches 60/62/64/65, gates 7/7/7/31.
+- **H2.3** Read `123_48`. Assert active bits land on steps 1/5/9/13 and nowhere else. **PASS.**
+- **H2.4** Single-pattern read through `read_project` to a MIDI export. Listen to it. **PASS,
+  measured: 115 requests in 440 ms** for the coalesced walk
+  (`ksp.bulk_fast.iter_pattern_requests`); MCC's own plan takes 250 for the same keys. The
+  exported MIDI matched the panel exactly, including the fourth note's 480-tick gate against the
+  other three's 60 ticks.
 
-**H4.1 no longer waits for Phase 4.** `tools/usb_probe.py phase2` runs H2.2, H2.3, H2.4 and H4.1
-in one invocation over one open transport, since the transport is already open and the extra reads
-cost nothing.
+**H4.1 rode along in the same run and was answered here, not in Phase 4.**
+`tools/usb_probe.py phase2` ran H2.2, H2.3, H2.4 and H4.1 in one invocation over one open
+transport, since the transport was already open and the extra reads cost nothing. It confirmed
+that the `05 <slot>` prologue selects the project — see the project-selection section above.
 
 ### Phase 3 — acceptance
 
@@ -225,10 +228,12 @@ cost nothing.
 - **H3.2** Recall the same project in MCC, export, and byte-diff against H3.1. This is the
   milestone gate.
 
-### Phase 4 — the unlock
+### Phase 4 — the unlock ✅ **answered inside Phase 2, hardware 2026-08-14**
 
 - **H4.1** Switch projects on the device and re-read `120_37`. Does the value follow the panel?
-  Determines whether multi-project dumping needs a select command that still has to be captured.
+  Answered by the sixteen-slot sweep in the `phase2` run, not by switching projects on the panel:
+  `05 <slot>` selects, and multi-project dumping needs no capture beyond that frame — see
+  "Project selection" above.
 
 ## Documentation corrections this work carries
 
