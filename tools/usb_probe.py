@@ -375,6 +375,11 @@ class RecordingTransport:
     def exchange(self, request: bytes) -> bytes:
         return exchange(self._transport, self._recorder, request)
 
+    def send(self, frame: bytes) -> None:
+        """read_raw's own prologue, recorded like every other frame."""
+        self._recorder.note("out", frame)
+        self._transport.send(frame)
+
 
 def _report(label: str, verdict: Verdict) -> bool:
     print(f"{label}  {'PASS' if verdict.passed else 'FAIL'}")

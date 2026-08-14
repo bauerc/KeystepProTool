@@ -11,14 +11,12 @@ seconds. ``fast=True`` walks ``ksp.bulk_fast`` instead and skips what the
 existence array has already answered, which is about 1,000 requests and four
 seconds for the same keys. See ``read_raw``.
 
-Byte 7 of every frame names the project slot (spec 7.4), so ``slot`` says which
-to read; a slot other than the panel's loaded one has been read successfully on
-hardware. What comes back is that slot's *stored* project: edits made on the
-panel and not saved do not appear in it.
-
-Some slots answer with filler instead -- well-formed frames whose payload is
-``0x7f`` -- and which slots do, and why, is not yet established. ``_refuse_filler``
-stops a read there rather than let a dump of filler be written out as a project.
+Which project comes back is chosen by the ``05 <slot>`` prologue, not by byte 7
+of the reads: ``read_raw`` sends it, and byte 7 then agrees with it throughout.
+Confirmed on hardware 2026-08-14 -- a sweep that sent one prologue and varied
+byte 7 got the prologue's project every time, and answered filler for the rest.
+What comes back is that slot's *stored* project: edits made on the panel and not
+saved do not appear in it.
 """
 
 from collections.abc import Iterable, Iterator
@@ -36,6 +34,7 @@ from ksp.sysex import (
     build_read_request,
     parse_reply,
     parse_slot,
+    prologue,
 )
 
 DEVICE_NAME: Final = "KeyStepPro"
@@ -48,10 +47,10 @@ DEFAULT_VERSION: Final = "2.5.20"
 #: default, which never came off a device. Host-side, so hard-coded.
 MCC_CONSTANTS: Final = {"120_55_5": 127, "120_56_4": 127, "120_56_5": 127}
 
-#: Observed 2026-08-14: some slots answer a read with well-formed frames whose
-#: payload is this byte -- a scalar comes back 0x7f, a 64-entry array as 16 of
-#: them then 48 zeros. The same byte H1.6 saw padding an overrun. Which slots do
-#: this is not established; that a read can come back this way is.
+#: What a read returns when the device has no project to give: a scalar comes
+#: back as this byte, a 64-entry array as 16 of them then 48 zeros. The same
+#: byte H1.6 saw padding an overrun. Well-formed either way, which is why it
+#: has to be checked for rather than caught by the codec.
 FILLER: Final = 0x7F
 
 #: The first address both plans ask for, and the one that tells such a read from
@@ -63,6 +62,9 @@ SLOT_PROBE: Final = "120_37"
 
 class Transport(Protocol):
     def exchange(self, request: bytes) -> bytes: ...
+
+    def send(self, frame: bytes) -> None:
+        """Write a frame the device does not answer. Only the prologue is one."""
 
 
 def keys_for(request: ReadRequest) -> list[str]:
@@ -156,7 +158,7 @@ def _refuse_filler(pairs: Iterator[tuple[str, int]], slot: int) -> Iterator[tupl
             raise ValueError(
                 f"the device answered {SLOT_PROBE} with {FILLER:#04x}, the filler byte, rather "
                 f"than a value any project holds: it is not returning slot {slot}'s contents. "
-                f"Check that slot {slot} is the project you meant and that it has been saved."
+                f"The usual cause is slot {slot} never having been saved on the device."
             )
         yield name, value
 
@@ -169,11 +171,10 @@ def read_raw(
     slot: int = DEFAULT_SLOT,
     requests: Iterable[ReadRequest] | None = None,
 ) -> dict[str, int | str]:
-    """Read the loaded project into the dict ``ksp.reader.read_project`` takes.
+    """Read one project slot into the dict ``ksp.reader.read_project`` takes.
 
-    ``slot`` must be the slot the device has loaded. It is not a chooser: name a
-    different one and the device answers filler, which this raises on rather
-    than return (see ``_refuse_filler``).
+    ``slot`` is a chooser and needs no help from the panel: this sends the
+    ``05 <slot>`` prologue that selects it before reading a byte.
 
     ``template_keys`` supplies the file's full key set -- the plan addresses the
     logical extent only, and the keys it never asks for hold 0 in every corpus
@@ -189,6 +190,10 @@ def read_raw(
     gated walk, which only ever skips a read the existence array has already
     settled.
     """
+    # Selecting is not optional and not the caller's job to remember: a read
+    # that names a slot in byte 7 without this gets whichever project the last
+    # prologue named, silently and in full.
+    transport.send(prologue(slot))
     walk = (
         _walk(transport, slot)
         if requests is None and not fast

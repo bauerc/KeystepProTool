@@ -167,6 +167,11 @@ class ReplayTransport:
     def __init__(self, pairs: list[tuple[bytes, bytes]]) -> None:
         self._replies = dict(pairs)
         self.asked: list[bytes] = []
+        self.sent: list[bytes] = []
+
+    def send(self, frame: bytes) -> None:
+        """The prologue, which the device never answers."""
+        self.sent.append(frame)
 
     def exchange(self, request: bytes) -> bytes:
         self.asked.append(request)
@@ -230,6 +235,11 @@ class DeviceModel:
         self._values = values
         self.asked: list[ReadRequest] = []
         self.slots: set[int] = set()
+        self.sent: list[bytes] = []
+
+    def send(self, frame: bytes) -> None:
+        """The prologue, which the device never answers."""
+        self.sent.append(frame)
 
     def exchange(self, frame: bytes) -> bytes:
         request = decode_request(frame)

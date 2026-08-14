@@ -173,6 +173,35 @@ def test_the_guard_reads_the_frames_the_device_actually_sent() -> None:
     assert sysex.parse_slot(bytes.fromhex(REFUSED_SLOT_REPLY)) == 3
 
 
+def test_the_slot_is_selected_before_anything_is_read(
+    replay_transport: Build, template_keys: list[str]
+) -> None:
+    """``05 <slot>`` is what chooses the project; byte 7 then agrees with it.
+
+    A read that names a slot without this gets whichever project the last
+    prologue selected -- silently, and for all 8,951 addresses -- so read_raw
+    sends it rather than leaving it to whoever writes the CLI.
+    """
+    transport = replay_transport()
+    bulk_read.read_raw(transport, template_keys, slot=1)
+
+    assert transport.sent == [sysex.prologue(1)]
+
+
+def test_the_prologue_names_the_slot_that_was_asked_for(
+    replay_transport: Build, template_keys: list[str], recall_tape: list[tuple[bytes, bytes]]
+) -> None:
+    """Selecting slot 1 while reading slot 4 would read the wrong project."""
+    probe = sysex.ReadRequest(item=120, param=37, indices=(), count=None)
+    at_four = (sysex.build_read_request(probe, 4), refusal_at(4))
+    transport = replay_transport([*recall_tape, at_four])
+
+    with pytest.raises(ValueError, match="not returning slot 4"):
+        bulk_read.read_raw(transport, template_keys, slot=4)
+
+    assert transport.sent == [sysex.prologue(4)]
+
+
 def test_a_real_slot_probe_value_passes_the_guard(
     replayed: dict[str, int | str],
 ) -> None:
