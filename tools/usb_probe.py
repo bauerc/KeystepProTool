@@ -224,51 +224,52 @@ class Verdict:
     faults: tuple[str, ...]
 
 
-#: The sweep reads these per slot. 120_37 tells a real answer from filler; the
-#: tempo triple is the one project-level value also visible on the panel, so a
-#: reader can check slot N against what the panel calls project N.
-SWEEP_SCALARS = (
-    (constants.ITEM_PROJECT, constants.P_TEMPO_LSB),
-    (constants.ITEM_PROJECT, constants.P_TEMPO_MIDSB),
-    (constants.ITEM_PROJECT, constants.P_TEMPO_MSB),
-)
-
-
-def tempo_bpm(chunks: tuple[int, ...]) -> float:
-    """The three 7-bit chunks as BPM. Little-endian, hundredths."""
-    lsb, midsb, msb = chunks
-    hundredths = lsb + midsb * constants.TEMPO_CHUNK + msb * constants.TEMPO_CHUNK**2
-    return hundredths / constants.TEMPO_SCALE
+def first_note(
+    transport: UsbMidiTransport, recorder: Recorder, args: argparse.Namespace, slot: int
+) -> tuple[int, int]:
+    """The step and pitch of note ordinal 1 in a track's pattern, at ``slot``."""
+    item = item_for_track(args.track)
+    at = (args.pattern, 1, 1)
+    step = read(transport, recorder, sysex.ReadRequest(item, P_NOTE_STEP, at, 1), slot)[0]
+    pitch = read(transport, recorder, sysex.ReadRequest(item, P_PITCH, at, 1), slot)[0]
+    return step, pitch
 
 
 def probe_slots(args: argparse.Namespace, recorder: Recorder) -> int:
-    """Which slots byte 7 gets an answer for, and which answer filler.
+    """What each of the sixteen slots answers, identified by its own marker note.
 
-    Four frames per slot and no interpretation: 120_37, which holds 0-3 in every
-    corpus file and so cannot legitimately read as the filler byte, plus the
-    tempo, which the panel also shows. Compare the table against the device.
+    Put one note on step 1 of track 1 / pattern 1 of every project, at a pitch
+    unique to that project, and save each. Then the pitch that comes back names
+    the project the device actually served -- which settles both whether byte 7
+    selects and whether slot N is the panel's project N, neither of which a
+    tempo or a scalar can show when several projects share a value.
+
+    Three frames per slot, and no interpretation: the table is meant to be read
+    against the panel. Pitches print in the device's own C3 convention.
     """
-    print(f"{'slot':>5}  {'120_37':>6}  {'tempo':>7}  answered")
+    print(f"{'slot':>5}  {'120_37':>6}  {'step':>4}  {'pitch':>5}  {'note':>5}  answered")
     answered = filler = 0
     with device(args, recorder) as transport:
         for slot in range(args.first_slot, args.last_slot + 1):
             try:
                 probe = read(transport, recorder, SCALAR, slot)[0]
-                chunks = tuple(
-                    read(transport, recorder, sysex.ReadRequest(item, param, (), None), slot)[0]
-                    for item, param in SWEEP_SCALARS
-                )
+                if probe == FILLER:
+                    filler += 1
+                    print(f"{slot:>5}  {probe:>6}  {'':>4}  {'':>5}  {'':>5}  FILLER")
+                    continue
+                step, pitch = first_note(transport, recorder, args, slot)
             except (TransportError, ValueError) as error:
-                print(f"{slot:>5}  {'':>6}  {'':>7}  no reply: {error}")
+                print(f"{slot:>5}  {'':>6}  {'':>4}  {'':>5}  {'':>5}  no reply: {error}")
                 continue
-            if probe == FILLER:
-                filler += 1
-                print(f"{slot:>5}  {probe:>6}  {'':>7}  FILLER")
+            answered += 1
+            if step == EMPTY:
+                print(f"{slot:>5}  {probe:>6}  {'':>4}  {'':>5}  {'':>5}  yes, no note in the pool")
             else:
-                answered += 1
-                print(f"{slot:>5}  {probe:>6}  {tempo_bpm(chunks):>7.2f}  yes")
+                name = constants.note_name(pitch)
+                print(f"{slot:>5}  {probe:>6}  {step + 1:>4}  {pitch:>5}  {name:>5}  yes")
     print(f"\n{answered} answered, {filler} filler")
-    print("compare each tempo against what the panel shows for that project")
+    print(f"track {args.track}, pattern {args.pattern}, note ordinal 1")
+    print("each note should be the marker put in that project; the device shows middle C as C3")
     return 0
 
 

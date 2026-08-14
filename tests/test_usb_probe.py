@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from conftest import DeviceModel, build_reply, decode_request, tape_values
-from ksp import bulk_fast, bulk_read, sysex
+from ksp import bulk_fast, bulk_read, constants, sysex
 from ksp.keys import item_for_track
 from ksp_cli.usb_transport import TransportError
 
@@ -135,6 +135,7 @@ def test_a_malformed_expectation_list_is_refused(text: str) -> None:
 POOL = (0, 4, 8, 12) + (127,) * 60
 PITCHES = (60, 64, 67, 72) + (127,) * 60
 ACTIVE = tuple(1 if step in (1, 5, 9, 13) else 0 for step in range(1, 65))
+EMPTY = bulk_fast.EMPTY
 STEPS = [1, 5, 9, 13]
 
 
@@ -305,11 +306,12 @@ def test_the_sweep_covers_all_sixteen_slots_by_default() -> None:
     assert (args.first_slot, args.last_slot) == (1, 16)
 
 
-def test_the_sweep_decodes_tempo_the_way_the_reader_does() -> None:
-    """96 + 93*128 = 12000 hundredths. The panel shows this number, which is what
-    makes it usable for telling one slot from another by eye."""
-    assert usb_probe.tempo_bpm((96, 93, 0)) == 120.0
-    assert usb_probe.tempo_bpm((16, 103, 0)) == 132.0
+def test_the_sweep_names_pitches_the_way_the_device_does() -> None:
+    """The panel shows middle C as C3, and the whole point of the marker notes is
+    that the table can be compared against it without converting anything."""
+    assert constants.note_name(60) == "C3"
+    assert constants.note_name(62) == "D3"
+    assert constants.note_name(64) == "E3"
 
 
 def test_the_sweep_runs_over_a_modelled_device(
@@ -323,8 +325,43 @@ def test_the_sweep_runs_over_a_modelled_device(
     assert usb_probe.main(["--first-slot", "1", "--last-slot", "3", "slots"]) == 0
     out = capsys.readouterr().out
 
-    assert "yes" in out and "FILLER" in out and "no reply" in out
+    assert "FILLER" in out and "no reply" in out
     assert "1 answered, 1 filler" in out
+
+
+def test_the_sweep_reports_the_marker_note_it_found(
+    fixtures_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A slot identifies itself by the pitch on step 1, printed as a note name.
+
+    The tape's track 1 pattern 1 holds a note at ordinal 1, so this exercises the
+    decode rather than the empty branch.
+    """
+    values = tape_values(fixtures_dir / "recall_tape.txt")
+    monkeypatch.setattr(
+        usb_probe, "UsbMidiTransport", partial(FakeDevice, {1: DeviceModel(values)})
+    )
+
+    usb_probe.main(["--first-slot", "1", "--last-slot", "1", "slots"])
+    out = capsys.readouterr().out
+
+    pitch = values["123_109_1_1_1"]
+    assert f"{pitch:>5}  {constants.note_name(pitch):>5}" in out
+
+
+def test_the_sweep_says_so_when_a_slot_holds_no_note(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An answering slot with an empty pool is not the same as a filler slot, and
+    conflating them is how a missing marker reads as a protocol failure."""
+    empty = DeviceModel({f"123_{param}_1_1_1": EMPTY for param in (50, 109)} | {"120_37": 3})
+    monkeypatch.setattr(usb_probe, "UsbMidiTransport", partial(FakeDevice, {1: empty}))
+
+    usb_probe.main(["--first-slot", "1", "--last-slot", "1", "slots"])
+    out = capsys.readouterr().out
+
+    assert "no note in the pool" in out
+    assert "1 answered, 0 filler" in out
 
 
 def test_ordinals_are_reported_one_based_and_steps_too() -> None:
