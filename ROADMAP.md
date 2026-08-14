@@ -479,9 +479,19 @@ deviation at one byte. The Swift suite is now 212 tests in 17 suites, up from M1
 Python suite is unchanged at 723 passed, 2 skipped.
 
 Parity with the Python needed no new CLI surface: both writers are pinned against the same third
-thing, MCC's bytes minus that comma, so equality is transitive. It was also checked directly, once,
-outside the suites — all six samples through both writers, `cmp`-identical, and each exactly one
-byte from MCC's own export.
+thing, MCC's bytes minus that comma, so equality is transitive. `scripts/writer_parity.sh`, new,
+says it directly instead — all six samples through both writers, `cmp`-identical, with the Python's
+own output checked against MCC's export on the way past, since a port-to-port diff cannot see the
+case where both broke the same way. `validate.sh` runs it as step 8 of 8, beside `port_parity.sh`
+and, like it, a dev-machine gate. There is no CLI to drive and none was added: `KSPKit` has no
+dependencies, so three lines of scratch compile straight into a binary alongside it.
+
+**That script caches its binary on a hash of the sources, never on their timestamps**, and the
+reason is worth keeping. The first version compared mtimes and was immediately caught out: reverting
+an edit restored the file's *original* mtime, older than the binary built from the mutated source,
+so the gate silently re-ran code that was no longer on disk and failed a tree that was correct. A
+checkout, a stash pop and a branch switch all do the same thing. A stale green here would be worse
+than no gate at all.
 
 **Two things worth knowing for M12.** Swift's `sorted()` agrees with Python's on these keys, checked
 across all 153,495 numeric keys of `project_5` rather than assumed — they are ASCII, where Swift's
