@@ -322,19 +322,24 @@ Three probes changed what later phases should do:
 `ksp_cli/pull.py` is **not** part of this phase. The full-dump CLI is what Phase 3's H3.1 gates,
 and writing it before there is a live read to point it at leaves it unexercised.
 
-- **Phases 2–4** — live read against the device, then the questions only hardware settles.
+- **Phase 2 is implemented and awaiting its hardware run**: `tools/usb_probe.py phase2` runs
+  H2.2–H2.4 and H4.1 in one invocation over one open transport ([hardware test
+  protocol](./analysis/Hardware_Test_Protocol.md)). H2.1 (building the scratch project by hand) and
+  the device run itself are still outstanding. **Phase 4** then covers whatever hardware settles
+  beyond that.
 
 No console entry point is declared until the milestone lands, per CLAUDE.md.
 
 ### Open items
 
-- **Project selection is decoded but unconfirmed.** Byte 7 of every frame is the project slot
-  ([spec 7.4](./analysis/format/SysEx_Direct_Transfer_Path.md)) — four captures track it against
-  the project, and nothing else in an import stream names the destination. But `ksp.sysex` still
-  sends the constant `1`, every probe so far sent `1`, and **no test has shown the device honours
-  it**. So `read_raw` returns whichever project is loaded until H4.1 says otherwise, its docstring
-  must keep saying so, and threading a slot parameter through `sysex`/`bulk_plan`/`bulk_read` is
-  work that should follow the probe rather than precede it.
+- **Project selection is decoded and settable, but the device's side is unconfirmed.** Byte 7 of
+  every frame is the project slot ([spec 7.4](./analysis/format/SysEx_Direct_Transfer_Path.md)) —
+  four captures track it against the project, and nothing else in an import stream names the
+  destination. It is now threaded through `sysex.build_read_request` and `bulk_read.read_raw` as
+  `slot`, and `bulk_plan` is untouched because the slot rides beside a request rather than inside
+  it. One hypothesis is closed: a read returns the slot's *stored* project, since an unsaved panel
+  edit does not travel. What is still open is whether byte 7 *selects* or a read simply follows the
+  panel-loaded slot — **H4.1**, now folded into the `phase2` run, is what decides it.
 - **The write direction is decoded but unimplemented.** A write is the read protocol with the
   reply opcodes sent as requests, over the same 8,951 addresses in the same order — so
   `ksp.bulk_plan` is already the write plan ([spec 7.5](./analysis/format/SysEx_Direct_Transfer_Path.md)).

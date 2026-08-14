@@ -34,7 +34,7 @@ def test_the_cable_number_rides_in_the_high_nibble(cable: int) -> None:
         # 6 bytes: two whole packets, the terminator third in the second.
         (sysex.IDENTITY_REQUEST, "04f07e7f070601f7"),
         # 9 bytes: three whole packets, CIN 0x07 again on the last.
-        (sysex.PROLOGUE, "04f00020046b7f42070501f7"),
+        (sysex.prologue(), "04f00020046b7f42070501f7"),
         # 4 bytes: the terminator lands alone, so the last packet is CIN 0x05.
         (bytes.fromhex("f0000df7"), "04f0000d05f70000"),
     ],

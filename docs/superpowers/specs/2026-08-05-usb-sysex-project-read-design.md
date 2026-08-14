@@ -211,8 +211,13 @@ Phase 0 needs no device. Phases 1–4 are one command each at the hardware, size
   so a scratch slot costs nothing.
 - **H2.2** Read `123_50` and `123_109` chunk 1. Assert ordinals and pitches match the panel.
 - **H2.3** Read `123_48`. Assert active bits land on steps 1/5/9/13 and nowhere else.
-- **H2.4** Single-pattern read — 210 requests, ~0.85 s — through `read_project` to a MIDI export.
-  Listen to it.
+- **H2.4** Single-pattern read through `read_project` to a MIDI export. Listen to it. **Measured:
+  115 requests** for the coalesced walk (`ksp.bulk_fast.iter_pattern_requests`); MCC's own plan
+  takes 250 for the same keys.
+
+**H4.1 no longer waits for Phase 4.** `tools/usb_probe.py phase2` runs H2.2, H2.3, H2.4 and H4.1
+in one invocation over one open transport, since the transport is already open and the extra reads
+cost nothing.
 
 ### Phase 3 — acceptance
 

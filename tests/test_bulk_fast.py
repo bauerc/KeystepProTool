@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import DeviceModel, tape_values
 from ksp import bulk_fast, bulk_plan, bulk_read, lenient_json, sysex
 from ksp.sysex import ReadRequest
 
@@ -26,66 +27,6 @@ ADDRESSED = 117783
 EXPECTED_REQUESTS = {"recall_tape.txt": 1007, "recall_project_2_tape.txt": 976}
 
 Loader = Callable[[str], dict[str, int | str]]
-
-
-def decode_request(frame: bytes) -> ReadRequest:
-    body = frame[6:-1]
-    if body[0] == sysex.CMD_SCALAR:
-        return ReadRequest(item=body[3], param=body[2], indices=(), count=None)
-    count = body[3]
-    return ReadRequest(
-        item=body[4], param=body[2], indices=tuple(body[5 : 5 + count]), count=body[5 + count]
-    )
-
-
-def build_reply(request: ReadRequest, values: tuple[int, ...]) -> bytes:
-    if request.count is None:
-        body = (sysex.CMD_SCALAR_REPLY, sysex.SUBCOMMAND, request.param, request.item, *values)
-    else:
-        body = (
-            sysex.CMD_READ_REPLY,
-            sysex.SUBCOMMAND,
-            request.param,
-            len(request.indices),
-            request.item,
-            *request.indices,
-            request.count,
-            *values,
-        )
-    return sysex.HEADER + bytes(body) + bytes((sysex.END,))
-
-
-class DeviceModel:
-    """Answers any address from a tape's values, at any count the device allows.
-
-    Raw bytes in, raw bytes out -- the 0xFF sentinel included, so the reader's
-    correction of it is exercised rather than bypassed.
-    """
-
-    def __init__(self, values: dict[str, int]) -> None:
-        self._values = values
-        self.asked: list[ReadRequest] = []
-
-    def exchange(self, frame: bytes) -> bytes:
-        request = decode_request(frame)
-        self.asked.append(request)
-        names = bulk_read.keys_for(request)
-        missing = [name for name in names if name not in self._values]
-        if missing:
-            raise LookupError(f"tape holds no value for {missing[0]}")
-        return build_reply(request, tuple(self._values[name] for name in names))
-
-
-def tape_values(path: Path) -> dict[str, int]:
-    """Every address the tape delivered, as the device sent it."""
-    values: dict[str, int] = {}
-    for line in path.read_text().splitlines():
-        sent, received = line.split()
-        request, payload = sysex.parse_reply(bytes.fromhex(received))
-        assert request == decode_request(bytes.fromhex(sent))
-        for name, value in zip(bulk_read.keys_for(request), payload, strict=True):
-            values[name] = value
-    return values
 
 
 @pytest.fixture(params=TAPES)
@@ -194,3 +135,102 @@ def test_the_drum_pool_is_never_skipped(device: DeviceModel, template_keys: list
 
     assert drum_pool
     assert drum_pool <= set(device.asked)
+
+
+def pattern_of(name: str) -> int | None:
+    """The pattern a track key belongs to, read off the key itself."""
+    parts = name.split("_")
+    return int(parts[2]) if len(parts) > 2 else None
+
+
+@pytest.mark.parametrize("pattern", [1, 5, 16])
+def test_the_pattern_walk_covers_every_key_of_that_pattern(pattern: int) -> None:
+    """H2.4 reads one pattern of one track, and must not quietly drop a key the
+    full walk would have filled for it.
+
+    The expectation comes off the *key names*, not off the same predicate the
+    filter uses -- deriving it the other way makes the test agree with the filter
+    by construction and blind to it dropping whole parameters.
+    """
+    whole = addresses(list(bulk_fast.iter_requests()))
+    subset = set(addresses(list(bulk_fast.iter_pattern_requests(123, pattern))))
+    owed = {name for name in whole if name.startswith("123_") and pattern_of(name) == pattern}
+
+    assert owed <= subset
+    # The per-pattern scalars ride in one 16-entry range, so neighbouring
+    # patterns come along. No other track's pattern data may -- the index-less
+    # track scalars are deliberately kept, and carry no pattern index.
+    assert not {
+        name
+        for name in subset
+        if name.startswith(("124_", "125_", "126_")) and pattern_of(name) is not None
+    }
+
+
+def test_the_pattern_walk_reads_the_scalars_that_make_a_pattern_play() -> None:
+    """Step count, swing, pattern bits and data state are per-pattern scalars
+    that bulk_fast coalesces into one range at index 1. A filter keyed on the
+    first index alone drops them for every pattern but 1 -- and a zero step count
+    is a pattern that does not play."""
+    for pattern in (1, 5, 16):
+        names = set(addresses(list(bulk_fast.iter_pattern_requests(123, pattern))))
+        assert {
+            f"123_40_{pattern}",
+            f"123_97_{pattern}",
+            f"123_98_{pattern}",
+            f"123_99_{pattern}",
+            f"123_100_{pattern}",
+        } <= names
+
+
+def test_the_pattern_walk_carries_the_index_less_scalars() -> None:
+    """Tempo lives in 120_70/71/72 and has no pattern index, so a walk that kept
+    only indexed requests would export the pattern at the wrong speed."""
+    names = set(addresses(list(bulk_fast.iter_pattern_requests(123, 1))))
+
+    assert {"120_70", "120_71", "120_72"} <= names
+    assert "123_40_1" in names  # the pattern's own data state
+
+
+def test_the_pattern_walk_is_a_fraction_of_the_whole() -> None:
+    requests = list(bulk_fast.iter_pattern_requests(123, 1))
+
+    assert len(requests) == bulk_fast.PATTERN_REQUEST_COUNT == 115
+    assert len(requests) < bulk_fast.REQUEST_COUNT / 16
+
+
+def test_the_pattern_walk_still_reads_the_gate_before_the_notes() -> None:
+    """Filtering must not disturb the order _already_answered depends on."""
+    seen_gate = False
+    for request in bulk_fast.iter_pattern_requests(123, 1):
+        if request.count is None or len(request.indices) != 3:
+            continue
+        if request.param == bulk_fast.MELODIC_GATE:
+            seen_gate = True
+        elif request.param in bulk_fast.MELODIC_GATED:
+            assert seen_gate
+
+
+def test_a_pattern_read_agrees_with_the_whole_project(
+    device: DeviceModel, tape_name: str, fixtures_dir: Path, template_keys: list[str]
+) -> None:
+    """Same device, same keys: reading one pattern must give the values a full
+    read gives, or H2.4 proves nothing about H3.1."""
+    whole = bulk_read.read_raw(
+        DeviceModel(tape_values(fixtures_dir / tape_name)), template_keys, fast=True
+    )
+    part = bulk_read.read_raw(
+        device, template_keys, requests=bulk_fast.iter_pattern_requests(123, 1)
+    )
+    covered = set(addresses(list(bulk_fast.iter_pattern_requests(123, 1))))
+
+    assert {name: part[name] for name in covered} == {name: whole[name] for name in covered}
+    assert set(part) == set(whole)
+
+
+def test_the_slot_reaches_every_frame(device: DeviceModel, template_keys: list[str]) -> None:
+    """Byte 7 is the project (spec 7.4). A walk that sent it on some frames and
+    not others would read two projects and merge them."""
+    bulk_read.read_raw(device, template_keys, fast=True, slot=2)
+
+    assert device.slots == {2}

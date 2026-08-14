@@ -112,11 +112,14 @@ Independently: the project 1 and project 2 recalls send an identical request str
 **different answers for 971 of 8,951 addresses**, so the two reads are not both returning one
 loaded project.
 
-**This is capture-derived, not confirmed.** The H1 probes all sent `01` and got the panel-loaded
-project back, which fits the slot reading only if that project sat in slot 1 — they do not
-distinguish the two. **H4.1** in the [hardware test protocol](../Hardware_Test_Protocol.md) is
-the probe that separates them, and until it runs, a reader must still tell the user it may be
-reading whichever project is loaded.
+**This is capture-derived, not confirmed** — but one hypothesis is now ruled out. Editing a project
+on the device and *not* saving it, then pulling, does not bring the unsaved edits across: a read
+returns the slot's stored project, not the panel's live edit buffer. That kills "byte 7 is inert
+and the panel's working buffer is what you get" as written. It does not, on its own, separate the
+two hypotheses that remain — byte 7 selects the slot, or a read always returns the panel-loaded
+slot's stored data regardless of byte 7 — since both agree with unsaved edits never travelling.
+**H4.1** in the [hardware test protocol](../Hardware_Test_Protocol.md) is still the probe that
+separates them, and it now runs inside `usb_probe.py phase2`.
 
 `tests/test_capture_evidence.py` holds the tape claims above.
 

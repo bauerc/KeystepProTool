@@ -252,9 +252,11 @@ sudo uv run python tools/usb_probe.py <probe> [--save project_files/captures/H1-
 Byte 7 of every frame is the **project slot** as far as the captures go
 ([spec 7.4](./format/SysEx_Direct_Transfer_Path.md)), but every probe below sent `01` and read
 whichever project happened to be loaded, so none of them separates "byte 7 selects the slot" from
-"byte 7 is inert and the panel decides". Note the loaded project in the ledger. **H4.1** is what
-separates the two, and until it runs a reader must still warn that it may be reading the panel's
-project rather than the one it asked for.
+"a read always returns the panel-loaded slot's stored data regardless of byte 7". Note the loaded
+project in the ledger. `usb_probe.py` now takes a `--slot` and reads that slot's data **as
+stored** — a device-side edit that was not saved does not travel — but that alone does not decide
+between the two hypotheses. **H4.1**, which runs as part of `phase2` (below), is what separates
+them.
 
 ### H1.1 — Identity
 
@@ -368,6 +370,14 @@ Recall To capture was taken from. Raw output in `usb_probe_results.txt`, and for
 | H1.4  | 2026-08-06 | initial_project | **all four rows succeeded.** No handshake is required — neither the identity request nor the `0x05` frame |
 | H1.5  | 2026-08-06 | initial_project | patterns 1–13 read **255** raw; 14–16 read 60. The sentinel survives raw USB |
 | H1.6  | 2026-08-06 | initial_project (restored) | `count` clamps to **100**; the reply echoes the honoured count, not the requested one. Overrun is **silent** — 106 asked, 64 real values then 36 × `0x7f`. Indices are 1-based; `nIdx=4` draws no reply |
+| H2.1  | not run    | —              | not run |
+| H2.2  | not run    | —              | not run |
+| H2.3  | not run    | —              | not run |
+| H2.4  | not run    | —              | not run |
+
+`phase2` is implemented and `--slot`/`--other-slot` make the byte settable, so **H4.1 is now
+runnable in the same pass as H2.2–H2.4** rather than waiting on its own invocation; its row stays
+in the Phase 4 section below since it is not part of this table's H1–H2 run.
 
 **H1.6 ran across two device states.** The first pass went out while track 1 had been deleted from
 the panel, so every `7b` value in it reads `0x7f` and it establishes lengths only. The project was
@@ -408,7 +418,85 @@ whether `0x05` is also needed to switch slots is a separate question this probe 
 
 ---
 
-## Phase 2 — the project slot
+## Phase 2 — correctness against visible ground truth
+
+Ground truth the panel itself provides, not a capture: the note pool, the step-active array and a
+MIDI export of one pattern, checked against what H2.1 puts on the panel by hand. **H4.1** (Phase
+4's probe, below) rides along in the same run — once the transport is open there is nothing left
+to pay to also flip byte 7 and re-read.
+
+One command, over one open transport, runs H2.2, H2.3, H2.4 and H4.1:
+
+```sh
+sudo uv run python tools/usb_probe.py \
+  --save project_files/captures/H2-phase2.jsonl \
+  phase2 --slot A --other-slot B --track 1 --pattern 1 \
+         --steps 1,5,9,13 --pitches 60,64,67,72 \
+         --midi-out project_files/captures/H2-4.mid
+```
+
+Nothing here writes to the device.
+
+### H2.1 — Build the scratch project
+
+- [ ] **not run.**
+
+- **Resolves:** nothing on its own — it is the ground truth H2.2–H2.4 read back against.
+- **Setup:** on the panel, scratch slot **A**: Track 1 in **Seq** mode (item 123 is also the drum
+  track item, so Seq mode matters here — otherwise the export takes the drum set), Pattern 1, 16
+  steps, notes on steps 1/5/9/13, ascending pitches, one deliberately long gate. **Save the
+  project** — the read is of stored data, not the panel's live edit buffer. Slot **B** must be a
+  slot whose Track 1 / Pattern 1 differs from A's (an empty slot is fine). Leave **A** loaded on
+  the panel.
+- **Command:** none — panel work.
+
+### H2.2 — The note pool matches the panel
+
+- [ ] **not run.**
+
+- **Resolves:** whether `123_50` (existence), `123_109` (pitch) and `123_110` (gate) chunk 1
+  decode to the ordinals, steps and pitches the panel shows for H2.1's pattern.
+- **Setup:** H2.1 built and saved.
+- **Command:** the `phase2` command above; its "H2.2 the note pool" section reads all three at
+  `--slot`, count 64 each, prints an ordinal/step/pitch/gate table, and prints PASS/FAIL against
+  `--steps` and `--pitches`.
+- **Confirms if:** the ordinals decoded from the pool land exactly on `--steps`, each paired with
+  the matching entry in `--pitches`, in order.
+- **Falsified if:** a step is missing, an extra step appears, or a step is paired with the wrong
+  pitch.
+
+### H2.3 — The step-active array matches the panel
+
+- [ ] **not run.**
+
+- **Resolves:** whether `123_48`'s active bits land only on the steps the panel has notes on.
+- **Setup:** H2.1 built and saved.
+- **Command:** the `phase2` command above; its "H2.3 the step-active array" section reads
+  `123_48` (count 64) at `--slot` and prints PASS/FAIL against `--steps`.
+- **Confirms if:** bits are set on `--steps` and nowhere else.
+- **Falsified if:** a bit is set off `--steps`, or is missing on one of them.
+
+### H2.4 — One pattern through the whole read path
+
+- [ ] **not run.**
+
+- **Resolves:** whether the fast walk (`ksp.bulk_fast.iter_pattern_requests`) reproduces a
+  listenable pattern end to end — through `bulk_read.read_raw(..., slot=, requests=)`,
+  `reader.read_project`, `midi_export.export_project` — not just the individual scalars H2.2 and
+  H2.3 check.
+- **Setup:** H2.1 built and saved.
+- **Command:** the `phase2` command above; its "H2.4" section walks 115 requests (measured — MCC's
+  own plan takes 250 for the same keys) and writes `--midi-out`. The resulting project has empty
+  scenes, since item 121 is not in this subset; that is expected, because `midi_export.render_project`
+  walks tracks and patterns, not the scene arrangement.
+- **Confirms if:** the export plays the same four ascending notes on the same beats as H2.1, with
+  one visibly longer gate, and nothing else.
+- **Falsified if:** a note is missing, mispitched, on the wrong beat, or the long gate does not
+  read long.
+
+---
+
+## Phase 4 — the project slot
 
 One probe, and it is the last thing standing between the read path and a project chooser.
 
@@ -416,25 +504,29 @@ One probe, and it is the last thing standing between the read path and a project
 
 - [ ] **not run.**
 
-- **Resolves:** whether byte 7 selects the project, or merely labels a transfer whose real target
-  is whatever the panel has loaded. Four captures show MCC varying it with the project
+- **Resolves:** whether byte 7 selects the project, or a read always returns the panel-loaded
+  slot's stored data regardless of byte 7. Four captures show MCC varying it with the project
   ([spec 7.4](./format/SysEx_Direct_Transfer_Path.md)) and nothing else in an import stream names
-  the destination — but every probe so far sent `01`, so the device's side of this is untested.
-  Until it is settled, `bulk_read` must keep warning that it may be reading the panel's project.
+  the destination — but every probe so far sent `01`, so the device's side of this is untested. A
+  separate hardware observation already rules out a third option, the panel's live edit buffer: an
+  unsaved on-device edit does not travel on a read, so what comes back is always *stored* data
+  ([spec 7.4](./format/SysEx_Direct_Transfer_Path.md)). That leaves exactly the two hypotheses
+  above, and this probe is what separates them.
 - **Setup:** two slots whose `120_37` **differs**, so the answer is not the same either way. Read
   it from each with the panel on that project first and record both values; if they match, pick a
   different scalar or change one. Then load project **A** on the panel and leave it there.
-- **Command:** the H1.2 scalar read against `120_37`, with byte 7 set to **B**'s slot number while
-  **A** is loaded. `usb_probe.py` sends `SUBCOMMAND = 0x01` today, so this needs the byte to be
-  settable — one parameter, no protocol change.
+- **Command:** byte 7 is settable now — `--slot` and `--other-slot` — so H4.1 no longer needs its
+  own invocation. It rides inside the `phase2` command in Phase 2 above: with **A** loaded on the
+  panel, `phase2 --slot A --other-slot B ...` re-reads `120_37` and the `123_50`/`123_109` pair at
+  both slots and prints them side by side.
 - **Confirms if:** the value comes back as **B**'s. Byte 7 selects, a slot can be named, and the
   read path can offer a project chooser.
 - **Falsified if:** the value comes back as **A**'s. Byte 7 is inert on the read, the slot is panel
   state, and MCC must be selecting the project by some route outside the SysEx stream — in which
   case say so in spec 7.4 and keep the warning permanently.
 - **Also worth noting:** whether the device answers at all when byte 7 names an *empty* slot, and
-  whether it answers when byte 7 is `00` or `11` (17, past the 16 slots). Neither is required to
-  settle the question; both are cheap once the byte is settable.
+  whether it answers when byte 7 is `00` or `17` (past the 16 slots). Neither is required to settle
+  the question; `phase2` reports both, value or timeout, since the byte is settable.
 
 **Do not extend this to the write direction.** Confirming byte 7 on a read costs nothing. Testing
 it on a write means sending 8,951 frames to a slot, and spec 7.5 flags `06 <slot>` as an untested
@@ -453,13 +545,14 @@ and tier 8's on 2026-08-06**; the findings are in [the spec](./format/Time_Shift
 tier 8's six recordings stay reduced in
 [`Timing_Calibration.md`](./Timing_Calibration.md) §6.1 because that is where the arithmetic lives.
 
-The table is empty because every tier is closed — **H4.1 above is the one probe still outstanding**,
-and it is the next row this table expects. Add a row when a new question sends someone back to the
-device.
+The table is empty because every tier is closed — **H2.1–H2.4 and H4.1 above are the probes still
+outstanding**, and they are the next rows this table expects. Add a row when a new question sends
+someone back to the device.
 
 ## Effort summary
 
-**One probe remains: H4.1.** B0, tiers 1–8, the two write tiers and Phase 1 are all complete —
+**Four probes remain: H2.1–H2.4**, which carry H4.1 in the same `phase2` run. B0, tiers 1–8, the
+two write tiers and Phase 1 are all complete —
 roughly 59 captures and 6 recordings, and every question they were opened to answer has been
 answered and folded into [the spec](./KeyStepPro_Format_Spec.md).
 

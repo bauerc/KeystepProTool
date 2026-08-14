@@ -10,6 +10,10 @@ Walking MCC's plan is 8,951 requests at a median 4.047 ms each, about 36
 seconds. ``fast=True`` walks ``ksp.bulk_fast`` instead and skips what the
 existence array has already answered, which is about 1,000 requests and four
 seconds for the same keys. See ``read_raw``.
+
+Byte 7 of every frame names the project slot (spec 7.4), so ``slot`` says which
+of the sixteen to read. What comes back is that slot's *stored* project: edits
+made on the panel and not saved do not appear in it.
 """
 
 from collections.abc import Iterable, Iterator
@@ -19,7 +23,15 @@ from ksp import bulk_fast
 from ksp.bulk_plan import iter_requests
 from ksp.keys import key
 from ksp.lenient_json import LEADING_KEYS
-from ksp.sysex import UNSET, UNSET_IN_FILE, ReadRequest, build_read_request, parse_reply
+from ksp.sysex import (
+    DEFAULT_SLOT,
+    UNSET,
+    UNSET_IN_FILE,
+    ReadRequest,
+    build_read_request,
+    parse_reply,
+    parse_slot,
+)
 
 DEVICE_NAME: Final = "KeyStepPro"
 
@@ -49,24 +61,31 @@ def keys_for(request: ReadRequest) -> list[str]:
     ]
 
 
-def _fetch(transport: Transport, request: ReadRequest) -> tuple[int, ...]:
-    answered, values = parse_reply(transport.exchange(build_read_request(request)))
+def _fetch(transport: Transport, request: ReadRequest, slot: int) -> tuple[int, ...]:
+    frame = transport.exchange(build_read_request(request, slot))
+    answered, values = parse_reply(frame)
     if answered != request:
         raise ValueError(f"asked for {request}, device answered {answered}")
+    # A reply about another project would merge two of them into one file.
+    if parse_slot(frame) != slot:
+        raise ValueError(f"asked slot {slot}, device answered slot {parse_slot(frame)}")
     return tuple(UNSET_IN_FILE if value == UNSET else value for value in values)
 
 
-def _walk(transport: Transport) -> Iterator[tuple[str, int]]:
+def _walk(transport: Transport, slot: int) -> Iterator[tuple[str, int]]:
     for request in iter_requests():
-        yield from zip(keys_for(request), _fetch(transport, request), strict=True)
+        yield from zip(keys_for(request), _fetch(transport, request, slot), strict=True)
 
 
-def _pool_gate(request: ReadRequest, slot: int) -> list[str]:
-    """The existence entries covering ``request``'s note ordinals in ``slot``."""
+def _pool_gate(request: ReadRequest, pool_slot: int) -> list[str]:
+    """The existence entries covering ``request``'s note ordinals in that chunk.
+
+    ``pool_slot`` is the note pool's own middle index, not the project slot.
+    """
     assert request.count is not None
     pattern, _, first = request.indices
     return [
-        key(request.item, bulk_fast.MELODIC_GATE, pattern, slot, first + offset)
+        key(request.item, bulk_fast.MELODIC_GATE, pattern, pool_slot, first + offset)
         for offset in range(request.count)
     ]
 
@@ -92,12 +111,16 @@ def _already_answered(request: ReadRequest, seen: dict[str, int]) -> int | None:
     return None
 
 
-def _walk_fast(transport: Transport) -> Iterator[tuple[str, int]]:
+def _walk_fast(
+    transport: Transport, requests: Iterable[ReadRequest], slot: int
+) -> Iterator[tuple[str, int]]:
     seen: dict[str, int] = {}
-    for request in bulk_fast.iter_requests():
+    for request in requests:
         names = keys_for(request)
         settled = _already_answered(request, seen)
-        values = (settled,) * len(names) if settled is not None else _fetch(transport, request)
+        values = (
+            (settled,) * len(names) if settled is not None else _fetch(transport, request, slot)
+        )
         for name, value in zip(names, values, strict=True):
             seen[name] = value
             yield name, value
@@ -108,8 +131,10 @@ def read_raw(
     template_keys: Iterable[str],
     version: str = DEFAULT_VERSION,
     fast: bool = False,
+    slot: int = DEFAULT_SLOT,
+    requests: Iterable[ReadRequest] | None = None,
 ) -> dict[str, int | str]:
-    """Read the loaded project into the dict ``ksp.reader.read_project`` takes.
+    """Read one project slot into the dict ``ksp.reader.read_project`` takes.
 
     ``template_keys`` supplies the file's full key set -- the plan addresses the
     logical extent only, and the keys it never asks for hold 0 in every corpus
@@ -120,10 +145,17 @@ def read_raw(
     the captured tapes pin down; the replay tests hold both walks to the same
     result.
 
-    The address tuple carries no project slot, so this reads whichever project
-    is currently loaded. Every caller must say so.
+    ``requests`` reads a subset instead -- ``bulk_fast.iter_pattern_requests``
+    for one pattern, say -- and everything outside it zero-fills. It takes the
+    gated walk, which only ever skips a read the existence array has already
+    settled.
     """
-    values: dict[str, int] = dict(_walk_fast(transport) if fast else _walk(transport))
+    walk = (
+        _walk(transport, slot)
+        if requests is None and not fast
+        else _walk_fast(transport, requests or bulk_fast.iter_requests(), slot)
+    )
+    values: dict[str, int] = dict(walk)
     values.update(MCC_CONSTANTS)
     for name in template_keys:
         if name not in LEADING_KEYS:
