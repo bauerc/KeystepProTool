@@ -24,7 +24,9 @@ sandbox=$(mktemp -d) || exit 1
 trap 'rm -rf "$sandbox"' EXIT
 
 status=0
+count=0
 for project in project_files/*.KeyStepPro; do
+    count=$((count + 1))
     for mode in --json ""; do
         # shellcheck disable=SC2086 # an empty $mode must expand to no argument at all
         if ! diff -u \
@@ -36,5 +38,5 @@ for project in project_files/*.KeyStepPro; do
     done
 done
 
-((status)) || echo "port_parity: both ports agree on $(ls project_files/*.KeyStepPro | wc -l | tr -d ' ') projects, tree and --json"
+((status)) || echo "port_parity: both ports agree on $count projects, tree and --json"
 exit "$status"

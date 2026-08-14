@@ -74,13 +74,11 @@ import Testing
 
     @Test(arguments: baselines) func theKeyCountMatches(baseline: Baseline) throws {
         // The key set is fixed; only the `version` key varies between files.
-        let raw = try LenientJSON.load(
-            contentsOf: RepoData.projectFiles.appending(path: baseline.projectFile))
+        let raw = try Samples.raw(baseline.projectFile)
         #expect(raw.count == baseline.totalKeys)
     }
 
     static func load(_ baseline: Baseline) throws -> Project {
-        try Reader.load(
-            contentsOf: RepoData.projectFiles.appending(path: baseline.projectFile))
+        try Samples.project(baseline.projectFile)
     }
 }
