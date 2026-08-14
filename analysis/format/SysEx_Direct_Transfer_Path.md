@@ -39,8 +39,9 @@ short  reply    F0 00 20 6B 7F 42 02 <slot> <param> <item> <one byte> F7
 ack             F0 00 20 6B 7F 42 1C 00    F7
 ```
 
-`<slot>` is the project number — see [7.4](#74-the-project-slot-is-byte-7). The ack is the only
-frame that does not carry it; its `00` is a constant, not a slot.
+`<slot>` is the project number — see [7.4](#74-the-05-slot-prologue-selects-the-project), which is
+also where the `05` frame that *selects* it lives. The ack is the only frame that does not carry
+it; its `00` is a constant, not a slot.
 
 The reply **echoes the request address verbatim**, which is what makes a desynchronised stream
 detectable rather than silently misfiled. The count byte is echoed as *honoured*, not as asked —
@@ -74,21 +75,41 @@ Replaying the capture through `ksp.bulk_read` reconstructs **all 153,497 keys of
 writer omits — so the hardware is a second producer of the same flat dict `ksp.reader` already
 consumes, and nothing downstream changes.
 
-That is a recording, not the device. `ksp.bulk_read` has not been run end to end against live
-hardware — the six H1 probes exercised pieces of it, not the whole walk.
+**The read path matches the panel.** A single pattern read off the device — the 115-request walk
+of 7.8, through `bulk_read` and `ksp.reader` to a MIDI export — reproduced a hand-built pattern
+exactly: notes on the steps the panel showed, at its pitches, and a deliberately long gate coming
+out eight times the length of the others. The note pool, the step-active array and the pool's
+existence markers each decode to what the panel displays. 2026-08-14, firmware 2.5.20.
 
-The two questions this section used to leave open — how a project slot is named, and how a write
-is framed — are answered by the captures in 7.4 and 7.5, and **not** by hardware. What 7.4 proves
-is that MCC *sends* a slot number and that nothing else in the stream could be one. Whether the
-device honours it is H4.1. Nothing below has been sent to a device by this project.
+**The full 8,951-request walk has not been run against hardware**, and no dump has been
+byte-diffed against an MCC export of the same project. That is the outstanding acceptance gate.
+
+Project selection is settled on hardware (7.4). The **write direction is capture-only** — nothing
+in 7.5 or 7.6 has been sent to a device by this project.
 
 (`libusb` in `/Library/Arturia/Shared/` is used only for DFU firmware updates — not for projects.)
 
-### 7.4 The project slot is byte 7
+### 7.4 The `05 <slot>` prologue selects the project
 
-The byte after the command is the **project number**. It was carried as an untested constant `01`
-for as long as every capture came from project 1. Four captures now disagree about it, and they
-disagree exactly where the project changes:
+`05 <slot>` is what tells the device which project to serve. Byte 7 of every frame carries the
+same slot number but does not itself select: send one prologue and then vary byte 7, and every
+request answers from the prologue's project — the others return the `0x7f` filler. **Switching
+project means sending `05 <slot>` again.** `ksp.bulk_read.read_raw` sends it.
+
+Slots are **1-based and match the panel**: `05 02` serves the panel's Project 2. All sixteen read
+this way, and the panel need not be touched. A read returns the slot **as stored** — edits made on
+the panel and not saved do not appear in it.
+
+`120_37` reads `3` in all sixteen slots, so no project-level scalar identifies which project was
+served. Only per-note data does.
+
+No handshake is required to re-read whatever project is *already* loaded — neither the identity
+request nor a prologue. Selecting a different one is the prologue's whole job.
+
+Confirmed on hardware 2026-08-14, firmware 2.5.20.
+
+Byte 7 was carried as an untested constant `01` for as long as every capture came from project 1.
+Four captures disagree about it, and they disagree exactly where the project changes:
 
 | Capture | Operation | Byte 7 |
 |---|---|---|
@@ -100,23 +121,17 @@ disagree exactly where the project changes:
 It rides in every command — `01`, `02`, `05`, `06`, `0B`, `0C` — and is constant for the whole of
 a transfer. Only the ack is exempt.
 
-**Why it cannot be anything else.** Both new captures are gapless: frame numbers step by exactly
-two from frame 7 with no holes, so every USB frame that crossed the wire is in the file and no
-non-SysEx MIDI was dropped in extraction. Laid side by side, the import's 8,951 outbound writes
-are byte-identical to the recall's 8,951 inbound replies once byte 7 is masked — **8,950 of
-8,951**, the exception being the sentinel frame in 7.6. Byte 7 and the closing `06 <slot>` are
-therefore the *only* bytes in the entire import stream that name slot 3. There is nothing else
-left for the destination to be encoded in.
+Each capture also contains exactly one `05`/`06` frame, naming that same project: `05 01` before
+the project 1 recall, `05 02` before the project 2 recall, `06 03` closing the project 3 import.
+Byte 7 and the prologue are in lockstep for the whole of every capture, which is why the tapes
+alone cannot say which of the two selects, and why this section once read it as byte 7 alone.
 
-Independently: the project 1 and project 2 recalls send an identical request stream and get
-**different answers for 971 of 8,951 addresses**, so the two reads are not both returning one
-loaded project.
-
-**This is capture-derived, not confirmed.** The H1 probes all sent `01` and got the panel-loaded
-project back, which fits the slot reading only if that project sat in slot 1 — they do not
-distinguish the two. **H4.1** in the [hardware test protocol](../Hardware_Test_Protocol.md) is
-the probe that separates them, and until it runs, a reader must still tell the user it may be
-reading whichever project is loaded.
+Two further capture facts, both from gapless recordings — frame numbers step by exactly two from
+frame 7 with no holes, so nothing was dropped in extraction. The import's 8,951 outbound writes
+are byte-identical to the recall's 8,951 inbound replies once byte 7 is masked, 8,950 of 8,951,
+the exception being the sentinel frame in 7.6. And the project 1 and project 2 recalls send an
+identical request stream but differ on **971 of 8,951 addresses**, so the two reads were never
+both returning one loaded project.
 
 `tests/test_capture_evidence.py` holds the tape claims above.
 
@@ -136,12 +151,17 @@ serialised — and the addresses and their order are **the same 8,951 the read p
 
 Session framing is asymmetric, and each frame appears exactly once:
 
-- `05 <slot>` is the **first** frame of a read, before any request.
+- `05 <slot>` is the **first** frame of a read, before any request. Confirmed on hardware
+  2026-08-14 (7.4): this is not an optional prologue MCC merely sends out of habit — it is what
+  selects project `<slot>` on the device. Byte 7 on the requests that follow only has to agree
+  with it.
 - `06 <slot>` is the **last** frame of a write, after the final value. It is not acked.
 
-H1.4 already showed `05` is not required to read. Whether `06` is a required commit — whether a
-write without it persists to the slot at all — has not been tested, and is the obvious thing to
-establish before anything writes to hardware.
+H1.4 showed a read succeeds with no `05` sent — that result stands, but only as a read of
+whichever project `05` last selected (or, with no `05` ever sent, whatever the panel already has
+loaded); it is not evidence that `05` is inert. Whether `06` is a required commit for the write
+direction — whether a write without it persists to the slot at all — has not been tested, and is
+the obvious thing to establish before anything writes to hardware.
 
 ### 7.6 `0xFF` survives a read and does not survive a write
 

@@ -36,6 +36,10 @@ MELODIC_GATED: Final = frozenset({109, 110, 111, 112, 113})
 #: Requests this plan expands to, against bulk_plan's 8,951.
 REQUEST_COUNT: Final = 2044
 
+#: What one pattern of one track costs: 75 pattern reads and the 40 index-less
+#: scalars. MCC's plan needs 250 for the same keys.
+PATTERN_REQUEST_COUNT: Final = 115
+
 
 def iter_requests(max_count: int = MAX_READ_COUNT) -> Iterator[ReadRequest]:
     """Every address bulk_plan reads, coalesced into the fewest requests.
@@ -51,6 +55,36 @@ def iter_requests(max_count: int = MAX_READ_COUNT) -> Iterator[ReadRequest]:
     for low, high, leaves in PLAN:
         requests = (request for index in range(low, high + 1) for request in _expand(index, leaves))
         yield from _coalesce(requests, max_count)
+
+
+def iter_pattern_requests(item: int, pattern: int) -> Iterator[ReadRequest]:
+    """The requests covering one pattern of one track, in ``iter_requests``' order.
+
+    The index-less scalars come too: tempo is ``120_70/71/72`` and carries no
+    pattern index, so a walk without them would export at the wrong speed.
+
+    What this leaves unread is everything else, and ``read_raw`` zero-fills it.
+    The project that comes back therefore has empty scenes -- which is fine for
+    what H2.4 wants, because ``midi_export.render_project`` walks tracks and
+    patterns rather than the scene arrangement.
+    """
+    for request in iter_requests():
+        if request.count is None or (request.item == item and _covers(request, pattern)):
+            yield request
+
+
+def _covers(request: ReadRequest, pattern: int) -> bool:
+    """Whether a request fills any key belonging to ``pattern``.
+
+    Not simply ``indices[0] == pattern``. A per-pattern scalar walks the pattern
+    index itself, and ``_coalesce`` joins all sixteen of those into one range at
+    index 1 -- so testing the first index alone would drop every pattern's step
+    count, swing and mode bits but pattern 1's, and zero-fill them in silence.
+    """
+    assert request.count is not None
+    if len(request.indices) == 1:
+        return request.indices[0] <= pattern < request.indices[0] + request.count
+    return request.indices[0] == pattern
 
 
 def _expand(index: int, leaves: Iterable[Leaf]) -> Iterator[ReadRequest]:

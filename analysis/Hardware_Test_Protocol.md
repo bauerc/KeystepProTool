@@ -249,12 +249,13 @@ unprivileged process, so every command below needs `sudo`. Each probe is a few s
 sudo uv run python tools/usb_probe.py <probe> [--save project_files/captures/H1-x.jsonl]
 ```
 
-Byte 7 of every frame is the **project slot** as far as the captures go
-([spec 7.4](./format/SysEx_Direct_Transfer_Path.md)), but every probe below sent `01` and read
-whichever project happened to be loaded, so none of them separates "byte 7 selects the slot" from
-"byte 7 is inert and the panel decides". Note the loaded project in the ledger. **H4.1** is what
-separates the two, and until it runs a reader must still warn that it may be reading the panel's
-project rather than the one it asked for.
+Byte 7 of every frame carries the **project slot**, but confirmed on hardware 2026-08-14, firmware
+2.5.20, it is the `05 <slot>` prologue that *selects* the project — byte 7 only agrees with it
+([spec 7.4](./format/SysEx_Direct_Transfer_Path.md)). Every probe below sent `01` and read
+whichever project happened to be loaded, so none of them exercises project selection; note the
+loaded project in the ledger. `usb_probe.py` now takes a `--slot` and sends `05 <slot>` itself
+before reading, so naming a slot selects it and reads that slot's data **as stored** — a
+device-side edit that was not saved does not travel.
 
 ### H1.1 — Identity
 
@@ -299,13 +300,16 @@ project rather than the one it asked for.
 
 ### H1.4 — Prologue minimisation
 
-- [x] **run 2026-08-06 — settled: there is no handshake.** All four combinations returned
-  `120_37 = 3`, including both frames skipped.
+- [x] **run 2026-08-06 — all four combinations returned `120_37 = 3`, including both frames
+  skipped. Holds only for the already-loaded project** — see the 2026-08-14 correction below.
 
-- **Resolved:** which of the two handshake frames a read actually needs. The answer is **neither**.
-  MCC sends a universal identity request and then `f0 00 20 6b 7f 42 05 01 f7`, and the
-  investigation notes guessed the latter was an "unlock or mode switch". It unlocks nothing: a
-  cold read answers without it. `bulk_read` needs to send no prologue at all.
+- **Resolved:** which of the two handshake frames a read of the *already-loaded* project needs.
+  The answer is **neither**. MCC sends a universal identity request and then
+  `f0 00 20 6b 7f 42 05 01 f7`, and the investigation notes guessed the latter was an "unlock or
+  mode switch". Confirmed on hardware 2026-08-14: it is not a mode switch, it is what *selects*
+  the project — it could be skipped here because the project read was the one already loaded, so
+  nothing needed selecting. A read of a *different* slot needs `05 <slot>` first
+  ([spec 7.4](./format/SysEx_Direct_Transfer_Path.md)).
 - The identity request is still required, but for the **version string** in a byte-identical file,
   not as a handshake. That distinction is the finding.
 - **Command to re-run:** `usb_probe.py prologue` — it runs all four combinations itself.
@@ -355,6 +359,11 @@ project rather than the one it asked for.
 
 ### Probe ledger
 
+> **This table is on its way out.** A finding belongs in the spec, in one place, stated as a fact.
+> Kept here it is a second copy that drifts, obfuscates the fact it duplicates, and has to be
+> cross-read to be trusted. Rows are cut to a verdict and a link as each probe closes; delete the
+> table outright once nothing points at it.
+
 **All six run 2026-08-06 and all six confirm.** The loaded project answered `120_37 = 3` with
 patterns 1–13 unset, which is what `initial_project.KeyStepPro` holds — the same project the
 Recall To capture was taken from. Raw output in `usb_probe_results.txt`, and for H1.6 in
@@ -365,9 +374,11 @@ Recall To capture was taken from. Raw output in `usb_probe_results.txt`, and for
 | H1.1  | 2026-08-06 | initial_project | version = **2.5.20**. Reply `f07e7f060200206b0200090025140502f7`, byte-identical to capture frame 9 |
 | H1.2  | 2026-08-06 | initial_project | `120_37` = **3**, matching the capture |
 | H1.3  | 2026-08-06 | initial_project | count=64 **honoured**, 64 values. Median 3.994 ms at 16, 3.998 ms at 64 — flat. Full dump 38.3 s → 9.6 s |
-| H1.4  | 2026-08-06 | initial_project | **all four rows succeeded.** No handshake is required — neither the identity request nor the `0x05` frame |
+| H1.4  | 2026-08-06 | initial_project | **all four rows succeeded, for the already-loaded project.** No handshake is required to re-read what is already loaded — neither the identity request nor the `0x05` frame. Corrected 2026-08-14: `0x05` is what selects a *different* project ([spec 7.4](./format/SysEx_Direct_Transfer_Path.md)) |
 | H1.5  | 2026-08-06 | initial_project | patterns 1–13 read **255** raw; 14–16 read 60. The sentinel survives raw USB |
 | H1.6  | 2026-08-06 | initial_project (restored) | `count` clamps to **100**; the reply echoes the honoured count, not the requested one. Overrun is **silent** — 106 asked, 64 real values then 36 × `0x7f`. Indices are 1-based; `nIdx=4` draws no reply |
+| H2.1–H2.4 | 2026-08-14 | hand-built pattern, slot 2 | **all confirm** — the read matches the panel. Facts in [spec 7.3](./format/SysEx_Direct_Transfer_Path.md) |
+| H4.1  | 2026-08-14 | all sixteen slots | **confirmed** — `05 <slot>` selects the project. Facts in [spec 7.4](./format/SysEx_Direct_Transfer_Path.md) |
 
 **H1.6 ran across two device states.** The first pass went out while track 1 had been deleted from
 the panel, so every `7b` value in it reads `0x7f` and it establishes lengths only. The project was
@@ -377,9 +388,13 @@ byte-identical to the populated `count=64` reply from the first session — whic
 
 **Three findings change later phases.**
 
-- **H1.4 removes the prologue.** `bulk_read` sends no handshake. The `0x05` frame is MCC's habit,
-  not the device's requirement, and the early investigation note's "unlock or mode switch" guess is
-  wrong.
+- **H1.4 removes the prologue for re-reading the already-loaded project.** `bulk_read` need send no
+  handshake to read what is already on the panel, and the early investigation note's "unlock or
+  mode switch" guess for `0x05` is wrong. Corrected 2026-08-14: `0x05 <slot>` is not habit, it is
+  what *selects* a project. H1.4 could skip it because the project it read was the one already
+  loaded — the ledger records that as `initial_project` and never recorded which slot that was, so
+  the probe says nothing about naming a slot ([spec 7.4](./format/SysEx_Direct_Transfer_Path.md)).
+  `bulk_read` now sends `0x05 <slot>` itself, since a read of any other project needs it.
 - **H1.3 offered a 4× dump, and `ksp.bulk_fast` took about 9×.** The obstacle this probe recorded —
   that `bulk_plan.py` is generated to reproduce MCC's request stream byte-for-byte, and
   `test_bulk_plan.py` holds it there — was sidestepped rather than paid: `bulk_fast` derives a
@@ -400,41 +415,71 @@ byte-identical to the populated `count=64` reply from the first session — whic
   The rule still governs any walk that does overrun. See
   [spec 7.7](./format/SysEx_Direct_Transfer_Path.md).
 
-**One caveat the captures added afterwards.** H1.4's "no handshake required" was measured with
-byte 7 = `01` throughout. It stands as measured — the reads succeeded without a prologue — but the
-`0x05` frame is now known to carry the slot number ([spec 7.5](./format/SysEx_Direct_Transfer_Path.md)),
-so what H1.4 rules out is a prologue *for reading slot 1*. If H4.1 shows the device honours byte 7,
-whether `0x05` is also needed to switch slots is a separate question this probe never asked.
+**Settled 2026-08-14.** H1.4's "no handshake required" was measured against the project already
+loaded on the panel, and stands for that case only. The `0x05` frame is not habit: it is what
+selects the slot, so reading any other project needs `0x05 <slot>` sent first
+([spec 7.4](./format/SysEx_Direct_Transfer_Path.md)).
 
 ---
 
-## Phase 2 — the project slot
+## Phase 2 — correctness against visible ground truth ✅ **ran 2026-08-14, all probes passed**
 
-One probe, and it is the last thing standing between the read path and a project chooser.
+Ground truth the panel itself provides, not a capture: the note pool, the step-active array and a
+MIDI export of one pattern, checked against what H2.1 puts on the panel by hand. **H4.1** (Phase
+4's probe, below) rode along in the same run — once the transport is open there is nothing left
+to pay to also flip byte 7 and re-read.
 
-### H4.1 — Does the device honour byte 7?
+One command, over one open transport, runs H2.2, H2.3, H2.4 and H4.1:
 
-- [ ] **not run.**
+```sh
+sudo uv run python tools/usb_probe.py \
+  --save project_files/captures/H2-phase2.jsonl \
+  --slot A --other-slot B --track 1 --pattern 1 \
+  --steps 1,5,9,13 --pitches 60,64,67,72 \
+  --midi-out project_files/captures/H2-4.mid \
+  phase2
+```
 
-- **Resolves:** whether byte 7 selects the project, or merely labels a transfer whose real target
-  is whatever the panel has loaded. Four captures show MCC varying it with the project
-  ([spec 7.4](./format/SysEx_Direct_Transfer_Path.md)) and nothing else in an import stream names
-  the destination — but every probe so far sent `01`, so the device's side of this is untested.
-  Until it is settled, `bulk_read` must keep warning that it may be reading the panel's project.
-- **Setup:** two slots whose `120_37` **differs**, so the answer is not the same either way. Read
-  it from each with the panel on that project first and record both values; if they match, pick a
-  different scalar or change one. Then load project **A** on the panel and leave it there.
-- **Command:** the H1.2 scalar read against `120_37`, with byte 7 set to **B**'s slot number while
-  **A** is loaded. `usb_probe.py` sends `SUBCOMMAND = 0x01` today, so this needs the byte to be
-  settable — one parameter, no protocol change.
-- **Confirms if:** the value comes back as **B**'s. Byte 7 selects, a slot can be named, and the
-  read path can offer a project chooser.
-- **Falsified if:** the value comes back as **A**'s. Byte 7 is inert on the read, the slot is panel
-  state, and MCC must be selecting the project by some route outside the SysEx stream — in which
-  case say so in spec 7.4 and keep the warning permanently.
-- **Also worth noting:** whether the device answers at all when byte 7 names an *empty* slot, and
-  whether it answers when byte 7 is `00` or `11` (17, past the 16 slots). Neither is required to
-  settle the question; both are cheap once the byte is settable.
+**Every option goes before the probe name**, as they do for the Phase 1 probes. `phase2 --slot 2`
+is an `unrecognized arguments` error, and the place to find that out is not with the device
+already on the desk.
+
+Nothing here writes to the device.
+
+### The pattern to build, and how to read it back
+
+Panel work first, in a scratch slot **A**: Track 1 in **Seq** mode — item 123 is also the drum
+track item, so Seq mode matters or the export takes the drum set — Pattern 1, 16 steps, notes on
+steps 1/5/9/13, ascending pitches, one deliberately long gate. **Save it**; the read is of stored
+data. Slot **B** is any slot whose Track 1 / Pattern 1 differs, and it should hold notes of its
+own rather than be empty: an empty pool reads back all `127`, which is both the empty marker and
+what a degraded read returns (H1.6 saw `36 × 0x7f` on an overrun), so an empty B is ambiguous.
+
+Then the command above. It prints PASS/FAIL for the note pool against `--steps`/`--pitches`, for
+the step-active array, and writes `--midi-out` to listen to. `120_37` coming back `0x7f` means the
+device is not returning that slot's contents at all — most likely it has never been saved.
+
+---
+
+## Phase 4 — the project slot ✅ **settled affirmatively, 2026-08-14**
+
+One probe, and it was the last thing standing between the read path and a project chooser.
+
+### H4.1 — Does the device honour the project slot?
+
+- [x] **run 2026-08-14 — CONFIRMED.** A project can be named and read without touching the panel.
+  It is the `05 <slot>` prologue that selects, not byte 7 alone — see
+  [spec 7.4](./format/SysEx_Direct_Transfer_Path.md).
+
+- **Resolved:** what selects a project, and that all sixteen slots are readable without touching
+  the panel. The facts are in [spec 7.4](./format/SysEx_Direct_Transfer_Path.md) — this entry
+  keeps only how to re-run it.
+- **Command:** the sixteen-slot sweep, `slots`. As with every probe here, every option goes
+  **before** the probe name:
+
+  ```sh
+  sudo uv run python tools/usb_probe.py --save project_files/captures/slots.jsonl slots
+  ```
 
 **Do not extend this to the write direction.** Confirming byte 7 on a read costs nothing. Testing
 it on a write means sending 8,951 frames to a slot, and spec 7.5 flags `06 <slot>` as an untested
@@ -453,15 +498,16 @@ and tier 8's on 2026-08-06**; the findings are in [the spec](./format/Time_Shift
 tier 8's six recordings stay reduced in
 [`Timing_Calibration.md`](./Timing_Calibration.md) §6.1 because that is where the arithmetic lives.
 
-The table is empty because every tier is closed — **H4.1 above is the one probe still outstanding**,
-and it is the next row this table expects. Add a row when a new question sends someone back to the
-device.
+The table is empty because every tier is closed — **H2.1–H2.4 and H4.1 all ran and confirmed on
+2026-08-14**, closing the last open probes. Add a row when a new question sends someone back to
+the device.
 
 ## Effort summary
 
-**One probe remains: H4.1.** B0, tiers 1–8, the two write tiers and Phase 1 are all complete —
-roughly 59 captures and 6 recordings, and every question they were opened to answer has been
-answered and folded into [the spec](./KeyStepPro_Format_Spec.md).
+**H2.1–H2.4 and H4.1 all ran 2026-08-14 and confirmed.** B0, tiers 1–8, the two write tiers,
+Phase 1 and Phase 2 are all complete — roughly 59 captures and 6 recordings, and every question
+they were opened to answer has been answered and folded into
+[the spec](./KeyStepPro_Format_Spec.md).
 
 H4.1 reopened the programme on 2026-08-06, not because a tier missed something but because two new
 USB captures decoded a byte that had been carried as a constant. It is a single scalar read and it

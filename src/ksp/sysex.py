@@ -19,8 +19,15 @@ CMD_READ: Final = 0x0B
 CMD_READ_REPLY: Final = 0x0C
 CMD_ACK: Final = 0x1C
 
-#: Follows every command byte in a request. Its meaning is untested.
-SUBCOMMAND: Final = 0x01
+#: Byte 7, following every command byte: the project slot the transfer names
+#: (spec 7.4). The ack is the only frame without one. Slot 1 is what every
+#: capture but the project 2 recall and the project 3 import carries.
+DEFAULT_SLOT: Final = 1
+
+#: A SysEx data byte, so 0-127. Deliberately wider than the device's sixteen
+#: slots: H4.1 asks what it does with 0 and with 17, and the codec is not the
+#: place to refuse that question.
+MAX_SLOT: Final = 0x7F
 
 #: H1.6 measured the ceiling on a long read's count. Above it the device clamps
 #: and echoes the count it honoured rather than the one asked for, so an
@@ -28,6 +35,7 @@ SUBCOMMAND: Final = 0x01
 #: refuse it here instead. MCC never sends above 16. See spec section 7.7.
 MAX_READ_COUNT: Final = 100
 
+#: The one frame with no slot in byte 7; its 0x00 is a constant (spec 7.4).
 ACK: Final = HEADER + bytes((CMD_ACK, 0x00, END))
 
 #: MCC sends this once before the first read and the device never answers it.
@@ -35,7 +43,6 @@ ACK: Final = HEADER + bytes((CMD_ACK, 0x00, END))
 #: habit and not a handshake: a reader need not send it. Kept because it is
 #: part of the recorded exchange and H1.4 is re-run against it.
 CMD_PROLOGUE: Final = 0x05
-PROLOGUE: Final = HEADER + bytes((CMD_PROLOGUE, SUBCOMMAND, END))
 
 #: Universal (non-Arturia) identity envelope. Not a handshake either -- H1.4
 #: read fine without it -- but nothing in the read protocol carries the
@@ -59,12 +66,26 @@ class ReadRequest:
     count: int | None  # None is the index-less short form
 
 
-def build_read_request(request: ReadRequest) -> bytes:
+def prologue(slot: int = DEFAULT_SLOT) -> bytes:
+    """The ``05 <slot>`` frame MCC opens a read with."""
+    _check_slot(slot)
+    return HEADER + bytes((CMD_PROLOGUE, slot, END))
+
+
+def build_read_request(request: ReadRequest, slot: int = DEFAULT_SLOT) -> bytes:
+    """One request frame, addressed at ``slot``.
+
+    The slot rides beside the request rather than inside it: ``bulk_plan`` is
+    generated from Arturia's descriptor, which names addresses and not projects,
+    and keeping the two apart is what lets ``parse_reply`` compare what came back
+    against what was asked for without the slot getting in the way.
+    """
+    _check_slot(slot)
     body: tuple[int, ...]
     if request.count is None:
         if request.indices:
             raise ValueError("the short form takes no indices")
-        body = (CMD_SCALAR, SUBCOMMAND, request.param, request.item)
+        body = (CMD_SCALAR, slot, request.param, request.item)
     else:
         if not 1 <= len(request.indices) <= 3:
             raise ValueError(f"{len(request.indices)} indices, expected 1 to 3")
@@ -72,7 +93,7 @@ def build_read_request(request: ReadRequest) -> bytes:
             raise ValueError(f"count {request.count}, expected 0 to {MAX_READ_COUNT}")
         body = (
             CMD_READ,
-            SUBCOMMAND,
+            slot,
             request.param,
             len(request.indices),
             request.item,
@@ -80,6 +101,18 @@ def build_read_request(request: ReadRequest) -> bytes:
             request.count,
         )
     return HEADER + bytes(body) + bytes((END,))
+
+
+def _check_slot(slot: int) -> None:
+    if not 0 <= slot <= MAX_SLOT:
+        raise ValueError(f"slot {slot}, expected 0 to {MAX_SLOT}")
+
+
+def parse_slot(frame: bytes) -> int:
+    """The project slot a frame names. Not valid for the ack."""
+    if len(frame) < 8 or not frame.startswith(HEADER):
+        raise ValueError("not a KeyStep Pro SysEx frame")
+    return frame[7]
 
 
 def parse_reply(frame: bytes) -> tuple[ReadRequest, tuple[int, ...]]:

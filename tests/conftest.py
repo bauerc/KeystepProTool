@@ -10,7 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from ksp import lenient_json
+from ksp import bulk_read, lenient_json, sysex
+from ksp.sysex import ReadRequest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -166,6 +167,11 @@ class ReplayTransport:
     def __init__(self, pairs: list[tuple[bytes, bytes]]) -> None:
         self._replies = dict(pairs)
         self.asked: list[bytes] = []
+        self.sent: list[bytes] = []
+
+    def send(self, frame: bytes) -> None:
+        """The prologue, which the device never answers."""
+        self.sent.append(frame)
 
     def exchange(self, request: bytes) -> bytes:
         self.asked.append(request)
@@ -173,6 +179,81 @@ class ReplayTransport:
             return self._replies[request]
         except KeyError:
             raise LookupError(f"no captured reply for {request.hex()}") from None
+
+
+def decode_request(frame: bytes) -> ReadRequest:
+    body = frame[6:-1]
+    if body[0] == sysex.CMD_SCALAR:
+        return ReadRequest(item=body[3], param=body[2], indices=(), count=None)
+    count = body[3]
+    return ReadRequest(
+        item=body[4], param=body[2], indices=tuple(body[5 : 5 + count]), count=body[5 + count]
+    )
+
+
+def build_reply(
+    request: ReadRequest, values: tuple[int, ...], slot: int = sysex.DEFAULT_SLOT
+) -> bytes:
+    if request.count is None:
+        body = (sysex.CMD_SCALAR_REPLY, slot, request.param, request.item, *values)
+    else:
+        body = (
+            sysex.CMD_READ_REPLY,
+            slot,
+            request.param,
+            len(request.indices),
+            request.item,
+            *request.indices,
+            request.count,
+            *values,
+        )
+    return sysex.HEADER + bytes(body) + bytes((sysex.END,))
+
+
+def tape_values(path: Path) -> dict[str, int]:
+    """Every address a tape delivered, as the device sent it."""
+    values: dict[str, int] = {}
+    for line in path.read_text().splitlines():
+        sent, received = line.split()
+        request, payload = sysex.parse_reply(bytes.fromhex(received))
+        assert request == decode_request(bytes.fromhex(sent))
+        for name, value in zip(bulk_read.keys_for(request), payload, strict=True):
+            values[name] = value
+    return values
+
+
+class DeviceModel:
+    """Answers any address from a tape's values, at any count the device allows.
+
+    Raw bytes in, raw bytes out -- the 0xFF sentinel included, so the reader's
+    correction of it is exercised rather than bypassed. Unlike ``ReplayTransport``
+    this answers requests the capture never contained, which is what lets the
+    merged walks and the single-pattern walk be tested at all.
+    """
+
+    def __init__(self, values: dict[str, int]) -> None:
+        self._values = values
+        self.asked: list[ReadRequest] = []
+        self.slots: set[int] = set()
+        self.sent: list[bytes] = []
+
+    def send(self, frame: bytes) -> None:
+        """The prologue, which the device never answers."""
+        self.sent.append(frame)
+
+    def exchange(self, frame: bytes) -> bytes:
+        request = decode_request(frame)
+        self.asked.append(request)
+        self.slots.add(sysex.parse_slot(frame))
+        names = bulk_read.keys_for(request)
+        missing = [name for name in names if name not in self._values]
+        if missing:
+            raise LookupError(f"tape holds no value for {missing[0]}")
+        # The device echoes the slot it was asked about, so bulk_read's check of
+        # that echo is exercised rather than answered by a constant.
+        return build_reply(
+            request, tuple(self._values[name] for name in names), sysex.parse_slot(frame)
+        )
 
 
 @pytest.fixture(scope="session")

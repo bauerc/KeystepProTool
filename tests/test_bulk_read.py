@@ -115,6 +115,101 @@ def test_a_device_that_answers_the_wrong_address_is_refused(
         bulk_read.read_raw(transport, template_keys)
 
 
+#: What the device sent on 2026-08-14 when byte 7 named slot 3 while slot 2 was
+#: loaded: a well-formed reply carrying the 0x7f filler. Nothing at the protocol
+#: level is wrong with it, which is exactly the danger.
+REFUSED_SLOT_REPLY = "f000206b7f42020325787ff7"
+
+
+def refusal_at(slot: int) -> bytes:
+    """The captured refusal, re-addressed so it answers a request for ``slot``.
+
+    Only byte 7 moves. The tape asks at slot 1 and the echoed-slot check would
+    otherwise fire first -- on the real frame, which names slot 3 -- and hide the
+    filler guard behind it.
+    """
+    frame = bytearray.fromhex(REFUSED_SLOT_REPLY)
+    frame[7] = slot
+    return bytes(frame)
+
+
+def test_a_slot_the_device_will_not_serve_is_refused(
+    replay_transport: Build,
+    template_keys: list[str],
+    recall_tape: list[tuple[bytes, bytes]],
+) -> None:
+    """Some slots answer a read with filler rather than a project (observed
+    2026-08-14; which slots and why is not established). A whole dump of filler
+    parses as a valid empty project, so this has to fail on the first reply
+    rather than write that file."""
+    first, _ = recall_tape[0]
+    transport = replay_transport([(first, refusal_at(1)), *recall_tape[1:]])
+
+    with pytest.raises(ValueError, match="not returning slot 1"):
+        bulk_read.read_raw(transport, template_keys)
+
+
+def test_the_echoed_slot_is_checked_before_the_payload(
+    replay_transport: Build,
+    template_keys: list[str],
+    recall_tape: list[tuple[bytes, bytes]],
+) -> None:
+    """The device's real refusal echoes the slot it was asked about, so a reply
+    naming a slot nobody asked for is a different fault and says so."""
+    first, _ = recall_tape[0]
+    transport = replay_transport([(first, bytes.fromhex(REFUSED_SLOT_REPLY)), *recall_tape[1:]])
+
+    with pytest.raises(ValueError, match="answered slot 3"):
+        bulk_read.read_raw(transport, template_keys)
+
+
+def test_the_guard_reads_the_frames_the_device_actually_sent() -> None:
+    """The refusal above is hardware evidence, not a description of it: 120_37
+    came back 0x7f, which no corpus project holds."""
+    request, values = sysex.parse_reply(bytes.fromhex(REFUSED_SLOT_REPLY))
+
+    assert bulk_read.keys_for(request) == [bulk_read.SLOT_PROBE]
+    assert values == (bulk_read.FILLER,)
+    assert sysex.parse_slot(bytes.fromhex(REFUSED_SLOT_REPLY)) == 3
+
+
+def test_the_slot_is_selected_before_anything_is_read(
+    replay_transport: Build, template_keys: list[str]
+) -> None:
+    """``05 <slot>`` is what chooses the project; byte 7 then agrees with it.
+
+    A read that names a slot without this gets whichever project the last
+    prologue selected -- silently, and for all 8,951 addresses -- so read_raw
+    sends it rather than leaving it to whoever writes the CLI.
+    """
+    transport = replay_transport()
+    bulk_read.read_raw(transport, template_keys, slot=1)
+
+    assert transport.sent == [sysex.prologue(1)]
+
+
+def test_the_prologue_names_the_slot_that_was_asked_for(
+    replay_transport: Build, template_keys: list[str], recall_tape: list[tuple[bytes, bytes]]
+) -> None:
+    """Selecting slot 1 while reading slot 4 would read the wrong project."""
+    probe = sysex.ReadRequest(item=120, param=37, indices=(), count=None)
+    at_four = (sysex.build_read_request(probe, 4), refusal_at(4))
+    transport = replay_transport([*recall_tape, at_four])
+
+    with pytest.raises(ValueError, match="not returning slot 4"):
+        bulk_read.read_raw(transport, template_keys, slot=4)
+
+    assert transport.sent == [sysex.prologue(4)]
+
+
+def test_a_real_slot_probe_value_passes_the_guard(
+    replayed: dict[str, int | str],
+) -> None:
+    """0-3 is the corpus range for 120_37, so the guard cannot fire on a project
+    the device is genuinely serving."""
+    assert replayed[bulk_read.SLOT_PROBE] != bulk_read.FILLER
+
+
 def test_the_result_decodes_through_the_existing_reader(
     replayed: dict[str, int | str],
 ) -> None:

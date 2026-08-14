@@ -71,6 +71,57 @@ def test_the_short_form_refuses_indices() -> None:
         sysex.build_read_request(sysex.ReadRequest(item=120, param=37, indices=(1,), count=None))
 
 
+def test_byte_7_carries_the_slot_in_the_short_form() -> None:
+    """The same frame as the capture's 13, addressed at slot 2 instead."""
+    request = sysex.ReadRequest(item=120, param=37, indices=(), count=None)
+    assert sysex.build_read_request(request, slot=2).hex() == "f000206b7f4201022578f7"
+
+
+def test_byte_7_carries_the_slot_in_the_long_form() -> None:
+    request = sysex.ReadRequest(item=123, param=48, indices=(1, 1, 17), count=16)
+    assert sysex.build_read_request(request, slot=2).hex() == "f000206b7f420b0230037b01011110f7"
+
+
+def test_the_slot_defaults_to_one() -> None:
+    """Every capture but the project 2 recall and the project 3 import sends 1."""
+    request = sysex.ReadRequest(item=120, param=37, indices=(), count=None)
+    assert sysex.build_read_request(request) == sysex.build_read_request(request, slot=1)
+    assert sysex.DEFAULT_SLOT == 1
+
+
+@pytest.mark.parametrize("slot", [0, 17, 127])
+def test_a_slot_outside_the_sixteen_still_builds(slot: int) -> None:
+    """H4.1 asks the device what it does with 0 and with 17, so the codec must
+    not be the thing that refuses them. Only the 7-bit SysEx limit is enforced."""
+    request = sysex.ReadRequest(item=120, param=37, indices=(), count=None)
+    assert sysex.build_read_request(request, slot=slot)[7] == slot
+
+
+@pytest.mark.parametrize("slot", [-1, 128])
+def test_a_slot_outside_seven_bits_is_refused(slot: int) -> None:
+    request = sysex.ReadRequest(item=120, param=37, indices=(), count=None)
+    with pytest.raises(ValueError, match="slot"):
+        sysex.build_read_request(request, slot=slot)
+
+
+def test_the_slot_comes_back_off_a_reply() -> None:
+    assert sysex.parse_slot(bytes.fromhex("f000206b7f420201257803f7")) == 1
+    assert sysex.parse_slot(bytes.fromhex("f000206b7f420202257803f7")) == 2
+
+
+def test_a_frame_that_is_too_short_has_no_slot() -> None:
+    with pytest.raises(ValueError):
+        sysex.parse_slot(bytes.fromhex("f000206b7f42"))
+
+
+def test_the_prologue_names_its_slot() -> None:
+    """Spec 7.5: ``05 <slot>`` is the first frame of a read. H1.4 showed it is
+    not required for slot 1; whether switching slots needs it is untested, so it
+    has to be able to name the right one."""
+    assert sysex.prologue().hex() == "f000206b7f420501f7"
+    assert sysex.prologue(2).hex() == "f000206b7f420502f7"
+
+
 def test_the_identity_reply_gives_the_firmware_version(identity_reply: bytes) -> None:
     """Frame 9 of the capture. Nothing in the read protocol carries the version,
     so this request is what makes a byte-identical file possible."""
