@@ -1,16 +1,11 @@
 """The addresses ``bulk_plan`` lists, in as few requests as the device allows.
 
-``bulk_plan`` reproduces MIDI Control Center's stream byte-for-byte and that
-parity is evidence -- it is what the captured tapes are checked against -- so it
-does not change. MCC is simply not efficient. It never sends a ``count`` above
-16 although the device honours 100 (spec 7.7), and it reads note-pool chunks the
-existence array has already reported empty.
-
-This module derives the efficient walk from the same ``PLAN``. It changes which
-frames go on the wire, never which addresses are covered: ``iter_requests`` here
-fills exactly the keys ``bulk_plan.iter_requests`` does. 8,951 requests become
-2,044, and the gate ``bulk_read`` applies to them takes a real project to about
-1,000 -- some 36 s to 4 s at the measured 4.047 ms per request.
+``bulk_plan`` reproduces MIDI Control Center's stream byte-for-byte, and that
+parity is the evidence the captured tapes are checked against, so it does not
+change. MCC is simply not efficient (spec section 7.7). This module derives an
+efficient walk from the same ``PLAN``, changing which frames go on the wire but
+never which addresses are covered -- ``iter_requests`` here fills exactly the
+keys ``bulk_plan.iter_requests`` does. The request counts are in spec 7.8.
 
 This module is hand-written; ``bulk_plan`` is generated and would lose it.
 """

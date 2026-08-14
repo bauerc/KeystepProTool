@@ -1,12 +1,11 @@
 """The decoded object model: project -> tracks -> patterns -> notes.
 
-This is what the flat key/value file becomes once both index spaces have been
-resolved. Everything here is plain data with no reference back to the raw
-dict, so consumers -- the dump CLI now, MIDI export at M2 -- never need to
-know the key grammar.
+What the flat key/value file becomes once both index spaces are resolved
+(spec section 4). Everything here is plain data with no reference back to the
+raw dict, so consumers never need to know the key grammar.
 
-The model is intentionally read-only. Mutation belongs to M3+, once there is a
-byte-identical round-trip proving that what we write back is what MCC expects.
+The model is read-only: writes go through :mod:`ksp.mutate` against the raw
+dict, so they stay byte-comparable with what MCC produces.
 """
 
 from dataclasses import dataclass, replace

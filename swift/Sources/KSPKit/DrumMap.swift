@@ -1,18 +1,12 @@
 /// Mapping the KeyStep Pro's 24 drum lanes to MIDI note numbers. A port of `src/ksp/drum_map.py`.
 ///
-/// A drum note stores a **lane index** in parameter 117, not a pitch. What note that lane actually
-/// transmits is decided by the device's Drum Map, which is a *global device setting* --
-/// `deviceGlobalParametersId 65` -- and is **not carried in the project file**. No `.KeyStepPro`
-/// file contains it, MIDI Control Center keeps no copy on disk, and it cannot be written into a
-/// project.
-///
-/// So this type holds an *assumption about the user's device*, never a decoded fact, and every
+/// A drum note stores a **lane index** in parameter 117, not a pitch, and which note a lane
+/// transmits is a global device setting absent from the project file (spec section 3.2.1). This
+/// type therefore holds an *assumption about the user's device*, never a decoded fact, and every
 /// consumer is expected to say which map it used -- see ``describe()``.
 ///
-/// Both halves of the default are measured (capture D5): with one hit per lane on 24 consecutive
-/// steps, the device's own MIDI output ran 36..59 in lane order, so the factory map is chromatic
-/// from 36 and lane *i* plays `low + i`, not `low + i + 1`. The Python module carries the rest of
-/// the provenance, including MCC's parameter table.
+/// The 24 lanes and the chromatic-from-36 default both come from that section, where the parameter
+/// table and capture D5 are recorded.
 public struct DrumMap: Sendable, Hashable {
     /// What the device's Drum Map menu actually reads (D5). The manual and MCC's Custom defaults
     /// of 36..59 agree.

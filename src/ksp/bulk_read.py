@@ -112,12 +112,13 @@ def read_raw(
     """Read the loaded project into the dict ``ksp.reader.read_project`` takes.
 
     ``template_keys`` supplies the file's full key set -- the plan addresses the
-    logical extent only, and the 35,712 keys it never asks for hold 0 in every
-    corpus file.
+    logical extent only, and the keys it never asks for hold 0 in every corpus
+    file (spec section 7).
 
-    ``fast`` fills the identical keys off ``ksp.bulk_fast`` in a ninth of the
-    requests. It is off by default because MCC's stream is the one the captured
-    tapes pin down; the replay tests hold both walks to the same result.
+    ``fast`` fills the identical keys off ``ksp.bulk_fast`` in far fewer
+    requests (spec 7.8). It is off by default because MCC's stream is the one
+    the captured tapes pin down; the replay tests hold both walks to the same
+    result.
 
     The address tuple carries no project slot, so this reads whichever project
     is currently loaded. Every caller must say so.

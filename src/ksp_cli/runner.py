@@ -1,14 +1,12 @@
 """Runs a Typer app and returns its exit code instead of exiting the process.
 
-Every command here is reachable two ways -- under its own name and as a
-``kspplus`` subcommand -- and both go through a ``main(argv) -> int`` that the
-console entry point and the tests call directly. Typer exits the interpreter
-instead of returning, so this converts the one into the other.
+Every command is reachable two ways, and both go through a ``main(argv) -> int``
+that the console entry point and the tests call directly. Typer exits the
+interpreter instead of returning, so this converts the one into the other.
 
-Typer vendors its copy of Click privately, so there is no supported way to ask
-it not to exit. Catching ``SystemExit`` needs none of its internals and leaves
-Typer to render usage errors itself, which is where the Rich error panel comes
-from.
+Catching ``SystemExit`` is what does it: Typer vendors Click privately, so there
+is no supported way to ask it not to exit, and this leaves Typer to render usage
+errors itself.
 """
 
 from collections.abc import Callable, Sequence

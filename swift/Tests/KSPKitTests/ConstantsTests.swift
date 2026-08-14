@@ -207,8 +207,8 @@ private let measuredBits = [
     MeasuredBits(raw: 24, denominator: 32, triplet: false, direction: Constants.directionForward),
 ]
 
-/// Twin of `tests/test_pattern_bits.py`, at the level M9 reaches: the model's `PatternBits`
-/// wrapper is M10, so these assert on the constants that decode is built from.
+/// Twin of `tests/test_pattern_bits.py`, asserting on the constants `PatternBits.decode` is
+/// built from. The wrapper itself is covered in `ModelTests`.
 @Suite struct PatternBitsTests {
     @Test(arguments: measuredBits)
     func everyMeasuredValueDecodesToWhatTheDeviceDisplayed(bits: MeasuredBits) {

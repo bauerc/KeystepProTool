@@ -77,9 +77,8 @@ def require_capture(captures_dir: Path) -> Callable[[str], Path]:
     """Resolve a capture by name, or skip.
 
     Skipping rather than failing keeps ``-m hardware`` runnable on a fresh
-    clone: the file is genuinely absent there, and failing would conflate "not
-    captured yet" with "the capture disagrees". The protocol's checkbox is what
-    records that a capture was taken -- a green run is not.
+    clone, where the file is genuinely absent -- failing would conflate "not
+    captured yet" with "the capture disagrees".
     """
 
     def resolve(name: str) -> Path:
@@ -115,19 +114,11 @@ def sample_bytes(sample_name: str, project_files_dir: Path) -> bytes:
 def without_trailing_comma(data: bytes) -> bytes:
     """MCC's bytes minus the comma before the closing brace -- the M3 target.
 
-    Protocol test T6.2 showed MCC does not need that comma, so the writer omits
-    it and its output is strict JSON. Every other byte must still match, which
-    is what the round-trip tests compare against. Asserting the comma is there
-    to begin with keeps a mangled sample from silently becoming the baseline.
+    Asserting the comma is there to begin with keeps a mangled sample from
+    silently becoming the baseline (spec section 2).
     """
     assert data.endswith(b",\n}"), "sample does not end with MCC's trailing comma"
     return data[:-3] + b"\n}"
-
-
-@pytest.fixture(scope="session")
-def sample_bytes_strict(sample_bytes: bytes) -> bytes:
-    """The sample as this writer emits it. See :func:`without_trailing_comma`."""
-    return without_trailing_comma(sample_bytes)
 
 
 @pytest.fixture(scope="session")

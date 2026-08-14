@@ -40,8 +40,9 @@ count)``. ``IDX`` inside a dimension stands for the group's current index, and
 index, leaf, param, then the product of the dimensions -- the device is read in
 exactly that order.
 
-The 35,712 keys this plan never addresses hold literal 0 in every corpus file.
-bulk_read zero-fills them rather than spending 693 requests to retrieve zeros.
+The keys this plan never addresses hold literal 0 in every corpus file, so
+bulk_read zero-fills them rather than spending requests to retrieve zeros
+(spec section 7).
 """
 
 from collections.abc import Iterator
