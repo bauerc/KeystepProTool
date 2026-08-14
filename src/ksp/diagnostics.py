@@ -1,20 +1,14 @@
 """Structured diagnostics, and how they collapse for display.
 
-The format has more unknowns than a converter can hide, so this package says
-what it assumed rather than deciding quietly (see CLAUDE.md). The problem is
-volume: one misread encoding affects dozens of notes across a dozen patterns,
-and as free text that buries the one-off findings that matter most.
+A diagnostic is a record, not a sentence: a stable ``Code``, the ``Site`` it
+came from, and how many notes or steps it covers. That lets reporting collapse
+a code's instances into one counted line and expand them again on request,
+without pattern-matching on English -- one misread encoding can otherwise
+bury the one-off findings that matter most.
 
-So a diagnostic is a record, not a sentence. It carries a stable ``Code``, the
-``Site`` it came from, and how many notes or steps it is about. Reporting can
-then collapse a code's instances into a single counted line, and expand them
-again on request, without pattern-matching on English.
-
-Adding one means: a ``Code`` member, a ``SUMMARIES`` entry, and the call site.
-There is no class per diagnostic -- the variation is data.
-
-This module is pure. It builds strings but never prints them; ``ksp_cli``
-decides where they go.
+Adding one means a ``Code`` member, a ``SUMMARIES`` entry and the call site;
+there is no class per diagnostic. This module builds strings but never prints
+them.
 """
 
 from collections.abc import Iterable, Mapping

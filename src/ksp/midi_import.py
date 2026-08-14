@@ -1,46 +1,18 @@
 """Building a project from a Standard MIDI file.
 
 The inverse of :mod:`ksp.midi_export`, and a much narrower operation than it
-looks. The key set of a ``.KeyStepPro`` file is fixed at 153,495 numeric keys
-(spec section 2), so nothing here *creates* a project: a template is loaded and
-values are overwritten in it. Placement itself is :func:`ksp.mutate.place_note`
-and :func:`ksp.mutate.place_drum_note`, whose 8-key recipes were measured from
-the device rather than inferred.
+looks. The key set of a ``.KeyStepPro`` file is fixed (spec section 2), so
+nothing here *creates* a project: a template is loaded and values are
+overwritten in it. Placement itself is :func:`ksp.mutate.place_note` and
+:func:`ksp.mutate.place_drum_note`.
 
-Milestone M6 widened this from M5's one monophonic pattern to real material:
-every note-bearing source track, chords, a drum track on Track 1, note lengths,
-tempo, and sequences longer than one pattern split across consecutive slots and
-chained.
+Three layers, mirroring the export direction inverted: :func:`read_song` (the
+only part that knows what ``mido`` is) -> :func:`plan_song` (plain arithmetic)
+-> :func:`apply` (a raw project dict).
 
-What the conversion still decides for the user, and says so on every run:
-
-* **The song is anchored.** A pattern is a loop with nowhere to keep a lead-in,
-  so the file's first note lands on step 1 whatever tick it sits at. The whole
-  file moves together: a part that enters at bar 3 still enters at bar 3.
-* **A track's length is its own content**, rounded up to the bar and then cut
-  into 64-step patterns. The device's ceiling is 64 steps and nothing may be
-  truncated silently. Tracks are not padded to a common length: the device
-  loops each track's chain on its own, so a one-bar part under an eight-bar one
-  repeats against it, which is what a sequencer is for.
-* **A source track is split by channel.** A type 0 file tells its instruments
-  apart by channel alone, so merging them would put a whole arrangement --
-  percussion included -- on one track as melodic pitches.
-* **The drum map is an assumption.** Which MIDI note a lane plays lives in
-  device settings, not the file (spec 3.2.1), so a map is either given or
-  fitted to the source pitches, and either way it is reported.
-
-The work is in three layers, matching the export direction so the Swift
-port translates arithmetic rather than a MIDI library:
-
-1. :func:`read_song` -- a ``mido.MidiFile`` becomes plain
-   :class:`~ksp.midi_export.RenderedNote` data in ticks. The only part that
-   knows what ``mido`` is.
-2. :func:`plan_song` -- ticks become steps, gates, swing and time shifts, and
-   everything out of bounds is dropped, still as plain data.
-3. :func:`apply` -- a plan goes into a raw project dict.
-
-Nothing here reads or writes a path, and nothing prints: the caller supplies a
-parsed file and a template and decides where the result goes.
+What the conversion decides for the user -- anchoring, track length, the
+channel split and the fitted drum map -- is documented in ``README.md`` and
+reported on every run.
 """
 
 import math
@@ -490,16 +462,11 @@ def _snap(clip: Clip, ticks_per_step: float, origin: float, percent: int) -> lis
 def _fit_swing(clip: Clip, ticks_per_step: float, origin: float) -> int:
     """The swing percentage that best explains a clip's timing.
 
-    Fitting swing before spending any time shift is the point: one
-    pattern-level value expresses a systematic groove for free, and the per-note
-    field is scarce -- a fixed 60 ticks either way (Timing_Calibration 3.2).
-
-    Done as a search over the 26 storable percentages rather than by inverting
-    a median, because the residual a median would be taken over depends on the
-    swing that produced it: at anything past two thirds the delayed steps snap
-    to the wrong beat and the estimate chases its own tail. Twenty-six
-    candidates scored against the notes is both exact and cheap. Ties keep the
-    lowest, so a straight clip stays straight.
+    Fitted before any time shift is spent, because one pattern-level value
+    expresses a systematic groove for free and the per-note field is scarce
+    (Timing_Calibration 3.2). A search over the 26 storable percentages, not an
+    inverted median -- see ROADMAP M6 for why the median breaks at 75 %. Ties
+    keep the lowest, so a straight clip stays straight.
     """
     low, high = constants.SWING_RANGE_PERCENT
     if not clip.notes:

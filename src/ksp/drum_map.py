@@ -1,43 +1,13 @@
 """Mapping the KeyStep Pro's 24 drum lanes to MIDI note numbers.
 
-A drum note stores a **lane index** in parameter 117, not a pitch. What note
-that lane actually transmits is decided by the device's Drum Map, which is a
-*global device setting* -- ``deviceGlobalParametersId 65`` -- and is **not
-carried in the project file**. No ``.KeyStepPro`` file contains it, MIDI
-Control Center keeps no copy on disk, and it cannot be written into a project.
+A drum note stores a **lane index** in parameter 117, not a pitch, and which
+note a lane transmits is a global device setting absent from the project file
+(spec section 3.2.1). This module therefore holds an *assumption about the
+user's device*, never a decoded fact, and every consumer is expected to say
+which map it used.
 
-So this module holds an *assumption about the user's device*, never a decoded
-fact, and every consumer is expected to say which map it used.
-
-The shape of the setting is not guesswork. MCC ships the definition at
-``/Library/Arturia/MIDI Control Center/Resources/KeyStepPro.json`` in a
-``globalFields`` group named "Drum Map":
-
-===============  ==============  ==========================  ==============
-``globalParamId``  Name          Range                       Default
-===============  ==============  ==========================  ==============
-``81``           Mode            0 = Chromatic, 1 = Custom   0 (Chromatic)
-``82``           Low note        0-103                       0
-``83``..``106``  Note 1..Note 24 0-127                       36..59
-===============  ==============  ==========================  ==============
-
-Two things follow. There are exactly **24** lanes -- which is where
-``DRUM_LANE_COUNT`` comes from, rather than from any array size in the file.
-And the factory mapping is chromatic from MIDI note 36: Arturia's manual says
-"the default mapping starts at MIDI note 36", and the Custom defaults 36..59
-are exactly that run.
-
-**Both halves are measured** (capture D5). With one hit per lane on 24
-consecutive steps, the device's own MIDI output ran 36..59 in lane order, so
-the factory map is chromatic from 36 and lane *i* plays ``low + i`` -- not
-``low + i + 1``. MCC's ``defaultValue`` of 0 for Low note is its fallback with
-no device attached and does not describe the hardware. The operator's menu
-readout adds the rest of the shape: chromatic mode takes a low note of 0-103,
-and custom mode gives all 24 lanes a free note 0-127, overlaps allowed,
-defaulting to the same 36..59 run.
-
-That the map is device state is unchanged by any of it, so the labelling
-obligation above stands.
+The 24 lanes and the chromatic-from-36 default both come from that section,
+where the parameter table and capture D5 are recorded.
 """
 
 from __future__ import annotations

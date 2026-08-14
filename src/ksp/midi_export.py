@@ -1,41 +1,20 @@
 """Rendering a decoded project as one or more Standard MIDI files.
 
-The device does not store an arrangement -- it stores 4 tracks x 16 independent
-patterns, each a loop. Turning that into a linear MIDI file means choosing a
-layout, and there are two:
+The device stores no arrangement -- 4 tracks x 16 independent pattern loops --
+so turning that into a linear file means choosing a layout. Merged (the
+default) lays note-bearing patterns end to end with pattern N at the same tick
+on every track; ``--split`` writes one file per pattern at tick 0 and invents
+no layout at all. Both are described in ``README.md``.
 
-* **Merged** (the default) -- patterns that hold notes are laid end to end in
-  pattern order, and pattern N starts at the same tick on every track, in a
-  single file. Tracks therefore keep the relationship the hardware gives them
-  (pattern N plays against pattern N), and patterns nobody uses take up no time.
-* **Split** -- one file per non-empty (track, pattern), each starting at tick 0.
-  No layout is invented at all; the caller reassembles them.
+The one quantity the file cannot supply is the **drum map**: lane -> MIDI note
+is a device global (spec section 3.2.1), so it is an :class:`ExportOptions`
+field named in the output rather than a buried literal. MIDI has no way to
+express an unresolved lane, so unlike ``ksp-dump`` this cannot fall back to
+printing the lane number.
 
-One quantity the file does not tell us has to be supplied from outside, and it
-is an :class:`ExportOptions` field rather than a buried literal: **the drum
-map**. Lane -> MIDI note is a *device global*, explicitly not in the project
-file (spec 3.2.1), so a :class:`ksp.drum_map.DrumMap` is supplied and named in
-the output. MIDI has no way to express an unresolved lane, so unlike
-``ksp-dump`` this cannot fall back to printing the lane number.
-
-Gate length and step size used to be two more. Both are measured now: the gate
-ladder in full (spec 6.1), so ``default_gate`` only covers a value off the
-0-127 ladder -- corrupt input, which is still warned about rather than rounded
-to the nearest rung -- and step size and triplet in the ``99``/``116`` bitfield
-(spec 3.3, protocol tier 5), which the export reads per pattern rather than
-asking the user to name a grid the file already knows.
-
-The work is in three layers, so the Swift port translates arithmetic
-rather than a MIDI library:
-
-1. :func:`render_pattern` -- one pattern's notes become plain
-   :class:`RenderedNote` data, ticks relative to the pattern's own start.
-2. :func:`arrange` -- renderings are placed on a timeline and grouped into MIDI
-   tracks, still as plain data.
-3. :func:`build_midi_file` -- the only part that knows what ``mido`` is.
-
-Nothing here reads or writes a path: the caller gets a ``mido.MidiFile`` and
-decides where it goes.
+Three layers, so the Swift port translates arithmetic rather than a MIDI
+library: :func:`render_pattern` -> :func:`arrange` -> :func:`build_midi_file`,
+the only part that knows what ``mido`` is.
 """
 
 from collections.abc import Sequence
@@ -677,16 +656,13 @@ def export_split(
 def render_project(project: Project, options: ExportOptions | None = None) -> tuple[Rendering, ...]:
     """Render every (track, pattern, parameter set) that holds notes and plays.
 
-    Track 1 can hold a melodic *and* a drum set in the same pattern -- leftovers
-    from before the track was switched over. Parameter 86 bit 6 says which one
-    the device plays, so only that one is exported; the other would be notes no
-    hardware ever produces.
+    Only the set parameter 86 bit 6 selects is exported (spec section 5); the
+    other would be notes no hardware ever produces.
 
-    An automatic pass count is resolved across each pattern *column* rather
-    than per rendering, so a pattern that expands to four repeats on one track
-    does not leave the same pattern playing once and then falling silent on
-    another. ``arrange`` gives every track the column's longest length, so this
-    is what keeps pattern N starting at the same tick on every track.
+    An automatic pass count is resolved across each pattern *column* rather than
+    per rendering, so a pattern expanding to four repeats on one track does not
+    leave the same pattern falling silent on another -- this is what keeps
+    pattern N starting at the same tick on every track.
     """
     options = options or ExportOptions()
     plans: list[tuple[Track, Pattern, NoteKind, Diagnostic | None]] = []

@@ -1,18 +1,12 @@
 """``ksp2midi`` -- write a ``.KeyStepPro`` project out as MIDI.
 
-MIDI Control Center can put patterns onto the device but has no way of getting
-them off as a ``.mid``, so this is the direction that is useful on its own.
 All the rendering lives in :mod:`ksp.midi_export`; this module handles
 arguments, paths and what gets printed.
 
-Warnings go to stderr and the summary to stdout, so a shell pipeline can take
-the summary while a human still sees everything the export was unsure about --
-and the file is written either way, because a gate length we cannot decode is
-a caveat, not a failure.
-
-Warnings are collapsed to one line per kind by default and listed in full
-under ``--verbose``; ``--quiet`` suppresses the stdout summary only, never the
-caveats.
+Warnings go to stderr and the summary to stdout, so a pipeline can take the
+summary while a human still sees what the export was unsure about. The file is
+written either way -- an undecodable gate length is a caveat, not a failure.
+Option behaviour is documented in ``README.md``.
 """
 
 import enum

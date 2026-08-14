@@ -1,38 +1,19 @@
 """Targeted edits to a parsed ``.KeyStepPro`` project.
 
-Milestone M4. Three operations, each specified by a hardware capture diff
-rather than inferred: placing a melodic note (8 keys, ``B0-baseline`` ->
-``T1-note-place``), changing one note's pitch (1 key, ``T1-note-place`` ->
-``T1-note-pitch``) and setting a pattern's step size (1 key, bits 3-4 of
-``99``, ``B0-baseline`` -> ``T5-99-stepsize``).
-
-Placing a note writes six note-indexed parameters, one **step**-indexed
-step-active flag and the pattern's data-state latch::
-
-    <item>_50_<pat>_<slot>_<ord>    step, 0-based
-    <item>_109_<pat>_<slot>_<ord>   pitch
-    <item>_110_<pat>_<slot>_<ord>   gate
-    <item>_111_<pat>_<slot>_<ord>   velocity
-    <item>_112_<pat>_<slot>_<ord>   time shift
-    <item>_113_<pat>_<slot>_<ord>   randomness
-    <item>_48_<pat>_1_<step>        step active -- slot 1, always (T4.6)
-    <item>_40_<pat>                 pattern holds data
-
-Step skip (``49``) is deliberately absent: an empty project already holds 15,
-"plays on all four sequences", everywhere.
+Every operation here is specified by a hardware capture diff rather than
+inferred. Placing one melodic note costs **8 keys, not one** -- six note-indexed
+parameters, the step-indexed step-active flag in slot 1, and the pattern's
+data-state latch -- and the table with its fresh values is in spec section 4.
+Step skip (``49``) is deliberately not written: an empty project already holds
+15, "plays on all four sequences", everywhere.
 
 Every function returns a new dict and never adds or removes a key. The key set
 is fixed (spec section 2), so an address the file does not already carry is an
 error rather than something to create.
 
-M6 added the drum twin :func:`place_drum_note` and the scalars a converter has
-to set alongside notes -- step count, swing, tempo, the ``86`` mode flag and a
-scene's pattern chain.
-
-Placing a note is also the one operation that runs hundreds of times, so it has
-a second form: :func:`note_updates` and :func:`drum_note_updates` return the
-delta instead of a copy, letting a bulk writer apply them to one working dict.
-Copying 153,495 keys per note is the difference between a conversion and a wait.
+:func:`note_updates` and :func:`drum_note_updates` are the delta forms, letting
+a bulk writer apply placements to one working dict instead of copying the whole
+key set per note.
 """
 
 from collections.abc import Mapping, Sequence
@@ -487,10 +468,9 @@ def note_updates(
 ) -> dict[str, int]:
     """The keys one melodic note writes, without copying the project.
 
-    :func:`place_note` is this plus a copy, and is what a caller placing one
-    note wants. A converter placing hundreds applies these to a working dict of
-    its own instead: copying 153,495 keys per note is the difference between a
-    conversion and a wait.
+    :func:`place_note` is this plus a copy. A converter placing hundreds
+    applies these to a working dict of its own instead, so the whole key set is
+    not copied per note.
 
     Raises:
         ValueError: if the slot is full, if the step or the pattern is already

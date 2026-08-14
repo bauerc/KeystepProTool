@@ -42,14 +42,13 @@ def key(item: int, param: int, *indices: int) -> str:
 def get_int(raw: Mapping[str, Any], item: int, param: int, *indices: int) -> int | None:
     """Read one integer value, or ``None`` if the key is absent.
 
-    Absent is meaningful rather than exceptional: the key set differs between
-    item types (only item 123 carries drum parameters), so callers probing a
-    parameter that may not apply get ``None`` instead of a lookup error.
+    Absent is meaningful rather than exceptional: only item 123 carries drum
+    parameters (spec section 3.2), so probing one that may not apply gets
+    ``None`` rather than a lookup error.
 
     Raises:
-        TypeError: if the key exists but does not hold an integer. That would
-            mean the file's shape differs from every sample we have, which is
-            worth surfacing loudly rather than silently coercing.
+        TypeError: if the key exists but does not hold an integer -- a file
+            shaped unlike every sample we have, worth surfacing loudly.
     """
     k = key(item, param, *indices)
 

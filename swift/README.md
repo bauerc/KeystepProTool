@@ -204,8 +204,8 @@ functions with an attribute, plain expressions in assertions, parallel by defaul
 ```swift
 import Testing
 
-@Test func deviceNameMatchesTheFileDialect() {
-    #expect(KSPKit.deviceName == "KeyStepPro")
+@Test func keyBuildsTheGrammar() {
+    #expect(Keys.key(125, 109, 1, 1, 10) == "125_109_1_1_10")
 }
 
 @Test(arguments: [1, 2, 3])            // parametrised, like @pytest.mark.parametrize

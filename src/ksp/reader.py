@@ -1,29 +1,15 @@
 """Decoding a flat ``.KeyStepPro`` dict into the object model.
 
-The whole difficulty of this milestone is in one place: within a single
-``(track, pattern, slot)`` the trailing index means two different things
-depending on the parameter.
+The difficulty is in one place: within a single ``(track, pattern, slot)`` the
+trailing index is a physical step for 48/49 but a note ordinal for 50/54 and
+109-113 / 117-121. The device stores an event list plus a separate per-step
+activity array, not a step grid, and reading it with a single index space
+produces values that look almost right (spec section 4).
 
-* **Step-indexed** -- 48 (step active) and 49 (melodic step skip): the index
-  is a physical step, 1-64.
-* **Note-indexed** -- 50/54 (note -> step) and 109-113 / 117-121: the index is
-  an ordinal in a compact note list, and 50 (or 54 for drums) says which step
-  that note sits on.
-
-So the device does not store a step grid of note data. It stores an event list
-plus a separate per-step activity array. Reading it with a single index space
-produces values that look almost right, which is worse than values that look
-wrong. Spec section 4.
-
-The two parameter sets are also scanned by **different rules**, which is not a
-typo. Spec section 4's "packed contiguously from index 1, with no gaps" is a
-rule for *writers*; only the melodic set is observably compacted. The drum
-array is a pool: deleting a note empties its entry and leaves later ones in
-place, so a ``127`` marks an empty *entry*, not the end of the list. Melodic
-therefore stops at the first sentinel and drum skips past it. Reading the drum
-set with the melodic rule discards live notes -- 43 of them in
-``initial_project`` alone -- and then reports their step-active flags as notes
-the file has lost.
+The two parameter sets are scanned by **different rules**, which is not a typo:
+melodic stops at the first ``127``, drum skips past it, because the drum array
+is a pool whose sentinel marks an empty *entry* rather than the end of the list
+(spec section 4).
 """
 
 from collections.abc import Sequence
@@ -178,18 +164,10 @@ def _read_pattern(
     """Decode one pattern from whichever parameter set(s) hold notes.
 
     Track 1 carries a melodic and a drum set side by side and plays one or the
-    other. The mode bitfield documented for this (parameter 100) does not
-    work -- it reads 26 in every pattern of every sample project, including
-    ones that are unambiguously melodic and ones that are unambiguously drum.
-    The flag that *does* work is parameter 86 bit 6, read per track and passed
-    in as *drum_mode*.
-
-    Note content alone is not always decisive: ``initial_project`` Track 1
-    pattern 1 holds a real 64-note melody *and* a real 12-note drum pattern.
-    The mode flag resolves which of those the device plays, but every note is
-    still reported and the leftover set is called out in a warning -- a reader
-    that silently discarded real user data would hide exactly the surprises
-    this milestone exists to find.
+    other; *drum_mode* is parameter 86 bit 6, not the 100 bitfield documented
+    for it (spec section 5). Content alone is not decisive -- a pattern can
+    hold real notes in both sets -- so the mode picks which the device plays
+    while every note is still reported and the leftover set warned about.
     """
     collector = Collector()
     site = Site(pattern=pattern)
@@ -523,18 +501,10 @@ def slot_is_initialised(
 ) -> bool:
     """Distinguish a genuinely empty slot from an uninitialised one.
 
-    An unused slot is normally sentinel-filled, and the ``127`` in its first
-    note->step entry ends the list immediately. Slot 4 of Track 1 is the
-    exception: it is filled with **zeros**, in all 16 patterns of all five
-    sample projects -- including both empty baselines and real user material --
-    for both the melodic and drum parameter sets. Taken at face value that
-    reads as 64 notes at step 1 with velocity 0, i.e. 128 phantom notes per
-    pattern in a file that holds nothing.
-
-    Zero-fill is therefore treated as uninitialised. The test is deliberately
-    narrow: all three of note->step, pitch and velocity uniformly zero. A real
-    note list cannot look like that, because a note with velocity 0 makes no
-    sound and 64 notes cannot all share step 1.
+    Track 1's slot 4 is zero-filled rather than sentinel-filled, so the ``!=
+    127`` existence rule alone decodes it as phantom notes (spec section 4).
+    The test is deliberately narrow -- note->step, pitch and velocity all
+    uniformly zero -- because a real note list cannot look like that.
     """
     return not (
         all(v == 0 for v in note_step)
@@ -548,16 +518,10 @@ def _check_step_active(
 ) -> list[Diagnostic]:
     """Cross-check the note list against the step-active flags.
 
-    The two are not redundant -- the device plays the flags, so a pooled note
-    whose flag is clear is silent, measured on drums (D1) and on the melodic
-    set (T4.5). Two things are worth saying:
-    a flag with no note behind it, and pooled notes that will not sound, which
-    is the case that used to become phantom MIDI.
-
-    Every flagged step having a pooled note is an *invariant*, verified across
-    all five sample files. So a violation says our decode is wrong, not that
-    the file is damaged -- which is exactly how it presented before the drum
-    pool scan learned to skip holes.
+    The device plays the flags, so a pooled note whose flag is clear is silent
+    (spec section 4). Every flagged step having a pooled note is an invariant
+    across all five samples, so a violation means the decode is wrong rather
+    than the file being damaged.
     """
     diagnostics: list[Diagnostic] = []
     site = Site(pattern=pattern, kind=kind.value)

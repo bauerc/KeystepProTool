@@ -1,24 +1,10 @@
 """Reading and writing MIDI Control Center's non-standard JSON dialect.
 
-MCC parses its own files with Boost.PropertyTree, which tolerates a trailing
-comma before a closing brace. ``json.loads`` does not, so every
-``.KeyStepPro`` file in existence fails strict parsing. See
-``analysis/KeyStepPro_Format_Spec.md`` section 2.
-
-The writer reproduces MCC's bytes -- tab indentation, no final newline, MCC's
-key order -- with one deliberate exception: it omits the trailing comma, so its
-output is strict JSON. Protocol test T6.2 established that MCC does not need
-it; a file differing from a known-good export by that one byte loaded in MCC
-and transferred to the device. Nothing else about the dialect is optional,
-because nothing else has been tested.
-
-``tests/test_round_trip.py`` holds the writer to MCC's bytes (minus that comma)
-against all five sample projects, which is the whole of milestone M3 -- M4 puts
-a written file on the hardware and M5 generates one from MIDI, and neither is
-trustworthy if the bytes drift.
+The read side tolerates MCC's trailing comma; the write side omits it, which is
+the only part of the dialect shown to be optional. The full byte-level rules are
+in spec section 2.
 """
 
-import json
 import os
 import re
 import tempfile
@@ -49,58 +35,22 @@ def strip_trailing_commas(text: str) -> str:
     return _TRAILING_COMMA.sub(r"\1", text)
 
 
-# def loads(text: str) -> dict[str, Any]:
-#     """Parse MCC's JSON dialect from a string.
-
-#     Raises:
-#         ValueError: if the text does not parse, or parses to something other
-#             than an object. A ``.KeyStepPro`` file is always a flat object;
-#             anything else means the caller was handed the wrong file.
-#     """
-#     parsed = json.loads(strip_trailing_commas(text))
-#     if not isinstance(parsed, dict):
-#         raise ValueError(f"expected a JSON object, got {type(parsed).__name__}")
-#     return parsed
-
-
-# def load_path(path: Path | str) -> dict[str, Any]:
-#     """Parse a ``.KeyStepPro`` file from disk.
-
-#     Decoding uses ``errors="replace"``. These files are ASCII in practice, but
-#     they are hardware exports: refusing to open one because of a stray byte in
-#     a project name would be a poor trade when every key we care about is
-#     numeric.
-#     """
-#     text = Path(path).read_text(encoding="utf-8", errors="replace")
-#     return loads(text)
-
-
-# Fallback type check for flat MCC object requirements
-_INT_OR_STR = (int, str)
-
-
 def strip_trailing_comma_fast(data: bytes) -> bytes:
-    """Remove MCC's trailing comma by searching backwards from the end.
+    """Remove MCC's trailing comma, scanning back from the end.
 
-    MCC writes a trailing comma right before the final closing brace '}'.
-    By scanning backwards with rfind, we find the comma instantly without
-    scanning the 3.5 MB body of the file.
+    The comma sits just before the final ``}``, so searching backwards avoids
+    walking the 3.5 MB body.
     """
-    # Find the position of the closing brace '}' near the end of the file
     closing_brace = data.rfind(b"}")
     if closing_brace == -1:
         return data
 
-    # Look backwards from '}' to find the last comma ','
     comma_pos = data.rfind(b",", 0, closing_brace)
     if comma_pos == -1:
         return data
 
-    # Verify that there are only whitespace bytes (space, tab, newline, return)
-    # between the comma and the closing brace.
     between = data[comma_pos + 1 : closing_brace]
     if between.strip() == b"":
-        # Slice out just the comma
         return data[:comma_pos] + data[comma_pos + 1 :]
 
     return data
@@ -111,8 +61,6 @@ def loads(text_or_bytes: str | bytes) -> dict[str, Any]:
     data = text_or_bytes.encode("utf-8") if isinstance(text_or_bytes, str) else text_or_bytes
 
     cleaned_data = strip_trailing_comma_fast(data)
-
-    # orjson.loads takes bytes and returns Python objects
     parsed = orjson.loads(cleaned_data)
 
     if not isinstance(parsed, dict):
@@ -130,14 +78,9 @@ def load_path(path: Path | str) -> dict[str, Any]:
 def dumps(obj: Mapping[str, int | str]) -> str:
     """Serialise *obj* in MCC's dialect, in the mapping's own iteration order.
 
-    Order is preserved rather than sorted so this stays a faithful dumper and
-    the round-trip test proves something; putting keys in MCC's order is
-    :func:`canonical`'s job, chosen explicitly by the caller.
-
-    Raises:
-        TypeError: for a value that is not an ``int`` or a ``str``. A float
-            would serialise as ``1.0`` and a bool as ``true``, neither of
-            which the firmware has ever been shown.
+    Ordering is :func:`canonical`'s job, so this stays a faithful dumper.
+    Rejects anything but ``int`` and ``str``: a float would serialise as
+    ``1.0`` and a bool as ``true``, neither of which the firmware accepts.
     """
     _escape_fn = _escape
     lines: list[str] = []
@@ -148,10 +91,8 @@ def dumps(obj: Mapping[str, int | str]) -> str:
             raise TypeError(f"{k} holds {type(v).__name__}, expected int or str")
         elif isinstance(v, int):
             append(f"\t{_escape_fn(k)}: {v}")
-        elif isinstance(v, str):
-            append(f"\t{_escape_fn(k)}: {_escape_fn(v)}")
         else:
-            append(f"\t{_escape_fn(k)}: {json.dumps(v)}")
+            append(f"\t{_escape_fn(k)}: {_escape_fn(v)}")
 
     return "{\n" + ",\n".join(lines) + ("\n}" if lines else "}")
 
@@ -159,15 +100,11 @@ def dumps(obj: Mapping[str, int | str]) -> str:
 def dump_path(obj: Mapping[str, int | str], path: Path | str) -> None:
     """Write *obj* to *path* as MCC would.
 
-    Bytes rather than text, so no platform translates ``\\n`` into ``\\r\\n``
-    or appends a final newline. The write goes to a temp file alongside the
-    destination and is then renamed into place: these files are 3.5 MB and
-    their destination is often MCC's Templates folder, where a half-written
-    one would be found and parsed.
-
-    ``mkstemp`` creates its file 0600, which is not what writing a file
-    normally gives you and not what MCC should find, so the mode is set to the
-    usual 0644 as the umask allows.
+    Bytes rather than text, so no platform rewrites the line endings or appends
+    a final newline (spec section 2). Written to a temp file and renamed into
+    place: the destination is often MCC's Templates folder, where a half-written
+    3.5 MB file would be found and parsed. ``mkstemp`` creates 0600, so the mode
+    is widened to the usual 0644 as the umask allows.
     """
     path = Path(path)
     data = dumps(obj).encode("utf-8")
@@ -187,22 +124,14 @@ def dump_path(obj: Mapping[str, int | str], path: Path | str) -> None:
 
 def canonical(obj: Mapping[str, int | str]) -> dict[str, int | str]:
     """Return a new dict in MCC's key order: ``device``, ``version``, then the
-    numeric keys sorted as strings.
+    numeric keys sorted **as strings** -- ``126_99_16`` before ``126_99_2``
+    (spec section 2).
 
-    They sort as strings, not numbers -- ``126_99_16`` comes before
-    ``126_99_2``.
-
-    M5 is what needs this. ``Default.KeyStepPro`` has no ``version`` key, so a
-    converter building on the factory template has to add one, and a plain
-    assignment appends it at the end of the dict -- a key order no file MCC
-    wrote has ever had.
+    A converter starting from ``Default.KeyStepPro`` has to add the ``version``
+    key it lacks, and a plain assignment would leave it last.
     """
-    # Extract leading keys while maintaining order
     leading_dict = {k: obj[k] for k in LEADING_KEYS if k in obj}
-
-    # Fast set exclusion for rest
     leading_set = set(leading_dict)
     rest_keys = sorted(k for k in obj if k not in leading_set)
 
-    # Reconstruct dict
     return leading_dict | {k: obj[k] for k in rest_keys}
