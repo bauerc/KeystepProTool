@@ -195,7 +195,7 @@ import Testing
         // what the truncated scan manufactured. The converse stays false by design -- many pooled
         // notes carry no flag, which is D1.
         for name in Self.sampleProjects {
-            let raw = try LenientJSON.load(contentsOf: RepoData.projectFiles.appending(path: name))
+            let raw = try Samples.raw(name)
             let project = try Self.load(name)
             for pattern in project.track(1).patterns {
                 let pooled = Set(
@@ -286,7 +286,7 @@ import Testing
     ]
 
     static func load(_ name: String) throws -> Project {
-        try Reader.load(contentsOf: RepoData.projectFiles.appending(path: name))
+        try Samples.project(name)
     }
 
     /// A minimal audible melodic note at `step`, which is 1-based.

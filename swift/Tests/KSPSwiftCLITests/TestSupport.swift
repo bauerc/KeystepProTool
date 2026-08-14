@@ -13,3 +13,12 @@ enum RepoData {
 
     static let projectFiles = root.appending(path: "project_files")
 }
+
+/// A file of `contents` at a unique temporary path, which is what pytest's `tmp_path` gives the
+/// Python twin of this suite. The caller removes it.
+func tempFile(_ contents: String, suffix: String) throws -> URL {
+    let url = FileManager.default.temporaryDirectory
+        .appending(path: "ksp-\(UUID().uuidString)\(suffix)")
+    try contents.write(to: url, atomically: true, encoding: .utf8)
+    return url
+}

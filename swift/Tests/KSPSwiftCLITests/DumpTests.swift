@@ -151,10 +151,7 @@ import Testing
     }
 
     @Test func aConfigFileIsUsedWhenNoFlagIsGiven() throws {
-        let config = FileManager.default.temporaryDirectory
-            .appending(path: "ksp-drum-map-\(UUID().uuidString).json")
-        try #"{"mode": "chromatic", "low": 60}"#.write(
-            to: config, atomically: true, encoding: .utf8)
+        let config = try tempFile(#"{"mode": "chromatic", "low": 60}"#, suffix: ".json")
         defer { try? FileManager.default.removeItem(at: config) }
 
         let out = Self.run("project_5.KeyStepPro", track: 1, configPath: config).stdout
@@ -173,9 +170,7 @@ import Testing
     }
 
     @Test func aFileThatIsNotAProjectIsAFormatFailure() throws {
-        let path = FileManager.default.temporaryDirectory
-            .appending(path: "wrong-\(UUID().uuidString).KeyStepPro")
-        try #"{"device": 5}"#.write(to: path, atomically: true, encoding: .utf8)
+        let path = try tempFile(#"{"device": 5}"#, suffix: ".KeyStepPro")
         defer { try? FileManager.default.removeItem(at: path) }
 
         let result = DumpRunner.run(
@@ -213,10 +208,7 @@ import Testing
     }
 
     @Test func theFlagBeatsTheConfigFile() throws {
-        let config = FileManager.default.temporaryDirectory
-            .appending(path: "ksp-drum-map-\(UUID().uuidString).json")
-        try #"{"mode": "chromatic", "low": 50}"#.write(
-            to: config, atomically: true, encoding: .utf8)
+        let config = try tempFile(#"{"mode": "chromatic", "low": 50}"#, suffix: ".json")
         defer { try? FileManager.default.removeItem(at: config) }
 
         #expect(try resolveDrumMap("chromatic:36", configPath: config)?.notes.first == 36)

@@ -49,8 +49,9 @@ public enum JSONNode: Sendable {
                 return
             }
             out += "[\n"
+            let inner = Self.indent(depth + 1)
             for (offset, item) in items.enumerated() {
-                out += Self.indent(depth + 1)
+                out += inner
                 item.write(into: &out, depth: depth + 1)
                 out += offset == items.count - 1 ? "\n" : ",\n"
             }
@@ -61,8 +62,9 @@ public enum JSONNode: Sendable {
                 return
             }
             out += "{\n"
+            let inner = Self.indent(depth + 1)
             for (offset, member) in members.enumerated() {
-                out += Self.indent(depth + 1) + Self.quoted(member.0) + ": "
+                out += inner + Self.quoted(member.0) + ": "
                 member.1.write(into: &out, depth: depth + 1)
                 out += offset == members.count - 1 ? "\n" : ",\n"
             }

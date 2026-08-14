@@ -92,8 +92,7 @@ import Testing
         // The +1 the device displays for the second kick (T6.1), pinned by hand. The description
         // first transcribed -1 here; asserting the decoded value keeps the corrected reading
         // anchored to the file rather than to prose.
-        let project = try Reader.load(
-            contentsOf: RepoData.projectFiles.appending(path: "project_5.KeyStepPro"))
+        let project = try Samples.project("project_5.KeyStepPro")
         let secondKick = project.track(1).pattern(1).notes[1]
         #expect(secondKick.step == 5)
         #expect(
@@ -208,8 +207,7 @@ import Testing
     static func load(_ name: String) throws -> (Fixture, Project) {
         let fixture = try JSONDecoder().decode(
             Fixture.self, from: Data(contentsOf: RepoData.fixtures.appending(path: name)))
-        let project = try Reader.load(
-            contentsOf: RepoData.projectFiles.appending(path: fixture.projectFile))
+        let project = try Samples.project(fixture.projectFile)
         return (fixture, project)
     }
 }
