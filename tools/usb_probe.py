@@ -5,9 +5,11 @@ what they print into the ledger in analysis/Hardware_Test_Protocol.md. Each is
 a few seconds; none of them writes to the device.
 
 Byte 7 of every frame is the project slot (spec 7.4), so ``--slot`` says which
-project to read. What comes back is that slot as stored: unsaved panel edits do
-not travel. ``phase2`` also carries H4.1, the probe that shows the device
-honouring the byte rather than the captures merely varying it.
+project to read; a slot other than the panel's loaded one reads fine. What comes
+back is that slot as stored: unsaved panel edits do not travel.
+
+Some slots answer with the ``0x7f`` filler instead of a project, and which do is
+not established -- ``slots`` sweeps byte 7 to find out.
 """
 
 import argparse
@@ -21,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ksp import bulk_fast, bulk_read, midi_export, reader, sysex
+from ksp import bulk_fast, bulk_read, constants, midi_export, reader, sysex
 from ksp.keys import item_for_track
 from ksp_cli.usb_transport import TransportError, UsbMidiTransport
 
@@ -48,6 +50,7 @@ P_NOTE_STEP = bulk_fast.MELODIC_GATE
 P_PITCH = 109
 P_GATE = 110
 EMPTY = bulk_fast.EMPTY
+FILLER = bulk_read.FILLER
 
 #: Rows of a table or faults to print before summarising. A pattern the probe
 #: was not pointed at can hold all 64 notes, and that is not worth 64 lines.
@@ -219,6 +222,54 @@ def probe_sentinel(args: argparse.Namespace, recorder: Recorder) -> int:
 class Verdict:
     passed: bool
     faults: tuple[str, ...]
+
+
+#: The sweep reads these per slot. 120_37 tells a real answer from filler; the
+#: tempo triple is the one project-level value also visible on the panel, so a
+#: reader can check slot N against what the panel calls project N.
+SWEEP_SCALARS = (
+    (constants.ITEM_PROJECT, constants.P_TEMPO_LSB),
+    (constants.ITEM_PROJECT, constants.P_TEMPO_MIDSB),
+    (constants.ITEM_PROJECT, constants.P_TEMPO_MSB),
+)
+
+
+def tempo_bpm(chunks: tuple[int, ...]) -> float:
+    """The three 7-bit chunks as BPM. Little-endian, hundredths."""
+    lsb, midsb, msb = chunks
+    hundredths = lsb + midsb * constants.TEMPO_CHUNK + msb * constants.TEMPO_CHUNK**2
+    return hundredths / constants.TEMPO_SCALE
+
+
+def probe_slots(args: argparse.Namespace, recorder: Recorder) -> int:
+    """Which slots byte 7 gets an answer for, and which answer filler.
+
+    Four frames per slot and no interpretation: 120_37, which holds 0-3 in every
+    corpus file and so cannot legitimately read as the filler byte, plus the
+    tempo, which the panel also shows. Compare the table against the device.
+    """
+    print(f"{'slot':>5}  {'120_37':>6}  {'tempo':>7}  answered")
+    answered = filler = 0
+    with device(args, recorder) as transport:
+        for slot in range(args.first_slot, args.last_slot + 1):
+            try:
+                probe = read(transport, recorder, SCALAR, slot)[0]
+                chunks = tuple(
+                    read(transport, recorder, sysex.ReadRequest(item, param, (), None), slot)[0]
+                    for item, param in SWEEP_SCALARS
+                )
+            except (TransportError, ValueError) as error:
+                print(f"{slot:>5}  {'':>6}  {'':>7}  no reply: {error}")
+                continue
+            if probe == FILLER:
+                filler += 1
+                print(f"{slot:>5}  {probe:>6}  {'':>7}  FILLER")
+            else:
+                answered += 1
+                print(f"{slot:>5}  {probe:>6}  {tempo_bpm(chunks):>7.2f}  yes")
+    print(f"\n{answered} answered, {filler} filler")
+    print("compare each tempo against what the panel shows for that project")
+    return 0
 
 
 def int_list(text: str) -> list[int]:
@@ -433,20 +484,17 @@ def _byte_seven(
         heads = [note[2] for note in live[:4]]
         print(f"{label:>10}  {scalar:>6}  {len(live):>5}  {heads}")
 
-    differs = (here, pool, pitch) != (there, other_pool, other_pitch)
-    outcome = "confirms: byte 7 SELECTS the project" if differs else "FALSIFIED: byte 7 is inert"
-    print(f"H4.1 {outcome}")
-    if not differs:
+    if there == FILLER:
+        # Not a verdict either way: filler is the device declining to answer for
+        # that slot, so it says nothing about whether byte 7 selects.
+        print(f"H4.1 INCONCLUSIVE: slot {other} answered filler, not a project")
+        print(f"        120_37 came back {FILLER}, which is not a value any project holds, and")
+        print("        the arrays came back 0x7f then 0x00. Re-run against a slot that answers.")
+    elif (here, pool, pitch) != (there, other_pool, other_pitch):
+        print("H4.1 confirms: byte 7 SELECTS the project")
+    else:
+        print("H4.1 FALSIFIED: byte 7 is inert -- both slots answered identically")
         print("        (or the two slots hold the same thing -- check the panel and re-run)")
-    elif all(entry == EMPTY for entry in other_pool):
-        # 127 is the empty marker and also what a degraded read returns (H1.6
-        # saw 36 x 0x7f on an overrun), so "B is empty" and "B did not really
-        # answer" look identical here. Only the scalar tells them apart.
-        print(f"        caveat: slot {other}'s pool reads entirely {EMPTY}, which is both 'empty'")
-        print("        and what a failed read looks like. 120_37 differing is the load-bearing")
-        print("        half; for a clean result re-run with an --other-slot that holds notes.")
-        if here == there:
-            print("        120_37 matches too, so this confirm rests on the empty pool alone.")
 
     for edge in (0, 17):
         try:
@@ -465,6 +513,7 @@ PROBES = {
     "prologue": probe_prologue,
     "sentinel": probe_sentinel,
     "phase2": probe_phase2,
+    "slots": probe_slots,
 }
 
 
@@ -504,6 +553,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--other-slot", type=int, help="a second slot whose pattern differs, for H4.1"
     )
     parser.add_argument("--midi-out", type=Path, metavar="PATH", help="write H2.4's export here")
+    parser.add_argument("--first-slot", type=int, default=1, help="first byte 7 the sweep tries")
+    parser.add_argument("--last-slot", type=int, default=16, help="last byte 7 the sweep tries")
 
     sub = parser.add_subparsers(dest="probe", required=True, metavar="PROBE")
     for name, probe in PROBES.items():

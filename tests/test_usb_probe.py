@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from conftest import DeviceModel, tape_values
-from ksp import bulk_fast, sysex
+from conftest import DeviceModel, build_reply, decode_request, tape_values
+from ksp import bulk_fast, bulk_read, sysex
 from ksp.keys import item_for_track
 from ksp_cli.usb_transport import TransportError
 
@@ -24,7 +24,7 @@ import usb_probe
 
 
 @pytest.mark.parametrize(
-    "name", ["identity", "scalar", "throughput", "prologue", "sentinel", "phase2"]
+    "name", ["identity", "scalar", "throughput", "prologue", "sentinel", "phase2", "slots"]
 )
 def test_every_probe_is_reachable_from_the_command_line(name: str) -> None:
     args = usb_probe.build_parser().parse_args([name])
@@ -203,8 +203,14 @@ class FakeDevice:
     names a slot it will not answer for.
     """
 
-    def __init__(self, slots: dict[int, DeviceModel], timeout_ms: int = 1000) -> None:
+    def __init__(
+        self,
+        slots: dict[int, DeviceModel],
+        timeout_ms: int = 1000,
+        filler: set[int] | None = None,
+    ) -> None:
         self.slots = slots
+        self.filler = filler or set()
         self.sent: list[bytes] = []
 
     def __enter__(self) -> "FakeDevice":
@@ -219,9 +225,15 @@ class FakeDevice:
     def exchange(self, frame: bytes) -> bytes:
         if frame == sysex.IDENTITY_REQUEST:
             return bytes.fromhex("f07e7f060200206b0200090025140502f7")
-        model = self.slots.get(sysex.parse_slot(frame))
+        slot = sysex.parse_slot(frame)
+        if slot in self.filler:
+            # The shape the device really sent: well formed, right slot, 0x7f.
+            request = decode_request(frame)
+            count = request.count or 1
+            return build_reply(request, (bulk_read.FILLER,) * count, slot)
+        model = self.slots.get(slot)
         if model is None:
-            raise TransportError(f"no reply for slot {sysex.parse_slot(frame)}")
+            raise TransportError(f"no reply for slot {slot}")
         return model.exchange(frame)
 
 
@@ -286,6 +298,33 @@ def test_the_smoke_run_reports_the_verdicts_it_reached(
     assert "H2.4 confirms if" in out
     assert "byte 7 SELECTS the project" in out  # the two tapes differ
     assert "byte 7 =  0: no reply for slot 0" in out
+
+
+def test_the_sweep_covers_all_sixteen_slots_by_default() -> None:
+    args = usb_probe.build_parser().parse_args(["slots"])
+    assert (args.first_slot, args.last_slot) == (1, 16)
+
+
+def test_the_sweep_decodes_tempo_the_way_the_reader_does() -> None:
+    """96 + 93*128 = 12000 hundredths. The panel shows this number, which is what
+    makes it usable for telling one slot from another by eye."""
+    assert usb_probe.tempo_bpm((96, 93, 0)) == 120.0
+    assert usb_probe.tempo_bpm((16, 103, 0)) == 132.0
+
+
+def test_the_sweep_runs_over_a_modelled_device(
+    fixtures_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Slot 1 answers, slot 2 is the filler case, the rest do not reply at all --
+    every branch of the table, before the device is on the desk."""
+    slots = {1: DeviceModel(tape_values(fixtures_dir / "recall_tape.txt"))}
+    monkeypatch.setattr(usb_probe, "UsbMidiTransport", partial(FakeDevice, slots, filler={2}))
+
+    assert usb_probe.main(["--first-slot", "1", "--last-slot", "3", "slots"]) == 0
+    out = capsys.readouterr().out
+
+    assert "yes" in out and "FILLER" in out and "no reply" in out
+    assert "1 answered, 1 filler" in out
 
 
 def test_ordinals_are_reported_one_based_and_steps_too() -> None:

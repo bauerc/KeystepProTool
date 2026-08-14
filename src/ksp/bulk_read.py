@@ -12,8 +12,13 @@ existence array has already answered, which is about 1,000 requests and four
 seconds for the same keys. See ``read_raw``.
 
 Byte 7 of every frame names the project slot (spec 7.4), so ``slot`` says which
-of the sixteen to read. What comes back is that slot's *stored* project: edits
-made on the panel and not saved do not appear in it.
+to read; a slot other than the panel's loaded one has been read successfully on
+hardware. What comes back is that slot's *stored* project: edits made on the
+panel and not saved do not appear in it.
+
+Some slots answer with filler instead -- well-formed frames whose payload is
+``0x7f`` -- and which slots do, and why, is not yet established. ``_refuse_filler``
+stops a read there rather than let a dump of filler be written out as a project.
 """
 
 from collections.abc import Iterable, Iterator
@@ -42,6 +47,18 @@ DEFAULT_VERSION: Final = "2.5.20"
 #: Read 0 from hardware but 127 in all six corpus files, including the factory
 #: default, which never came off a device. Host-side, so hard-coded.
 MCC_CONSTANTS: Final = {"120_55_5": 127, "120_56_4": 127, "120_56_5": 127}
+
+#: Observed 2026-08-14: some slots answer a read with well-formed frames whose
+#: payload is this byte -- a scalar comes back 0x7f, a 64-entry array as 16 of
+#: them then 48 zeros. The same byte H1.6 saw padding an overrun. Which slots do
+#: this is not established; that a read can come back this way is.
+FILLER: Final = 0x7F
+
+#: The first address both plans ask for, and the one that tells such a read from
+#: a real one. It holds 0-3 in all six corpus files and never the filler, so a
+#: 127 here is caught on the first reply rather than 36 seconds later, with a
+#: file of filler already written.
+SLOT_PROBE: Final = "120_37"
 
 
 class Transport(Protocol):
@@ -126,6 +143,24 @@ def _walk_fast(
             yield name, value
 
 
+def _refuse_filler(pairs: Iterator[tuple[str, int]], slot: int) -> Iterator[tuple[str, int]]:
+    """Stop the moment a read comes back as filler rather than a project.
+
+    Such a read is not an error at the protocol level -- the frames are
+    well-formed and echo the slot asked for -- so nothing below this notices,
+    and a whole dump of filler parses as a valid, empty project. Failing on the
+    first reply is what keeps that file from being written and believed.
+    """
+    for name, value in pairs:
+        if name == SLOT_PROBE and value == FILLER:
+            raise ValueError(
+                f"the device answered {SLOT_PROBE} with {FILLER:#04x}, the filler byte, rather "
+                f"than a value any project holds: it is not returning slot {slot}'s contents. "
+                f"Check that slot {slot} is the project you meant and that it has been saved."
+            )
+        yield name, value
+
+
 def read_raw(
     transport: Transport,
     template_keys: Iterable[str],
@@ -134,7 +169,11 @@ def read_raw(
     slot: int = DEFAULT_SLOT,
     requests: Iterable[ReadRequest] | None = None,
 ) -> dict[str, int | str]:
-    """Read one project slot into the dict ``ksp.reader.read_project`` takes.
+    """Read the loaded project into the dict ``ksp.reader.read_project`` takes.
+
+    ``slot`` must be the slot the device has loaded. It is not a chooser: name a
+    different one and the device answers filler, which this raises on rather
+    than return (see ``_refuse_filler``).
 
     ``template_keys`` supplies the file's full key set -- the plan addresses the
     logical extent only, and the keys it never asks for hold 0 in every corpus
@@ -155,7 +194,7 @@ def read_raw(
         if requests is None and not fast
         else _walk_fast(transport, requests or bulk_fast.iter_requests(), slot)
     )
-    values: dict[str, int] = dict(walk)
+    values: dict[str, int] = dict(_refuse_filler(walk, slot))
     values.update(MCC_CONSTANTS)
     for name in template_keys:
         if name not in LEADING_KEYS:
