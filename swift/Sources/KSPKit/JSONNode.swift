@@ -79,7 +79,10 @@ public enum JSONNode: Sendable {
     /// Python's `json.encoder.py_encode_basestring_ascii`: the five short escapes, `\uXXXX` in
     /// lower-case hex for everything else outside printable ASCII, and surrogate pairs above the
     /// basic plane. `ensure_ascii` is on by default there, so this is on here too.
-    private static func quoted(_ value: String) -> String {
+    ///
+    /// Internal rather than private: `LenientJSON`'s writer escapes by the same rules, because
+    /// Python reaches for this same function from both `json.dumps` and `lenient_json.dumps`.
+    static func quoted(_ value: String) -> String {
         var out = "\""
         for unit in value.utf16 {
             switch unit {
