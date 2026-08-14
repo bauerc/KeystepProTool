@@ -88,12 +88,26 @@ def device(args: argparse.Namespace, recorder: Recorder) -> Iterator[UsbMidiTran
         if not args.no_identity:
             exchange(transport, recorder, sysex.IDENTITY_REQUEST)
         if not args.no_prologue:
-            # Names args.slot, not 1: H1.4 measured "no prologue needed" while
-            # reading slot 1, so it rules one out only for slot 1.
-            frame = sysex.prologue(args.slot)
-            recorder.note("out", frame)
-            transport.send(frame)
+            # Names args.slot, not 1. H1.4 measured "no prologue needed" while
+            # reading the loaded project, which is why it looked optional: what
+            # it does is switch, and a probe reading another slot must send it.
+            select(transport, recorder, args.slot)
         yield transport
+
+
+def select(transport: UsbMidiTransport, recorder: Recorder, slot: int) -> None:
+    """Send ``05 <slot>``, which is how MCC names the project it is about to read.
+
+    Each capture carries exactly one: ``05 01`` before the project 1 recall,
+    ``05 02`` before the project 2 recall, ``06 03`` closing the project 3
+    import. Byte 7 on the reads that follow then agrees with it throughout, so
+    the captures alone cannot say which of the two does the selecting -- but a
+    sweep that sent one prologue and varied byte 7 got the prologue's project
+    every time. Switching slots means sending this again.
+    """
+    frame = sysex.prologue(slot)
+    recorder.note("out", frame)
+    transport.send(frame)
 
 
 def exchange(transport: UsbMidiTransport, recorder: Recorder, request: bytes) -> bytes:
@@ -244,7 +258,11 @@ def probe_slots(args: argparse.Namespace, recorder: Recorder) -> int:
     selects and whether slot N is the panel's project N, neither of which a
     tempo or a scalar can show when several projects share a value.
 
-    Three frames per slot, and no interpretation: the table is meant to be read
+    Every slot gets its own ``05 <slot>`` first. Sending one prologue and then
+    varying byte 7 answered for the prologue's project only, which is what makes
+    the prologue -- not byte 7 -- look like the thing that selects.
+
+    Four frames per slot, and no interpretation: the table is meant to be read
     against the panel. Pitches print in the device's own C3 convention.
     """
     print(f"{'slot':>5}  {'120_37':>6}  {'step':>4}  {'pitch':>5}  {'note':>5}  answered")
@@ -252,6 +270,8 @@ def probe_slots(args: argparse.Namespace, recorder: Recorder) -> int:
     with device(args, recorder) as transport:
         for slot in range(args.first_slot, args.last_slot + 1):
             try:
+                if not args.no_prologue:
+                    select(transport, recorder, slot)
                 probe = read(transport, recorder, SCALAR, slot)[0]
                 if probe == FILLER:
                     filler += 1
@@ -473,6 +493,10 @@ def _byte_seven(
         return True
 
     here = read(transport, recorder, SCALAR, args.slot)[0]
+    # Select the other project before reading it. Without this the device
+    # answers for whichever slot the last prologue named, and the comparison
+    # below measures the harness rather than the device.
+    select(transport, recorder, other)
     there = read(transport, recorder, SCALAR, other)[0]
     other_pool = read(transport, recorder, chunk(item, P_NOTE_STEP, args.pattern), other)
     other_pitch = read(transport, recorder, chunk(item, P_PITCH, args.pattern), other)
@@ -499,11 +523,12 @@ def _byte_seven(
 
     for edge in (0, 17):
         try:
-            print(
-                f"        byte 7 = {edge:>2}: 120_37 = {read(transport, recorder, SCALAR, edge)[0]}"
-            )
+            select(transport, recorder, edge)
+            print(f"        slot {edge:>2}: 120_37 = {read(transport, recorder, SCALAR, edge)[0]}")
         except (TransportError, ValueError) as error:
-            print(f"        byte 7 = {edge:>2}: {error}")
+            print(f"        slot {edge:>2}: {error}")
+    # Leave the device pointed back where the operator left it.
+    select(transport, recorder, args.slot)
     return True
 
 

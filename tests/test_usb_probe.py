@@ -298,7 +298,7 @@ def test_the_smoke_run_reports_the_verdicts_it_reached(
     assert "H2.3  FAIL" in out
     assert "H2.4 confirms if" in out
     assert "byte 7 SELECTS the project" in out  # the two tapes differ
-    assert "byte 7 =  0: no reply for slot 0" in out
+    assert "slot  0: no reply for slot 0" in out
 
 
 def test_the_sweep_covers_all_sixteen_slots_by_default() -> None:
@@ -327,6 +327,43 @@ def test_the_sweep_runs_over_a_modelled_device(
 
     assert "FILLER" in out and "no reply" in out
     assert "1 answered, 1 filler" in out
+
+
+def test_the_sweep_selects_every_slot_before_reading_it(
+    fixtures_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bug that wasted a hardware run: one prologue was sent for the default
+    slot and byte 7 varied under it, so only that project ever answered. Each
+    slot must get its own ``05 <slot>`` first."""
+    device = FakeDevice(
+        {n: DeviceModel(tape_values(fixtures_dir / "recall_tape.txt")) for n in range(1, 4)}
+    )
+    monkeypatch.setattr(usb_probe, "UsbMidiTransport", lambda **_: device)
+
+    usb_probe.main(["--first-slot", "1", "--last-slot", "3", "slots"])
+
+    prologues = [sysex.parse_slot(f) for f in device.sent if f[6] == sysex.CMD_PROLOGUE]
+    assert prologues == [1, 1, 2, 3]  # the transport's own, then one per slot
+
+
+def test_h4_1_selects_the_other_slot_before_comparing(
+    fixtures_dir: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Same bug in the H4.1 section: reading --other-slot without selecting it
+    measures the harness, not the device."""
+    slots = {
+        1: DeviceModel(tape_values(fixtures_dir / "recall_tape.txt")),
+        2: DeviceModel(tape_values(fixtures_dir / "recall_project_2_tape.txt")),
+    }
+    device = FakeDevice(slots)
+    monkeypatch.setattr(usb_probe, "UsbMidiTransport", lambda **_: device)
+
+    usb_probe.main(["--other-slot", "2", "phase2"])
+
+    prologues = [sysex.parse_slot(f) for f in device.sent if f[6] == sysex.CMD_PROLOGUE]
+    assert prologues[0] == 1  # the slot being read
+    assert 2 in prologues  # the other slot, before it is read
+    assert prologues[-1] == 1  # and back, so the device is left where it was
 
 
 def test_the_sweep_reports_the_marker_note_it_found(
