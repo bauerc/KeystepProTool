@@ -17,6 +17,7 @@ deviation T6.2 settled at the device and ``test_round_trip`` bounds to that one
 byte. H3.2's diff on hardware will show the same byte and nothing else.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -65,7 +66,9 @@ def test_the_dump_is_byte_identical_to_mcc_s_export(
     assert written.read_bytes() == without_trailing_comma(expected.read_bytes())
 
 
-def test_the_walk_asks_for_64_values_at_a_time(attached: FakeDevice, tmp_path: Path) -> None:
+def test_the_walk_asks_for_64_values_at_a_time(
+    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """H3.1 asks for the coalesced walk, not MCC's 8,951 count-1 reads.
 
     H1.3 measured a request period that does not move with the payload, so the
@@ -79,6 +82,9 @@ def test_the_walk_asks_for_64_values_at_a_time(attached: FakeDevice, tmp_path: P
     assert max(counts) == 64
     # The gated walk's own figure for this tape, which test_bulk_fast pins too.
     assert len(attached.slots[1].asked) == 1007
+    # And the summary reports the walk, not the walk plus the identity request:
+    # 1,007 is the number spec 7.8 states and an operator compares a run against.
+    assert "1007 requests" in capsys.readouterr().out
 
 
 def test_the_mcc_plan_reads_the_same_project_in_far_more_requests(
@@ -145,6 +151,25 @@ def test_the_result_is_a_project_the_rest_of_the_tool_can_read(
     assert project.tempo_bpm == 132
     assert project.diagnostics.entries == ()
     assert "read slot 1" in capsys.readouterr().out
+
+
+def test_the_summary_times_the_whole_run_not_just_the_read(
+    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The total has to include the template parse and the write.
+
+    Both are 3.5 MB and neither is at the device, so a "total" measured from the
+    first frame would understate a real run by most of it.
+    """
+    written = tmp_path / "pulled.KeyStepPro"
+    assert main([str(written)]) == 0
+
+    line = next(line for line in capsys.readouterr().out.splitlines() if "s total" in line)
+    total, reading = (float(part) for part in re.findall(r"([\d.]+) s", line))
+    # The replayed device answers instantly, so the 3.5 MB parse and write are
+    # nearly all of this run. A total equal to the read time means the clock was
+    # started after them.
+    assert total > reading
 
 
 def test_an_existing_file_is_not_overwritten_without_force(

@@ -150,6 +150,11 @@ def pull_command(
     ] = False,
     verbose: VerboseInPanel = False,
 ) -> None:
+    # From the top, not from the first frame: the 3.5 MB template parse and the
+    # write of the same size are most of a run that is not at the device, and a
+    # total that quietly left them out would be the wrong number to plan around.
+    began = time.monotonic()
+
     # Before the device is touched: a read costs ten seconds and the operator's
     # attention, and refusing it afterwards wastes both.
     if output.exists() and not force:
@@ -163,11 +168,14 @@ def pull_command(
     except ValueError as exc:
         fail(f"template: {template_path}: {exc}", prog=PROG, code=1)
 
-    started = time.monotonic()
+    opened = time.monotonic()
     try:
         with UsbMidiTransport(timeout_ms=timeout) as device:
+            # The identity request is asked outside the count: what the summary
+            # reports is the size of the walk, which is the figure spec 7.8
+            # states and the one worth comparing a run against.
+            version = DEFAULT_VERSION if no_identity else _version(device)
             transport = _Counted(device)
-            version = DEFAULT_VERSION if no_identity else _version(transport)
             raw = read_raw(transport, template_keys, version=version, fast=not mcc_plan, slot=slot)
     except TransportError as exc:
         fail(str(exc), prog=PROG, code=1)
@@ -175,7 +183,7 @@ def pull_command(
         # A well-formed frame that answered the wrong question, or a slot with
         # nothing saved in it. bulk_read's messages already say which.
         fail(f"slot {slot}: {exc}", prog=PROG, code=1)
-    elapsed = time.monotonic() - started
+    reading = time.monotonic() - opened
 
     # What was read has to parse as a project before it is worth writing: the
     # point of the dump is that the rest of this tool can take it from here.
@@ -193,9 +201,11 @@ def pull_command(
     print_report(project.diagnostics, prog=PROG, verbose=verbose)
     if not quiet:
         notes = sum(len(pattern.notes) for track in project.tracks for pattern in track.patterns)
-        print(f"read slot {slot} in {elapsed:.1f} s, {transport.requests} requests")
+        total = time.monotonic() - began
+        print(f"read slot {slot} in {reading:.1f} s, {transport.requests} requests")
         print(f"wrote {output}")
         print(f"  {notes} note(s), {project.tempo_bpm:g} BPM")
+        print(f"  {total:.1f} s total, {reading:.1f} s of it at the device")
 
 
 def register(app: typer.Typer) -> None:

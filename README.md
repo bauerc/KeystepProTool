@@ -316,6 +316,19 @@ for every project. This asks the hardware directly and writes the same file, in 
 What comes back feeds straight into the rest of the tool, so `ksp-pull` then `ksp2midi` turns what
 is on the device into a MIDI file.
 
+It reports what it did and how long it took:
+
+```
+read slot 3 in 9.6 s, 1007 requests
+wrote my_project.KeyStepPro
+  64 note(s), 120 BPM
+  11.2 s total, 9.6 s of it at the device
+```
+
+The request count is the walk's own, so it can be compared against the figure in
+[spec 7.8](./analysis/format/SysEx_Direct_Transfer_Path.md). The gap between the two times is the
+3.5 MB template parse and the write, neither of which is the device's fault.
+
 Installing the USB extra is what makes it work — the raw-USB dependency is optional, because most
 people converting files have no reason to install libusb:
 
