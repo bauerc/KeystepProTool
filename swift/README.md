@@ -240,13 +240,25 @@ Four targets:
 
 `swift-midi-file` supports Apple platforms only. Rather than let that decide where the whole port
 can be tested, `Package.swift` uses `#if os(Linux)` to drop the bottom three rows on Linux. `KSPKit`
-therefore has **zero third-party dependencies**, and the bulk of the port (milestones M9–M11) builds
-and tests on GitHub's Linux runners, which bill at 1× instead of macOS's 10×.
+therefore has **zero third-party dependencies**, and the bulk of the port (milestones M9–M11, plus
+M12's `Mutate.swift`) builds and tests on GitHub's Linux runners, which bill at 1× instead of
+macOS's 10×.
 
 **So do not add a dependency to `KSPKit`.** That is the whole point of it. `swift-argument-parser`
 does run on Linux, but it is declared inside the same `#else` because `KSPSwiftCLI` is the only
 target that wants it and that target is gated off there anyway — no reason to make the Linux job
 fetch a package it cannot use.
+
+The same rule decides where a *ported module* goes rather than only where a dependency does:
+`mutate.py` imports no `mido`, so `Mutate.swift` is in `KSPKit`; `midi_export.py` and
+`midi_import.py` both do, so they are in `KSPMIDI` whole. From M12 `swift.yml` runs a second job on
+`macos-latest`, because it is the only one that can see `KSPMIDI` and `KSPSwiftCLI` at all.
+
+`KSPSwiftCLI` carries one resource: `Resources/Default.KeyStepPro`, MCC's factory default, which
+`convert` overwrites when the user names no `--template`. The real bytes live there and
+`src/ksp_cli/templates/Default.KeyStepPro` is a symlink to them, not the other way round — SwiftPM
+copies a symlink *as a symlink* (measured, with both `.copy` and `.process`), which would leave a
+dangling link in the bundle, while Python and hatchling follow one transparently.
 
 `KSPSwiftCLI` has no `main.swift`. That is a choice, not a requirement: SwiftPM will happily let
 `KSPSwiftCLITests` `@testable import` an executable target that uses top-level code, and the suite

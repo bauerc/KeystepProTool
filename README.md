@@ -144,6 +144,7 @@ wrote out/project_9_track1_pattern3.mid
 | `--include-stale` | Export both note sets of a pattern that holds both |
 | `--include-disabled` | Export disabled notes — step turned off, or past the pattern's last step (the device plays neither) |
 | `--no-swing` | Place every step on a flat grid |
+| `--no-time-shift` | Ignore each note's time shift and place every step on a flat grid |
 | `--dry-run` | Report what would be written, and write nothing |
 | `--force` | Overwrite an existing output file |
 | `--quiet` | Suppress the stdout summary. Warnings still go to stderr |
@@ -172,8 +173,10 @@ Where a pattern holds both a melodic and a drum note set, only the one the track
 track was switched over, and exporting it would put notes in the file that no hardware produces.
 `--include-stale` exports both.
 
-Note **time shift is not applied**: how much time one shift unit is worth has never been
-measured, so the export leaves the grid alone and says so.
+Each note's **time shift is applied**. Tier 8 measured one unit as a fixed 1/400 of a beat --
+1.2 ticks at 480 PPQN, and the same count whatever the step size -- so the displacement the
+device plays is the displacement the file gets. `--no-time-shift` returns the flat grid, which
+is what to reach for when reading a pattern's written positions rather than its groove.
 
 ### Reading the warnings
 

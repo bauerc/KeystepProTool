@@ -155,6 +155,10 @@ fi
 
 if has convert; then
     for clip in project_files/*.mid analysis/captures/*.mid; do
+        # analysis/captures/ is gitignored, so a worktree has none of it and the glob arrives
+        # unexpanded. Skipping it is right rather than a gap: the captures are hardware recordings
+        # that cannot be regenerated, and a machine that has them tests more than one that does not.
+        [[ -e $clip ]] || continue
         compare import "$(basename "$clip")" "$clip"
         compare import "$(basename "$clip") --no-swing-fit" "$clip" --no-swing-fit
         compare import "$(basename "$clip") --no-time-shift" "$clip" --no-time-shift
