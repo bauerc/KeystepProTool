@@ -2,6 +2,9 @@
 #
 # Assemble the drag-and-drop app (M13.2) into a launchable .app.
 #
+#   ./scripts/bundle_app.sh             build it under swift/.build/app/
+#   ./scripts/bundle_app.sh --install   build it and put it in /Applications  (= `make install`)
+#
 # A macOS app bundle is a directory with an Info.plist, so SwiftPM builds the binary and this
 # script does the wrapping -- no Xcode, no xcodebuild, no actool. Deliberately not part of
 # validate.sh: it is a release build of a GUI, and the tests already compile the target.
@@ -9,6 +12,17 @@
 # The signature here is ad-hoc, which is enough to launch on this machine. M14 replaces it with a
 # Developer ID identity and notarisation, and needs no rebuild to do it.
 set -euo pipefail
+
+install=false
+for arg in "$@"; do
+    case "$arg" in
+        --install) install=true ;;
+        *)
+            echo "usage: ${BASH_SOURCE[0]##*/} [--install]" >&2
+            exit 2
+            ;;
+    esac
+done
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root/swift"
@@ -89,4 +103,31 @@ codesign --verify --strict "$bundle"
 
 echo
 echo "Built $bundle"
-echo "Run it with:  open '$bundle'"
+
+if [[ $install == false ]]; then
+    echo "Run it with:  open '$bundle'"
+    exit 0
+fi
+
+# /Applications is group-writable by admin on a stock macOS, so this needs no sudo. If someone has
+# locked it down, say which command to repeat rather than half-installing.
+installed="/Applications/$app_name.app"
+echo "==> Installing to $installed"
+
+# Replacing a bundle under a running process leaves it half old and half new, and the running copy
+# keeps the old code paths until it is relaunched either way.
+if pgrep -qf "$app_name.app/Contents/MacOS/$exe_name"; then
+    echo "    (quitting the running copy first)"
+    pkill -f "$app_name.app/Contents/MacOS/$exe_name" || true
+    sleep 1
+fi
+
+rm -rf "$installed"
+if ! cp -R "$bundle" "$installed"; then
+    echo "error: could not write to /Applications -- retry with: sudo $0 --install" >&2
+    exit 1
+fi
+
+echo
+echo "Installed $installed"
+echo "Run it with:  open -a '$app_name'"

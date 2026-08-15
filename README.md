@@ -5,6 +5,33 @@ The `.KeyStepPro` format is decoded and hardware-validated — see
 [`analysis/KeyStepPro_Format_Spec.md`](./analysis/KeyStepPro_Format_Spec.md). The staged build
 plan is in [`ROADMAP.md`](./ROADMAP.md).
 
+## Installation
+
+**The app.** One command rebuilds *Key Step Pro Plus* and installs it to `/Applications`:
+
+```sh
+make install
+```
+
+Run it afterwards from Launchpad, or with `open -a "Key Step Pro Plus"`. Re-run `make install`
+any time to pick up changes — it quits a running copy first and replaces it. Needs Swift 6.2 and
+the Command Line Tools; **not** a full Xcode install. No `sudo` on a stock macOS, where
+`/Applications` is writable by admin users.
+
+```sh
+make app     # build it without installing, into swift/.build/app/
+make check   # format, typecheck, test and parity-check both toolchains
+make         # list the targets
+```
+
+**The command line tools.** Requires Python 3.13 and [uv](https://docs.astral.sh/uv/):
+
+```sh
+uv sync
+```
+
+That puts `ksp-dump`, `ksp2midi`, `midi2ksp` and `kspplus` on your path.
+
 ## Status
 
 Both directions work end to end, and both are **verified on the hardware** — files this tool wrote
@@ -24,14 +51,14 @@ There is also a drag-and-drop **macOS app**, *Key Step Pro Plus*, for the common
 Center's Templates folder, where the Project Browser will list it. Drop a `.KeyStepPro` instead and
 you get a `.mid` beside it. One file at a time; everything else is the CLI's job.
 
+Install it with `make install` (see [Installation](#installation)), then:
+
 ```sh
-./scripts/bundle_app.sh
-open "swift/.build/app/Key Step Pro Plus.app"
+open -a "Key Step Pro Plus"
 ```
 
-It needs Swift 6.2 and the Command Line Tools — **not** a full Xcode install. The build is
-unsigned beyond an ad-hoc signature, so it launches on the machine that built it and nowhere else
-yet; a Developer ID build is M14.
+The build is unsigned beyond an ad-hoc signature, so it launches on the machine that built it and
+nowhere else yet; a Developer ID build is M14.
 
 **Naming.** The name field is the filename, and the filename is what MCC's Project Browser shows,
 so it is worth setting. It is editable after the write and renames the file in place.
@@ -46,13 +73,6 @@ be there and the file goes to `~/Downloads` instead, with a message saying where
 The app calls exactly the same `convert` and `export` that `ksp-swift-cli` calls — its output is
 byte-identical, and there is no second implementation to drift.
 
-## Install
-
-Requires Python 3.13 and [uv](https://docs.astral.sh/uv/).
-
-```sh
-uv sync
-```
 
 ## `kspplus`
 
