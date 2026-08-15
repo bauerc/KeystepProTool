@@ -46,7 +46,7 @@ fail() {
 }
 
 # 1. AUTO-FORMAT & LINT (Using uv to run Ruff)
-banner "=== [1/8] Auto-formatting with Ruff ==="
+banner "=== [1/9] Auto-formatting with Ruff ==="
 run_step uv run ruff format .
 if ! run_step uv run ruff check --fix .; then
     fail "❌ LINT VIOLATIONS REMAIN" \
@@ -55,7 +55,7 @@ fi
 
 # 2. SECRET SCANNING (Independent system binary check)
 if command -v gitleaks &> /dev/null; then
-    banner "\n=== [2/8] Scanning for exposed API keys ==="
+    banner "\n=== [2/9] Scanning for exposed API keys ==="
     if ! run_step gitleaks detect --no-git --verbose; then
         fail "❌ ALERT: Hardcoded credentials or API keys detected!" \
             "Claude: remove the secret and use an environment variable instead."
@@ -63,7 +63,7 @@ if command -v gitleaks &> /dev/null; then
 fi
 
 # 3. PARALLEL SYNTAX CHECK (Using uv's python environment)
-banner "\n=== [3/8] Running Parallel Syntax Check ==="
+banner "\n=== [3/9] Running Parallel Syntax Check ==="
 if ! run_step uv run python -m compileall -q -j 0 src tests tools; then
     fail "❌ SYNTAX ERROR DETECTED" \
         "Claude: Fix the broken syntax or indentation shown above."
@@ -71,14 +71,14 @@ fi
 banner "✅ Syntax passes."
 
 # 4. TYPE CHECK (Using uv to run Mypy)
-banner "\n=== [4/8] Running Fast Type Check ==="
+banner "\n=== [4/9] Running Fast Type Check ==="
 if ! run_step uv run mypy; then
     fail "❌ TYPE MISMATCH DETECTED" \
         "Claude: Review the Mypy trace above and correct variable assignments."
 fi
 
 # 5. PARALLEL UNIT TESTS (Using uv to run Pytest with xdist parallel cores)
-banner "\n=== [5/8] Running Parallel Unit Tests ==="
+banner "\n=== [5/9] Running Parallel Unit Tests ==="
 if ! run_step uv run pytest -n auto -m "not slow and not hardware"; then
     fail "❌ UNIT TEST FAILURE" \
         "Claude: You broke existing runtime logic. Review the failing test above."
@@ -86,7 +86,7 @@ fi
 
 # 6. SWIFT PACKAGE (M8 port; skipped where the toolchain is absent, as with gitleaks above)
 if command -v swift &> /dev/null; then
-    banner "\n=== [6/8] Linting and testing the Swift package ==="
+    banner "\n=== [6/9] Linting and testing the Swift package ==="
 
     # Command Line Tools ship Swift Testing as a framework but, unlike a full Xcode, leave it off
     # the compiler's search path and off the runtime's. Worse, the _Testing_Foundation cross-import
@@ -121,7 +121,7 @@ if command -v swift &> /dev/null; then
     # Python rather than in a feature, and this is M10's: the same file through both readers and
     # both output modes has to come out identical, character for character. The Swift CLI is gated
     # off Linux, so CI cannot run this -- it is a dev-machine gate only.
-    banner "\n=== [7/8] Comparing ksp-swift-cli dump against ksp-dump ==="
+    banner "\n=== [7/9] Comparing ksp-swift-cli dump against ksp-dump ==="
     if ! run_step ./scripts/port_parity.sh; then
         fail "❌ THE TWO PORTS DISAGREE" \
             "Claude: the Swift dump no longer reproduces the Python's output. The Python is the reference implementation; fix the Swift."
@@ -131,14 +131,26 @@ if command -v swift &> /dev/null; then
     # 8. WRITER PARITY (M11 onwards). The same again for the write path: both writers over every
     # sample, byte for byte. Needs only swiftc, since KSPKit has no dependencies -- but it writes
     # 3.5 MB files, so it stays beside port_parity as a dev-machine gate rather than a CI one.
-    banner "\n=== [8/8] Comparing the Swift writer against the Python's ==="
+    banner "\n=== [8/9] Comparing the Swift writer against the Python's ==="
     if ! run_step ./scripts/writer_parity.sh; then
         fail "❌ THE TWO WRITERS DISAGREE" \
             "Claude: the Swift writer no longer reproduces the Python's bytes. The Python is the reference implementation; fix the Swift."
     fi
     banner "✅ Both writers agree."
+
+    # 9. CONVERSION PARITY (M12 onwards). Both directions this time, over every project and every
+    # clip in the repository. The export half compares parsed events rather than bytes, because
+    # mido writes running status and swift-midi-file does not; the import half is a real cmp. Each
+    # direction reports itself absent until the subcommand it drives exists, so this arms itself as
+    # M12 lands rather than having to be switched on.
+    banner "\n=== [9/9] Comparing the two ports' conversions, both directions ==="
+    if ! run_step ./scripts/midi_parity.sh; then
+        fail "❌ THE TWO PORTS CONVERT DIFFERENTLY" \
+            "Claude: the Swift no longer converts as the Python does. The Python is the reference implementation; fix the Swift."
+    fi
+    banner "✅ Both ports convert alike."
 else
-    banner "\n=== [6/8] No swift on PATH -- skipping the swift/ package ==="
+    banner "\n=== [6/9] No swift on PATH -- skipping the swift/ package ==="
 fi
 
 exit 0
