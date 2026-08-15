@@ -23,12 +23,12 @@ import typer
 
 from ksp import constants, sysex
 from ksp.bulk_read import DEFAULT_VERSION, Transport, read_raw
-from ksp.lenient_json import canonical, dump_path, load_path
+from ksp.lenient_json import canonical, dump_path
 from ksp.reader import read_project
-from ksp_cli.loading import default_template
+from ksp_cli.loading import load_template
 from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
 from ksp_cli.runner import standalone
-from ksp_cli.usb_transport import TransportError, UsbMidiTransport
+from ksp_cli.usb_transport import DEFAULT_TIMEOUT_MS, TransportError, UsbMidiTransport
 
 PROG = "ksp-pull"
 
@@ -42,10 +42,6 @@ EPILOG = (
 )
 
 _DEVICE_PANEL = "Device"
-
-#: Long enough for the device to answer, short enough that a wrong interface or
-#: a busy MCC is a failure rather than a hang. ``usb_probe`` uses the same.
-DEFAULT_TIMEOUT_MS = 1000
 
 
 class _Counted:
@@ -160,13 +156,7 @@ def pull_command(
     if output.exists() and not force:
         fail(f"{output} already exists (use --force to overwrite)", prog=PROG, code=1)
 
-    template_path = template or default_template()
-    try:
-        template_keys = list(load_path(template_path))
-    except OSError as exc:  # its message already names the file
-        fail(f"template: {exc}", prog=PROG, code=1)
-    except ValueError as exc:
-        fail(f"template: {template_path}: {exc}", prog=PROG, code=1)
+    template_keys = load_template(template, prog=PROG).keys()
 
     opened = time.monotonic()
     try:
@@ -188,7 +178,7 @@ def pull_command(
     # What was read has to parse as a project before it is worth writing: the
     # point of the dump is that the rest of this tool can take it from here.
     try:
-        project = read_project(dict(raw), source_name=str(output))
+        project = read_project(raw, source_name=str(output))
     except ValueError as exc:
         fail(f"the device's answer is not a readable project: {exc}", prog=PROG, code=1)
 

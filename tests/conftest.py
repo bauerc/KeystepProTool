@@ -268,8 +268,9 @@ class FakeDevice:
     def __init__(
         self,
         slots: dict[int, "DeviceModel"],
-        timeout_ms: int = 1000,
         filler: set[int] | None = None,
+        # Stands in for the real transport, so it takes its tuning and ignores it.
+        **_: object,
     ) -> None:
         self.slots = slots
         self.filler = filler or set()

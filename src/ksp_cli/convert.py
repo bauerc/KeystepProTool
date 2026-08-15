@@ -21,10 +21,10 @@ import typer
 
 from ksp import constants
 from ksp.constants import DEFAULT_STEPS_PER_BEAT
-from ksp.lenient_json import dump_path, load_path
+from ksp.lenient_json import dump_path
 from ksp.midi_import import ImportOptions, ImportResult, convert, convert_song, saveable
 from ksp_cli.drum_map_option import DRUM_MAP_HELP, resolve_import_drum_map
-from ksp_cli.loading import TEMPLATE_NAME, default_template
+from ksp_cli.loading import load_template
 from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
 from ksp_cli.runner import standalone
 
@@ -42,8 +42,6 @@ EPILOG = (
 _SOURCE_PANEL = "Source"
 _DESTINATION_PANEL = "Destination"
 _TIMING_PANEL = "Timing"
-
-__all__ = ["TEMPLATE_NAME", "convert_command", "default_template", "main", "register"]
 
 
 def _summary(result: ImportResult, destination: Path, dry_run: bool) -> str:
@@ -230,13 +228,7 @@ def convert_command(
         # the same class of failure as a truncated one rather than an IO error.
         fail(f"{path}: not a readable MIDI file: {exc}", prog=PROG, code=1)
 
-    template_path = template or default_template()
-    try:
-        loaded_template = load_path(template_path)
-    except OSError as exc:
-        fail(f"template: {exc}", prog=PROG, code=1)
-    except ValueError as exc:
-        fail(f"template: {template_path}: {exc}", prog=PROG, code=1)
+    loaded_template = load_template(template, prog=PROG)
 
     # --midi-track narrows the source to one track, which is the whole of the
     # single-target path: that one track, into the one pattern --track and
