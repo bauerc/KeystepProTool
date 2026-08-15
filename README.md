@@ -15,17 +15,18 @@ converts a MIDI clip into a playable pattern. `kspplus` gathers all three under 
 `midi2ksp` converts a whole file: every note-bearing track onto the device's four, chords, a drum
 track, note lengths, tempo, and sequences too long for one pattern split and chained.
 
-There is also a drag-and-drop **macOS app** for the common case — see [The app](#the-app).
+There is also a drag-and-drop **macOS app**, *Key Step Pro Plus*, for the common case — see
+[The app](#the-app).
 
 ## The app
 
-Drop a `.mid` on the window and a `.KeyStepPro` lands in MIDI Control Center's Templates folder,
-where the Project Browser will list it. Drop a `.KeyStepPro` instead and you get a `.mid` beside
-it. One file at a time; everything else is the CLI's job.
+**Key Step Pro Plus.** Drop a `.mid` on the window and a `.KeyStepPro` lands in MIDI Control
+Center's Templates folder, where the Project Browser will list it. Drop a `.KeyStepPro` instead and
+you get a `.mid` beside it. One file at a time; everything else is the CLI's job.
 
 ```sh
 ./scripts/bundle_app.sh
-open swift/.build/app/KeyStepProTool.app
+open "swift/.build/app/Key Step Pro Plus.app"
 ```
 
 It needs Swift 6.2 and the Command Line Tools — **not** a full Xcode install. The build is

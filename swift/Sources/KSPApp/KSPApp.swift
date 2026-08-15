@@ -12,7 +12,7 @@ struct KSPApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        WindowGroup("KeyStep Pro Tool") {
+        WindowGroup("Key Step Pro Plus") {
             DropView(model: .shared)
         }
         .windowResizability(.contentSize)

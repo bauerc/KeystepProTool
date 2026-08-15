@@ -20,7 +20,8 @@ drums, gates, tempo, fitted swing and time shift, and long sequences split acros
 patterns (M5, M6). `swift/` builds and tests alongside the Python and is now a complete port of
 both directions — constants, keys, the JSON reader and writer, diagnostics, the drum map, the
 model, the reader, `mutate`, `midi_export`, `midi_import` and `ksp-swift-cli dump` / `export` /
-`convert` (M8–M12), plus the drag-and-drop app `ksp-app` (M13). What is left is packaging (M14).
+`convert` (M8–M12), plus the drag-and-drop app *Key Step Pro Plus* — SwiftPM product `ksp-app`,
+target `KSPApp` (M13). What is left is packaging (M14).
 
 - [KeyStep Pro Format Spec](analysis/KeyStepPro_Format_Spec.md) — authoritative format reference. **Read it before touching
   format code.**

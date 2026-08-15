@@ -13,8 +13,14 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root/swift"
 
-name="KeyStepProTool"
-bundle="$root/swift/.build/app/$name.app"
+# What the user sees. Finder labels an app by its bundle filename and the menu bar by
+# CFBundleName, so both carry the spaced form or the two disagree.
+app_name="Key Step Pro Plus"
+# The Mach-O inside stays unspaced: nothing displays it, and a space in an executable name is a
+# quoting trap in every script that ever touches it.
+exe_name="KeyStepProPlus"
+
+bundle="$root/swift/.build/app/$app_name.app"
 contents="$bundle/Contents"
 
 echo "==> Building ksp-app (release)"
@@ -22,10 +28,10 @@ swift build -c release --product ksp-app
 
 build_dir=$(swift build -c release --show-bin-path)
 
-echo "==> Assembling $name.app"
+echo "==> Assembling $app_name.app"
 rm -rf "$bundle"
 mkdir -p "$contents/MacOS" "$contents/Resources"
-cp "$build_dir/ksp-app" "$contents/MacOS/$name"
+cp "$build_dir/ksp-app" "$contents/MacOS/$exe_name"
 
 # The SwiftPM resource bundles, which is how the 3.5 MB factory template reaches the app:
 # `Bundle.module` looks in `Bundle.main.resourceURL`, and for an app that is Contents/Resources.
@@ -44,10 +50,10 @@ cat > "$contents/Info.plist" << PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>KeyStep Pro Tool</string>
-    <key>CFBundleDisplayName</key><string>KeyStep Pro Tool</string>
-    <key>CFBundleExecutable</key><string>$name</string>
-    <key>CFBundleIdentifier</key><string>com.github.bauerc.keysteppro-tool</string>
+    <key>CFBundleName</key><string>$app_name</string>
+    <key>CFBundleDisplayName</key><string>$app_name</string>
+    <key>CFBundleExecutable</key><string>$exe_name</string>
+    <key>CFBundleIdentifier</key><string>com.github.bauerc.keysteppro-plus</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key><string>1</string>

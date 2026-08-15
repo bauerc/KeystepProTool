@@ -577,7 +577,8 @@ port, and it is the one step no script can do.
 
 ### M13 — Native GUI ✅ **done**
 
-**Artifact:** `ksp-app`, the drag-and-drop macOS app. Drop a `.mid` and a `.KeyStepPro` lands in
+**Artifact:** *Key Step Pro Plus*, the drag-and-drop macOS app (SwiftPM product `ksp-app`). Drop a
+`.mid` and a `.KeyStepPro` lands in
 `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/` (mode `0777`, no elevation needed,
 confirmed 2026-08-07); drop a `.KeyStepPro` and a `.mid` lands beside it.
 
