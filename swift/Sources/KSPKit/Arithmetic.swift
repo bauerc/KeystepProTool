@@ -29,6 +29,14 @@ public enum Arithmetic {
     public static func pyRound(_ value: Double) -> Int {
         Int(value.rounded(.toNearestOrEven))
     }
+
+    /// Python's `f"{value:g}"`: 0.5 rather than 0.500000, and 2 rather than 2.0.
+    ///
+    /// Both CLIs print gate lengths and tempo through this, and so does the export's off-ladder
+    /// gate diagnostic, so it has to say the same thing in all three.
+    public static func general(_ value: Double) -> String {
+        String(format: "%g", value)
+    }
 }
 
 extension Sequence {

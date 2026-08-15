@@ -16,7 +16,7 @@ private let gateWidth = 6
 /// wrong.
 private func formatGate(_ gate: Double?, raw: Int) -> String {
     guard let gate else { return "?(\(raw))" }
-    return general(gate).rightAligned(to: gateWidth)
+    return Arithmetic.general(gate).rightAligned(to: gateWidth)
 }
 
 private func formatSkip(_ skip: [Int]) -> String {
@@ -131,7 +131,7 @@ func formatProject(
     var lines = [
         project.sourceName.isEmpty ? project.device : project.sourceName,
         "  device \(project.device)   version \(project.version ?? "(none)")",
-        "  tempo \(general(project.tempoBPM)) BPM   "
+        "  tempo \(Arithmetic.general(project.tempoBPM)) BPM   "
             + "swing \(project.globalSwingPercent)%   scene \(project.currentScene)",
     ]
     // Only scenes that chain something: a project nobody has chained holds the sentinel in all 16
@@ -169,10 +169,6 @@ func formatProject(
 
 /// Python's `f"{value:g}"`: the shortest of fixed and exponential, with no trailing zeros, so
 /// 120.0 prints as `120` and 0.1875 as `0.1875`.
-private func general(_ value: Double) -> String {
-    String(format: "%g", value)
-}
-
 extension String {
     /// Python's `str.ljust`, which pads on the right and never truncates.
     fileprivate func padded(to width: Int) -> String {
