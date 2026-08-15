@@ -237,16 +237,11 @@ def test_an_unreadable_template_stops_before_the_device(
     assert not attached.slots[1].asked
 
 
-def test_ksp_pull_is_the_same_command_either_way(
-    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_ksp_pull_is_the_same_command_either_way(attached: FakeDevice, tmp_path: Path) -> None:
     direct = tmp_path / "direct.KeyStepPro"
     umbrella = tmp_path / "umbrella.KeyStepPro"
 
     assert main([str(direct)]) == 0
-    capsys.readouterr()
-
     assert app.main(["ksp-pull", str(umbrella)]) == 0
-    capsys.readouterr()
 
     assert direct.read_bytes() == umbrella.read_bytes()

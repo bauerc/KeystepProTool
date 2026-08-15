@@ -27,6 +27,11 @@ LIBUSB_PATHS: Final = (
     "/usr/local/lib/libusb-1.0.dylib",
 )
 
+#: Long enough for the device to answer, short enough that a wrong interface or
+#: a busy MCC is a failure rather than a hang. ``ksp-pull`` and ``usb_probe``
+#: both default to it.
+DEFAULT_TIMEOUT_MS: Final = 1000
+
 #: Payload bytes carried by each SysEx code index number.
 _CIN_LENGTHS: Final = {0x04: 3, 0x05: 1, 0x06: 2, 0x07: 3}
 _CIN_TERMINAL: Final = frozenset((0x05, 0x06, 0x07))
@@ -87,7 +92,7 @@ class UsbMidiTransport:
     identifies a slot.
     """
 
-    def __init__(self, timeout_ms: int = 1000) -> None:
+    def __init__(self, timeout_ms: int = DEFAULT_TIMEOUT_MS) -> None:
         self.timeout_ms = timeout_ms
         self._device: Any = None
         self._detached = False

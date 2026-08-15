@@ -23,7 +23,7 @@ from typing import Any
 
 from ksp import bulk_fast, bulk_read, constants, midi_export, reader, sysex
 from ksp.keys import item_for_track
-from ksp_cli.usb_transport import TransportError, UsbMidiTransport
+from ksp_cli.usb_transport import DEFAULT_TIMEOUT_MS, TransportError, UsbMidiTransport
 
 PROG = "usb_probe"
 
@@ -547,7 +547,7 @@ PROBES = {
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=PROG, description=__doc__)
-    parser.add_argument("--timeout", type=int, default=1000, help="reply timeout, ms")
+    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT_MS, help="reply timeout, ms")
     parser.add_argument(
         "--slot",
         type=int,

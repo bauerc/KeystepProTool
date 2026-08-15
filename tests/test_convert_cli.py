@@ -7,7 +7,8 @@ import pytest
 
 from ksp import lenient_json, reader
 from ksp.model import NoteKind
-from ksp_cli.convert import default_template, main
+from ksp_cli.convert import main
+from ksp_cli.loading import default_template
 
 
 def test_writes_a_project_next_to_its_input(
