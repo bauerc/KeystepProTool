@@ -4,14 +4,16 @@ name: swift
 # core, M9-M11, and the bulk of the port -- takes no third-party dependencies, so it builds and
 # tests anywhere Swift runs. See the comment in swift/Package.swift.
 #
-# What this job therefore does NOT cover: `Package.swift` gates `KSPMIDI`, `KSPSwiftCLI` and their
-# test targets off on Linux, because swift-midi-file supports Apple platforms only. Those targets
-# -- M8's SMF spike and M10's `dump` command -- are checked by ./scripts/validate.sh on a dev
-# machine and nowhere else, and so is the port-parity diff against the Python CLI that
-# ./scripts/port_parity.sh runs. M12 is when the MIDI layer gets real code and this needs a
-# macos-latest job beside it.
+# `Package.swift` gates `KSPMIDI`, `KSPSwiftCLI` and their test targets off on Linux, because
+# swift-midi-file supports Apple platforms only, so the Linux job cannot see them. M8 said M12 would
+# need a macos-latest job beside it once the MIDI layer had real code, and `swift-macos` below is
+# it. Keeping both is the point: Linux still covers `KSPKit` -- the format core and, from M12,
+# `Mutate.swift` -- at 1x, and only the MIDI half pays 10x.
 #
-# The container image carries swift-format, so no toolchain setup step is needed.
+# What neither job covers is the three parity scripts. They drive both toolchains at once and need
+# `uv` beside Swift, so ./scripts/validate.sh runs them on a dev machine and nowhere else.
+#
+# The container image carries swift-format, so no toolchain setup step is needed there.
 
 on:
   push:
@@ -39,5 +41,19 @@ jobs:
 
       # Package.resolved is committed, so this must not need to re-resolve. `swift test` builds
       # as a side effect, which is why there is no separate build step.
+      - name: Test
+        run: swift test
+
+  # The only job that sees KSPMIDI and KSPSwiftCLI at all: everything M12 adds beyond Mutate.swift
+  # is invisible to the Linux job above. Xcode's toolchain ships Swift Testing on the search paths,
+  # so none of validate.sh's Command Line Tools bridging flags are needed here.
+  swift-macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: swift
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Test
         run: swift test

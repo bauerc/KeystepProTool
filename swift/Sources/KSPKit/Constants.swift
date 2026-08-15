@@ -262,7 +262,7 @@ public enum Constants {
     /// is what Python's `round` does and what `rounded()` alone would not.
     public static func timeShiftTicks(_ shift: Int, ticksPerBeat: Int) -> Int {
         let ticks = Double(shift) * Double(ticksPerBeat) / Double(timeShiftUnitsPerBeat)
-        return Int(ticks.rounded(.toNearestOrEven))
+        return Arithmetic.pyRound(ticks)
     }
 
     /// Step skip is a 4-bit mask over the four 16-step sequences a pattern can run as. 15 (all
@@ -372,26 +372,12 @@ public enum Constants {
 
     /// Render a MIDI pitch the way the hardware labels it, e.g. 48 -> `C2`.
     public static func noteName(_ pitch: Int) -> String {
-        "\(noteNames[floorRemainder(pitch, 12)])\(floorQuotient(pitch, 12) - 2)"
+        "\(noteNames[Arithmetic.floorMod(pitch, 12)])\(Arithmetic.floorDiv(pitch, 12) - 2)"
     }
 
     /// Name parameter 107's pitch class, e.g. 2 -> `D`. No octave: the display shows one but the
     /// file does not store it (T5.6).
     public static func rootNoteName(_ root: Int) -> String {
-        noteNames[floorRemainder(root, rootNoteCount)]
-    }
-
-    /// Python's `//`, which floors. Swift's `/` truncates toward zero, so the two disagree on
-    /// every negative dividend: `-7 // 4` is -2 there and -1 here.
-    private static func floorQuotient(_ dividend: Int, _ divisor: Int) -> Int {
-        let (quotient, remainder) = dividend.quotientAndRemainder(dividingBy: divisor)
-        return remainder != 0 && (remainder < 0) != (divisor < 0) ? quotient - 1 : quotient
-    }
-
-    /// Python's `%`, whose result takes the sign of the divisor and so is never negative for the
-    /// positive divisors used here.
-    private static func floorRemainder(_ dividend: Int, _ divisor: Int) -> Int {
-        let remainder = dividend % divisor
-        return remainder != 0 && (remainder < 0) != (divisor < 0) ? remainder + divisor : remainder
+        noteNames[Arithmetic.floorMod(root, rootNoteCount)]
     }
 }
