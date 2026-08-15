@@ -13,10 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from conftest import DeviceModel, build_reply, decode_request, tape_values
-from ksp import bulk_fast, bulk_read, constants, sysex
+from conftest import DeviceModel, FakeDevice, tape_values
+from ksp import bulk_fast, constants, sysex
 from ksp.keys import item_for_track
-from ksp_cli.usb_transport import TransportError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
@@ -195,47 +194,6 @@ def test_the_step_active_check_catches_a_missing_bit() -> None:
     verdict = usb_probe.check_step_active(missing, STEPS)
     assert not verdict.passed
     assert any("13" in fault for fault in verdict.faults)
-
-
-class FakeDevice:
-    """A ``UsbMidiTransport`` whose slots are the two tapes, for the smoke test.
-
-    Anything else times out, which is also how the device behaves when byte 7
-    names a slot it will not answer for.
-    """
-
-    def __init__(
-        self,
-        slots: dict[int, DeviceModel],
-        timeout_ms: int = 1000,
-        filler: set[int] | None = None,
-    ) -> None:
-        self.slots = slots
-        self.filler = filler or set()
-        self.sent: list[bytes] = []
-
-    def __enter__(self) -> "FakeDevice":
-        return self
-
-    def __exit__(self, *_: object) -> None:
-        return None
-
-    def send(self, frame: bytes) -> None:
-        self.sent.append(frame)
-
-    def exchange(self, frame: bytes) -> bytes:
-        if frame == sysex.IDENTITY_REQUEST:
-            return bytes.fromhex("f07e7f060200206b0200090025140502f7")
-        slot = sysex.parse_slot(frame)
-        if slot in self.filler:
-            # The shape the device really sent: well formed, right slot, 0x7f.
-            request = decode_request(frame)
-            count = request.count or 1
-            return build_reply(request, (bulk_read.FILLER,) * count, slot)
-        model = self.slots.get(slot)
-        if model is None:
-            raise TransportError(f"no reply for slot {slot}")
-        return model.exchange(frame)
 
 
 def test_phase_2_runs_end_to_end_against_a_modelled_device(

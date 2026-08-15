@@ -12,6 +12,7 @@ import pytest
 
 from ksp import bulk_read, lenient_json, sysex
 from ksp.sysex import ReadRequest
+from ksp_cli.usb_transport import TransportError
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -254,6 +255,48 @@ class DeviceModel:
         return build_reply(
             request, tuple(self._values[name] for name in names), sysex.parse_slot(frame)
         )
+
+
+class FakeDevice:
+    """A ``UsbMidiTransport`` whose slots are tapes, for the probes and the pull.
+
+    Anything else times out, which is also how the device behaves when byte 7
+    names a slot it will not answer for. ``filler`` makes the named slots answer
+    ``0x7f`` to everything, the shape a never-saved slot really returns.
+    """
+
+    def __init__(
+        self,
+        slots: dict[int, "DeviceModel"],
+        timeout_ms: int = 1000,
+        filler: set[int] | None = None,
+    ) -> None:
+        self.slots = slots
+        self.filler = filler or set()
+        self.sent: list[bytes] = []
+
+    def __enter__(self) -> "FakeDevice":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def send(self, frame: bytes) -> None:
+        self.sent.append(frame)
+
+    def exchange(self, frame: bytes) -> bytes:
+        if frame == sysex.IDENTITY_REQUEST:
+            return bytes.fromhex("f07e7f060200206b0200090025140502f7")
+        slot = sysex.parse_slot(frame)
+        if slot in self.filler:
+            # The shape the device really sent: well formed, right slot, 0x7f.
+            request = decode_request(frame)
+            count = request.count or 1
+            return build_reply(request, (bulk_read.FILLER,) * count, slot)
+        model = self.slots.get(slot)
+        if model is None:
+            raise TransportError(f"no reply for slot {slot}")
+        return model.exchange(frame)
 
 
 @pytest.fixture(scope="session")

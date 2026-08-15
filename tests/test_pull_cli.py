@@ -1,0 +1,252 @@
+"""``ksp-pull`` end to end, against a modelled device.
+
+The command cannot be run against hardware in CI, but everything except the USB
+layer can: ``FakeDevice`` answers out of the captured tapes, so the walk, the
+slot selection, the failure paths and -- the one that matters -- the bytes that
+land on disk are all exercised here.
+
+H3.2's gate is a byte-diff of a dump against MCC's own export of the same
+project. ``test_the_dump_is_byte_identical_to_mcc_s_export`` is that diff, run
+over the replayed capture. Passing it is not the same as passing on hardware,
+which is what H3.1 is for, but a regression that would fail the hardware gate
+fails here first.
+
+The diff is against ``without_trailing_comma``, not the raw export: this tool
+emits strict JSON and MCC emits one trailing comma before the closing brace, a
+deviation T6.2 settled at the device and ``test_round_trip`` bounds to that one
+byte. H3.2's diff on hardware will show the same byte and nothing else.
+"""
+
+import re
+from pathlib import Path
+
+import pytest
+
+from conftest import DeviceModel, FakeDevice, tape_values, without_trailing_comma
+from ksp import lenient_json, reader, sysex
+from ksp_cli import app, pull
+from ksp_cli.pull import main
+from ksp_cli.usb_transport import TransportError
+
+
+@pytest.fixture
+def device(fixtures_dir: Path) -> FakeDevice:
+    """Slot 1 is the initial_project tape, slot 2 the project 2 recall."""
+    return FakeDevice(
+        {
+            1: DeviceModel(tape_values(fixtures_dir / "recall_tape.txt")),
+            2: DeviceModel(tape_values(fixtures_dir / "recall_project_2_tape.txt")),
+        }
+    )
+
+
+@pytest.fixture
+def attached(monkeypatch: pytest.MonkeyPatch, device: FakeDevice) -> FakeDevice:
+    """The command's transport, with the device standing in for the hardware."""
+    monkeypatch.setattr(pull, "UsbMidiTransport", lambda **_: device)
+    return device
+
+
+def test_the_dump_is_byte_identical_to_mcc_s_export(
+    attached: FakeDevice, tmp_path: Path, project_files_dir: Path
+) -> None:
+    """H3.2's byte-diff, over the capture rather than over the device.
+
+    The whole point of the read path is that the file it writes is the file MCC
+    writes. Key order, the value of every one of the 153,495 numeric keys, the
+    247 the firmware never sent and the three MCC-side constants it also never
+    sent all have to be right for this to hold, and nothing else in the suite
+    compares the finished artifact rather than the dict behind it.
+    """
+    written = tmp_path / "pulled.KeyStepPro"
+
+    assert main([str(written)]) == 0
+
+    expected = project_files_dir / "initial_project.KeyStepPro"
+    assert written.read_bytes() == without_trailing_comma(expected.read_bytes())
+
+
+def test_the_walk_asks_for_64_values_at_a_time(
+    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """H3.1 asks for the coalesced walk, not MCC's 8,951 count-1 reads.
+
+    H1.3 measured a request period that does not move with the payload, so the
+    count is the whole of the speedup: the same addresses in about a ninth of
+    the frames.
+    """
+    written = tmp_path / "pulled.KeyStepPro"
+    assert main([str(written)]) == 0
+
+    counts = [request.count for request in attached.slots[1].asked if request.count is not None]
+    assert max(counts) == 64
+    # The gated walk's own figure for this tape, which test_bulk_fast pins too.
+    assert len(attached.slots[1].asked) == 1007
+    # And the summary reports the walk, not the walk plus the identity request:
+    # 1,007 is the number spec 7.8 states and an operator compares a run against.
+    assert "1007 requests" in capsys.readouterr().out
+
+
+def test_the_mcc_plan_reads_the_same_project_in_far_more_requests(
+    attached: FakeDevice, tmp_path: Path, project_files_dir: Path
+) -> None:
+    """The two walks are alternatives, not different answers."""
+    written = tmp_path / "slow.KeyStepPro"
+
+    assert main([str(written), "--mcc-plan"]) == 0
+
+    expected = project_files_dir / "initial_project.KeyStepPro"
+    assert written.read_bytes() == without_trailing_comma(expected.read_bytes())
+    assert len(attached.slots[1].asked) == 8951
+
+
+def test_the_slot_is_chosen_without_touching_the_panel(
+    attached: FakeDevice, tmp_path: Path
+) -> None:
+    """``--slot`` sends the prologue that selects the project (H4.1)."""
+    written = tmp_path / "two.KeyStepPro"
+
+    assert main([str(written), "--slot", "2"]) == 0
+
+    assert attached.sent == [sysex.prologue(2)]
+    assert attached.slots[2].asked
+    assert not attached.slots[1].asked
+
+
+def test_the_version_comes_off_the_wire(attached: FakeDevice, tmp_path: Path) -> None:
+    """No read address carries it, so the identity request is not optional."""
+    written = tmp_path / "pulled.KeyStepPro"
+    assert main([str(written)]) == 0
+
+    assert lenient_json.load_path(written)["version"] == "2.5.20"
+
+
+def test_no_identity_falls_back_without_asking(
+    monkeypatch: pytest.MonkeyPatch, device: FakeDevice, tmp_path: Path
+) -> None:
+    asked: list[bytes] = []
+    exchange = device.exchange
+
+    def watched(frame: bytes) -> bytes:
+        asked.append(frame)
+        return exchange(frame)
+
+    monkeypatch.setattr(device, "exchange", watched)
+    monkeypatch.setattr(pull, "UsbMidiTransport", lambda **_: device)
+
+    written = tmp_path / "pulled.KeyStepPro"
+    assert main([str(written), "--no-identity"]) == 0
+
+    assert sysex.IDENTITY_REQUEST not in asked
+    assert lenient_json.load_path(written)["version"] == "2.5.20"
+
+
+def test_the_result_is_a_project_the_rest_of_the_tool_can_read(
+    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    written = tmp_path / "pulled.KeyStepPro"
+    assert main([str(written)]) == 0
+
+    project = reader.load(written)
+    assert project.tempo_bpm == 132
+    assert project.diagnostics.entries == ()
+    assert "read slot 1" in capsys.readouterr().out
+
+
+def test_the_summary_times_the_whole_run_not_just_the_read(
+    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The total has to include the template parse and the write.
+
+    Both are 3.5 MB and neither is at the device, so a "total" measured from the
+    first frame would understate a real run by most of it.
+    """
+    written = tmp_path / "pulled.KeyStepPro"
+    assert main([str(written)]) == 0
+
+    line = next(line for line in capsys.readouterr().out.splitlines() if "s total" in line)
+    total, reading = (float(part) for part in re.findall(r"([\d.]+) s", line))
+    # The replayed device answers instantly, so the 3.5 MB parse and write are
+    # nearly all of this run. A total equal to the read time means the clock was
+    # started after them.
+    assert total > reading
+
+
+def test_an_existing_file_is_not_overwritten_without_force(
+    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """And the device is never opened: the check is worth more before the read."""
+    written = tmp_path / "pulled.KeyStepPro"
+    written.write_text("mine")
+
+    assert main([str(written)]) == 1
+
+    assert "already exists" in capsys.readouterr().err
+    assert written.read_text() == "mine"
+    assert not attached.slots[1].asked
+
+    assert main([str(written), "--force"]) == 0
+    assert written.read_text() != "mine"
+
+
+def test_a_slot_with_nothing_saved_in_it_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+    fixtures_dir: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Filler parses as a valid empty project, so it has to be caught here.
+
+    A dump of ``0x7f`` is well formed at every level below this one. Left alone
+    it writes a plausible file that silently is not the user's project.
+    """
+    empty = FakeDevice({3: DeviceModel(tape_values(fixtures_dir / "recall_tape.txt"))}, filler={3})
+    monkeypatch.setattr(pull, "UsbMidiTransport", lambda **_: empty)
+
+    written = tmp_path / "pulled.KeyStepPro"
+    assert main([str(written), "--slot", "3"]) == 1
+
+    assert "slot 3" in capsys.readouterr().err
+    assert not written.exists()
+
+
+def test_a_device_that_is_not_there_fails_with_its_own_message(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def refuse(**_: object) -> FakeDevice:
+        raise TransportError("no KeyStep Pro at 0x1c75:0x0218")
+
+    monkeypatch.setattr(pull, "UsbMidiTransport", refuse)
+
+    assert main([str(tmp_path / "pulled.KeyStepPro")]) == 1
+    assert "no KeyStep Pro" in capsys.readouterr().err
+
+
+def test_a_slot_outside_the_sixteen_is_a_usage_error(attached: FakeDevice, tmp_path: Path) -> None:
+    assert main([str(tmp_path / "pulled.KeyStepPro"), "--slot", "17"]) == 2
+
+
+def test_an_unreadable_template_stops_before_the_device(
+    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    missing = tmp_path / "nowhere.KeyStepPro"
+
+    assert main([str(tmp_path / "pulled.KeyStepPro"), "--template", str(missing)]) == 1
+
+    assert "template" in capsys.readouterr().err
+    assert not attached.slots[1].asked
+
+
+def test_ksp_pull_is_the_same_command_either_way(
+    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    direct = tmp_path / "direct.KeyStepPro"
+    umbrella = tmp_path / "umbrella.KeyStepPro"
+
+    assert main([str(direct)]) == 0
+    capsys.readouterr()
+
+    assert app.main(["ksp-pull", str(umbrella)]) == 0
+    capsys.readouterr()
+
+    assert direct.read_bytes() == umbrella.read_bytes()

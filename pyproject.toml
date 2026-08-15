@@ -26,6 +26,7 @@ kspplus = "ksp_cli.app:main"
 ksp-dump = "ksp_cli.dump:main"
 ksp2midi = "ksp_cli.export:main"
 midi2ksp = "ksp_cli.convert:main"
+ksp-pull = "ksp_cli.pull:main"
 
 [build-system]
 requires = ["hatchling"]

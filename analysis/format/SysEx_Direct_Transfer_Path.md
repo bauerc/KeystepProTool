@@ -262,3 +262,11 @@ both walks out of one model of the tape's values and requires the resulting proj
 which is what makes the saving checkable without hardware. **No timing here is measured**: H1.3's
 9.6 s remains the only figure taken off the device, and what the gate does to wall-clock is
 untested.
+
+`ksp-pull` (`src/ksp_cli/pull.py`) is the command that drives this walk: it reads the coalesced
+`bulk_fast` plan by default and takes `--mcc-plan` to walk the generated one instead. Replayed
+against `recall_tape.txt` it writes a file byte-identical to MCC's own export of the same
+project — but for the trailing comma MCC appends and this writer's strict JSON omits, same as 7.3
+above (`tests/test_pull_cli.py::test_the_dump_is_byte_identical_to_mcc_s_export`). That is the
+tapes again, not the device; H3.1 and H3.2 in the [hardware test
+protocol](../Hardware_Test_Protocol.md#phase-3--acceptance) are what carry this check to hardware.

@@ -16,11 +16,12 @@ export back out.
 untouched project, already captured. Where a test says "from the baseline", start by loading or
 re-initialising to that state; do not re-derive it.
 
-**What is genuinely unknown and needs the device: nothing.** Every question this programme opened
-has been answered, and the procedures have been removed as each tier closed. What is left below is
-the method — how to run a capture, the export and import routes, the device operating notes, the
-rules — kept because the next format question will need all of it, and because reconstructing it
-from memory is exactly how a capture gets taken wrongly.
+**What is genuinely unknown and needs the device: Phase 3's acceptance run.** Every format question
+this programme opened has been answered, and the procedures have been removed as each tier closed.
+What is left below is the method — how to run a capture, the export and import routes, the device
+operating notes, the rules — kept because the next format question will need all of it, and because
+reconstructing it from memory is exactly how a capture gets taken wrongly. Phase 3 (below) is the
+one open item: H3.1 and H3.2 have not yet been run on hardware.
 
 **Tiers 7 and 8 are complete and have been removed.** Tier 7 (2026-08-05) measured the Time Shift
 range and linearity, the swing encoding and scope, and the meaning of randomness. Tier 8
@@ -458,6 +459,78 @@ what a degraded read returns (H1.6 saw `36 × 0x7f` on an overrun), so an empty 
 Then the command above. It prints PASS/FAIL for the note pool against `--steps`/`--pitches`, for
 the step-active array, and writes `--midi-out` to listen to. `120_37` coming back `0x7f` means the
 device is not returning that slot's contents at all — most likely it has never been saved.
+
+---
+
+## Phase 3 — acceptance
+
+The milestone gate: a whole project pulled off the device, checked against MCC's own export of the
+same project. Everything up to here has been probes and fragments; this is the first run that has
+to hold end to end. Neither entry below has run on hardware yet.
+
+### H3.1 — Full dump
+
+- [ ] **not yet run.**
+
+- **Resolves:** whether a full project reads correctly off the device end to end, at the request
+  volume `bulk_fast` actually walks — Phase 1 and 2 exercised single scalars, one pattern and a
+  sixteen-slot sweep of one field, never all 117,783 addresses in one run.
+- **Command:**
+
+  ```sh
+  sudo ksp-pull project_files/captures/H3-pull.KeyStepPro --slot <N>
+  ```
+
+  Any populated slot works; `--slot` needs no panel work first, per Phase 4. The slot is read as it
+  was **saved**, so save any panel edits before pulling. Add `--mcc-plan` to walk MCC's
+  8,951-request stream instead of the coalesced 1,007 if the two need comparing directly on
+  hardware.
+- **Confirms if:** the command completes, `ksp.reader.read_project` parses the result without
+  error, and the printed note count and tempo look like the loaded project.
+- **Falsified if:** the device times out, returns a filler answer (an unsaved slot reads as `0x7f`
+  throughout and `bulk_read` refuses it, exit 1), or the parsed project disagrees with what the
+  panel shows for that slot.
+
+### H3.2 — Byte-diff against MCC's export
+
+- [ ] **not yet run.**
+
+- **Resolves:** whether the coalesced walk `ksp-pull` uses by default reproduces MCC's export byte
+  for byte. This is what promotes `bulk_fast` from "checked against the tapes" to "checked against
+  the device" — the saving H1.3 and §7.8 count is over 8,951 requests that were never replayed
+  live.
+- **Command:** Recall the same project H3.1 pulled (slot `<N>`) in MCC and export it, then compare
+  against the file H3.1 already wrote:
+
+  ```sh
+  cmp path/to/mcc-export.KeyStepPro project_files/captures/H3-pull.KeyStepPro
+  wc -c path/to/mcc-export.KeyStepPro project_files/captures/H3-pull.KeyStepPro
+  ```
+
+  **Read this before running it: a passing H3.2 does not print "identical".** `ksp-pull` writes
+  strict JSON; every file MCC writes ends `,\n}` with a trailing comma before the closing brace
+  that this writer deliberately omits. That one-byte deviation was settled by T6.2 and is pinned in
+  `tests/test_round_trip.py::test_output_differs_from_mcc_by_exactly_the_trailing_comma`. So `cmp`
+  is expected to report one difference, and **where** it reports it is the whole result: `cmp`
+  stops at the first differing byte, so a difference on the *last* line proves every byte before it
+  matched. Rehearsed against `initial_project.KeyStepPro`, a pass looks like
+
+  ```
+  differ: char 3523190, line 153498      # the last line -- the trailing comma, nothing before it
+  3523192 mcc-export.KeyStepPro
+  3523191 H3-pull.KeyStepPro             # exactly one byte shorter
+  ```
+
+  A single wrong value in the middle of the file moves that `char` figure by about 1.7 MB, which is
+  why the position and not the mere presence of a difference is what is being read.
+  `tests/test_pull_cli.py::test_the_dump_is_byte_identical_to_mcc_s_export` already holds this over
+  the replayed capture in CI; H3.2 is the same check against a live device.
+- **Confirms if:** `cmp`'s first difference falls on the file's last line and the two sizes differ
+  by exactly one byte.
+- **Falsified if:** they differ anywhere earlier, or by more than one byte. That would mean the
+  coalesced walk or the melodic gate ([spec 7.8](./format/SysEx_Direct_Transfer_Path.md)) drops or
+  misreads something the tapes never exposed, and `ksp-pull` defaulting to the coalesced walk would
+  have to be revisited — `--mcc-plan` is the comparison to run next in that case.
 
 ---
 
