@@ -18,24 +18,36 @@ enum Job: Sendable, Hashable {
 
 /// What the window shows after a run.
 ///
-/// Built from ``RunResult``'s structured half -- `diagnostics` and `destinations` -- never by
-/// re-parsing the text meant for a terminal. The `Report` is carried whole rather than pre-rendered
-/// so the detail toggle can re-render it without converting again.
+/// The findings, the destination and a failure's message come from ``RunResult``'s structured half.
+/// The one thing read out of the terminal text is the success summary, and only to drop its first
+/// line -- see ``summary(_:)``.
 struct Outcome: Sendable {
     var written: URL?
     var headline: String
-    var report: Report
     var note: String?
+
+    /// The findings rendered both ways, once. SwiftUI re-evaluates a body far more often than a
+    /// conversion happens, and `Report.grouped()` allocates on every call.
+    let collapsed: [String]
+    let all: [String]
+
+    init(written: URL?, headline: String, report: Report, note: String?) {
+        self.written = written
+        self.headline = headline
+        self.note = note
+        // `Report.note(verbose:)` is deliberately not used: it ends in "--verbose for detail",
+        // which names a flag this app does not have.
+        self.collapsed = report.render(verbose: false)
+        self.all = report.render(verbose: true)
+    }
 
     var failed: Bool { written == nil }
 
-    /// The findings, collapsed by default. `Report.note(verbose:)` is deliberately not used: it
-    /// ends in "--verbose for detail", which names a flag this app does not have.
-    func findings(verbose: Bool) -> [String] { report.render(verbose: verbose) }
+    func findings(verbose: Bool) -> [String] { verbose ? all : collapsed }
 
     /// True only when collapsing is actually hiding something, so the toggle appears when it has
     /// work to do and not otherwise.
-    var hasDetail: Bool { report.count > report.grouped().count }
+    var hasDetail: Bool { all.count > collapsed.count }
 }
 
 enum Conversion {
@@ -56,11 +68,12 @@ enum Conversion {
     /// job crosses to a detached task and only the `Outcome` comes back.
     static func run(_ job: Job, named stem: String, into destination: Destination) async -> Outcome
     {
+        let base = Naming.sanitised(stem)
         let target = Naming.vacant(
-            in: destination.directory, stem: stem, extension: job.extensionOfResult)
+            in: destination.directory, stem: base, extension: job.extensionOfResult)
         // Both notes can apply at once -- a fallback directory that already holds that name -- so
         // they are collected rather than chosen between.
-        let clashed = target.deletingPathExtension().lastPathComponent != Naming.sanitised(stem)
+        let clashed = target.deletingPathExtension().lastPathComponent != base
         let note = [destination.note, clashed ? collisionNote(target) : nil]
             .compactMap { $0 }.joined(separator: " ")
 
@@ -85,20 +98,11 @@ enum Conversion {
     private static func outcome(from result: RunResult, note: String?) -> Outcome {
         guard result.code == 0, let written = result.destinations.first else {
             return Outcome(
-                written: nil, headline: failureMessage(result), report: result.diagnostics,
-                note: nil)
+                written: nil, headline: result.message ?? "Conversion failed.",
+                report: result.diagnostics, note: nil)
         }
         return Outcome(
             written: written, headline: summary(result), report: result.diagnostics, note: note)
-    }
-
-    /// The runner spells a failure `<prog>: <message>` for a terminal. The window already knows
-    /// which command it ran, so the prefix is dropped and the sentence kept.
-    private static func failureMessage(_ result: RunResult) -> String {
-        let text = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let line = text.split(separator: "\n").first else { return "Conversion failed." }
-        guard let colon = line.range(of: ": ") else { return String(line) }
-        return String(line[colon.upperBound...])
     }
 
     /// The runner's own summary, minus its first line -- which names the path this window is

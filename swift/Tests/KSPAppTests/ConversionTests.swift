@@ -39,7 +39,7 @@ import Testing
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let source = RepoData.projectFiles.appending(path: "m6-test-file.mid")
-        let destination = Destination(directory: directory, isFallback: false, note: nil)
+        let destination = Destination(directory: directory, note: nil)
 
         let outcome = await Conversion.run(.toProject(source), named: "fixture", into: destination)
 
@@ -54,7 +54,7 @@ import Testing
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let source = RepoData.projectFiles.appending(path: "m6-test-file.mid")
-        let destination = Destination(directory: directory, isFallback: false, note: nil)
+        let destination = Destination(directory: directory, note: nil)
         try touch(directory, "fixture.KeyStepPro")
 
         let outcome = await Conversion.run(.toProject(source), named: "fixture", into: destination)
@@ -68,7 +68,7 @@ import Testing
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let missing = directory.appending(path: "absent.mid")
-        let destination = Destination(directory: directory, isFallback: false, note: nil)
+        let destination = Destination(directory: directory, note: nil)
 
         let outcome = await Conversion.run(.toProject(missing), named: "absent", into: destination)
 

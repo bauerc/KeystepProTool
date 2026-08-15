@@ -147,8 +147,8 @@ struct DropView: View {
                 Text(note).font(.caption).foregroundStyle(.secondary)
             }
 
-            if !outcome.report.isEmpty {
-                DisclosureGroup("\(outcome.report.count) note(s)") {
+            if !outcome.all.isEmpty {
+                DisclosureGroup("\(outcome.all.count) note(s)") {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(outcome.findings(verbose: model.verbose), id: \.self) { finding in
                             Text(finding).font(.caption).textSelection(.enabled)
