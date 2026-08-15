@@ -519,10 +519,16 @@ the artifact comparison **and** by stderr independently.
 
 **The export direction compares parsed events, not bytes, and the reason is not ours.** mido's
 `write_track` emits MIDI running status; `swift-midi-file`'s `Track+Encoding.swift` carries a
-`TODO` saying it does not. Consecutive note-ons on one channel are ubiquitous, so the two writers
-disagree on the bytes of nearly every file while agreeing on every event in it. `tools/midi_events.py`
-is the level the comparison moves up to. The import direction needed no such concession: it writes
-`.KeyStepPro` files through M11's writer, so it gets a real `cmp` and passes it.
+`TODO` saying it does not. `tools/midi_events.py` is the level the comparison moves up to. The
+import direction needed no such concession: it writes `.KeyStepPro` files through M11's writer, so
+it gets a real `cmp` and passes it.
+
+The size of the divergence is worth knowing, because it is not uniform. `project_5` comes out
+**byte-identical at 391 bytes** — its notes alternate on and off, and a note-on and a note-off carry
+different status bytes, so running status never engages. `initial_project` is where it shows: 4,981
+bytes from mido against 5,297 from Swift, a 316-byte difference that is **entirely** running status,
+with identical event streams. So a byte comparison would have passed on the simplest sample and
+failed on the realistic one — which is exactly the shape of gate worth not having.
 
 **Where the bugs were, and both were found by reading rather than by a failing test** — which is
 the kind this milestone was most exposed to, since they look correct on inspection:
