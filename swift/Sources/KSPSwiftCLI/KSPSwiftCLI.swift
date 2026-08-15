@@ -10,7 +10,7 @@ struct RootCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ksp-swift-cli",
         abstract: "Convert between Standard MIDI files and Arturia KeyStep Pro projects.",
-        subcommands: [Dump.self, Export.self])
+        subcommands: [Dump.self, Export.self, Convert.self])
 
     func run() throws {
         // Matching the Python group, which is built with `no_args_is_help`: the help is what the

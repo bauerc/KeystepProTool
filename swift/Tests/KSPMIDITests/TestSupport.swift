@@ -23,6 +23,17 @@ enum RepoData {
 enum Samples {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var projects: [String: Project] = [:]
+    nonisolated(unsafe) private static var raws: [String: RawProject] = [:]
+
+    /// The undecoded key set, by full file name -- what `Mutate` and `MIDIImport.apply` write into.
+    static func raw(_ name: String) throws -> RawProject {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = raws[name] { return cached }
+        let parsed = try LenientJSON.load(contentsOf: RepoData.projectFiles.appending(path: name))
+        raws[name] = parsed
+        return parsed
+    }
 
     static func project(_ name: String) throws -> Project {
         lock.lock()

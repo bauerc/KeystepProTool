@@ -502,19 +502,71 @@ which turns a one-byte drift into minutes of output; `firstDifference` in `TestS
 reports the offset and the line either side of it instead, and every bulk comparison goes through
 it.
 
-### M12 — Swift port: MIDI export, import and the differential harness
+### M12 — Swift port: MIDI export, import and the differential harness ✅ **done**
 
-**Artifact:** parity with the Python CLI. `midi_export.py` and `midi_import.py` keep their three
-layers exactly as they stand — only `buildMIDIFile` and `readSong` touch `swift-midi-file` — plus
-`mutate.py`. Tests assert on `Rendering` and `Placement` values, never on parsed MIDI.
+**Artifact:** parity with the Python CLI. `ksp-swift-cli export` and `ksp-swift-cli convert`
+convert in both directions, and `scripts/midi_parity.sh` reports **zero diffs across 60
+conversions** — six sample projects in seven export modes, three committed clips in six import
+modes — agreeing on exit code, stdout, stderr and the artifact every time.
 
-**Build the harness first.** A short script running both implementations over every fixture and
-`cmp`ing the output catches nearly every porting slip for far less effort than re-deriving each unit
-test. `bulk_read`, `sysex` and `usb_transport` stay out of scope — CoreMIDI SysEx is its own
-learning curve and the `Transport` protocol already isolates it.
+**The harness was built first, and that was the whole point.** It landed in its own PR with
+nothing to compare yet, so both conversion PRs were gated from their first commit. It compares four
+things per case rather than one, which is what makes it safe to throw the whole corpus at it: a
+shared *refusal*, worded the same way, is agreement rather than a skip. Verified before it had
+anything to gate by standing a shim that dispatches to the Python in for the Swift binary — 66
+conversions agreed, and a shim perturbed to drop time shift was caught on every affected case by
+the artifact comparison **and** by stderr independently.
 
-**Test:** zero diffs across every fixture in both directions, and any legitimate difference written
-down.
+**The export direction compares parsed events, not bytes, and the reason is not ours.** mido's
+`write_track` emits MIDI running status; `swift-midi-file`'s `Track+Encoding.swift` carries a
+`TODO` saying it does not. Consecutive note-ons on one channel are ubiquitous, so the two writers
+disagree on the bytes of nearly every file while agreeing on every event in it. `tools/midi_events.py`
+is the level the comparison moves up to. The import direction needed no such concession: it writes
+`.KeyStepPro` files through M11's writer, so it gets a real `cmp` and passes it.
+
+**Where the bugs were, and both were found by reading rather than by a failing test** — which is
+the kind this milestone was most exposed to, since they look correct on inspection:
+
+- **`swift-midi-file` truncates BPM to microseconds where mido rounds.** Its `tempo(bpm:)` computes
+  `(60 / bpm) * 1_000_000` and then `UInt32(_:)`; mido's `bpm2tempo` is `int(round(60 * 1e6 / bpm))`.
+  The device stores BPM to two decimal places, so a tempo landing just under a whole microsecond
+  would be written one lower on one side. `bpmToMicroseconds` does it mido's way and the library's
+  convenience constructor is deliberately unused.
+- **`URL.path` resolves a relative path against the working directory** where `pathlib` prints what
+  it was given, so every summary line named an absolute file. `relativePath` is the twin. The
+  harness caught this one on its first run.
+
+**`Mutate.swift` is in `KSPKit`, not `KSPMIDI`.** `mutate.py` imports no `mido`, so it is `ksp/`
+minus MIDI by CLAUDE.md's split — which puts the 576-line module carrying the 8-key note recipe on
+CI's free Linux runner rather than the 10× macOS one.
+
+**The template moved rather than being copied.** SwiftPM resources must live under their own
+target's directory, and SwiftPM copies a symlink *as a symlink* — measured, with both `.copy` and
+`.process`, which lands a dangling link in the bundle. So the real bytes are now
+`swift/Sources/KSPSwiftCLI/Resources/Default.KeyStepPro` and `src/ksp_cli/templates/` holds the
+symlink: Python and hatchling both follow one transparently, and the built wheel still carries the
+full 3.5 MB. The repository keeps the two real copies it already had — that one and the untouchable
+sample in `project_files/` — rather than gaining a third. `TemplateTests` pins all three against
+each other.
+
+**`swift.yml` gained the `macos-latest` job M8 said this milestone would need**, because
+`Package.swift` gates `KSPMIDI` and `KSPSwiftCLI` off Linux and nothing else can see them.
+
+**Two Python assertions have no faithful Swift twin.** `midi.length` in *seconds* is asserted twice;
+`swift-midi-file` exposes no duration property, and reimplementing mido's tempo walk inside a test
+would be testing the reimplementation. Both are ported as tick-length assertions on the
+`Arrangement`, which is what determines the seconds and is the layer this milestone is meant to
+assert on. The timecode refusal is also stated differently: the Python builds it with a *negative*
+`ticks_per_beat`, because mido reads the division field signed, and `swift-midi-file` types the two
+apart so a timecode file decodes as `SMPTEMIDI1File` and never reaches the check.
+
+**Test:** the Swift suite is 358 tests in 36 suites, up from M11's 212 in 17; the Python suite is
+unchanged at 784 passed, 2 skipped. `validate.sh` now runs nine steps, the ninth being
+`midi_parity.sh`.
+
+**Green here is still not verified on hardware.** Every gate is a comparison against the Python.
+The final listen — a Swift-converted project loaded and played on the device — is what closes the
+port, and it is the one step no script can do.
 
 ### M13 — Native GUI
 
@@ -565,7 +617,7 @@ without touching a terminal or reading setup instructions.
 | M9 Swift leaf layers | ✅ done | No | M8 |
 | M10 Swift reader | ✅ done | No | M9 |
 | M11 Swift writer | ✅ done | No | M10 |
-| M12 Swift MIDI both ways | | For final listen | M11 |
+| M12 Swift MIDI both ways | ✅ done | For final listen | M11 |
 | M13 GUI | | For final check | M12 |
 | M14 Distribution | | For final check | M13 |
 
