@@ -7,12 +7,12 @@ import KSPKit
 /// which MIDI note -- and the answer is a device global the project file does not carry. One
 /// grammar and one config file, so a user who sets it up once is understood by all of them.
 
-/// Where a user's own drum map lives, if they have one. Path resolution stays in the CLI: `KSPKit`
-/// must not decide where files are.
-let drumMapConfigPath = FileManager.default.homeDirectoryForCurrentUser
+/// Where a user's own drum map lives, if they have one. Path resolution stays out of `KSPKit`,
+/// which must not decide where files are.
+public let drumMapConfigPath = FileManager.default.homeDirectoryForCurrentUser
     .appending(path: ".config/keysteppro/drum_map.json")
 
-let drumMapHelp = """
+public let drumMapHelp = """
     lane -> note mapping: chromatic:N, custom:a,b,c (24 notes) or none. The device's drum map is a \
     global setting and is not in the project file, so this defaults to \
     chromatic:\(DrumMap.defaultChromaticLow)

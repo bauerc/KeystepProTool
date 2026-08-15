@@ -69,9 +69,14 @@ path, so installing from a worktree blocks commits repo-wide once that worktree 
   Swift port (M8–M12), so the port stays a translation of pure functions.
 - **`ksp_cli/`** — args, path resolution, terminal output. No format logic.
 
-`swift/` mirrors that split across four targets: `KSPKit` (the format core, `ksp/` minus MIDI),
-`KSPMIDI` (the `swift-midi-file` layer, `midi_export`/`midi_import`), `KSPSwiftCLI` (the
-`ksp-swift-cli` product, `ksp_cli/`), and their tests. **Nothing may add a dependency to `KSPKit`.**
+`swift/` mirrors that split across five targets: `KSPKit` (the format core, `ksp/` minus MIDI),
+`KSPMIDI` (the `swift-midi-file` layer, `midi_export`/`midi_import`), `KSPRun` (the command bodies
+— `ConvertRunner`, `ExportRunner`, `DumpRunner` — and the bundled template), `KSPSwiftCLI` (the
+`ksp-swift-cli` product: argument parsing, `@main`, nothing else), and their tests. **A command
+body goes in `KSPRun`, never in `KSPSwiftCLI`**: SwiftPM forbids a non-test target from depending
+on an executable one, so anything in `KSPSwiftCLI` is reachable only from the CLI, and M13's app
+has to run the very same `convert` for the parity scripts to keep meaning anything.
+**Nothing may add a dependency to `KSPKit`.**
 `swift-midi-file` is Apple-only, so `Package.swift` gates `KSPMIDI` and everything above it off on
 Linux; keeping `KSPKit` dependency-free is what puts M9–M11's tests on GitHub's 1× runner instead
 of the 10× macOS one. swift-format owns every byte of `swift/` — pre-commit excludes the tree.
@@ -108,7 +113,7 @@ points and the tests call. The exit codes are load-bearing: **0 success, 1 file 
 
 Both `midi2ksp` and `ksp-swift-cli convert` ship MCC's factory default, so the installed command
 has something to overwrite. The bytes live once, at
-`swift/Sources/KSPSwiftCLI/Resources/Default.KeyStepPro`, because a SwiftPM resource must sit under
+`swift/Sources/KSPRun/Resources/Default.KeyStepPro`, because a SwiftPM resource must sit under
 its own target and SwiftPM copies a symlink as a symlink; `src/ksp_cli/templates/Default.KeyStepPro`
 is the symlink to it, which Python and hatchling both follow. See the comment in
 `swift/Package.swift`. It is byte-identical to `project_files/Default.KeyStepPro` and a test holds

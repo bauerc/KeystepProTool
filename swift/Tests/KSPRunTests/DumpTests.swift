@@ -2,7 +2,7 @@ import Foundation
 import KSPKit
 import Testing
 
-@testable import KSPSwiftCLI
+@testable import KSPRun
 
 /// Twin of `tests/test_dump_cli.py`: argument handling and output shape.
 ///

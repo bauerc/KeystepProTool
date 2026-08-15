@@ -229,14 +229,15 @@ your tests can only see what is marked `public`.
 
 ## 5. How this package is laid out, and why
 
-Four targets:
+Five targets:
 
 | Target | Is | Depends on | Builds on Linux |
 |---|---|---|---|
 | `KSPKit` | the format core; port of `src/ksp/` minus MIDI | **nothing** | yes |
 | `KSPMIDI` | the Standard MIDI File layer | `KSPKit`, `SwiftMIDIFile` | no |
-| `KSPSwiftCLI` | the `ksp-swift-cli` binary; port of `src/ksp_cli/` | `KSPMIDI`, `ArgumentParser` | no |
-| `KSPKitTests`, `KSPMIDITests`, `KSPSwiftCLITests` | tests for each | | respectively |
+| `KSPRun` | the command bodies and the bundled template | `KSPMIDI` | no |
+| `KSPSwiftCLI` | the `ksp-swift-cli` binary: arguments and `@main` | `KSPRun`, `ArgumentParser` | no |
+| `KSPKitTests`, `KSPMIDITests`, `KSPRunTests`, `KSPSwiftCLITests` | tests for each | | respectively |
 
 `swift-midi-file` supports Apple platforms only. Rather than let that decide where the whole port
 can be tested, `Package.swift` uses `#if os(Linux)` to drop the bottom three rows on Linux. `KSPKit`
@@ -252,9 +253,33 @@ fetch a package it cannot use.
 The same rule decides where a *ported module* goes rather than only where a dependency does:
 `mutate.py` imports no `mido`, so `Mutate.swift` is in `KSPKit`; `midi_export.py` and
 `midi_import.py` both do, so they are in `KSPMIDI` whole. From M12 `swift.yml` runs a second job on
-`macos-latest`, because it is the only one that can see `KSPMIDI` and `KSPSwiftCLI` at all.
+`macos-latest`, because it is the only one that can see `KSPMIDI` and above at all.
 
-`KSPSwiftCLI` carries one resource: `Resources/Default.KeyStepPro`, MCC's factory default, which
+### Why `KSPRun` is a library and `KSPSwiftCLI` is only a face
+
+**SwiftPM forbids a non-test target from depending on an executable target.** A test target may
+`@testable import` one, which is why `KSPSwiftCLITests` works, but an ordinary target cannot link
+one at all. So every line that lived in `KSPSwiftCLI` was reachable from exactly one place: the
+`ksp-swift-cli` binary.
+
+That was fine until M13. The app has to run the *same* `convert` the CLI runs — the parity scripts
+compare the Swift against the Python byte for byte, and a second implementation in the app would be
+outside that net on the day it drifted. So the command bodies moved down into `KSPRun` and both
+faces call them:
+
+```
+KSPKit  <-  KSPMIDI  <-  KSPRun  <-  KSPSwiftCLI   (@main, ArgumentParser)
+                             ^
+                             +------  KSPApp       (M13, SwiftUI)
+```
+
+`KSPSwiftCLI` keeps the `ParsableCommand` structs, `RootCommand`, `ExitStatus` and `@main`. A
+command's body — anything that reads a file, decides an exit code or builds a message — goes in
+`KSPRun`. `Options` and `Result` are `public` and `Sendable` there, with spelled-out initialisers,
+because a public struct's memberwise initialiser is internal and every caller is now in another
+module.
+
+`KSPRun` carries one resource: `Resources/Default.KeyStepPro`, MCC's factory default, which
 `convert` overwrites when the user names no `--template`. The real bytes live there and
 `src/ksp_cli/templates/Default.KeyStepPro` is a symlink to them, not the other way round — SwiftPM
 copies a symlink *as a symlink* (measured, with both `.copy` and `.process`), which would leave a
