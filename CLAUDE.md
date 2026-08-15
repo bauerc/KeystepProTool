@@ -17,10 +17,10 @@ is no reference render to check against: **the hardware's live MIDI output is th
 truth**. Reading and MIDI export work; `ksp.mutate` writes notes and pattern scalars into an
 existing project (M4, M6); `ksp.midi_import` converts a whole MIDI file — multi-track, chords,
 drums, gates, tempo, fitted swing and time shift, and long sequences split across chained
-patterns (M5, M6). `swift/` builds and tests alongside the Python and holds the whole read path plus the
-byte-identical writer — constants, keys, the JSON reader and writer, diagnostics, the drum map, the
-model, the reader and `ksp-swift-cli dump` (M8–M11). What is left is MIDI, a GUI and packaging
-(M12–M14).
+patterns (M5, M6). `swift/` builds and tests alongside the Python and is now a complete port of
+both directions — constants, keys, the JSON reader and writer, diagnostics, the drum map, the
+model, the reader, `mutate`, `midi_export`, `midi_import` and `ksp-swift-cli dump` / `export` /
+`convert` (M8–M12). What is left is a GUI and packaging (M13–M14).
 
 - [KeyStep Pro Format Spec](analysis/KeyStepPro_Format_Spec.md) — authoritative format reference. **Read it before touching
   format code.**
@@ -76,13 +76,19 @@ path, so installing from a worktree blocks commits repo-wide once that worktree 
 Linux; keeping `KSPKit` dependency-free is what puts M9–M11's tests on GitHub's 1× runner instead
 of the 10× macOS one. swift-format owns every byte of `swift/` — pre-commit excludes the tree.
 
-**The two CLIs' output is a byte-for-byte contract.** `scripts/port_parity.sh` diffs
-`ksp-swift-cli dump` against `ksp-dump` over every sample project in both output modes, and
-`validate.sh` runs it. A diagnostic's wording, a key's position in the JSON and a number's
-formatting are therefore all load-bearing on both sides: change one, change the other in the same
-commit. The Python is the reference implementation. This is also why the Swift model serialises
-through `JSONNode` rather than `Encodable` — `JSONEncoder` controls neither key order nor the
-`120` vs `120.0` rendering of a whole-numbered `Double`.
+**The two CLIs' output is a byte-for-byte contract**, held by three scripts `validate.sh` runs as
+its last three steps. `scripts/port_parity.sh` diffs `ksp-swift-cli dump` against `ksp-dump` over
+every sample project in both output modes; `scripts/writer_parity.sh` does the same for the write
+path; `scripts/midi_parity.sh` runs both conversion directions over every project and clip in the
+repository, comparing exit code, stdout, stderr and the artifact. A diagnostic's wording, a key's
+position in the JSON and a number's formatting are therefore all load-bearing on both sides: change
+one, change the other in the same commit. The Python is the reference implementation. This is also
+why the Swift model serialises through `JSONNode` rather than `Encodable` — `JSONEncoder` controls
+neither key order nor the `120` vs `120.0` rendering of a whole-numbered `Double`.
+
+**The one thing that is deliberately not byte-identical is the exported `.mid`.** mido writes MIDI
+running status and `swift-midi-file` does not, so `midi_parity.sh` compares the two files as parsed
+event streams through `tools/midi_events.py`. The `.KeyStepPro` direction still gets a real `cmp`.
 
 `ksp.midi_export` has three layers that must stay separate: `render_pattern` (pattern → tick
 data), `arrange` (timeline placement), `build_midi_file` (the only `mido` caller). Tests assert on

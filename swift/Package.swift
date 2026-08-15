@@ -34,7 +34,17 @@ import PackageDescription
             dependencies: [
                 "KSPMIDI",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
-            ]
+            ],
+            // MCC's factory default, which `convert` overwrites when the user names no template.
+            //
+            // A SwiftPM resource must live under its own target's directory, and SwiftPM copies a
+            // symlink *as a symlink* -- measured, with both `.copy` and `.process` -- which lands
+            // a dangling link in the bundle. So the real bytes live here and
+            // src/ksp_cli/templates/Default.KeyStepPro is the symlink instead: Python and
+            // hatchling both follow one transparently, and the wheel carries the full 3.5 MB.
+            // That keeps the repository at the two real copies it already had -- this one and the
+            // untouchable sample in project_files/ -- rather than gaining a third.
+            resources: [.copy("Resources/Default.KeyStepPro")]
         ),
         .testTarget(name: "KSPMIDITests", dependencies: ["KSPMIDI"]),
         // Tests an executable target, which needs `@main` rather than a `main.swift`.
