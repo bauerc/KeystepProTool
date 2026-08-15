@@ -582,6 +582,9 @@ extension MIDIImport {
         var heldPastEnd = 0
         var unrepresentable = 0
         var unmapped: [Int] = []
+        // Half a time-shift unit in ticks: the most a residual can be off by and still round to a
+        // storable shift.
+        let halfShiftUnit = Double(ticksPerBeat) / Double(Constants.timeShiftUnitsPerBeat) / 2
 
         for entry in snapped {
             let local = entry.step - offset
@@ -595,9 +598,7 @@ extension MIDIImport {
             if options.fitTimeShift {
                 let fitted = fitShift(entry.residual, ticksPerBeat)
                 shift = fitted.stored
-                if abs(fitted.remainder)
-                    > Double(ticksPerBeat) / Double(Constants.timeShiftUnitsPerBeat) / 2
-                {
+                if abs(fitted.remainder) > halfShiftUnit {
                     unrepresentable += 1
                 }
             }
@@ -722,7 +723,7 @@ extension MIDIImport {
 
         let swing = options.fitSwing ? fitSwing(clip, ticksPerStep, origin) : straight
         let snapped = snap(clip, ticksPerStep, origin, swing)
-        let moved = snapped.filter { $0.residual != 0 }.count
+        let moved = snapped.count(where: { $0.residual != 0 })
         if moved > 0 {
             collector.add(
                 .notesQuantised,
@@ -780,7 +781,7 @@ extension MIDIImport {
         let furthest = Arithmetic.pyRound(ends.max() ?? 1)
         let total = max(1, Arithmetic.ceilDiv(furthest, stepsPerBar) * stepsPerBar)
 
-        let moved = snapped.filter { $0.residual != 0 }.count
+        let moved = snapped.count(where: { $0.residual != 0 })
         if moved > 0 {
             collector.add(
                 .notesQuantised,
@@ -835,7 +836,7 @@ extension MIDIImport {
     /// source that does not start at MIDI 36, which is most of them; fitting to what is actually
     /// there converts the file and says which map it used.
     public static func fitDrumMap(_ clip: Clip) throws -> DrumMap {
-        let low = clip.notes.map(\.pitch).min() ?? DrumMap.defaultChromaticLow
+        let low = clip.notes.lazy.map(\.pitch).min() ?? DrumMap.defaultChromaticLow
         return try DrumMap.chromatic(max(DrumMap.minNote, min(low, DrumMap.maxChromaticLow)))
     }
 
