@@ -178,3 +178,15 @@ extension String {
         count >= width ? self : String(repeating: " ", count: width - count) + self
     }
 }
+
+/// A report as the CLI prints it: one line per kind unless `verbose`, then the "there is more"
+/// note. A port of `ksp_cli.reporting.print_report`, shared by both converting commands -- so
+/// `prog` is required rather than defaulting to either one's name.
+func reported(_ report: Report, verbose: Bool, prog: String) -> String {
+    var lines = report.render(verbose: verbose).map { "\(prog): warning: \($0)\n" }
+    if let note = report.note(verbose: verbose) {
+        // No "warning:" prefix: this is about the report, not a finding.
+        lines.append("\(prog): \(note)\n")
+    }
+    return lines.joined()
+}

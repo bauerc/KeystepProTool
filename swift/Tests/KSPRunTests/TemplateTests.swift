@@ -7,7 +7,7 @@ import Testing
 ///
 /// A port of `test_the_bundled_template_is_the_factory_default` in `tests/test_convert_cli.py`,
 /// and the check that the resource actually made it into the bundle: SwiftPM copies a symlink *as
-/// a symlink*, so the real bytes live under `Sources/KSPSwiftCLI/Resources/` and the Python's
+/// a symlink*, so the real bytes live under `Sources/KSPRun/Resources/` and the Python's
 /// `src/ksp_cli/templates/` copy is the link. If that ever inverts, this fails on the first read.
 @Suite struct TemplateTests {
     @Test func theBundledTemplateIsTheFactoryDefault() throws {

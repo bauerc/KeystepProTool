@@ -75,7 +75,10 @@ path, so installing from a worktree blocks commits repo-wide once that worktree 
 `ksp-swift-cli` product: argument parsing, `@main`, nothing else), and their tests. **A command
 body goes in `KSPRun`, never in `KSPSwiftCLI`**: SwiftPM forbids a non-test target from depending
 on an executable one, so anything in `KSPSwiftCLI` is reachable only from the CLI, and M13's app
-has to run the very same `convert` for the parity scripts to keep meaning anything.
+has to run the very same `convert` for the parity scripts to keep meaning anything. All three
+runners return one `RunResult`: the rendered `stdout`/`stderr`/`code` the CLI prints through its
+single `emit(_:)`, plus the same run structurally as `diagnostics` and `destinations`, which is
+what M13.2's app reads instead of re-parsing the text.
 **Nothing may add a dependency to `KSPKit`.**
 `swift-midi-file` is Apple-only, so `Package.swift` gates `KSPMIDI` and everything above it off on
 Linux; keeping `KSPKit` dependency-free is what puts M9–M11's tests on GitHub's 1× runner instead

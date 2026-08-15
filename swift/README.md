@@ -275,9 +275,18 @@ KSPKit  <-  KSPMIDI  <-  KSPRun  <-  KSPSwiftCLI   (@main, ArgumentParser)
 
 `KSPSwiftCLI` keeps the `ParsableCommand` structs, `RootCommand`, `ExitStatus` and `@main`. A
 command's body — anything that reads a file, decides an exit code or builds a message — goes in
-`KSPRun`. `Options` and `Result` are `public` and `Sendable` there, with spelled-out initialisers,
-because a public struct's memberwise initialiser is internal and every caller is now in another
-module.
+`KSPRun`. Each runner's `Options`, and the one `RunResult` all three return, are `public` and
+`Sendable` there, with spelled-out initialisers, because a public struct's memberwise initialiser
+is internal and every caller is now in another module. `KSPRun` is also declared as a `.library`
+product, not just a target: Xcode can depend on a package's products only, and M13.2's app is an
+Xcode-side consumer.
+
+`RunResult` carries the run twice over. `stdout`/`stderr`/`code` are the terminal's view, rendered
+inside `KSPRun` so the CLI stays a shell — `emit(_:)` in `KSPSwiftCLI` is the only place they reach
+a stream — and so the parity scripts keep comparing text this module produced. `diagnostics` (a
+`KSPKit.Report`) and `destinations` are the same run said structurally, for a caller with no
+terminal: M13.2's app lists findings through `Report.render(verbose:)` and reveals what was
+written, rather than re-parsing `stderr` or re-deriving the destination rule.
 
 `KSPRun` carries one resource: `Resources/Default.KeyStepPro`, MCC's factory default, which
 `convert` overwrites when the user names no `--template`. The real bytes live there and

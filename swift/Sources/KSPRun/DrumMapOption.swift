@@ -12,12 +12,6 @@ import KSPKit
 public let drumMapConfigPath = FileManager.default.homeDirectoryForCurrentUser
     .appending(path: ".config/keysteppro/drum_map.json")
 
-public let drumMapHelp = """
-    lane -> note mapping: chromatic:N, custom:a,b,c (24 notes) or none. The device's drum map is a \
-    global setting and is not in the project file, so this defaults to \
-    chromatic:\(DrumMap.defaultChromaticLow)
-    """
-
 /// Parse a `--drum-map` argument.
 ///
 /// `chromatic:36` | `custom:36,38,42,...` | `none`. `nil` means do not resolve lanes at all, which
@@ -65,4 +59,23 @@ func resolveDrumMap(_ spec: String?, configPath: URL) throws -> DrumMap? {
         // Named, because it is the config file rather than the flag that is malformed.
         throw KSPError.value("\(configPath.path): \(error.localizedDescription)")
     }
+}
+
+/// The same `--drum-map` choice as `export`, except that unset means *fit to the source*.
+///
+/// Reading a lane back can fall through to the factory default and print what it assumed. Writing
+/// one cannot: a source whose drums sit anywhere but 36-59 would have every hit dropped as
+/// unmapped. So an unconfigured import fits a map to the pitches it was given, and says so.
+///
+/// `none` is refused rather than accepted, because a drum note stores a lane and there is no lane
+/// without a map.
+func resolveImportDrumMap(_ spec: String?, configPath: URL) throws -> DrumMap? {
+    if spec == "none" {
+        throw KSPError.value(
+            "a drum note stores a lane, not a pitch, so importing drums needs a map; use "
+                + "chromatic:N or custom:a,b,c, or leave --drum-map off to fit one")
+    }
+    if let spec { return try parseDrumMap(spec) }
+    guard let data = try? Data(contentsOf: configPath) else { return nil }
+    return try DrumMap.from(JSONDecoder().decode(DrumMapConfig.self, from: data))
 }
