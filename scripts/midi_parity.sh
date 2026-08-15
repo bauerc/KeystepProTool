@@ -40,9 +40,14 @@ cases=0
 
 # Both sides write to the same file name under a different directory, and the directory is filtered
 # back out of their output. Otherwise every summary line would differ on the path alone.
+# The leading program name is normalised for the same reason, and only the leading one: the two
+# tools genuinely have different names -- `ksp2midi` against `ksp-swift-cli export` -- and that is
+# not a defect to fix. Everything after the prefix is still compared exactly, which is where all the
+# meaning is.
 scrub() {
-    sed -e "s|$sandbox/case/py/|<out>/|g" -e "s|$sandbox/case/sw/|<out>/|g" \
-        -e "s|$sandbox|<sandbox>|g" "$1"
+    sed -E -e "s|$sandbox/case/py/|<out>/|g" -e "s|$sandbox/case/sw/|<out>/|g" \
+        -e "s|$sandbox|<sandbox>|g" \
+        -e "s|^(ksp2midi\|midi2ksp\|ksp-swift-cli (export\|convert)): |<prog>: |" "$1"
 }
 
 # Run one case through both ports and compare everything observable about it.
@@ -61,7 +66,8 @@ compare() {
     local name python swift py_code sw_code
     case $direction in
         export) name=out.mid python=ksp2midi swift=export ;;
-        split) name=. python=ksp2midi swift=export ;;
+        # --split takes a directory, so -o is the case directory itself and nothing is appended.
+        split) name="" python=ksp2midi swift=export ;;
         import) name=out.KeyStepPro python=midi2ksp swift=convert ;;
     esac
 
