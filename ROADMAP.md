@@ -575,12 +575,14 @@ unchanged at 784 passed, 2 skipped. `validate.sh` now runs nine steps, the ninth
 The final listen — a Swift-converted project loaded and played on the device — is what closes the
 port, and it is the one step no script can do.
 
-### M13 — Native GUI
+### M13 — Native GUI ✅ **done**
 
-**Artifact:** drag-and-drop macOS app. Templates path confirmed on 2026-08-07:
-`/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/`, mode `0777`, no elevation needed.
+**Artifact:** *Key Step Pro Plus*, the drag-and-drop macOS app (SwiftPM product `ksp-app`). Drop a
+`.mid` and a `.KeyStepPro` lands in
+`/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/` (mode `0777`, no elevation needed,
+confirmed 2026-08-07); drop a `.KeyStepPro` and a `.mid` lands beside it.
 
-**v1 is drag-and-drop only** — one window, no options. The larger app in
+**v1 is drag-and-drop only** — one window, one file, no options. The larger app in
 `project_requirements/project_requirements.md` (preview, per-track routing, segmentation, loop
 counts) needs its own specs. Sandbox off, since a sandbox cannot write into another app's directory
 and Developer ID distribution permits it.
@@ -588,7 +590,27 @@ and Developer ID distribution permits it.
 **Split in two: M13.1 the seam, M13.2 the app.** SwiftPM forbids a non-test target from depending
 on an executable one, so the command bodies inside `KSPSwiftCLI` were reachable only from the CLI
 and no app could call them. M13.1 moved them down into a `KSPRun` library, taking the bundled
-template with them, and proved it changed nothing by re-running the three parity scripts. ✅ **done**
+template with them, and proved it changed nothing by re-running the three parity scripts.
+
+**Full Xcode was not required, and the estimate that it would be was wrong.** Measured on a
+Command Line Tools 6.2.3 machine: the CLT SDK ships `SwiftUI.framework`, `AppKit.framework` and
+`UniformTypeIdentifiers.framework`, and `codesign`, `notarytool`, `stapler` and `iconutil` are all
+on `xcrun`'s path — which likely unblocks M14 on the same terms. Only `xcodebuild`, `actool` and
+`ibtool` are absent, and a hand-assembled bundle needs none of them. So the GUI is an ordinary
+SwiftPM `executableTarget` inside `swift/`, tested by the same `validate.sh` as everything else,
+and `scripts/bundle_app.sh` assembles and ad-hoc signs the `.app`. No `.xcodeproj`, no 15 GB
+install.
+
+**What holds it honest:** the app calls `ConvertRunner`/`ExportRunner` directly and owns no format
+logic — only where a file goes and what it is called. Checked by converting the same source both
+ways: the app's output and `ksp-swift-cli convert`'s were byte-identical. The placement rules
+(Templates vs the `~/Downloads` fallback, name sanitising, the never-overwrite `song 2` ladder)
+are `KSPAppTests`, which is also what makes `swift test` compile the GUI on every run.
+
+**The rename control is a feature, not a workaround.** MCC's Project Browser lists the *filename* —
+the Templates folder holds freely named files. The claim in `README.md` that a converted project
+"may show the template's name" confused that with the undecoded integer parameter *inside* the
+file, and was corrected here.
 
 **Start Apple Developer Program enrolment now**, not at M14 — it can take days.
 
