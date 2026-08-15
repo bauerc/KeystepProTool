@@ -229,7 +229,7 @@ your tests can only see what is marked `public`.
 
 ## 5. How this package is laid out, and why
 
-Five targets:
+Six targets:
 
 | Target | Is | Depends on | Builds on Linux |
 |---|---|---|---|
@@ -237,7 +237,8 @@ Five targets:
 | `KSPMIDI` | the Standard MIDI File layer | `KSPKit`, `SwiftMIDIFile` | no |
 | `KSPRun` | the command bodies and the bundled template | `KSPMIDI` | no |
 | `KSPSwiftCLI` | the `ksp-swift-cli` binary: arguments and `@main` | `KSPRun`, `ArgumentParser` | no |
-| `KSPKitTests`, `KSPMIDITests`, `KSPRunTests`, `KSPSwiftCLITests` | tests for each | | respectively |
+| `KSPApp` | the `ksp-app` binary: the SwiftUI drop window | `KSPRun`, `SwiftUI`, `AppKit` | no |
+| `KSPKitTests` … `KSPAppTests` | tests for each | | respectively |
 
 `swift-midi-file` supports Apple platforms only. Rather than let that decide where the whole port
 can be tested, `Package.swift` uses `#if os(Linux)` to drop the bottom three rows on Linux. `KSPKit`
@@ -278,8 +279,13 @@ command's body — anything that reads a file, decides an exit code or builds a 
 `KSPRun`. Each runner's `Options`, and the one `RunResult` all three return, are `public` and
 `Sendable` there, with spelled-out initialisers, because a public struct's memberwise initialiser
 is internal and every caller is now in another module. `KSPRun` is also declared as a `.library`
-product, not just a target: Xcode can depend on a package's products only, and M13.2's app is an
-Xcode-side consumer.
+product, not just a target, so both faces link it by name.
+
+`KSPApp` turned out to need no Xcode at all. The Command Line Tools SDK ships `SwiftUI.framework`,
+`AppKit.framework` and `UniformTypeIdentifiers.framework`, and a `.app` is a directory with an
+`Info.plist` — so the GUI is an ordinary `executableTarget` and `scripts/bundle_app.sh` does the
+wrapping and the ad-hoc signing. `xcodebuild`, `actool` and `ibtool` are the only things missing
+from a CLT install, and a hand-assembled bundle needs none of them.
 
 `RunResult` carries the run twice over. `stdout`/`stderr`/`code` are the terminal's view, rendered
 inside `KSPRun` so the CLI stays a shell — `emit(_:)` in `KSPSwiftCLI` is the only place they reach

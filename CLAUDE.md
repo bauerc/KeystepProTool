@@ -20,10 +20,11 @@ drums, gates, tempo, fitted swing and time shift, and long sequences split acros
 patterns (M5, M6). `ksp-pull` reads a project straight off the hardware over USB SysEx and writes
 the `.KeyStepPro` MCC would have exported, so a project no longer has to come through MCC at all;
 its acceptance gate (H3.2's byte-diff on hardware) is still open. `swift/` builds and tests
-alongside the Python and is now a complete port of
-both directions — constants, keys, the JSON reader and writer, diagnostics, the drum map, the
+alongside the Python and is now a complete port of both directions — constants, keys, the JSON
+reader and writer, diagnostics, the drum map, the
 model, the reader, `mutate`, `midi_export`, `midi_import` and `ksp-swift-cli dump` / `export` /
-`convert` (M8–M12). What is left is a GUI and packaging (M13–M14).
+`convert` (M8–M12), plus the drag-and-drop app *Key Step Pro Plus* — SwiftPM product `ksp-app`,
+target `KSPApp` (M13). What is left is packaging (M14).
 
 - [KeyStep Pro Format Spec](analysis/KeyStepPro_Format_Spec.md) — authoritative format reference. **Read it before touching
   format code.**
@@ -42,7 +43,9 @@ uv run pytest -m "not hardware"  # as CI runs it
 uv run ruff check . && uv run mypy
 ```
 
-Swift 6.2, Command Line Tools only — no Xcode until M13. [`swift/README.md`](swift/README.md)
+Swift 6.2, Command Line Tools only — no Xcode at all, the GUI included: the CLT SDK ships
+`SwiftUI`, `AppKit` and `UniformTypeIdentifiers`, and an `.app` is a directory with an `Info.plist`
+that `scripts/bundle_app.sh` assembles. [`swift/README.md`](swift/README.md)
 covers the toolchain, SwiftPM and dependency management from a Python starting point. From `swift/`:
 
 ```sh
@@ -72,16 +75,24 @@ path, so installing from a worktree blocks commits repo-wide once that worktree 
   Swift port (M8–M12), so the port stays a translation of pure functions.
 - **`ksp_cli/`** — args, path resolution, terminal output. No format logic.
 
-`swift/` mirrors that split across five targets: `KSPKit` (the format core, `ksp/` minus MIDI),
+`swift/` mirrors that split across six targets: `KSPKit` (the format core, `ksp/` minus MIDI),
 `KSPMIDI` (the `swift-midi-file` layer, `midi_export`/`midi_import`), `KSPRun` (the command bodies
 — `ConvertRunner`, `ExportRunner`, `DumpRunner` — and the bundled template), `KSPSwiftCLI` (the
-`ksp-swift-cli` product: argument parsing, `@main`, nothing else), and their tests. **A command
-body goes in `KSPRun`, never in `KSPSwiftCLI`**: SwiftPM forbids a non-test target from depending
-on an executable one, so anything in `KSPSwiftCLI` is reachable only from the CLI, and M13's app
-has to run the very same `convert` for the parity scripts to keep meaning anything. All three
-runners return one `RunResult`: the rendered `stdout`/`stderr`/`code` the CLI prints through its
-single `emit(_:)`, plus the same run structurally as `diagnostics` and `destinations`, which is
-what M13.2's app reads instead of re-parsing the text.
+`ksp-swift-cli` product: argument parsing, `@main`, nothing else), `KSPApp` (the `ksp-app` product:
+the SwiftUI drag-and-drop window), and their tests. **A command body goes in `KSPRun`, never in
+`KSPSwiftCLI` or `KSPApp`**: SwiftPM forbids a non-test target from depending on an executable one,
+so anything in `KSPSwiftCLI` is reachable only from the CLI, and the app has to run the very same
+`convert` for the parity scripts to keep meaning anything. All three runners return one
+`RunResult`: the rendered `stdout`/`stderr`/`code` the CLI prints through its single `emit(_:)`,
+plus the same run structurally as `diagnostics` and `destinations`, which is what the app reads
+instead of re-parsing the text.
+
+**`KSPApp` owns no format logic** — only where a file goes and what it is called. `Destination.swift`
+and `Conversion.swift` are Foundation-only so their rules are unit-tested; SwiftUI stays in
+`DropView.swift` and `KSPApp.swift`, and every mutable value lives on the one `@MainActor`
+`AppModel`. Conversions run in a `Task.detached`, which is what the `Sendable` `Options`/`RunResult`
+are for. `scripts/bundle_app.sh` wraps the built binary in a `.app`; it is deliberately **not** in
+`validate.sh`, which compiles the target through `KSPAppTests` instead.
 **Nothing may add a dependency to `KSPKit`.**
 `swift-midi-file` is Apple-only, so `Package.swift` gates `KSPMIDI` and everything above it off on
 Linux; keeping `KSPKit` dependency-free is what puts M9–M11's tests on GitHub's 1× runner instead

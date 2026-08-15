@@ -19,8 +19,10 @@ import PackageDescription
     ]
     let midiProducts: [Product] = [
         .executable(name: "ksp-swift-cli", targets: ["KSPSwiftCLI"]),
-        // A product, not just a target: Xcode can only depend on a package's products, and M13's
-        // app is an Xcode project because SwiftPM cannot build a .app.
+        // The GUI. SwiftPM builds the binary; scripts/bundle_app.sh wraps it in the .app, which is
+        // a directory with an Info.plist and needs no Xcode to assemble.
+        .executable(name: "ksp-app", targets: ["KSPApp"]),
+        // A product, not just a target, so the runners are linkable by name from both faces.
         .library(name: "KSPRun", targets: ["KSPRun"]),
     ]
     // KSPSwiftCLI, not ksp-swift-cli: a hyphen is legal in a product name but mangles a module name.
@@ -59,10 +61,16 @@ import PackageDescription
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
+        // The drag-and-drop app, the second face on the same runners (M13.2). SwiftUI, AppKit and
+        // UniformTypeIdentifiers all ship in the Command Line Tools SDK, so this needs no Xcode.
+        .executableTarget(name: "KSPApp", dependencies: ["KSPRun"]),
         .testTarget(name: "KSPMIDITests", dependencies: ["KSPMIDI"]),
         .testTarget(name: "KSPRunTests", dependencies: ["KSPRun"]),
         // Tests an executable target, which needs `@main` rather than a `main.swift`.
         .testTarget(name: "KSPSwiftCLITests", dependencies: ["KSPSwiftCLI"]),
+        // Covers the app's file-placement rules, and is what makes `swift test` -- and so
+        // validate.sh -- compile the GUI on every run rather than only when someone bundles it.
+        .testTarget(name: "KSPAppTests", dependencies: ["KSPApp"]),
     ]
 #endif
 

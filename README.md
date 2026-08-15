@@ -5,6 +5,38 @@ The `.KeyStepPro` format is decoded and hardware-validated — see
 [`analysis/KeyStepPro_Format_Spec.md`](./analysis/KeyStepPro_Format_Spec.md). The staged build
 plan is in [`ROADMAP.md`](./ROADMAP.md).
 
+## Installation
+
+**The app.** One command rebuilds *Key Step Pro Plus* and installs it to `/Applications`:
+
+```sh
+make install
+```
+
+Run it afterwards from Launchpad, or with `open -a "Key Step Pro Plus"`. Re-run `make install`
+any time to pick up changes — it quits a running copy first and replaces it. Needs Swift 6.2 and
+the Command Line Tools; **not** a full Xcode install. No `sudo` on a stock macOS, where
+`/Applications` is writable by admin users.
+
+```sh
+make app     # build it without installing, into swift/.build/app/
+make check   # format, typecheck, test and parity-check both toolchains
+make         # list the targets
+```
+
+**The command line tools.** Requires Python 3.13 and [uv](https://docs.astral.sh/uv/):
+
+```sh
+uv sync
+```
+
+That puts `ksp-dump`, `ksp2midi`, `midi2ksp` and `kspplus` on your path. Reading a project off the
+device with `ksp-pull` additionally needs the optional USB extra:
+
+```sh
+uv sync --extra usb   # and: brew install libusb
+```
+
 ## Status
 
 Both directions work end to end, and both are **verified on the hardware** — files this tool wrote
@@ -21,13 +53,37 @@ verified against a replayed capture and against the device's own panel, but the 
 against MIDI Control Center's export (H3.2) has not been run on hardware. See
 [`ROADMAP.md`](./ROADMAP.md).
 
-## Install
+There is also a drag-and-drop **macOS app**, *Key Step Pro Plus*, for the common case — see
+[The app](#the-app).
 
-Requires Python 3.13 and [uv](https://docs.astral.sh/uv/).
+## The app
+
+**Key Step Pro Plus.** Drop a `.mid` on the window and a `.KeyStepPro` lands in MIDI Control
+Center's Templates folder, where the Project Browser will list it. Drop a `.KeyStepPro` instead and
+you get a `.mid` beside it. One file at a time; everything else is the CLI's job.
+
+Install it with `make install` (see [Installation](#installation)), then:
 
 ```sh
-uv sync
+open -a "Key Step Pro Plus"
 ```
+
+The build is unsigned beyond an ad-hoc signature, so it launches on the machine that built it and
+nowhere else yet; a Developer ID build is M14.
+
+**Naming.** The name field is the filename, and the filename is what MCC's Project Browser shows,
+so it is worth setting. It is editable after the write and renames the file in place.
+
+**It never overwrites.** A name already in use becomes `song 2.KeyStepPro`, and the window says so
+— MCC's Templates folder holds your own projects under freely chosen names, so a clash is as
+likely to be something else's as a re-run of this one.
+
+**If MCC is not installed**, `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/` will not
+be there and the file goes to `~/Downloads` instead, with a message saying where to move it.
+
+The app calls exactly the same `convert` and `export` that `ksp-swift-cli` calls — its output is
+byte-identical, and there is no second implementation to drift.
+
 
 ## `kspplus`
 
@@ -299,9 +355,11 @@ to the source's own pitches and reports which one it used. `--drum-map` override
 A drum track is found on MIDI channel 10, which is what General MIDI reserves. Plenty of files put
 drums on an ordinary channel instead, and for those `--drum-track N` names it explicitly.
 
-**The project's name comes from the template**, because a project name is stored as an integer
-parameter whose encoding we have not decoded. In MCC's Project Browser a converted project may
-therefore show the template's name rather than your filename.
+**Name the output file what you want the project called.** MCC's Project Browser lists the
+*filename*, so `midi2ksp song.mid -o "Y Control.KeyStepPro"` appears as `Y Control`. The project
+also carries an internal name, stored as an integer parameter whose encoding is undecoded and
+therefore inherited from the template — but that is not what the browser shows, and it is not
+worth working around.
 
 ## `ksp-pull`
 
@@ -329,12 +387,8 @@ The request count is the walk's own, so it can be compared against the figure in
 [spec 7.8](./analysis/format/SysEx_Direct_Transfer_Path.md). The gap between the two times is the
 3.5 MB template parse and the write, neither of which is the device's fault.
 
-Installing the USB extra is what makes it work — the raw-USB dependency is optional, because most
-people converting files have no reason to install libusb:
-
-```sh
-uv sync --extra usb      # and: brew install libusb
-```
+This is the one command that needs the USB extra from [Installation](#installation); the raw-USB
+dependency is optional because most people converting files have no reason to install libusb.
 
 Three things about the read:
 
