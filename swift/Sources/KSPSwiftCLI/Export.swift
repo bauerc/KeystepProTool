@@ -143,8 +143,6 @@ struct Export: ParsableCommand {
                 applySwing: !noSwing, applyTimeShift: !noTimeShift,
                 dryRun: dryRun, force: force, quiet: quiet, verbose: verbose,
                 configPath: drumMapConfigPath))
-        if !result.stdout.isEmpty { print(result.stdout) }
-        if !result.stderr.isEmpty { FileHandle.standardError.write(Data(result.stderr.utf8)) }
-        if result.code != 0 { throw ExitStatus(code: result.code) }
+        try emit(result)
     }
 }
