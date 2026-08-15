@@ -29,12 +29,15 @@ import PackageDescription
                 .product(name: "SwiftMIDIFile", package: "swift-midi-file"),
             ]
         ),
-        .executableTarget(
-            name: "KSPSwiftCLI",
-            dependencies: [
-                "KSPMIDI",
-                .product(name: "ArgumentParser", package: "swift-argument-parser"),
-            ],
+        // The command bodies, as a library rather than as part of the executable below.
+        //
+        // SwiftPM forbids a non-test target from depending on an executable target, so anything
+        // living in KSPSwiftCLI can only ever be reached by the CLI. M13's app needs the same
+        // `convert` that `ksp-swift-cli convert` runs -- byte for byte, or the parity scripts stop
+        // meaning anything -- so the runners sit here and both faces call them.
+        .target(
+            name: "KSPRun",
+            dependencies: ["KSPMIDI"],
             // MCC's factory default, which `convert` overwrites when the user names no template.
             //
             // A SwiftPM resource must live under its own target's directory, and SwiftPM copies a
@@ -46,7 +49,15 @@ import PackageDescription
             // untouchable sample in project_files/ -- rather than gaining a third.
             resources: [.copy("Resources/Default.KeyStepPro")]
         ),
+        .executableTarget(
+            name: "KSPSwiftCLI",
+            dependencies: [
+                "KSPRun",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]
+        ),
         .testTarget(name: "KSPMIDITests", dependencies: ["KSPMIDI"]),
+        .testTarget(name: "KSPRunTests", dependencies: ["KSPRun"]),
         // Tests an executable target, which needs `@main` rather than a `main.swift`.
         .testTarget(name: "KSPSwiftCLITests", dependencies: ["KSPSwiftCLI"]),
     ]

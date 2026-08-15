@@ -549,7 +549,8 @@ CI's free Linux runner rather than the 10× macOS one.
 **The template moved rather than being copied.** SwiftPM resources must live under their own
 target's directory, and SwiftPM copies a symlink *as a symlink* — measured, with both `.copy` and
 `.process`, which lands a dangling link in the bundle. So the real bytes are now
-`swift/Sources/KSPSwiftCLI/Resources/Default.KeyStepPro` and `src/ksp_cli/templates/` holds the
+`swift/Sources/KSPRun/Resources/Default.KeyStepPro` (`KSPSwiftCLI/` until M13.1 moved the command
+bodies down a target) and `src/ksp_cli/templates/` holds the
 symlink: Python and hatchling both follow one transparently, and the built wheel still carries the
 full 3.5 MB. The repository keeps the two real copies it already had — that one and the untouchable
 sample in `project_files/` — rather than gaining a third. `TemplateTests` pins all three against
@@ -582,7 +583,12 @@ port, and it is the one step no script can do.
 **v1 is drag-and-drop only** — one window, no options. The larger app in
 `project_requirements/project_requirements.md` (preview, per-track routing, segmentation, loop
 counts) needs its own specs. Sandbox off, since a sandbox cannot write into another app's directory
-and Developer ID distribution permits it. Full Xcode required from here.
+and Developer ID distribution permits it.
+
+**Split in two: M13.1 the seam, M13.2 the app.** SwiftPM forbids a non-test target from depending
+on an executable one, so the command bodies inside `KSPSwiftCLI` were reachable only from the CLI
+and no app could call them. M13.1 moved them down into a `KSPRun` library, taking the bundled
+template with them, and proved it changed nothing by re-running the three parity scripts. ✅ **done**
 
 **Start Apple Developer Program enrolment now**, not at M14 — it can take days.
 

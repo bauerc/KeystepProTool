@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import KSPSwiftCLI
+@testable import KSPRun
 
 /// The factory template `convert` overwrites when the user names no `--template`.
 ///
