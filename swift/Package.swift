@@ -18,7 +18,10 @@ import PackageDescription
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
     ]
     let midiProducts: [Product] = [
-        .executable(name: "ksp-swift-cli", targets: ["KSPSwiftCLI"])
+        .executable(name: "ksp-swift-cli", targets: ["KSPSwiftCLI"]),
+        // A product, not just a target: Xcode can only depend on a package's products, and M13's
+        // app is an Xcode project because SwiftPM cannot build a .app.
+        .library(name: "KSPRun", targets: ["KSPRun"]),
     ]
     // KSPSwiftCLI, not ksp-swift-cli: a hyphen is legal in a product name but mangles a module name.
     let midiTargets: [Target] = [

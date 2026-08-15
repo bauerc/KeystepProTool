@@ -18,7 +18,7 @@ import Testing
         _ name: String, showAll: Bool = false, track: Int? = nil, pattern: Int? = nil,
         asJSON: Bool = false, drumMap: String? = nil, verbose: Bool = false,
         configPath: URL = noPersonalConfig
-    ) -> DumpRunner.Result {
+    ) -> RunResult {
         DumpRunner.run(
             DumpRunner.Options(
                 path: RepoData.projectFiles.appending(path: name), showAll: showAll, track: track,
