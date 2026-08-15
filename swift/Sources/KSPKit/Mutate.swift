@@ -216,7 +216,7 @@ public enum Mutate {
                 "track \(track) pattern \(pattern) already holds \(Constants.poolCapacity) notes, "
                     + "the firmware's per-pattern limit")
         }
-        if pooled.filter({ $0 == step - 1 }).count >= Constants.maxNotesPerStep {
+        if pooled.count(where: { $0 == step - 1 }) >= Constants.maxNotesPerStep {
             throw KSPError.value(
                 "step \(step) already holds \(Constants.maxNotesPerStep) notes, the firmware's "
                     + "per-step limit")
@@ -303,7 +303,7 @@ public enum Mutate {
                 "drum pattern \(pattern) already holds \(Constants.poolCapacity) hits, the "
                     + "firmware's per-pattern limit")
         }
-        if pooled.filter({ $0 == step - 1 }).count >= Constants.maxNotesPerStep {
+        if pooled.count(where: { $0 == step - 1 }) >= Constants.maxNotesPerStep {
             throw KSPError.value(
                 "step \(step) already holds \(Constants.maxNotesPerStep) hits, the firmware's "
                     + "per-step limit")

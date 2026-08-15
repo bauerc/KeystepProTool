@@ -106,9 +106,13 @@ by writing `register`, never by declaring its options twice. Commands signal fai
 points and the tests call. The exit codes are load-bearing: **0 success, 1 file or format failure,
 2 usage failure**.
 
-`midi2ksp` ships MCC's factory default in `src/ksp_cli/templates/`, so the installed command has
-something to overwrite. It is a byte-identical copy of `project_files/Default.KeyStepPro` and a
-test holds it there; pre-commit excludes the directory because the file is 3.5 MB.
+Both `midi2ksp` and `ksp-swift-cli convert` ship MCC's factory default, so the installed command
+has something to overwrite. The bytes live once, at
+`swift/Sources/KSPSwiftCLI/Resources/Default.KeyStepPro`, because a SwiftPM resource must sit under
+its own target and SwiftPM copies a symlink as a symlink; `src/ksp_cli/templates/Default.KeyStepPro`
+is the symlink to it, which Python and hatchling both follow. See the comment in
+`swift/Package.swift`. It is byte-identical to `project_files/Default.KeyStepPro` and a test holds
+it there; pre-commit excludes both directories because the file is 3.5 MB.
 
 ## Repository data is not source
 

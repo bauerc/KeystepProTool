@@ -167,8 +167,6 @@ func formatProject(
     return lines.joined(separator: "\n")
 }
 
-/// Python's `f"{value:g}"`: the shortest of fixed and exponential, with no trailing zeros, so
-/// 120.0 prints as `120` and 0.1875 as `0.1875`.
 extension String {
     /// Python's `str.ljust`, which pads on the right and never truncates.
     fileprivate func padded(to width: Int) -> String {

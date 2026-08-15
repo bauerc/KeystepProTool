@@ -1,4 +1,4 @@
-/// The four places Swift and Python disagree on arithmetic, in one file.
+/// Where Swift and Python disagree on arithmetic, in one file.
 ///
 /// M9 found the port's bugs were never overflow -- every field in this format is 7 bits -- but
 /// rounding and division. M12 hand-converts another 2,500 lines of tick arithmetic, so the
