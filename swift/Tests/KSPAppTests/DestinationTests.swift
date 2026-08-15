@@ -16,7 +16,6 @@ import Testing
             templates: templates, downloads: URL(filePath: "/nowhere"), isWritable: { _ in true })
 
         #expect(destination.directory == templates)
-        #expect(!destination.isFallback)
         #expect(destination.note == nil)
     }
 
@@ -30,7 +29,6 @@ import Testing
             isWritable: { _ in false })
 
         #expect(destination.directory == downloads)
-        #expect(destination.isFallback)
         // The message has to name the folder, or the file is findable and still useless.
         #expect(destination.note?.contains("/Library/nope") == true)
     }
@@ -43,7 +41,6 @@ import Testing
         // By path: `deletingLastPathComponent` leaves a trailing slash, which URL equality counts
         // and `appending(path:)` does not.
         #expect(destination.directory.path == "/tmp/songs")
-        #expect(!destination.isFallback)
     }
 }
 

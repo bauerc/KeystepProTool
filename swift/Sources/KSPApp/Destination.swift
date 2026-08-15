@@ -6,8 +6,6 @@ import Foundation
 /// without an MCC install to point at.
 struct Destination: Sendable, Hashable {
     let directory: URL
-    /// True when MCC's folder was unusable and this is somewhere else.
-    let isFallback: Bool
     /// Shown under the result when the file did not land where the user would expect it.
     let note: String?
 }
@@ -32,18 +30,17 @@ enum Destinations {
         isWritable: (URL) -> Bool = { FileManager.default.isWritableFile(atPath: $0.path) }
     ) -> Destination {
         if isWritable(templates) {
-            return Destination(directory: templates, isFallback: false, note: nil)
+            return Destination(directory: templates, note: nil)
         }
         return Destination(
-            directory: downloads, isFallback: true,
+            directory: downloads,
             note: "MIDI Control Center's Templates folder is not writable, so this went to "
                 + "Downloads. Move it to \(templates.path) for MCC to list it.")
     }
 
     /// Where a `.mid` exported from a dropped project belongs: next to the project it came from.
     static func beside(_ source: URL) -> Destination {
-        Destination(
-            directory: source.deletingLastPathComponent(), isFallback: false, note: nil)
+        Destination(directory: source.deletingLastPathComponent(), note: nil)
     }
 }
 
