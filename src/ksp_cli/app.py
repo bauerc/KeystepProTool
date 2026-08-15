@@ -1,4 +1,4 @@
-"""``kspplus`` -- the three commands under one name.
+"""``kspplus`` -- the four commands under one name.
 
 Nothing is implemented here. Each command is defined in its own module and
 mounted on this group by its own ``register``, so ``kspplus ksp2midi ...`` and
@@ -8,7 +8,7 @@ names stay installed; this is a way in, not a replacement.
 
 from collections.abc import Sequence
 
-from ksp_cli import convert, dump, export
+from ksp_cli import convert, dump, export, pull
 from ksp_cli.runner import new_app, run
 
 PROG = "kspplus"
@@ -25,6 +25,7 @@ app = new_app(
 dump.register(app)
 export.register(app)
 convert.register(app)
+pull.register(app)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

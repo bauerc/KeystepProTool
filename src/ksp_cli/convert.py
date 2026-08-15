@@ -24,6 +24,7 @@ from ksp.constants import DEFAULT_STEPS_PER_BEAT
 from ksp.lenient_json import dump_path, load_path
 from ksp.midi_import import ImportOptions, ImportResult, convert, convert_song, saveable
 from ksp_cli.drum_map_option import DRUM_MAP_HELP, resolve_import_drum_map
+from ksp_cli.loading import TEMPLATE_NAME, default_template
 from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
 from ksp_cli.runner import standalone
 
@@ -42,14 +43,7 @@ _SOURCE_PANEL = "Source"
 _DESTINATION_PANEL = "Destination"
 _TIMING_PANEL = "Timing"
 
-#: Shipped inside the package so the installed command is self-contained. Path
-#: resolution stays in the CLI: ``ksp`` must not decide where files are.
-TEMPLATE_NAME = "Default.KeyStepPro"
-
-
-def default_template() -> Path:
-    """MCC's factory default, as shipped with this package."""
-    return Path(__file__).parent / "templates" / TEMPLATE_NAME
+__all__ = ["TEMPLATE_NAME", "convert_command", "default_template", "main", "register"]
 
 
 def _summary(result: ImportResult, destination: Path, dry_run: bool) -> str:

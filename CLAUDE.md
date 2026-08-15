@@ -17,7 +17,10 @@ is no reference render to check against: **the hardware's live MIDI output is th
 truth**. Reading and MIDI export work; `ksp.mutate` writes notes and pattern scalars into an
 existing project (M4, M6); `ksp.midi_import` converts a whole MIDI file — multi-track, chords,
 drums, gates, tempo, fitted swing and time shift, and long sequences split across chained
-patterns (M5, M6). `swift/` builds and tests alongside the Python and is now a complete port of
+patterns (M5, M6). `ksp-pull` reads a project straight off the hardware over USB SysEx and writes
+the `.KeyStepPro` MCC would have exported, so a project no longer has to come through MCC at all;
+its acceptance gate (H3.2's byte-diff on hardware) is still open. `swift/` builds and tests
+alongside the Python and is now a complete port of
 both directions — constants, keys, the JSON reader and writer, diagnostics, the drum map, the
 model, the reader, `mutate`, `midi_export`, `midi_import` and `ksp-swift-cli dump` / `export` /
 `convert` (M8–M12). What is left is a GUI and packaging (M13–M14).
@@ -105,7 +108,7 @@ data), `arrange` (timeline placement), `build_midi_file` (the only `mido` caller
 `Placement` data the same way.
 
 Console entry points go in `pyproject.toml` only when their milestone lands, so an installed
-command never crashes on invocation. All four are claimed; a new one waits for its milestone.
+command never crashes on invocation. All five are claimed; a new one waits for its milestone.
 
 The CLI is Typer. Each command is a function in its own module with a `register(app)` that mounts
 it, so `ksp2midi ...` and `kspplus ksp2midi ...` are one command reached two ways — add a command

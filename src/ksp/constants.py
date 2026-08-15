@@ -31,6 +31,11 @@ DRUM_TRACK_ITEM_ID: Final = 123
 PATTERNS_PER_TRACK: Final = 16
 MAX_STEPS: Final = 64
 
+#: Project slots on the device, any of which a read may name. The protocol's own
+#: slot byte is deliberately wider (``sysex.MAX_SLOT``) because H4.1 had to ask
+#: what the device does with 0 and with 17; a user names one of these sixteen.
+PROJECT_SLOTS: Final = 16
+
 # --- Scenes and pattern chaining (item 121) --------------------------------
 # Measured 2026-08-04, capture T5-chain-3: a 3-pattern chain on Track 2 in
 # scene 1 stores 121_84_1_2_1..3 = 0, 1, 2 and leaves slots 4-16 at SENTINEL.

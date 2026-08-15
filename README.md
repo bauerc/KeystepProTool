@@ -9,11 +9,17 @@ plan is in [`ROADMAP.md`](./ROADMAP.md).
 
 Both directions work end to end, and both are **verified on the hardware** — files this tool wrote
 loaded in MIDI Control Center, transferred to a KeyStep Pro, and played what they said they would.
-Three commands ship: `ksp-dump` reads a project, `ksp2midi` exports one as MIDI, and `midi2ksp`
-converts a MIDI clip into a playable pattern. `kspplus` gathers all three under one name.
+Four commands ship: `ksp-dump` reads a project, `ksp2midi` exports one as MIDI, `midi2ksp`
+converts a MIDI clip into a playable pattern, and `ksp-pull` reads a project straight off the
+device over USB. `kspplus` gathers all four under one name.
 
 `midi2ksp` converts a whole file: every note-bearing track onto the device's four, chords, a drum
 track, note lengths, tempo, and sequences too long for one pattern split and chained.
+
+`ksp-pull` is newer than the rest and its acceptance gate is not yet closed: the read path is
+verified against a replayed capture and against the device's own panel, but the full-dump diff
+against MIDI Control Center's export (H3.2) has not been run on hardware. See
+[`ROADMAP.md`](./ROADMAP.md).
 
 ## Install
 
@@ -33,7 +39,7 @@ uv run ksp2midi project_files/project_5.KeyStepPro -o project_5.mid
 uv run kspplus ksp2midi project_files/project_5.KeyStepPro -o project_5.mid
 ```
 
-`kspplus --help` lists the three, and `kspplus <command> --help` gives that command's options
+`kspplus --help` lists the four, and `kspplus <command> --help` gives that command's options
 grouped by what they affect — selection, timing, drum mapping, output. The rest of this README uses
 the standalone form for brevity; prefix any of it with `kspplus` and it still works.
 
@@ -296,6 +302,51 @@ drums on an ordinary channel instead, and for those `--drum-track N` names it ex
 **The project's name comes from the template**, because a project name is stored as an integer
 parameter whose encoding we have not decoded. In MCC's Project Browser a converted project may
 therefore show the template's name rather than your filename.
+
+## `ksp-pull`
+
+Read a project off the device itself, with no MIDI Control Center in the way:
+
+```sh
+sudo uv run ksp-pull my_project.KeyStepPro --slot 3
+```
+
+MCC is otherwise the only way to get a `.KeyStepPro` file, and it wants a Recall To and an export
+for every project. This asks the hardware directly and writes the same file, in about ten seconds.
+What comes back feeds straight into the rest of the tool, so `ksp-pull` then `ksp2midi` turns what
+is on the device into a MIDI file.
+
+Installing the USB extra is what makes it work — the raw-USB dependency is optional, because most
+people converting files have no reason to install libusb:
+
+```sh
+uv sync --extra usb      # and: brew install libusb
+```
+
+Three things about the read:
+
+- **It needs root on macOS.** The system binds its own USB-MIDI driver to the interface that
+  answers SysEx reads and will not release it to an unprivileged process, so the command is run
+  under `sudo`. Close MIDI Control Center first; it holds the same device.
+- **`--slot` needs no help from the panel.** Slots are numbered as the device numbers them, 1–16.
+  The read selects the slot itself.
+- **A slot is read as it was saved.** Panel edits you have not saved are not in the file. A slot
+  that was never saved is refused rather than written out as a plausible empty project.
+
+| option | what it does |
+| --- | --- |
+| `--slot N` | which of the sixteen projects to read (default 1) |
+| `--force` | overwrite an existing output file |
+| `--quiet`, `-v` | suppress the summary; list every diagnostic |
+| `--timeout MS` | how long to wait for each reply (default 1000) |
+| `--mcc-plan` | walk MCC's own 8,951-request stream instead of the coalesced one. Same file, about four times slower |
+| `--no-identity` | skip the identity request and write the firmware version this tool already knows |
+| `--template P` | take the file's full key set from `P` instead of the shipped factory default |
+
+The default walk asks for up to 64 values per request and skips what the note pool's existence
+array has already answered — the same addresses MCC reads, in about a ninth of the frames. The
+device's reply period does not change with the payload size, which is why that is the whole of the
+speedup.
 
 ## Development
 

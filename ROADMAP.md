@@ -300,9 +300,10 @@ it to an unprivileged process.
 
 Three probes changed what later phases should do:
 
-- **H1.4 — there is no handshake.** A read succeeds with neither the identity request nor the
-  `0x05` frame, so `bulk_read` sends no prologue. The identity request is still needed for the
-  version string, but not to open the conversation.
+- **H1.4 — there is no handshake for re-reading what is already loaded.** A read succeeds with
+  neither the identity request nor the `0x05` frame when the target is the project already on the
+  panel. Selecting a different project still needs `05 <slot>`, and `bulk_read` sends it. The
+  identity request is still needed for the version string, but not to open the conversation.
 - **H1.3 — `count=64` is honoured and free.** The per-request period does not move with payload
   size (3.994 ms at 16, 3.998 ms at 64), so a full dump drops from 38.3 s to 9.6 s. **Taken, and
   without touching MCC's stream:** `ksp.bulk_fast` derives a second walk from the same `PLAN`
@@ -319,8 +320,15 @@ Three probes changed what later phases should do:
   by the plan's declared extent rather than trusting reply length
   ([spec 7.7](./analysis/format/SysEx_Direct_Transfer_Path.md)).
 
-`ksp_cli/pull.py` is **not** part of this phase. The full-dump CLI is what Phase 3's H3.1 gates,
-and writing it before there is a live read to point it at leaves it unexercised.
+`ksp_cli/pull.py` **has landed** — `ksp-pull` is a declared console entry point on the `kspplus`
+group, so `sudo ksp-pull OUT.KeyStepPro [--slot N]` reads the coalesced walk by default
+(`--mcc-plan` for MCC's own 8,951-request stream). It is the full-dump CLI Phase 3's H3.1 gates.
+`tests/test_pull_cli.py::test_the_dump_is_byte_identical_to_mcc_s_export` runs it against
+`FakeDevice` fed by `tests/fixtures/recall_tape.txt` and pins the 1,007-request replay figure and
+byte-for-byte agreement with `initial_project.KeyStepPro`, minus MCC's trailing comma. **That is
+CI over a replay, not hardware:** H3.1 (the live full dump) and H3.2 (the live byte-diff against
+MCC's own export) have not yet run on the device — see
+[the hardware protocol's Phase 3](./analysis/Hardware_Test_Protocol.md#phase-3--acceptance).
 
 - **Phase 2 ran on hardware 2026-08-14 (firmware 2.5.20) and all four probes passed** — H2.1–H2.4
   ([hardware test protocol](./analysis/Hardware_Test_Protocol.md)). `tools/usb_probe.py phase2`

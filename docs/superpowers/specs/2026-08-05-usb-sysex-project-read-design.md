@@ -143,7 +143,9 @@ The pyusb import never enters `ksp/`, so the Swift port swaps in CoreMIDI and re
 unchanged.
 
 Per CLAUDE.md, the `ksp-pull` console entry point goes into `pyproject.toml` only when the
-milestone lands.
+milestone lands. It is now declared: the command exists and is exercised end to end against a
+modelled device, which is what that rule is protecting against — an installed command that crashes
+on invocation.
 
 ### The read plan is generated into the repo
 
@@ -222,11 +224,28 @@ Phase 0 needs no device. Phases 1–4 are one command each at the hardware, size
 transport, since the transport was already open and the extra reads cost nothing. It confirmed
 that the `05 <slot>` prologue selects the project — see the project-selection section above.
 
-### Phase 3 — acceptance
+### Phase 3 — acceptance — **CLI landed; both hardware steps outstanding**
 
-- **H3.1** Full dump, ~36 s, written to `.KeyStepPro`.
+`src/ksp_cli/pull.py` and the `ksp-pull` entry point now exist. The command walks `bulk_fast`'s
+coalesced plan by default — up to 64 values per request, about 1,008 requests for project 1 against
+the replayed tape — sends the `05 <slot>` prologue for `--slot`, asks the identity request for the
+version, and writes the file through `lenient_json.canonical`. `--mcc-plan` walks MCC's 8,951
+instead and produces the identical file.
+
+- **H3.1** Full dump written to a `.KeyStepPro`: `sudo ksp-pull out.KeyStepPro --slot N`.
 - **H3.2** Recall the same project in MCC, export, and byte-diff against H3.1. This is the
   milestone gate.
+
+**H3.2 will differ by exactly one byte, and that is a pass.** This tool emits strict JSON; every
+file MCC writes ends `,\n}`. The deviation was settled at the device by T6.2 and is bounded to that
+one byte by `test_output_differs_from_mcc_by_exactly_the_trailing_comma`. Diff against the export
+with its trailing comma stripped, or a passing run reads as a failure.
+
+That diff is also held in CI over the capture:
+`tests/test_pull_cli.py::test_the_dump_is_byte_identical_to_mcc_s_export` runs the whole command
+against a modelled device fed by `recall_tape.txt` and compares the 3.5 MB result to
+`project_files/initial_project.KeyStepPro`. It is the strongest evidence available without the
+device, and it is still not the device: H3.1 has not been run.
 
 ### Phase 4 — the unlock ✅ **answered inside Phase 2, hardware 2026-08-14**
 
