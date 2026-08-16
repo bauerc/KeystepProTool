@@ -32,7 +32,7 @@ can *listen to* rather than merely diff.
 exploratory work — the kind where a REPL matters. `mido` handles MIDI file parsing for free, which
 has no equivalent in the Swift standard toolchain (CoreMIDI is real-time I/O, not file parsing).
 
-**M8–M14 in Swift.** By then the core is a proven set of rules, so porting is mechanical translation
+**M8–M13 in Swift.** By then the core is a proven set of rules, so porting is mechanical translation
 rather than reverse engineering. Swift wins decisively on distribution: a signed `.app` versus
 asking other KeyStep Pro owners to manage a Python environment.
 
@@ -40,7 +40,8 @@ The port itself is M8–M12 and is most of the work — roughly 5,500 lines of P
 of Swift. It ships no user-visible artifact, which is why it is broken into five milestones that each
 end in a byte-comparison against the Python rather than in a feature. The Python does not retire when
 Swift lands; it becomes the reference implementation the port is checked against, which is why both
-live in this repo. M13 is the GUI and M14 is distribution.
+live in this repo. M13 is the GUI, M15 is the full application and distribution is a repeatable
+track rather than a milestone.
 
 **The port has no discovery risk and real translation risk.** Nothing is left to reverse-engineer,
 but thousands of lines of hand-converted bit arithmetic will contain bugs that look correct on
@@ -208,8 +209,8 @@ distinct pitches onto consecutive lanes instead; nothing in the format prevents 
 sort of thing that is obvious once a GM file is converted and invisible until then.
 
 **The GUI decision is settled: build it.** The CLI does everything the format allows, so what is left
-is reach — a full Swift port (M8–M12), a drag-and-drop app (M13), and a signed `.dmg` (M14). No
-embedded Python.
+is reach — a full Swift port (M8–M12), a drag-and-drop app (M13), the full application (M15), and a
+signed `.dmg` from the release track. No embedded Python.
 
 ### M7 — Timing calibration
 
@@ -256,9 +257,9 @@ play wrong, with nothing to signal the error.
 
 ## Direct device read over USB SysEx
 
-**Not part of the M1–M14 ladder.** It is an additional input path, not a step toward the existing
+**Not part of the milestone ladder.** It is an additional input path, not a step toward the existing
 milestones: it makes the hardware a second producer of the same flat dict `ksp.reader.read_project`
-already consumes, so nothing downstream changes. M1–M14 stand whether or not this ever lands.
+already consumes, so nothing downstream changes. The milestones stand whether or not this ever lands.
 
 Today `ksp2midi` can only read a project MCC has already exported. This reads one off the device
 directly. The protocol is decoded in
@@ -365,7 +366,8 @@ pre-commit and `check.yml` are path-scoped so the two toolchains ignore each oth
 lists Linux as WIP, unlike `swift-midi-core` and `swift-timecode` underneath it. So `KSPKit` (the
 format core, M9–M11) takes no third-party dependencies and `KSPMIDI` (M12) holds the one import,
 splitting where M12 already drew the line. `Package.swift` gates `KSPMIDI`, `KSPSwiftCLI` and
-`KSPMIDITests` off on Linux, which puts the bulk of the port on the 1× runner; only M13–M14 need
+`KSPMIDITests` off on Linux, which puts the bulk of the port on the 1× runner; only M13 and the
+release track need
 macOS. The cost is that those three targets are checked by `./scripts/validate.sh` alone —
 `swift.yml` cannot see them, and **M12 must add a `macos-latest` job** when they gain real code.
 
@@ -603,7 +605,8 @@ template with them, and proved it changed nothing by re-running the three parity
 **Full Xcode was not required, and the estimate that it would be was wrong.** Measured on a
 Command Line Tools 6.2.3 machine: the CLT SDK ships `SwiftUI.framework`, `AppKit.framework` and
 `UniformTypeIdentifiers.framework`, and `codesign`, `notarytool`, `stapler` and `iconutil` are all
-on `xcrun`'s path — which likely unblocks M14 on the same terms. Only `xcodebuild`, `actool` and
+on `xcrun`'s path — which likely unblocks the release track on the same terms. Only `xcodebuild`,
+`actool` and
 `ibtool` are absent, and a hand-assembled bundle needs none of them. So the GUI is an ordinary
 SwiftPM `executableTarget` inside `swift/`, tested by the same `validate.sh` as everything else,
 and `scripts/bundle_app.sh` assembles and ad-hoc signs the `.app`. No `.xcodeproj`, no 15 GB
@@ -620,23 +623,60 @@ the Templates folder holds freely named files. The claim in `README.md` that a c
 "may show the template's name" confused that with the undecoded integer parameter *inside* the
 file, and was corrected here.
 
-**Start Apple Developer Program enrolment now**, not at M14 — it can take days.
+**Start Apple Developer Program enrolment now**, not when the release track starts — it can take days.
 
 **Test:** drag a `.mid` onto the app, restart MCC, pattern is there.
 
-### M14 — Distribution
+### M14 — retired
 
-**Artifact:** a signed, notarised `.dmg` another KeyStep Pro owner can actually run. Until this
-exists the tool only works for people willing to set up a Python environment.
+Distribution was M14. It has been taken off the ladder — see **Release track** below — and the
+number is not reused. The application's own remaining work is M15.
 
-**Last, not first.** The old ordering assumed distribution might mean freezing the Python CLI; with
-the full port decided there is no Python artifact to ship and nothing to notarise until M13 exists.
+### M15 — The full application
 
-**Signing is a post-build step, so it does not gate anything before it.** M8–M13 build and run
-unsigned for free. Paying the $99/yr Apple Developer Program later requires no rebuild — `codesign
---force` replaces whatever signature is there, including none. But there is no free notarisation,
-and macOS 15+ removed the right-click → Open bypass, so unsigned means the recipient must dig through
-System Settings and authenticate as an admin. That fails the test below.
+**Artifact:** *Key Step Pro Plus* as `project_requirements/project_requirements.md` describes it,
+rather than the deliberate one-window v1 M13 shipped. Preview, per-track routing, segmentation,
+loop counts, metadata control and multi-file import.
+
+**Spec of record is the epic, issue #115**, which holds the requirement-coverage table and the
+frontier. Forty issues, each a vertical slice sized to a PR a human can read in one sitting.
+
+**Most of it is wiring, not format work.** `ExportRunner.Options` and `ConvertRunner.Options`
+already carry `split`, `track`, `pattern`, `passes`, `includeStale`, `includeDisabled`,
+`applySwing`, `applyTimeShift`, `dryRun`, `midiTrack`, `drumTrack`, `drumMapSpec` and
+`stepsPerBeat` — the app has simply never set them. Those issues are labelled `app` and touch no
+parity script. The rest are labelled `core-parity` and land in both cores in one commit.
+
+**The preview exemption is what keeps this affordable.** A summary type that adds no CLI text needs
+no Python mirror and runs no parity gate, so both summaries live in `KSPRun` composed from existing
+`KSPKit`/`KSPMIDI` reads. A preview issue that quietly adds a CLI flag doubles its own cost.
+
+**Test:** convert the same file through the app on defaults and through `ksp-swift-cli` on defaults,
+and get the same bytes — the check that the options surface did not change what conversion means.
+
+---
+
+## Release track — off the ladder
+
+Signing and distribution are **not** a milestone. They gate nothing: signing is a post-build step,
+every milestone before it builds and runs unsigned for free, and paying for a Developer ID later
+requires no rebuild — `codesign --force` replaces whatever signature is there, including none. And
+they are not done once: every release re-signs, re-notarises and re-staples. A milestone that
+completes and stays complete is the wrong shape for that.
+
+So it is a repeatable track, tracked in issue #10, split into four self-contained pieces:
+
+| | |
+|---|---|
+| **R1** | Developer ID identity and hardened runtime |
+| **R2** | notarise and staple |
+| **R3** | assemble the `.dmg` |
+| **R4** | versioned release automation |
+
+R1 needs $99/yr Apple Developer Program membership. There is no free notarisation, and macOS 15+
+removed the right-click → Open bypass, so unsigned means the recipient must dig through System
+Settings and authenticate as an admin — which fails the test. The Command Line Tools suffice:
+`codesign`, `notarytool`, `stapler` and `iconutil` are all on `xcrun`'s path, measured during M13.
 
 **Test:** hand a downloaded `.dmg` to someone else with a KeyStep Pro and have them convert a file
 without touching a terminal or reading setup instructions.
@@ -660,8 +700,9 @@ without touching a terminal or reading setup instructions.
 | M10 Swift reader | ✅ done | No | M9 |
 | M11 Swift writer | ✅ done | No | M10 |
 | M12 Swift MIDI both ways | ✅ done | For final listen | M11 |
-| M13 GUI | | For final check | M12 |
-| M14 Distribution | | For final check | M13 |
+| M13 GUI | ✅ done | For final check | M12 |
+| M15 Full application | | For final check | M13 |
+| R Distribution | | For final check | M13 — but gates nothing, and repeats every release |
 
 ---
 
