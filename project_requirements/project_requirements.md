@@ -6,6 +6,7 @@ For exporting KeyStepPro Project to MIDI:
 
 - As a user when I interact with a UI I should be able to:
   - A "simple mode" which reasonably does a straight dump from one to the other format and handles edge cases gracefully (i.e. two or more KeyStepPro project files if one doesn't fit, fixed defaults)
+  - Specify where an output file lands with distinct options for Midi files vs KeyStepPro files
   - For exporting a MIDI file from a KeyStepPro project:
     - A preview UI that will reasonably show me what tracks exist in the current project and how they line up to the project
     - Determine if certain tracks and/or patterns should be included/excluded from the output
