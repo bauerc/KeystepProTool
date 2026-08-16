@@ -151,3 +151,20 @@ never reformat, re-indent, or add a final newline. The exports are M3's byte-ide
 the `.txt` files are transcribed from the hardware display and cannot be regenerated without the
 device. `tests/test_format_invariants.py` makes such corruption fail loudly; if it fails, the fix
 is never in that file.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub issues on `bauerc/KeystepProTool`, driven through the `gh` CLI. See
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles, each label string equal to its name. See
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root, both created lazily — absent today.
+See `docs/agents/domain.md`.
