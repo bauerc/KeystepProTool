@@ -22,6 +22,10 @@ One of the twenty-four drum sounds, each with its own track of triggers. Always 
 a bare "track" is a sequencer track.
 _Avoid_: lane, drum lane
 
+**Track mode**:
+Whether a track runs as a sequencer, an arpeggiator or drums. It belongs to the Project, not to a
+Scene.
+
 **Pattern**:
 The note information a track plays, laid out across steps.
 
@@ -46,15 +50,14 @@ _Avoid_: hit, drum note
 ## Arrangement
 
 **Chain**:
-A series of Patterns a track plays one after another in a fixed order. A track has one at a time,
-and creating a new one replaces it. A Chain persists when its Project is saved, but cannot be
-saved as an object of its own.
+A series of Patterns one track plays one after another in a fixed order. A track has a single
+Chain at a time, and creating a new one replaces it. A Chain persists when its Project is saved,
+but cannot be saved as an object of its own.
 
 **Scene**:
 A snapshot of the Patterns and Chains current in all four tracks, together with each track's mute
-status and which track is selected.
-*Open question:* Arturia's manual contradicts itself on whether a track's mode is saved in a Scene
-— §4.2.7 says it is not, §6.5.2.1 implies it is. Only the device can settle this.
+status and which track is selected — so one Scene carries four independent Chains, one per track.
+Scenes are stored in the Project.
 
 ## Timing and expression
 
