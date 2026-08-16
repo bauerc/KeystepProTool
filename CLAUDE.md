@@ -96,10 +96,14 @@ so anything in `KSPSwiftCLI` is reachable only from the CLI, and the app has to 
 plus the same run structurally as `diagnostics` and `destinations`, which is what the app reads
 instead of re-parsing the text.
 
-**`KSPApp` owns no format logic** — only where a file goes and what it is called. `Destination.swift`
-and `Conversion.swift` are Foundation-only so their rules are unit-tested; SwiftUI stays in
-`DropView.swift` and `KSPApp.swift`, and every mutable value lives on the one `@MainActor`
-`AppModel`. Conversions run in a `Task.detached`, which is what the `Sendable` `Options`/`RunResult`
+**`KSPApp` owns no format logic** — only where a file goes, what it is called and which options the
+window offers. `Destination.swift`, `Conversion.swift` and `Settings.swift` carry no SwiftUI so
+their rules are unit-tested; SwiftUI stays in `DropView.swift` and `KSPApp.swift`, and every mutable
+value lives on the one `@MainActor` `AppModel`, in `AppModel.swift` (Observation and AppKit, no
+SwiftUI). **A new option is a property on `Settings` and a line in its two mappings onto
+`ConvertRunner.Options`/`ExportRunner.Options`** — an option left out of those mappings keeps the
+runner's own default, which is what makes the app on defaults convert what the CLI on defaults
+converts. Conversions run in a `Task.detached`, which is what the `Sendable` `Options`/`RunResult`
 are for. `scripts/bundle_app.sh` wraps the built binary in a `.app`; it is deliberately **not** in
 `validate.sh`, which compiles the target through `KSPAppTests` instead.
 **Nothing may add a dependency to `KSPKit`.**

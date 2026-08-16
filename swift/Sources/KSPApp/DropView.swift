@@ -1,86 +1,22 @@
 import AppKit
-import KSPKit
 import SwiftUI
-
-/// The window's state. The one place in the app that is mutable, and it is main-actor confined --
-/// everything below `KSPApp` is a value type the runners already declare `Sendable`.
-@MainActor
-@Observable
-final class AppModel {
-    static let shared = AppModel()
-
-    enum Phase {
-        case idle
-        case working(String)
-        case done(Outcome)
-    }
-
-    var phase: Phase = .idle
-    var name: String = ""
-    var verbose = false
-
-    func accept(_ url: URL) {
-        guard let job = Conversion.job(for: url) else {
-            phase = .done(
-                Outcome(
-                    written: nil,
-                    headline: "\(url.lastPathComponent) is not a MIDI file or a KeyStep Pro "
-                        + "project.", report: Report(), note: nil))
-            return
-        }
-        let stem = Naming.stem(of: url)
-        name = stem
-        phase = .working(url.lastPathComponent)
-
-        let destination =
-            switch job {
-            case .toProject: Destinations.forProjects()
-            case .toMIDI: Destinations.beside(url)
-            }
-
-        Task {
-            let outcome = await Conversion.run(job, named: stem, into: destination)
-            if let written = outcome.written {
-                self.name = written.deletingPathExtension().lastPathComponent
-                NSWorkspace.shared.activateFileViewerSelecting([written])
-            }
-            self.phase = .done(outcome)
-        }
-    }
-
-    /// Rename what was just written, in place. MCC's Project Browser lists the filename, so this
-    /// is how a project gets the name it will carry on the device.
-    func renameResult() {
-        guard case .done(var outcome) = phase, let written = outcome.written else { return }
-        do {
-            let moved = try Naming.rename(written, toStem: name)
-            outcome.written = moved
-            outcome.note = nil
-            name = moved.deletingPathExtension().lastPathComponent
-            phase = .done(outcome)
-            NSWorkspace.shared.activateFileViewerSelecting([moved])
-        } catch {
-            outcome.note = "Could not rename: \(error.localizedDescription)"
-            phase = .done(outcome)
-        }
-    }
-
-    func reset() {
-        phase = .idle
-        name = ""
-    }
-}
 
 struct DropView: View {
     @Bindable var model: AppModel
     @State private var targeted = false
 
     var body: some View {
-        VStack(spacing: 16) {
-            content
+        HStack(alignment: .top, spacing: 0) {
+            VStack(spacing: 16) {
+                content
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(24)
+
+            Divider()
+            options
         }
-        .padding(24)
-        .frame(width: 460, height: 300)
+        .frame(width: 620, height: 380)
         .dropDestination(for: URL.self) { urls, _ in
             // One file at a time in v1: a second would need its own name field and its own result.
             guard let first = urls.first else { return false }
@@ -92,11 +28,38 @@ struct DropView: View {
         .background(targeted ? Color.accentColor.opacity(0.12) : Color.clear)
     }
 
+    /// The sidebar is on screen in every phase, including idle, so an option can be set before
+    /// anything is dropped. Later options land here beside these two.
+    private var options: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Options").font(.headline)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Dry run", isOn: $model.settings.dryRun)
+                Text("Report what would be written, and write nothing.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Show every finding", isOn: $model.settings.verbose)
+                Text("List each finding instead of one line per kind.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .toggleStyle(.checkbox)
+        .frame(width: 180, alignment: .leading)
+        .padding(16)
+    }
+
     @ViewBuilder
     private var content: some View {
         switch model.phase {
         case .idle:
             idle
+        case .staged(let staged):
+            self.staged(staged)
         case .working(let filename):
             ProgressView("Converting \(filename)…")
         case .done(let outcome):
@@ -120,6 +83,68 @@ struct DropView: View {
         }
     }
 
+    /// What was dropped, what it will be called and where it will land -- all before anything is
+    /// written, which is the whole point of the phase.
+    private func staged(_ staged: AppModel.Staged) -> some View {
+        let plan = model.plan(for: staged.job)
+        return VStack(alignment: .leading, spacing: 12) {
+            Label(plan.source.lastPathComponent, systemImage: "doc")
+                .font(.headline)
+            Text(staged.job.direction).font(.callout).foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("Name", text: $model.name)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: model.name) { model.discardPreview() }
+                Text("This is the name MIDI Control Center's Project Browser will show.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Will be written to").font(.caption).foregroundStyle(.secondary)
+                Text(plan.target.path).font(.callout).textSelection(.enabled)
+            }
+
+            if let note = plan.note {
+                Text(note).font(.caption).foregroundStyle(.secondary)
+            }
+
+            if let preview = staged.preview {
+                Divider()
+                dryRunPreview(preview)
+            }
+
+            Spacer()
+            HStack {
+                Button("Cancel") { model.cancel() }
+                Spacer()
+                Button(model.settings.dryRun ? "Dry run" : "Convert") {
+                    Task { await model.convert() }
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func dryRunPreview(_ preview: Outcome) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(
+                preview.failed
+                    ? "Nothing would be written"
+                    : "Would write \(preview.written?.lastPathComponent ?? "")",
+                systemImage: preview.failed ? "exclamationmark.triangle" : "eye"
+            )
+            .font(.subheadline)
+            .foregroundStyle(preview.failed ? Color.orange : Color.secondary)
+
+            Text(preview.headline).font(.caption).textSelection(.enabled)
+            findings(preview)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     @ViewBuilder
     private func done(_ outcome: Outcome) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -132,39 +157,32 @@ struct DropView: View {
 
             Text(outcome.headline).font(.callout).textSelection(.enabled)
 
-            if !outcome.failed {
-                HStack {
-                    TextField("Name", text: $model.name)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit { model.renameResult() }
-                    Button("Rename") { model.renameResult() }
-                }
-                Text("This is the name MIDI Control Center's Project Browser will show.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
             if let note = outcome.note {
                 Text(note).font(.caption).foregroundStyle(.secondary)
             }
 
-            if !outcome.all.isEmpty {
-                DisclosureGroup("\(outcome.all.count) note(s)") {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(outcome.findings(verbose: model.verbose), id: \.self) { finding in
-                            Text(finding).font(.caption).textSelection(.enabled)
-                        }
-                        if outcome.hasDetail {
-                            Toggle("Show each one", isOn: $model.verbose)
-                                .font(.caption).toggleStyle(.checkbox)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
+            findings(outcome)
 
             Spacer()
             Button("Convert another") { model.reset() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The sidebar's toggle decides whether the list inside is one line per kind or one per
+    /// occurrence. "Finding", not "note": a note is a melodic event (ADR 0001).
+    @ViewBuilder
+    private func findings(_ outcome: Outcome) -> some View {
+        if !outcome.all.isEmpty {
+            DisclosureGroup("\(outcome.all.count) finding(s)") {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(outcome.findings(verbose: model.settings.verbose), id: \.self) {
+                        finding in
+                        Text(finding).font(.caption).textSelection(.enabled)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
     }
 }
