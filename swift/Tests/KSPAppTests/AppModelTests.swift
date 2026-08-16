@@ -23,10 +23,77 @@ import Testing
         model.accept(midiFixture)
 
         let staged = try #require(model.staged, "the drop should have been staged")
-        #expect(staged.plan.job == .toProject(midiFixture))
-        #expect(staged.plan.target == directory.appending(path: "m6-test-file.KeyStepPro"))
+        #expect(staged.job == .toProject(midiFixture))
+        #expect(model.name == "m6-test-file")
+        #expect(
+            model.plan(for: staged.job).target
+                == directory.appending(path: "m6-test-file.KeyStepPro"))
         #expect(staged.preview == nil)
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
+    }
+
+    /// The name is typed before the write, so the file is created under it rather than moved
+    /// afterwards -- and the destination on screen follows each keystroke.
+    @Test func thePlanFollowsTheNameAsItIsTyped() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.accept(midiFixture)
+
+        model.name = "My Song"
+
+        let staged = try #require(model.staged)
+        #expect(
+            model.plan(for: staged.job).target == directory.appending(path: "My Song.KeyStepPro"))
+    }
+
+    @Test func convertingWritesUnderTheNameThatWasTyped() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.accept(midiFixture)
+        model.name = "My Song"
+
+        await model.convert()
+
+        guard case .done(let outcome) = model.phase else {
+            Issue.record("a conversion should have finished in the result view")
+            return
+        }
+        let written = try #require(outcome.written, "conversion failed: \(outcome.headline)")
+        #expect(written == directory.appending(path: "My Song.KeyStepPro"))
+        #expect(FileManager.default.fileExists(atPath: written.path))
+    }
+
+    /// The never-overwrite ladder now applies to the name the user chose, not the source's stem.
+    @Test func atypedNameThatIsTakenStepsAsideAndSaysSo() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        try touch(directory, "My Song.KeyStepPro")
+        model.accept(midiFixture)
+
+        model.name = "My Song"
+
+        let plan = model.plan(for: try #require(model.staged).job)
+        #expect(plan.target.lastPathComponent == "My Song 2.KeyStepPro")
+        #expect(plan.note?.contains("My Song 2.KeyStepPro") == true)
+    }
+
+    /// A dry run describes one name, so editing the name drops it rather than leaving a stale
+    /// preview on screen.
+    @Test func editingTheNameDiscardsADryRunPreview() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.settings.dryRun = true
+        model.accept(midiFixture)
+        await model.convert()
+        #expect(try #require(model.staged).preview != nil)
+
+        model.discardPreview()
+
+        #expect(try #require(model.staged).preview == nil)
     }
 
     @Test func cancelReturnsToIdleWithoutWriting() throws {

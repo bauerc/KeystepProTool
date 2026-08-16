@@ -47,8 +47,8 @@ struct Outcome: Sendable, Equatable {
 
     var failed: Bool { written == nil }
 
-    /// Whether there is a file on disk to reveal and to rename. A dry run names one without
-    /// creating it, so the two are not the same question.
+    /// Whether there is a file on disk to reveal. A dry run names one without creating it, so the
+    /// two are not the same question.
     var wroteFile: Bool { !failed && !dryRun }
 
     func findings(verbose: Bool) -> [String] { verbose ? all : collapsed }
@@ -133,9 +133,10 @@ enum Conversion {
         return detail.isEmpty ? "Converted." : detail.joined(separator: "\n")
     }
 
+    /// Worded to read the same before the write and after it, because the staged view and the
+    /// result view both show it.
     private static func collisionNote(_ target: URL) -> String {
-        "That name was taken, so this was written as \(target.lastPathComponent). "
-            + "Rename it below if you would rather it were something else."
+        "That name is taken, so this one is \(target.lastPathComponent)."
     }
 }
 

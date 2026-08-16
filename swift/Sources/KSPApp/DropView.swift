@@ -83,21 +83,29 @@ struct DropView: View {
         }
     }
 
-    /// What was dropped, which way it goes and where it would land -- shown before anything is
+    /// What was dropped, what it will be called and where it will land -- all before anything is
     /// written, which is the whole point of the phase.
-    @ViewBuilder
     private func staged(_ staged: AppModel.Staged) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(staged.plan.source.lastPathComponent, systemImage: "doc")
+        let plan = model.plan(for: staged.job)
+        return VStack(alignment: .leading, spacing: 12) {
+            Label(plan.source.lastPathComponent, systemImage: "doc")
                 .font(.headline)
-            Text(staged.plan.job.direction).font(.callout).foregroundStyle(.secondary)
+            Text(staged.job.direction).font(.callout).foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("Name", text: $model.name)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: model.name) { model.discardPreview() }
+                Text("This is the name MIDI Control Center's Project Browser will show.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Will be written to").font(.caption).foregroundStyle(.secondary)
-                Text(staged.plan.target.path).font(.callout).textSelection(.enabled)
+                Text(plan.target.path).font(.callout).textSelection(.enabled)
             }
 
-            if let note = staged.plan.note {
+            if let note = plan.note {
                 Text(note).font(.caption).foregroundStyle(.secondary)
             }
 
@@ -148,17 +156,6 @@ struct DropView: View {
             .foregroundStyle(outcome.failed ? Color.orange : Color.green)
 
             Text(outcome.headline).font(.callout).textSelection(.enabled)
-
-            if outcome.wroteFile {
-                HStack {
-                    TextField("Name", text: $model.name)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit { model.renameResult() }
-                    Button("Rename") { model.renameResult() }
-                }
-                Text("This is the name MIDI Control Center's Project Browser will show.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
 
             if let note = outcome.note {
                 Text(note).font(.caption).foregroundStyle(.secondary)

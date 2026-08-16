@@ -83,20 +83,4 @@ enum Naming {
         }
         return candidate
     }
-
-    /// Rename in place, keeping the extension. Returns where the file now is.
-    ///
-    /// A no-op rather than an error when the name is unchanged, because the text field fires on
-    /// commit whether or not anything was typed.
-    static func rename(_ current: URL, toStem stem: String) throws -> URL {
-        let ext = current.pathExtension
-        let directory = current.deletingLastPathComponent()
-        // The unsuffixed name first: asking `vacant` straight away would find *this* file sitting
-        // at its own name, call it a clash and rename `foo` to `foo 2`.
-        let plain = directory.appending(path: "\(sanitised(stem)).\(ext)")
-        if plain.standardizedFileURL.path == current.standardizedFileURL.path { return current }
-        let target = vacant(in: directory, stem: stem, extension: ext)
-        try FileManager.default.moveItem(at: current, to: target)
-        return target
-    }
 }

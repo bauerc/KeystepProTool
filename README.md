@@ -59,8 +59,8 @@ There is also a drag-and-drop **macOS app**, *Key Step Pro Plus*, for the common
 ## The app
 
 **Key Step Pro Plus.** Drop a `.mid` on the window and it is held there, showing which way it will
-go and where the result will land; press **Convert** and a `.KeyStepPro` lands in MIDI Control
-Center's Templates folder, where the Project Browser will list it. Drop a `.KeyStepPro` instead and
+go, what the result will be called and where it will land; press **Convert** and a `.KeyStepPro`
+lands in MIDI Control Center's Templates folder, where the Project Browser will list it. Drop a `.KeyStepPro` instead and
 you get a `.mid` beside it. **Cancel** drops it again without writing anything. One file at a time;
 everything else is the CLI's job.
 
@@ -79,11 +79,12 @@ The build is unsigned beyond an ad-hoc signature, so it launches on the machine 
 nowhere else yet; a Developer ID build is M14.
 
 **Naming.** The name field is the filename, and the filename is what MCC's Project Browser shows,
-so it is worth setting. It is editable after the write and renames the file in place.
+so it is worth setting. It sits in the staged view, above the destination it changes: type the name
+before pressing Convert and the file is written under it, rather than written and then moved.
 
 **It never overwrites.** A name already in use becomes `song 2.KeyStepPro`, and the window says so
-— MCC's Templates folder holds your own projects under freely chosen names, so a clash is as
-likely to be something else's as a re-run of this one.
+while the file is still staged — MCC's Templates folder holds your own projects under freely chosen
+names, so a clash is as likely to be something else's as a re-run of this one.
 
 **If MCC is not installed**, `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/` will not
 be there and the file goes to `~/Downloads` instead, with a message saying where to move it.

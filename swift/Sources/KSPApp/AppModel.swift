@@ -18,12 +18,14 @@ final class AppModel {
     }
 
     struct Staged {
-        var plan: Conversion.Plan
-        /// What a dry run of this plan said, if one has been made.
+        var job: Job
+        /// What a dry run said, if one has been made since the name last changed.
         var preview: Outcome?
     }
 
     var phase: Phase = .idle
+    /// What the result will be called. Typed before Convert, so the file is written under it
+    /// rather than moved afterwards -- and so the never-overwrite ladder applies to this name.
     var name: String = ""
     var settings = Settings()
 
@@ -63,56 +65,44 @@ final class AppModel {
             return
         }
         name = Naming.stem(of: url)
-        phase = .staged(Staged(plan: plan(for: job)))
+        phase = .staged(Staged(job: job))
+    }
+
+    /// Where the staged file would land under the name currently typed. Recomputed as the name is
+    /// edited, so the window never promises a path it would not use.
+    func plan(for job: Job) -> Conversion.Plan {
+        Conversion.plan(job, named: name, into: destination(job))
+    }
+
+    /// A dry run describes one name. Editing the name makes it stale, so it is dropped.
+    func discardPreview() {
+        guard case .staged(var staged) = phase, staged.preview != nil else { return }
+        staged.preview = nil
+        phase = .staged(staged)
     }
 
     func convert() async {
         guard let staged else { return }
-        // Re-planned rather than reused: a name can be taken between the drop and the press.
-        let plan = plan(for: staged.plan.job)
+        // Re-planned rather than reused: a name can be taken between the last keystroke and this.
+        let plan = plan(for: staged.job)
         phase = .working(plan.source.lastPathComponent)
 
         let outcome = await Conversion.run(plan, settings: settings)
 
         // A dry run wrote nothing, so the file stays staged and can be converted for real.
         guard !outcome.dryRun else {
-            phase = .staged(Staged(plan: plan, preview: outcome))
+            phase = .staged(Staged(job: staged.job, preview: outcome))
             return
         }
-        if let written = outcome.written {
-            name = written.deletingPathExtension().lastPathComponent
-            reveal([written])
-        }
+        if let written = outcome.written { reveal([written]) }
         phase = .done(outcome)
     }
 
     /// Drop the staged file without writing anything.
     func cancel() { reset() }
 
-    /// Rename what was just written, in place. MCC's Project Browser lists the filename, so this
-    /// is how a project gets the name it will carry on the device.
-    func renameResult() {
-        guard case .done(var outcome) = phase, outcome.wroteFile, let written = outcome.written
-        else { return }
-        do {
-            let moved = try Naming.rename(written, toStem: name)
-            outcome.written = moved
-            outcome.note = nil
-            name = moved.deletingPathExtension().lastPathComponent
-            phase = .done(outcome)
-            reveal([moved])
-        } catch {
-            outcome.note = "Could not rename: \(error.localizedDescription)"
-            phase = .done(outcome)
-        }
-    }
-
     func reset() {
         phase = .idle
         name = ""
-    }
-
-    private func plan(for job: Job) -> Conversion.Plan {
-        Conversion.plan(job, named: Naming.stem(of: job.source), into: destination(job))
     }
 }
