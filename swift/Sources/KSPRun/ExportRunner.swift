@@ -10,8 +10,8 @@ public enum ExportRunner {
         public var path: URL
         public var output: URL?
         public var split: Bool
-        public var track: Int?
-        public var pattern: Int?
+        public var tracks: Set<Int>
+        public var patterns: Set<Int>
         public var passes: Int?
         public var ticksPerBeat: Int
         public var drumMapSpec: String?
@@ -32,8 +32,8 @@ public enum ExportRunner {
         // Spelled out for the same reason as ``ConvertRunner/Options``: a public struct's
         // memberwise initialiser is internal, and every caller is in another module.
         public init(
-            path: URL, output: URL? = nil, split: Bool = false, track: Int? = nil,
-            pattern: Int? = nil, passes: Int? = nil,
+            path: URL, output: URL? = nil, split: Bool = false, tracks: Set<Int> = [],
+            patterns: Set<Int> = [], passes: Int? = nil,
             ticksPerBeat: Int = MIDIExport.defaultTicksPerBeat, drumMapSpec: String? = nil,
             drumChannel: Int = MIDIExport.drumChannel,
             defaultGate: Double = Constants.defaultGateLength, includeStale: Bool = false,
@@ -44,8 +44,8 @@ public enum ExportRunner {
             self.path = path
             self.output = output
             self.split = split
-            self.track = track
-            self.pattern = pattern
+            self.tracks = tracks
+            self.patterns = patterns
             self.passes = passes
             self.ticksPerBeat = ticksPerBeat
             self.drumMapSpec = drumMapSpec
@@ -165,7 +165,7 @@ public enum ExportRunner {
     static func plan(_ project: Project, _ exportOptions: ExportOptions, options: Options) throws
         -> [(result: ExportResult, destination: URL)]
     {
-        let narrowed = project.select(track: options.track, pattern: options.pattern)
+        let narrowed = project.select(tracks: options.tracks, patterns: options.patterns)
         if options.split {
             let directory = options.output ?? options.path.deletingLastPathComponent()
             return try MIDIExport.exportSplit(narrowed, options: exportOptions).map {

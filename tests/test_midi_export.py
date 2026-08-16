@@ -401,7 +401,9 @@ def test_only_the_set_the_device_plays_is_exported(project_files_dir: Path) -> N
     leftovers from before it was switched over -- notes no hardware would play.
     Exporting them would put phantom material in a file meant to be listened to.
     """
-    project = load(project_files_dir / "initial_project.KeyStepPro").select(track=1, pattern=1)
+    project = load(project_files_dir / "initial_project.KeyStepPro").select(
+        tracks={1}, patterns={1}
+    )
 
     live = export_project(project)
     assert live.track_names == ("Track 1 (drum)",)
@@ -421,7 +423,7 @@ def test_a_pattern_holding_one_set_is_exported_whatever_the_mode_flag_says(
     export that melody -- filtering on the flag alone would silently drop real
     user data. No sample project has this combination, so it is constructed.
     """
-    melodic = project_5.select(track=3)
+    melodic = project_5.select(tracks={3})
     in_drum_mode = replace(melodic, tracks=(replace(melodic.tracks[0], drum_mode=True),))
 
     result = export_project(in_drum_mode, ExportOptions(passes=1))
@@ -436,7 +438,7 @@ def test_an_empty_project_exports_nothing(project_files_dir: Path) -> None:
 
 
 def test_selection_narrows_what_is_exported(project_5: Project) -> None:
-    result = export_project(project_5.select(track=3), ExportOptions(passes=1))
+    result = export_project(project_5.select(tracks={3}), ExportOptions(passes=1))
     assert result.track_names == ("Track 3",)
     assert result.note_count == 10
 
@@ -668,7 +670,9 @@ class TestSplit:
 
     def test_both_note_sets_of_one_pattern_stay_in_one_file(self, project_files_dir: Path) -> None:
         """--include-stale adds a MIDI track, not a file: same (track, pattern)."""
-        project = load(project_files_dir / "initial_project.KeyStepPro").select(track=1, pattern=1)
+        project = load(project_files_dir / "initial_project.KeyStepPro").select(
+            tracks={1}, patterns={1}
+        )
         (result,) = export_split(project, ExportOptions(include_stale=True))
         assert result.track_names == ("Track 1", "Track 1 (drum)")
 
@@ -687,7 +691,7 @@ def test_tracks_of_different_total_lengths_are_reported(project_9: Project) -> N
     assert any("different total lengths" in w and "drift apart" in w for w in result.warnings)
 
     # One track cannot disagree with itself, so the line must not appear.
-    alone = export_project(project_9.select(track=1))
+    alone = export_project(project_9.select(tracks={1}))
     assert not any("different total lengths" in w for w in alone.warnings)
 
 

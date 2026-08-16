@@ -707,8 +707,8 @@ extension MIDIExport {
 extension MIDIExport {
     /// Render `project` as a single type-1 MIDI file.
     ///
-    /// Only patterns holding notes are rendered; narrow with `Project.select` first to pick one
-    /// track or pattern.
+    /// Only patterns holding notes are rendered; narrow with `Project.select` first to pick
+    /// tracks or patterns.
     public static func exportProject(_ project: Project, options: ExportOptions? = nil) throws
         -> ExportResult
     {

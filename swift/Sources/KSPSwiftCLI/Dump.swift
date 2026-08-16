@@ -45,7 +45,8 @@ struct Dump: ParsableCommand {
     func run() throws {
         let result = DumpRunner.run(
             DumpRunner.Options(
-                path: URL(filePath: path), showAll: showAll, track: track, pattern: pattern,
+                path: URL(filePath: path), showAll: showAll, tracks: track.map { [$0] } ?? [],
+                patterns: pattern.map { [$0] } ?? [],
                 asJSON: asJSON, drumMapSpec: drumMapSpec, verbose: verbose,
                 configPath: drumMapConfigPath))
         try emit(result)

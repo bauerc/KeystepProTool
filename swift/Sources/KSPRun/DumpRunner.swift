@@ -7,8 +7,8 @@ public enum DumpRunner {
     public struct Options: Sendable {
         public var path: URL
         public var showAll: Bool
-        public var track: Int?
-        public var pattern: Int?
+        public var tracks: Set<Int>
+        public var patterns: Set<Int>
         public var asJSON: Bool
         public var drumMapSpec: String?
         public var verbose: Bool
@@ -17,13 +17,13 @@ public enum DumpRunner {
         // Spelled out because a public struct's memberwise initialiser is internal, and every
         // caller is in another module. The defaults live here only, not on the properties too.
         public init(
-            path: URL, showAll: Bool = false, track: Int? = nil, pattern: Int? = nil,
+            path: URL, showAll: Bool = false, tracks: Set<Int> = [], patterns: Set<Int> = [],
             asJSON: Bool = false, drumMapSpec: String? = nil, verbose: Bool = false, configPath: URL
         ) {
             self.path = path
             self.showAll = showAll
-            self.track = track
-            self.pattern = pattern
+            self.tracks = tracks
+            self.patterns = patterns
             self.asJSON = asJSON
             self.drumMapSpec = drumMapSpec
             self.verbose = verbose
@@ -57,7 +57,7 @@ public enum DumpRunner {
             return fail("\(error.localizedDescription)", code: 1)
         }
 
-        let selected = project.select(track: options.track, pattern: options.pattern)
+        let selected = project.select(tracks: options.tracks, patterns: options.patterns)
         let text =
             options.asJSON
             ? selected.toJSON(drumMap: drumMap).serialised()

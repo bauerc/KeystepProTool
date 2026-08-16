@@ -136,7 +136,8 @@ struct Export: ParsableCommand {
             ExportRunner.Options(
                 path: URL(filePath: path),
                 output: output.map { URL(filePath: $0) },
-                split: split, track: track, pattern: pattern, passes: passes.count,
+                split: split, tracks: track.map { [$0] } ?? [],
+                patterns: pattern.map { [$0] } ?? [], passes: passes.count,
                 ticksPerBeat: ticksPerBeat, drumMapSpec: drumMapSpec,
                 drumChannel: drumChannel - 1, defaultGate: defaultGate,
                 includeStale: includeStale, includeDisabled: includeDisabled,

@@ -622,7 +622,7 @@ def export_project(project: Project, options: ExportOptions | None = None) -> Ex
     """Render *project* as a single type-1 MIDI file.
 
     Only patterns holding notes are rendered; narrow with
-    :meth:`ksp.model.Project.select` first to pick one track or pattern.
+    :meth:`ksp.model.Project.select` first to pick tracks or patterns.
     """
     options = options or ExportOptions()
     renderings = render_project(project, options)

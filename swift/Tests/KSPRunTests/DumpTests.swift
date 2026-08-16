@@ -21,8 +21,9 @@ import Testing
     ) -> RunResult {
         DumpRunner.run(
             DumpRunner.Options(
-                path: RepoData.projectFiles.appending(path: name), showAll: showAll, track: track,
-                pattern: pattern, asJSON: asJSON, drumMapSpec: drumMap, verbose: verbose,
+                path: RepoData.projectFiles.appending(path: name), showAll: showAll,
+                tracks: track.map { [$0] } ?? [], patterns: pattern.map { [$0] } ?? [],
+                asJSON: asJSON, drumMapSpec: drumMap, verbose: verbose,
                 configPath: configPath))
     }
 

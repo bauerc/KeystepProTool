@@ -400,14 +400,17 @@ public struct Project: Sendable, Hashable {
     /// Track `number`, counting from 1.
     public func track(_ number: Int) -> Track { tracks[number - 1] }
 
-    /// A copy narrowed to one track and/or one pattern.
-    public func select(track: Int? = nil, pattern: Int? = nil) -> Project {
-        var narrowed = tracks.filter { track == nil || $0.number == track }
-        if let pattern {
+    /// A copy narrowed to `tracks` and `patterns`, empty meaning all.
+    ///
+    /// The project's own order survives, since a set has none.
+    public func select(tracks: Set<Int> = [], patterns: Set<Int> = []) -> Project {
+        var narrowed = self.tracks.filter { tracks.isEmpty || tracks.contains($0.number) }
+        if !patterns.isEmpty {
             narrowed = narrowed.map {
                 Track(
                     number: $0.number, itemID: $0.itemID,
-                    patterns: $0.patterns.filter { $0.number == pattern }, drumMode: $0.drumMode)
+                    patterns: $0.patterns.filter { patterns.contains($0.number) },
+                    drumMode: $0.drumMode)
             }
         }
         return Project(
