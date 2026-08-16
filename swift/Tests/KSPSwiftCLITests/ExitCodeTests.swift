@@ -30,6 +30,15 @@ import Testing
         #expect(result.stderr.contains("'--track' must be in 1...4"))
     }
 
+    /// Export's selection is parsed in the command body rather than by `validate()`, so that the
+    /// wording matches `ksp2midi`'s; this is the test that it still leaves through exit code 2.
+    @Test func aMalformedExportSelectionIsTwo() throws {
+        let result = try Self.run(["export", Self.project, "--tracks", "bad"])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr == "ksp-swift-cli export: --tracks: 'bad' is not a number or a range\n")
+    }
+
     @Test func anUnknownOptionIsTwo() throws {
         // Not 64, which is what ArgumentParser exits with if the entry point stops mapping.
         let result = try Self.run(["dump", Self.project, "--nope"])

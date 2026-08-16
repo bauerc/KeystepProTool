@@ -42,7 +42,9 @@ public struct RunResult: Sendable {
     /// The prefix, the colon and the trailing newline are part of the byte-for-byte contract with
     /// the Python CLI, so they are written here once rather than at each failure site. A port of
     /// `ksp_cli.reporting.fail`. The unprefixed message is kept for a caller with no terminal.
-    static func failure(_ prog: String, _ message: String, code: Int32) -> RunResult {
+    /// Public because a usage failure can be spotted in the argument layer, before a runner is
+    /// reached -- the same reason `ksp_cli.reporting.fail` is called from the command module.
+    public static func failure(_ prog: String, _ message: String, code: Int32) -> RunResult {
         RunResult(stderr: "\(prog): \(message)\n", code: code, message: message)
     }
 }

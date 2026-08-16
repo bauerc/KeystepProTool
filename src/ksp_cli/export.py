@@ -17,7 +17,7 @@ from typing import Annotated
 
 import typer
 
-from ksp.constants import DEFAULT_GATE_LENGTH
+from ksp.constants import DEFAULT_GATE_LENGTH, PATTERNS_PER_TRACK, TRACK_ITEM_IDS
 from ksp.diagnostics import Report
 from ksp.midi_export import (
     DEFAULT_TICKS_PER_BEAT,
@@ -32,6 +32,7 @@ from ksp_cli.drum_map_option import CONFIG_PATH, DRUM_MAP_HELP, resolve_drum_map
 from ksp_cli.loading import load_project
 from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
 from ksp_cli.runner import standalone
+from ksp_cli.selection import SELECTION_HELP, parse_selection
 
 PROG = "ksp2midi"
 
@@ -124,22 +125,24 @@ def export(
             ),
         ),
     ] = False,
-    track: Annotated[
-        int | None,
+    tracks: Annotated[
+        str | None,
         typer.Option(
-            min=1,
-            max=4,
+            "--tracks",
+            "--track",
+            metavar="LIST",
             rich_help_panel=_SELECTION_PANEL,
-            help="export only this track",
+            help=f"export only these tracks: {SELECTION_HELP}",
         ),
     ] = None,
-    pattern: Annotated[
-        int | None,
+    patterns: Annotated[
+        str | None,
         typer.Option(
-            min=1,
-            max=16,
+            "--patterns",
+            "--pattern",
+            metavar="LIST",
             rich_help_panel=_SELECTION_PANEL,
-            help="export only this pattern",
+            help=f"export only these patterns: {SELECTION_HELP}",
         ),
     ] = None,
     passes: Annotated[
@@ -241,6 +244,15 @@ def export(
     ] = False,
     verbose: VerboseInPanel = False,
 ) -> None:
+    # Before the drum map, which is resolved against a file and the device's own settings: what
+    # the user typed is checked for shape first, and the Swift reads its arguments in this order
+    # too. Two commands cannot disagree about which of two bad flags to name.
+    try:
+        selected_tracks = parse_selection(tracks, option="--tracks", limit=len(TRACK_ITEM_IDS))
+        selected_patterns = parse_selection(patterns, option="--patterns", limit=PATTERNS_PER_TRACK)
+    except ValueError as exc:
+        fail(str(exc), prog=PROG, code=2)
+
     drum_map = resolve_drum_map_or_fail(drum_map_spec, CONFIG_PATH, prog=PROG)
     if drum_map is None:
         # ksp-dump can print "lane 0" and leave it unresolved; a MIDI file has
@@ -274,8 +286,8 @@ def export(
         path=path,
         output=output,
         split=split,
-        tracks=frozenset() if track is None else frozenset({track}),
-        patterns=frozenset() if pattern is None else frozenset({pattern}),
+        tracks=selected_tracks,
+        patterns=selected_patterns,
     )
     if not planned:
         # Writing a MIDI file with no notes in it would look like success.
