@@ -287,7 +287,7 @@ private func exported5Flat() throws -> ExportResult {
     /// says the track is in drum mode, so the 64-note melody is leftovers from before it was
     /// switched over -- notes no hardware would play.
     @Test func onlyTheSetTheDevicePlaysIsExported() throws {
-        let project = try initialProject().select(track: 1, pattern: 1)
+        let project = try initialProject().select(tracks: [1], patterns: [1])
 
         let live = try MIDIExport.exportProject(project)
         #expect(live.trackNames == ["Track 1 (drum)"])
@@ -303,7 +303,7 @@ private func exported5Flat() throws -> ExportResult {
     /// pattern holds only a melody must still export that melody -- filtering on the flag alone
     /// would silently drop real user data. No sample project has this combination, so it is built.
     @Test func aPatternHoldingOneSetIsExportedWhateverTheModeFlagSays() throws {
-        let melodic = try project5().select(track: 3)
+        let melodic = try project5().select(tracks: [3])
         let original = melodic.tracks[0]
         let inDrumMode = Project(
             device: melodic.device, version: melodic.version, tempoBPM: melodic.tempoBPM,
@@ -329,7 +329,7 @@ private func exported5Flat() throws -> ExportResult {
 
     @Test func selectionNarrowsWhatIsExported() throws {
         let result = try MIDIExport.exportProject(
-            project5().select(track: 3), options: onePass())
+            project5().select(tracks: [3]), options: onePass())
         #expect(result.trackNames == ["Track 3"])
         #expect(result.noteCount == 10)
     }
@@ -463,7 +463,7 @@ private func exported5Flat() throws -> ExportResult {
             })
 
         // One track cannot disagree with itself, so the line must not appear.
-        let alone = try MIDIExport.exportProject(project9().select(track: 1))
+        let alone = try MIDIExport.exportProject(project9().select(tracks: [1]))
         #expect(!alone.warnings.contains { $0.contains("different total lengths") })
     }
 
@@ -566,7 +566,7 @@ private func exported5Flat() throws -> ExportResult {
 
     /// --include-stale adds a MIDI track, not a file: same (track, pattern).
     @Test func bothNoteSetsOfOnePatternStayInOneFile() throws {
-        let project = try initialProject().select(track: 1, pattern: 1)
+        let project = try initialProject().select(tracks: [1], patterns: [1])
         let results = try MIDIExport.exportSplit(
             project, options: ExportOptions(includeStale: true))
         #expect(results.count == 1)

@@ -11,6 +11,7 @@ Option behaviour is documented in ``README.md``.
 
 import enum
 from collections.abc import Sequence
+from collections.abc import Set as AbstractSet
 from pathlib import Path
 from typing import Annotated
 
@@ -81,11 +82,11 @@ def _plan(
     path: Path,
     output: Path | None,
     split: bool,
-    track: int | None,
-    pattern: int | None,
+    tracks: AbstractSet[int],
+    patterns: AbstractSet[int],
 ) -> list[tuple[ExportResult, Path]]:
     """Pair each rendered file with where it goes. Nothing is written yet."""
-    narrowed = project.select(track=track, pattern=pattern)
+    narrowed = project.select(tracks=tracks, patterns=patterns)
     if split:
         directory = output or path.parent
         return [
@@ -268,7 +269,13 @@ def export(
 
     project = load_project(path, prog=PROG)
     planned = _plan(
-        project, options, path=path, output=output, split=split, track=track, pattern=pattern
+        project,
+        options,
+        path=path,
+        output=output,
+        split=split,
+        tracks=frozenset() if track is None else frozenset({track}),
+        patterns=frozenset() if pattern is None else frozenset({pattern}),
     )
     if not planned:
         # Writing a MIDI file with no notes in it would look like success.

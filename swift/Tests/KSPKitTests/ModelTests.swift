@@ -67,7 +67,7 @@ import Testing
 
     @Test func selectNarrowsToOneTrackAndPattern() {
         let project = Self.project()
-        let narrowed = project.select(track: 1, pattern: 2)
+        let narrowed = project.select(tracks: [1], patterns: [2])
         #expect(narrowed.tracks.count == 1)
         #expect(narrowed.tracks[0].patterns.map(\.number) == [2])
         // And the fields that are not being narrowed survive it.
@@ -78,6 +78,60 @@ import Testing
     @Test func selectWithoutArgumentsKeepsEverything() {
         let project = Self.project()
         #expect(project.select().tracks.count == project.tracks.count)
+    }
+
+    // MARK: - Selecting sets
+    //
+    // Every project holds four tracks of sixteen patterns whether or not they hold notes, so a
+    // sample carries every case. `tests/test_model.py` is the mirror.
+
+    private static func sample() throws -> Project { try Samples.project("project_9.KeyStepPro") }
+
+    private static func numbers(_ project: Project) -> [Int] { project.tracks.map(\.number) }
+
+    private static func patterns(_ project: Project, _ track: Int) -> [Int] {
+        project.tracks[track].patterns.map(\.number)
+    }
+
+    @Test func selectOneTrack() throws {
+        #expect(Self.numbers(try Self.sample().select(tracks: [3])) == [3])
+    }
+
+    @Test func selectSeveralTracks() throws {
+        #expect(Self.numbers(try Self.sample().select(tracks: [1, 3])) == [1, 3])
+    }
+
+    @Test func selectAContiguousPatternRange() throws {
+        let narrowed = try Self.sample().select(patterns: [2, 3, 4, 5])
+        #expect(Self.numbers(narrowed) == [1, 2, 3, 4])  // patterns narrow, tracks do not
+        #expect(Self.patterns(narrowed, 0) == [2, 3, 4, 5])
+    }
+
+    @Test func selectANonContiguousPatternSet() throws {
+        #expect(Self.patterns(try Self.sample().select(patterns: [1, 5, 9]), 0) == [1, 5, 9])
+    }
+
+    @Test func anEmptySelectionMeansEverything() throws {
+        let project = try Self.sample()
+        let narrowed = project.select()
+        #expect(Self.numbers(narrowed) == Self.numbers(project))
+        #expect(Self.patterns(narrowed, 0) == Self.patterns(project, 0))
+    }
+
+    @Test func selectBothSetsAtOnce() throws {
+        let narrowed = try Self.sample().select(tracks: [1, 4], patterns: [2])
+        #expect(Self.numbers(narrowed) == [1, 4])
+        #expect([0, 1].map { Self.patterns(narrowed, $0) } == [[2], [2]])
+    }
+
+    @Test func selectionKeepsTheProjectOrder() throws {
+        // A set has no order; the project's own order is what survives.
+        #expect(Self.numbers(try Self.sample().select(tracks: [4, 2, 1])) == [1, 2, 4])
+    }
+
+    @Test func aNumberNoTrackHasSelectsNothing() throws {
+        // Range checking belongs to the CLI, not here.
+        #expect(try Self.sample().select(tracks: [9]).tracks.isEmpty)
     }
 
     @Test func onlyScenesThatChainSomethingAreReported() {

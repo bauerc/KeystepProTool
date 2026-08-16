@@ -8,6 +8,7 @@ The model is read-only: writes go through :mod:`ksp.mutate` against the raw
 dict, so they stay byte-comparable with what MCC produces.
 """
 
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
@@ -372,19 +373,22 @@ class Project:
         """Return track *number*, counting from 1."""
         return self.tracks[number - 1]
 
-    def select(self, *, track: int | None = None, pattern: int | None = None) -> "Project":
-        """Return a copy narrowed to one track and/or one pattern.
+    def select(
+        self, *, tracks: AbstractSet[int] = frozenset(), patterns: AbstractSet[int] = frozenset()
+    ) -> "Project":
+        """Return a copy narrowed to *tracks* and *patterns*, empty meaning all.
 
-        Uses ``replace`` so fields added later (``drum_mode``) survive
-        narrowing without every caller being updated.
+        The project's own order survives, since a set has none. Uses ``replace``
+        so fields added later (``drum_mode``) survive narrowing without every
+        caller being updated.
         """
-        tracks = tuple(t for t in self.tracks if track is None or t.number == track)
-        if pattern is not None:
-            tracks = tuple(
-                replace(t, patterns=tuple(p for p in t.patterns if p.number == pattern))
-                for t in tracks
+        narrowed = tuple(t for t in self.tracks if not tracks or t.number in tracks)
+        if patterns:
+            narrowed = tuple(
+                replace(t, patterns=tuple(p for p in t.patterns if p.number in patterns))
+                for t in narrowed
             )
-        return replace(self, tracks=tracks)
+        return replace(self, tracks=narrowed)
 
     def to_dict(self, drum_map: DrumMap | None = None) -> dict[str, Any]:
         data: dict[str, Any] = {

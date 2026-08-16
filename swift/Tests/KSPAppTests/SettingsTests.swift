@@ -85,8 +85,8 @@ import Testing
             path: output, output: source, configPath: mapped.configPath)
 
         #expect(mapped.split == defaults.split)
-        #expect(mapped.track == defaults.track)
-        #expect(mapped.pattern == defaults.pattern)
+        #expect(mapped.tracks == defaults.tracks)
+        #expect(mapped.patterns == defaults.patterns)
         #expect(mapped.passes == defaults.passes)
         #expect(mapped.ticksPerBeat == defaults.ticksPerBeat)
         #expect(mapped.drumMapSpec == defaults.drumMapSpec)

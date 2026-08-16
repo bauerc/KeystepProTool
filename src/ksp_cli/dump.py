@@ -226,7 +226,10 @@ def dump(
     verbose: Verbose = False,
 ) -> None:
     drum_map = resolve_drum_map_or_fail(drum_map_spec, CONFIG_PATH, prog=PROG)
-    project = load_project(path, prog=PROG).select(track=track, pattern=pattern)
+    project = load_project(path, prog=PROG).select(
+        tracks=frozenset() if track is None else frozenset({track}),
+        patterns=frozenset() if pattern is None else frozenset({pattern}),
+    )
 
     if as_json:
         print(json.dumps(project.to_dict(drum_map), indent=2))
