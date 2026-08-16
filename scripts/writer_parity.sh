@@ -61,13 +61,21 @@ trap 'rm -rf "$sandbox"' EXIT
 
 status=0
 count=0
+# The six writes are independent and each one costs a 3.5 MB parse and a 3.5 MB emit, so they go
+# across the cores for the reason midi_parity.sh sets out. The Python side below deliberately stays
+# one interpreter -- see its own comment -- and the cmp loop after it is too cheap to be worth
+# splitting. KSP_PARITY_JOBS=1 restores the serial order.
+jobs=${KSP_PARITY_JOBS:-$(getconf _NPROCESSORS_ONLN 2> /dev/null || echo 4)}
 for project in project_files/*.KeyStepPro; do
     count=$((count + 1))
-    if ! "$writer" "$project" "$sandbox/swift_$(basename "$project")"; then
-        echo "writer_parity: the Swift writer failed on $(basename "$project")" >&2
-        status=1
-    fi
+    printf '%s\0' "$project" >> "$sandbox/projects"
 done
+if ! xargs -0 -P "$jobs" -I{} sh -c '"$0" "$1" "$2/swift_$(basename "$1")" || {
+        echo "writer_parity: the Swift writer failed on $(basename "$1")" >&2
+        exit 1
+    }' "$writer" {} "$sandbox" < "$sandbox/projects"; then
+    status=1
+fi
 
 # One interpreter for all six: starting it costs more than the writing does. It checks its own
 # output against MCC's export on the way past, which is the half a port-to-port diff cannot see.
