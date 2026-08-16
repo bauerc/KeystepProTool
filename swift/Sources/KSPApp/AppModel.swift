@@ -28,25 +28,64 @@ final class AppModel {
     /// rather than moved afterwards -- and so the never-overwrite ladder applies to this name.
     var name: String = ""
     var settings = Settings()
+    /// Set through ``choose(_:)`` and ``useDefault(for:)`` alone, so every change is saved.
+    private(set) var folders: Folders
 
-    // Injected: the alternative is a test that writes into MCC's Templates folder and opens Finder.
-    private let destination: (Job) -> Destination
+    // Injected: the alternative is a test that writes into MCC's Templates folder, opens Finder and
+    // puts a modal panel on screen.
+    private let store: FolderStore
+    private let destination: (Job, Folders) -> Destination
     private let reveal: ([URL]) -> Void
+    /// Main-actor by type, not by convention: it puts a modal panel on screen.
+    private let chooseFolder: @MainActor (URL?) -> URL?
 
     init(
-        destination: @escaping (Job) -> Destination = AppModel.destination(for:),
-        reveal: @escaping ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) }
+        store: FolderStore = FolderStore(),
+        destination: @escaping (Job, Folders) -> Destination = AppModel.destination(for:folders:),
+        reveal: @escaping ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) },
+        chooseFolder: @escaping @MainActor (URL?) -> URL? = AppModel.chooseFolder(startingAt:)
     ) {
+        self.store = store
         self.destination = destination
         self.reveal = reveal
+        self.chooseFolder = chooseFolder
+        self.folders = store.load()
     }
 
-    /// A project lands where MCC will list it; a MIDI file lands beside what it came from.
-    nonisolated static func destination(for job: Job) -> Destination {
+    /// A project lands where MCC will list it; a MIDI file lands beside what it came from -- unless
+    /// the user has said otherwise, for either one on its own.
+    nonisolated static func destination(for job: Job, folders: Folders) -> Destination {
         switch job {
-        case .toProject: return Destinations.forProjects()
-        case .toMIDI: return Destinations.beside(job.source)
+        case .toProject: return Destinations.forProjects(chosen: folders.project)
+        case .toMIDI: return Destinations.forMIDI(source: job.source, chosen: folders.midi)
         }
+    }
+
+    /// The one thing a chosen project folder costs. Shown while the folder is set, not once.
+    var mccWarning: String? { Destinations.mccWarning(for: folders.project) }
+
+    /// Cancelling the panel leaves the folder as it was.
+    func choose(_ kind: FolderKind) {
+        guard let picked = chooseFolder(folders[kind]) else { return }
+        folders[kind] = picked
+        store.save(folders)
+    }
+
+    func useDefault(for kind: FolderKind) {
+        folders[kind] = nil
+        store.save(folders)
+    }
+
+    @MainActor
+    private static func chooseFolder(startingAt current: URL?) -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Choose"
+        panel.directoryURL = current
+        return panel.runModal() == .OK ? panel.url : nil
     }
 
     var staged: Staged? {
@@ -71,7 +110,7 @@ final class AppModel {
     /// Where the staged file would land under the name currently typed. Recomputed as the name is
     /// edited, so the window never promises a path it would not use.
     func plan(for job: Job) -> Conversion.Plan {
-        Conversion.plan(job, named: name, into: destination(job))
+        Conversion.plan(job, named: name, into: destination(job, folders))
     }
 
     /// A dry run describes one name. Editing the name makes it stale, so it is dropped.

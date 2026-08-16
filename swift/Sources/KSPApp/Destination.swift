@@ -25,10 +25,14 @@ enum Destinations {
     /// The paths and the writability test are injected because the alternative is a test that
     /// passes or fails on whether this machine happens to have MIDI Control Center installed.
     static func forProjects(
+        chosen: URL? = nil,
         templates: URL = mccTemplates,
         downloads: URL = downloads,
         isWritable: (URL) -> Bool = { FileManager.default.isWritableFile(atPath: $0.path) }
     ) -> Destination {
+        // A folder the user picked is obeyed as it stands: the ladder below exists to find a
+        // writable folder when nobody has said which, not to second-guess one that has been named.
+        if let chosen { return Destination(directory: chosen, note: nil) }
         if isWritable(templates) {
             return Destination(directory: templates, note: nil)
         }
@@ -38,9 +42,27 @@ enum Destinations {
                 + "Downloads. Move it to \(templates.path) for MCC to list it.")
     }
 
-    /// Where a `.mid` exported from a dropped project belongs: next to the project it came from.
-    static func beside(_ source: URL) -> Destination {
-        Destination(directory: source.deletingLastPathComponent(), note: nil)
+    /// Where a `.mid` exported from a dropped project belongs: a chosen folder, or next to the
+    /// project it came from.
+    static func forMIDI(source: URL, chosen: URL?) -> Destination {
+        Destination(directory: chosen ?? source.deletingLastPathComponent(), note: nil)
+    }
+
+    /// What a chosen project folder costs: MCC's Project Browser lists only what is inside
+    /// `templates`. Choosing that folder by hand is the default reached another way, so it is not
+    /// warned about.
+    static func mccWarning(for chosen: URL?, templates: URL = mccTemplates) -> String? {
+        guard let chosen, folderPath(chosen) != folderPath(templates) else { return nil }
+        return "MIDI Control Center's Project Browser lists only its own Templates folder, so it "
+            + "will not show a project written here."
+    }
+
+    /// Two ways of writing the same folder compare equal: symlinks are resolved, and a trailing
+    /// slash survives `deletingLastPathComponent` where an `NSOpenPanel` drops it.
+    private static func folderPath(_ url: URL) -> String {
+        var path = url.resolvingSymlinksInPath().standardizedFileURL.path(percentEncoded: false)
+        while path.count > 1 && path.hasSuffix("/") { path.removeLast() }
+        return path
     }
 }
 
