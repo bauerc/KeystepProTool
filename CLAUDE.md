@@ -175,5 +175,11 @@ The five canonical triage roles, each label string equal to its name. See
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` and `docs/adr/` at the repo root, both created lazily — absent today.
-See `docs/agents/domain.md`.
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+**The device's vocabulary is canonical** — Arturia's wording beats MCC's, which beats the code's
+([ADR 0001](docs/adr/0001-device-vocabulary-is-canonical.md)). So the docs say *trigger* and *drum
+track* where the code still says *note* and *lane*, deliberately: the glossary binds prose, UI text,
+diagnostics and new code, while existing identifiers are recorded as alternatives and renamed only
+when their file is already open. A rename reaching a diagnostic or CLI option is a two-core commit
+plus a parity re-fingerprint, so **there is no standalone rename PR** (#163, #164).

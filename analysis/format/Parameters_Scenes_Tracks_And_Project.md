@@ -7,8 +7,18 @@
 
 ### 3.3.1 Scenes and pattern chaining — item `121`
 
-**Measured 2026-08-04, capture `T5-chain-3`.** A scene holds a **pattern chain per track**, which is
-the mechanism M6 needs for source material longer than 64 steps.
+**Measured 2026-08-04, capture `T5-chain-3`.** A Chain is a track's own linked series of Patterns
+played one after another in a fixed order — up to 16 per track, and creating a new one replaces the
+track's existing Chain rather than extending it. It cannot be saved as an object of its own, but it
+persists through a project save (the manual, §6.5.1: "A Chain is a linked series of Patterns that
+will play one after the other in a fixed order... each Chain can consist of up to 16 Patterns,"
+"the pre-existing chain in that track is replaced," "you cannot save the chain separately, but you
+can store the current chains in a scene"; §6.5.1.3: "You save the Chains you've created for each
+track by saving the current project by pressing Save + Project"). A Scene is a snapshot of the
+Patterns and Chains current in all four tracks, not a per-pattern binding (§6.5.2: "A Scene is a
+kind of 'snapshot' of the Patterns and Chains that are current in each of the four tracks"), and
+item `121` is where that snapshot's per-track Chain lives — the mechanism M6 needs for source
+material longer than 64 steps.
 
 ```
 121_84_<scene>_<track>_<slot>    pattern number, 0-based, in chain order
