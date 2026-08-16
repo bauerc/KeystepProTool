@@ -108,6 +108,14 @@ one, change the other in the same commit. The Python is the reference implementa
 why the Swift model serialises through `JSONNode` rather than `Encodable` — `JSONEncoder` controls
 neither key order nor the `120` vs `120.0` rendering of a whole-numbered `Double`.
 
+All three run their cases across the cores, and each one reports failures in case order rather than
+completion order so a blocked Stop reads the same every time. `KSP_PARITY_JOBS=1` puts them back to
+one at a time, which is the first thing to try when a failure is confusing. They are also gated
+together: `validate.sh` fingerprints what they read — both implementations, the corpus and the
+comparison tools — and skips all three when it matches `swift/.build/parity/gates.sha`, which is
+written only after all three have passed. Content hashes, never mtimes, and a red run leaves no
+stamp; delete the file to force a run.
+
 **The one thing that is deliberately not byte-identical is the exported `.mid`.** mido writes MIDI
 running status and `swift-midi-file` does not, so `midi_parity.sh` compares the two files as parsed
 event streams through `tools/midi_events.py`. The `.KeyStepPro` direction still gets a real `cmp`.
