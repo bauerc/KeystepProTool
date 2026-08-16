@@ -24,11 +24,20 @@ alongside the Python and is now a complete port of both directions — constants
 reader and writer, diagnostics, the drum map, the
 model, the reader, `mutate`, `midi_export`, `midi_import` and `ksp-swift-cli dump` / `export` /
 `convert` (M8–M12), plus the drag-and-drop app *Key Step Pro Plus* — SwiftPM product `ksp-app`,
-target `KSPApp` (M13). What is left is packaging (M14).
+target `KSPApp` (M13). What is left is the full application (M15) and distribution.
+
+M13's app is a deliberate v1 — one window, one file, no options. **M15 is the app
+`project_requirements/project_requirements.md` describes**, and its spec of record is the epic,
+GitHub issue #115: forty issues carrying the requirement-coverage table and the frontier. Two
+labels say what a given one costs — `app` touches no parity script, `core-parity` lands in both
+cores in one commit. A summary type that adds no CLI text needs no Python mirror and runs no parity
+gate; that exemption is what keeps the preview work affordable, so do not let a preview issue add a
+CLI flag. Distribution is no longer a milestone: it gates nothing and repeats every release, so it
+is the release track in issue #10.
 
 - [KeyStep Pro Format Spec](analysis/KeyStepPro_Format_Spec.md) — authoritative format reference. **Read it before touching
   format code.**
-- [Implementation Road Map](ROADMAP.md) — milestones M1–M14 and current status. `README.md` — CLI usage and options Cohosted on Github Issues for this repo.
+- [Implementation Road Map](ROADMAP.md) — milestones M1–M15, the release track and current status. `README.md` — CLI usage and options Cohosted on Github Issues for this repo.
 - [Timing Calibration](analysis/Timing_Calibration.md), [Hardware Test Protocol](analysis/Hardware_Test_Protocol.md) — how the timing
   encodings were measured, and the one question left for the device.
 
