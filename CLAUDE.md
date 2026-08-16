@@ -97,8 +97,8 @@ plus the same run structurally as `diagnostics` and `destinations`, which is wha
 instead of re-parsing the text.
 
 **`KSPApp` owns no format logic** — only where a file goes, what it is called and which options the
-window offers. `Destination.swift`, `Conversion.swift` and `Settings.swift` carry no SwiftUI so
-their rules are unit-tested; SwiftUI stays in `DropView.swift` and `KSPApp.swift`, and every mutable
+window offers. `Destination.swift`, `Folders.swift`, `Conversion.swift` and `Settings.swift` carry
+no SwiftUI so their rules are unit-tested; SwiftUI stays in `DropView.swift` and `KSPApp.swift`, and every mutable
 value lives on the one `@MainActor` `AppModel`, in `AppModel.swift` (Observation and AppKit, no
 SwiftUI). **A new option is a property on `Settings` and a line in its two mappings onto
 `ConvertRunner.Options`/`ExportRunner.Options`** — an option left out of those mappings keeps the

@@ -6,11 +6,13 @@ import Testing
 /// The staged phase: a drop no longer writes, and the write happens when Convert says so.
 @MainActor
 @Suite struct AppModelTests {
-    /// Destinations the test owns, so nothing reaches MCC's Templates folder, and a reveal that
-    /// does nothing, so a test run opens no Finder windows.
+    /// Destinations the test owns, so nothing reaches MCC's Templates folder; a reveal that does
+    /// nothing, so a test run opens no Finder windows; and a folder panel that never opens.
     private func model(writingInto directory: URL) -> AppModel {
         AppModel(
-            destination: { _ in Destination(directory: directory, note: nil) }, reveal: { _ in })
+            store: FolderStore(defaults: volatileDefaults()),
+            destination: { _, _ in Destination(directory: directory, note: nil) },
+            reveal: { _ in }, chooseFolder: { _ in nil })
     }
 
     private var midiFixture: URL { RepoData.projectFiles.appending(path: "m6-test-file.mid") }
@@ -181,5 +183,113 @@ import Testing
         // The dry run wrote nothing, so the real one gets the plain name rather than "… 2".
         #expect(written == directory.appending(path: "m6-test-file.KeyStepPro"))
         #expect(FileManager.default.fileExists(atPath: written.path))
+    }
+}
+
+/// The two destination folders: chosen independently, obeyed by the staged plan, and remembered.
+@MainActor
+@Suite struct AppModelFolderTests {
+    private var midiFixture: URL { RepoData.projectFiles.appending(path: "m6-test-file.mid") }
+
+    /// The real placement rules, so a chosen folder is tested through the routing the app uses --
+    /// safe because a chosen folder is exactly what keeps `forProjects` away from MCC's.
+    private func model(picking picked: URL?, over defaults: UserDefaults) -> AppModel {
+        AppModel(
+            store: FolderStore(defaults: defaults), reveal: { _ in }, chooseFolder: { _ in picked })
+    }
+
+    /// A defaults domain and a folder to pick, both this test's own and both cleaned up after it.
+    private func withFolder(_ body: (UserDefaults, URL) throws -> Void) throws {
+        try withVolatileDefaults { defaults in
+            let chosen = try tempDirectory()
+            defer { try? FileManager.default.removeItem(at: chosen) }
+            try body(defaults, chosen)
+        }
+    }
+
+    @Test func achosenProjectFolderIsWhereTheStagedFileWouldLand() throws {
+        try withFolder { defaults, chosen in
+            let model = model(picking: chosen, over: defaults)
+
+            model.choose(.project)
+            model.accept(midiFixture)
+
+            #expect(model.folders.project == chosen)
+            let plan = model.plan(for: try #require(model.staged).job)
+            #expect(plan.target == chosen.appending(path: "m6-test-file.KeyStepPro"))
+        }
+    }
+
+    /// The MIDI folder is set on its own and does not disturb where a project goes.
+    @Test func achosenMIDIFolderTakesTheExportWithoutMovingProjects() throws {
+        try withFolder { defaults, chosen in
+            let model = model(picking: chosen, over: defaults)
+
+            model.choose(.midi)
+
+            #expect(model.folders.midi == chosen)
+            #expect(model.folders.project == nil)
+        }
+    }
+
+    @Test func cancellingThePanelLeavesTheFolderAlone() {
+        withVolatileDefaults { defaults in
+            let model = model(picking: nil, over: defaults)
+
+            model.choose(.project)
+
+            #expect(model.folders.project == nil)
+        }
+    }
+
+    @Test func achoiceIsRememberedForTheNextLaunch() throws {
+        try withFolder { defaults, chosen in
+            model(picking: chosen, over: defaults).choose(.project)
+
+            // A second model over the same domain is what the next launch builds.
+            let relaunched = model(picking: nil, over: defaults)
+
+            #expect(relaunched.folders.project == chosen)
+        }
+    }
+
+    @Test func returningToTheDefaultIsAlsoRemembered() throws {
+        try withFolder { defaults, chosen in
+            let model = model(picking: chosen, over: defaults)
+            model.choose(.project)
+            model.choose(.midi)
+
+            model.useDefault(for: .project)
+
+            #expect(model.folders.project == nil)
+            #expect(model.folders.midi == chosen)
+            #expect(self.model(picking: nil, over: defaults).folders.project == nil)
+        }
+    }
+
+    /// The warning stands while the folder is set, which is what "at the moment of choosing" has to
+    /// mean for a choice that outlives the moment.
+    @Test func awarningStandsWhileAProjectFolderIsSet() throws {
+        try withFolder { defaults, chosen in
+            let model = model(picking: chosen, over: defaults)
+            #expect(model.mccWarning == nil)
+
+            model.choose(.project)
+            #expect(model.mccWarning != nil)
+
+            model.useDefault(for: .project)
+            #expect(model.mccWarning == nil)
+        }
+    }
+
+    /// A MIDI folder says nothing about MCC: the Project Browser never lists `.mid` files.
+    @Test func achosenMIDIFolderIsNotWarnedAbout() throws {
+        try withFolder { defaults, chosen in
+            let model = model(picking: chosen, over: defaults)
+
+            model.choose(.midi)
+
+            #expect(model.mccWarning == nil)
+        }
     }
 }

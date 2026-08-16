@@ -16,7 +16,7 @@ struct DropView: View {
             Divider()
             options
         }
-        .frame(width: 620, height: 380)
+        .frame(width: 680, height: 380)
         .dropDestination(for: URL.self) { urls, _ in
             // One file at a time in v1: a second would need its own name field and its own result.
             guard let first = urls.first else { return false }
@@ -29,28 +29,66 @@ struct DropView: View {
     }
 
     /// The sidebar is on screen in every phase, including idle, so an option can be set before
-    /// anything is dropped. Later options land here beside these two.
+    /// anything is dropped. Later options land here beside these. Scrolls because the window is
+    /// fixed-size: a control added below must push, not clip.
     private var options: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Options").font(.headline)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Destinations").font(.headline)
+                folderRow(.project)
+                folderRow(.midi)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Toggle("Dry run", isOn: $model.settings.dryRun)
-                Text("Report what would be written, and write nothing.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Divider()
+
+                Text("Options").font(.headline)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Dry run", isOn: $model.settings.dryRun)
+                    Text("Report what would be written, and write nothing.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Show every finding", isOn: $model.settings.verbose)
+                    Text("List each finding instead of one line per kind.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Toggle("Show every finding", isOn: $model.settings.verbose)
-                Text("List each finding instead of one line per kind.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
         }
         .toggleStyle(.checkbox)
-        .frame(width: 180, alignment: .leading)
-        .padding(16)
+        .frame(width: 220)
+    }
+
+    /// One kind of file: where it lands today, the way to change that, and the way back. The two
+    /// rows are independent -- a project and a MIDI file need not go to the same place.
+    private func folderRow(_ kind: FolderKind) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(kind.title).font(.subheadline)
+
+            Text(model.folders.description(of: kind))
+                .font(.caption).foregroundStyle(.secondary)
+                .lineLimit(2).truncationMode(.middle)
+                // Abbreviated to fit the sidebar, so the full path has to be reachable somewhere.
+                .help(model.folders[kind]?.path ?? kind.defaultDescription)
+
+            HStack(spacing: 8) {
+                Button("Choose…") { model.choose(kind) }
+                if model.folders[kind] != nil {
+                    Button("Use default") { model.useDefault(for: kind) }
+                        .buttonStyle(.link)
+                }
+            }
+            .controlSize(.small)
+
+            // What a chosen project folder costs, said where the choice was made.
+            if kind == .project, let warning = model.mccWarning {
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -73,9 +111,10 @@ struct DropView: View {
                 .font(.system(size: 44))
                 .foregroundStyle(.secondary)
             Text("Drop a MIDI file here").font(.title3)
+            // Where each one lands is the sidebar's to state, now that it can be changed there.
             Text(
-                "A KeyStep Pro project lands in MIDI Control Center's Templates folder. "
-                    + "Drop a .KeyStepPro instead to get a MIDI file beside it."
+                "Drop a .KeyStepPro instead to get a MIDI file back. "
+                    + "Where each one lands is on the right."
             )
             .font(.caption)
             .foregroundStyle(.secondary)
