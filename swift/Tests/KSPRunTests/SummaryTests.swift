@@ -5,7 +5,7 @@ import Testing
 @testable import KSPRun
 
 /// ``SummaryRunner`` and ``ProjectSummary``: what the app shows about a project before converting
-/// it. No Python twin -- this renders no text, which is what keeps it off the parity contract.
+/// it. No Python twin -- this renders no text.
 ///
 /// `project_5`'s counts are the hand-transcribed ground truth in `tests/fixtures/`. The rest are the
 /// Python reference implementation's answer for the same file, which is what the port is measured
@@ -57,7 +57,7 @@ import Testing
     // MARK: - Patterns
 
     @Test func itCountsTheNotesTheDescriptionRecords() throws {
-        // tests/fixtures/project_5.expected.json: two drum notes on track 1 pattern 1, and the ten
+        // tests/fixtures/project_5.expected.json: two triggers on track 1 pattern 1, and the ten
         // melodic notes on track 3 pattern 1 that prove the two index spaces.
         let summary = try Self.summarise("project_5.KeyStepPro")
         let drum = summary.tracks[0].patterns[0]
@@ -95,22 +95,24 @@ import Testing
         #expect(!pattern.isEnabled)
     }
 
-    @Test func itCountsWhatTheDevicePlaysRatherThanWhatThePoolHolds() throws {
+    @Test func itCountsWhatIsSwitchedOnRatherThanWhatThePoolHolds() throws {
         // initial_project is the only sample holding disabled notes: steps turned off, or notes
-        // sitting past the last step. A preview that counted the pool would promise notes the
+        // sitting past the last step. A preview that counted the pool alone would promise notes the
         // export then drops.
         let summary = try Self.summarise("initial_project.KeyStepPro")
-        // Its first pattern is the extreme case: 76 notes recorded, 16 steps declared, and only 8
-        // notes that are both switched on and inside those steps.
+        // Its first pattern is the extreme case: 76 in the pool, 8 switched on. 64 of them are
+        // melodic leftovers from before the track was switched to drums -- so the mode is the live
+        // set's, drum -- and 4 of the 12 triggers sit on steps that are turned off.
         let crowded = summary.tracks[0].patterns[0]
+        #expect(crowded.mode == .drum)
         #expect(crowded.noteCount == 76)
-        #expect(crowded.playableNoteCount == 8)
+        #expect(crowded.enabledNoteCount == 8)
         #expect(crowded.stepCount == 16)
         // Disabled is not absent -- the notes are still in the pool, and still not empty.
         #expect(!crowded.isEmpty)
         #expect(crowded.isEnabled)
         #expect(
-            summary.tracks.flatMap(\.patterns).allSatisfy { $0.playableNoteCount <= $0.noteCount }
+            summary.tracks.flatMap(\.patterns).allSatisfy { $0.enabledNoteCount <= $0.noteCount }
         )
     }
 
@@ -122,7 +124,7 @@ import Testing
         for name in ["project_5.KeyStepPro", "project_9.KeyStepPro", "initial_project.KeyStepPro"] {
             let summary = try Self.summarise(name)
             #expect(summary.tracks.allSatisfy { $0.chain.isEmpty })
-            #expect(summary.tracks.flatMap(\.patterns).allSatisfy { $0.chainedWith.isEmpty })
+            #expect(summary.tracks.flatMap(\.patterns).allSatisfy { $0.chain.isEmpty })
         }
     }
 
@@ -141,12 +143,12 @@ import Testing
 
         // The current Scene decides, so scene 1's chain is not what is reported.
         #expect(summary.tracks[0].chain == [3, 1, 2])
-        #expect(summary.tracks[0].patterns[0].chainedWith == [3, 1, 2])
-        #expect(summary.tracks[0].patterns[2].chainedWith == [3, 1, 2])
-        #expect(summary.tracks[0].patterns[3].chainedWith.isEmpty)
+        #expect(summary.tracks[0].patterns[0].chain == [3, 1, 2])
+        #expect(summary.tracks[0].patterns[2].chain == [3, 1, 2])
+        #expect(summary.tracks[0].patterns[3].chain.isEmpty)
         // A track nobody chained is unchained, whatever its neighbours do.
         #expect(summary.tracks[1].chain.isEmpty)
-        #expect(summary.tracks[1].patterns.allSatisfy { $0.chainedWith.isEmpty })
+        #expect(summary.tracks[1].patterns.allSatisfy { $0.chain.isEmpty })
     }
 
     // MARK: - Failure

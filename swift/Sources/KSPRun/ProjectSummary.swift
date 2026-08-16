@@ -4,9 +4,8 @@ import KSPMIDI
 
 /// What a project holds, said structurally: tracks, their patterns, and the counts a preview needs.
 ///
-/// Composed entirely from ``KSPKit/Reader``'s model -- nothing here parses the format, and nothing
-/// here renders text. That is what keeps it off the two CLIs' byte-for-byte contract: the app reads
-/// this instead of running a command and parsing what it printed back.
+/// Composed from ``KSPKit/Reader``'s model. Nothing here parses the format and nothing here renders
+/// text, which is what keeps a preview off the two CLIs' byte-for-byte contract.
 public struct ProjectSummary: Sendable, Hashable {
     public let sourceName: String
     public let tempoBPM: Double
@@ -33,6 +32,8 @@ public struct ProjectSummary: Sendable, Hashable {
 
     /// Summarise an already-read project. The reader is the only thing that touches the file.
     public init(_ project: Project) {
+        // Only the current Scene's Chains: a Scene the device is not on says nothing about how what
+        // you are looking at will play.
         let chains = project.scenes.first { $0.number == project.currentScene }?.chains ?? []
         self.init(
             sourceName: project.sourceName, tempoBPM: project.tempoBPM,
@@ -47,9 +48,9 @@ public struct ProjectSummary: Sendable, Hashable {
 
 /// Whether a track runs as a sequencer or as drums.
 ///
-/// Two cases, not three: parameter 86 bit 6 is the Arp/Drum mode state, and on tracks 2-4 -- where
-/// it presumably means ARP -- the reader reports it as `false` rather than guessing (spec 5). An
-/// `arpeggiator` case would be a claim the format core does not make.
+/// Two cases, not the glossary's three: parameter 86 bit 6 is the Arp/Drum mode state, and on
+/// tracks 2-4 -- where it presumably means ARP -- the reader reports it as `false` rather than
+/// guessing (spec 5). An `arpeggiator` case would be a claim the format core does not make.
 public enum TrackMode: String, Sendable, Hashable {
     case sequencer
     case drum
@@ -58,35 +59,32 @@ public enum TrackMode: String, Sendable, Hashable {
 public struct TrackSummary: Sendable, Hashable {
     /// 1-4.
     public let number: Int
-    /// What the exported `.mid` calls this track, so the preview and the file agree. The convention
-    /// is ``KSPMIDI/Rendering/midiTrackName``'s.
+    /// What the exported `.mid` calls this track, so the preview and the file agree.
     public let name: String
     public let mode: TrackMode
-    /// The current Scene's Chain for this track, in play order. Empty when nothing is chained.
-    public let chain: [Int]
     /// All sixteen pattern slots, whether or not they hold anything.
     public let patterns: [PatternSummary]
 
-    public init(
-        number: Int, name: String, mode: TrackMode, chain: [Int], patterns: [PatternSummary]
-    ) {
+    public init(number: Int, name: String, mode: TrackMode, patterns: [PatternSummary]) {
         self.number = number
         self.name = name
         self.mode = mode
-        self.chain = chain
         self.patterns = patterns
     }
 
     public var isEmpty: Bool { patterns.allSatisfy(\.isEmpty) }
 
+    /// This track's Chain in the current Scene, in play order, or empty when nothing is chained.
+    /// Derived rather than stored, so it cannot disagree with the Patterns that make it up.
+    public var chain: [Int] { patterns.first { !$0.chain.isEmpty }?.chain ?? [] }
+
     public init(_ track: Track, chain: [Int]) {
-        // The set parameter 86 bit 6 selects is the one the device plays, and so the one every
-        // count below is about -- the same choice `MIDIExport.renderProject` makes.
+        // Parameter 86 bit 6 decides both what this track is called and which note set every count
+        // below is about -- the same choice `MIDIExport.renderProject` makes.
         let live: NoteKind = track.drumMode ? .drum : .seq
         self.init(
-            number: track.number,
-            name: track.drumMode ? "Track \(track.number) (drum)" : "Track \(track.number)",
-            mode: track.drumMode ? .drum : .sequencer, chain: chain,
+            number: track.number, name: Rendering.trackName(track.number, kind: live),
+            mode: track.drumMode ? .drum : .sequencer,
             patterns: track.patterns.map { PatternSummary($0, live: live, chain: chain) })
     }
 }
@@ -94,49 +92,56 @@ public struct TrackSummary: Sendable, Hashable {
 public struct PatternSummary: Sendable, Hashable {
     /// 1-16.
     public let number: Int
+    /// The set this Pattern plays. Where it holds both, parameter 86 bit 6 has already decided
+    /// which one this is, and the reader reports the leftovers as a finding rather than in here.
     public let mode: PatternMode
-    /// Everything in the Pool, both note sets.
+    /// Everything in the Pool -- notes and triggers, live set and leftovers alike. Where this runs
+    /// well ahead of ``enabledNoteCount``, ``ProjectSummary/diagnostics`` says why; a preview
+    /// showing what will sound wants the smaller number.
     public let noteCount: Int
-    /// How many of those the device plays: the live set's, minus the disabled ones. Below
-    /// ``noteCount`` where a step is turned off, a note sits past the last step, or the other note
-    /// set holds the rest.
-    public let playableNoteCount: Int
+    /// How many of those the user has left switched on: the live set's, minus the ones on a step
+    /// that is off and the ones past the last step.
+    ///
+    /// Enabled is not audible. The spec lists six reasons a note might not play (4); this counts
+    /// the two the device gives you a switch for, and the two `--include-disabled` exports.
+    public let enabledNoteCount: Int
     /// The live set's declared step count.
     public let stepCount: Int
     /// Parameter 40's latch, as read. Usually agrees with ``isEmpty``; where it does not, the
     /// reader has already said so.
     public let hasData: Bool
-    /// The Chain this Pattern sits in, in play order, or empty when it is in none.
-    public let chainedWith: [Int]
+    /// The Chain this Pattern plays in, in play order, or empty when it is in none. It carries the
+    /// whole Chain rather than the rest of it, so a cell can draw where it sits in the run.
+    public let chain: [Int]
 
     public init(
-        number: Int, mode: PatternMode, noteCount: Int, playableNoteCount: Int, stepCount: Int,
-        hasData: Bool, chainedWith: [Int]
+        number: Int, mode: PatternMode, noteCount: Int, enabledNoteCount: Int, stepCount: Int,
+        hasData: Bool, chain: [Int]
     ) {
         self.number = number
         self.mode = mode
         self.noteCount = noteCount
-        self.playableNoteCount = playableNoteCount
+        self.enabledNoteCount = enabledNoteCount
         self.stepCount = stepCount
         self.hasData = hasData
-        self.chainedWith = chainedWith
+        self.chain = chain
     }
 
     /// Holds nothing at all -- the question a greyed cell asks.
     public var isEmpty: Bool { noteCount == 0 }
 
-    /// Something here would sound. Not the same as holding notes: a pattern of switched-off steps
-    /// is not empty and still plays nothing.
-    public var isEnabled: Bool { playableNoteCount > 0 }
+    /// Something here is switched on. Not the same as holding notes: a pattern of switched-off
+    /// steps is not empty and still plays nothing.
+    public var isEnabled: Bool { enabledNoteCount > 0 }
 
     public init(_ pattern: Pattern, live: NoteKind, chain: [Int]) {
         let lastStep = MIDIExport.declaredStepCount(pattern, live)
         self.init(
             number: pattern.number, mode: pattern.mode, noteCount: pattern.notes.count,
-            playableNoteCount: pattern.notes(of: live).count(where: {
+            enabledNoteCount: pattern.notes(of: live).count(where: {
                 disablement($0, lastStep: lastStep) == nil
             }),
             stepCount: lastStep, hasData: pattern.hasData,
-            chainedWith: chain.contains(pattern.number) ? chain : [])
+            chain: chain.contains(pattern.number) ? chain : [])
     }
 }

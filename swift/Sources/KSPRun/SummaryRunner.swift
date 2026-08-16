@@ -3,10 +3,8 @@ import KSPKit
 
 /// Reading a project for a caller that wants to show it rather than convert it.
 ///
-/// The fourth runner, and the one that returns no ``RunResult``: it renders no stdout, no stderr and
-/// no exit code, because nothing on either CLI prints a summary. That is deliberate -- a summary
-/// adds no text to compare, so the Python needs no mirror of this and the parity scripts have
-/// nothing new to check. Adding a subcommand for it would forfeit that and pay full parity.
+/// The one runner that returns no ``RunResult``: nothing on either CLI prints a summary, so there
+/// is no stdout, stderr or exit code to render. See `CLAUDE.md` for why that exemption matters.
 public enum SummaryRunner {
     public struct Options: Sendable {
         public var path: URL

@@ -87,8 +87,8 @@ path, so installing from a worktree blocks commits repo-wide once that worktree 
 `swift/` mirrors that split across six targets: `KSPKit` (the format core, `ksp/` minus MIDI),
 `KSPMIDI` (the `swift-midi-file` layer, `midi_export`/`midi_import`), `KSPRun` (the command bodies
 — `ConvertRunner`, `ExportRunner`, `DumpRunner` — plus `SummaryRunner` and the bundled template),
-`KSPSwiftCLI` (the
-`ksp-swift-cli` product: argument parsing, `@main`, nothing else), `KSPApp` (the `ksp-app` product:
+`KSPSwiftCLI` (the `ksp-swift-cli` product: argument parsing, `@main`, nothing else),
+`KSPApp` (the `ksp-app` product:
 the SwiftUI drag-and-drop window), and their tests. **A command body goes in `KSPRun`, never in
 `KSPSwiftCLI` or `KSPApp`**: SwiftPM forbids a non-test target from depending on an executable one,
 so anything in `KSPSwiftCLI` is reachable only from the CLI, and the app has to run the very same
@@ -98,7 +98,9 @@ plus the same run structurally as `diagnostics` and `destinations`, which is wha
 instead of re-parsing the text. **`SummaryRunner` is the exception, and deliberately so**: it
 returns a `ProjectSummary` and renders no text at all, which is what keeps a preview off the parity
 contract — no CLI output to compare means no Python mirror. Giving it a subcommand would forfeit
-that and pay full parity, so a preview issue must not add a flag (#115).
+that and pay full parity, so a preview issue must not add a flag (#115). Its counts say *enabled*,
+never *audible*: they answer the two reasons a note is switched off, not the spec's six reasons one
+might not play.
 
 **`KSPApp` owns no format logic** — only where a file goes, what it is called and which options the
 window offers. `Destination.swift`, `Folders.swift`, `Conversion.swift` and `Settings.swift` carry
