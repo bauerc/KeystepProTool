@@ -163,7 +163,11 @@ public struct Rendering: Sendable, Hashable {
 
     public var warnings: [String] { diagnostics.messages }
 
-    public var midiTrackName: String {
+    public var midiTrackName: String { Rendering.trackName(trackNumber, kind: kind) }
+
+    /// What a track is called in an exported `.mid`. Named here rather than at each site so a
+    /// preview of a project and the file it exports to cannot drift apart.
+    public static func trackName(_ trackNumber: Int, kind: NoteKind) -> String {
         kind == .drum ? "Track \(trackNumber) (drum)" : "Track \(trackNumber)"
     }
 }
