@@ -58,9 +58,16 @@ There is also a drag-and-drop **macOS app**, *Key Step Pro Plus*, for the common
 
 ## The app
 
-**Key Step Pro Plus.** Drop a `.mid` on the window and a `.KeyStepPro` lands in MIDI Control
+**Key Step Pro Plus.** Drop a `.mid` on the window and it is held there, showing which way it will
+go and where the result will land; press **Convert** and a `.KeyStepPro` lands in MIDI Control
 Center's Templates folder, where the Project Browser will list it. Drop a `.KeyStepPro` instead and
-you get a `.mid` beside it. One file at a time; everything else is the CLI's job.
+you get a `.mid` beside it. **Cancel** drops it again without writing anything. One file at a time;
+everything else is the CLI's job.
+
+**Options.** The sidebar carries **Dry run** — report what would be written and write nothing,
+which is worth having against a 3.5 MB project — and **Show every finding**, which lists each
+finding rather than one line per kind. A dry run leaves the file where it is, so switching the
+toggle off and pressing Convert writes it for real.
 
 Install it with `make install` (see [Installation](#installation)), then:
 
