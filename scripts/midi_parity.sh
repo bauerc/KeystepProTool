@@ -186,8 +186,19 @@ if has export; then
         add export "$(basename "$project") --include-stale --include-disabled" \
             "$project" --include-stale --include-disabled
         add export "$(basename "$project") --drum-channel 16" "$project" --drum-channel 16
+        add export "$(basename "$project") --tracks 1,3" "$project" --tracks 1,3
+        add export "$(basename "$project") --patterns 1-4" "$project" --patterns 1-4
         add split "$(basename "$project") --split" "$project" --split
     done
+    # A refused selection, once rather than per project: the message does not depend on the file,
+    # and it is the only place the two cores' usage wording is compared rather than assumed.
+    add export "--tracks refused alike" project_files/project_9.KeyStepPro --tracks bad
+    # A numeral too big for Swift's Int, where Python's arithmetic is unbounded, and a run with two
+    # bad flags: which of the two is named is as much a part of the output as the wording is.
+    add export "--tracks past Int, in a range" project_files/project_9.KeyStepPro \
+        --tracks 3-99999999999999999999
+    add export "--tracks bad and --drum-map bad" project_files/project_9.KeyStepPro \
+        --tracks bad --drum-map garbage
 else
     echo "midi_parity: ksp-swift-cli has no 'export' yet -- skipping the ksp2midi direction"
 fi

@@ -52,8 +52,15 @@ struct Export: ParsableCommand {
             """)
     var split = false
 
-    @Option(help: "export only this track") var track: Int?
-    @Option(help: "export only this pattern") var pattern: Int?
+    @Option(
+        name: [.customLong("tracks"), .customLong("track")],
+        help: ArgumentHelp("export only these tracks: \(selectionHelp)", valueName: "LIST"))
+    var tracks: String?
+
+    @Option(
+        name: [.customLong("patterns"), .customLong("pattern")],
+        help: ArgumentHelp("export only these patterns: \(selectionHelp)", valueName: "LIST"))
+    var patterns: String?
 
     @Option(
         help: """
@@ -120,24 +127,31 @@ struct Export: ParsableCommand {
     var verbose = false
 
     func validate() throws {
-        if let track, !(1...4 ~= track) {
-            throw ValidationError("'--track' must be in 1...4")
-        }
-        if let pattern, !(1...Constants.patternsPerTrack ~= pattern) {
-            throw ValidationError("'--pattern' must be in 1...\(Constants.patternsPerTrack)")
-        }
         if !(1...16 ~= drumChannel) {
             throw ValidationError("'--drum-channel' must be in 1...16")
         }
     }
 
     func run() throws {
+        let selectedTracks: Set<Int>
+        let selectedPatterns: Set<Int>
+        do {
+            selectedTracks = try parseSelection(
+                tracks, option: "--tracks", limit: Constants.trackItemIDs.count)
+            selectedPatterns = try parseSelection(
+                patterns, option: "--patterns", limit: Constants.patternsPerTrack)
+        } catch {
+            // Through the runner's own failure shape rather than `ValidationError`, so the wording
+            // matches `ksp2midi`'s byte for byte -- ArgumentParser's would not.
+            return try emit(RunResult.failure(ExportRunner.prog, "\(error)", code: 2))
+        }
+
         let result = ExportRunner.run(
             ExportRunner.Options(
                 path: URL(filePath: path),
                 output: output.map { URL(filePath: $0) },
-                split: split, tracks: track.map { [$0] } ?? [],
-                patterns: pattern.map { [$0] } ?? [], passes: passes.count,
+                split: split, tracks: selectedTracks,
+                patterns: selectedPatterns, passes: passes.count,
                 ticksPerBeat: ticksPerBeat, drumMapSpec: drumMapSpec,
                 drumChannel: drumChannel - 1, defaultGate: defaultGate,
                 includeStale: includeStale, includeDisabled: includeDisabled,

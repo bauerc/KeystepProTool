@@ -205,7 +205,8 @@ wrote out/project_9_track1_pattern3.mid
 |---|---|
 | `-o PATH` | Destination (default: the input file with a `.mid` suffix); with `--split`, a directory |
 | `--split` | One file per non-empty (track, pattern), named `<stem>_track{N}_pattern{P}.mid` |
-| `--track N` / `--pattern N` | Export only one track or pattern |
+| `--tracks LIST` / `--patterns LIST` | Export only these tracks or patterns — comma-separated numbers and `N-M` ranges (`1,3`, `2-5`, `1,3-5`) |
+| `--track LIST` / `--pattern LIST` | The same two options under their singular names |
 | `--passes {auto,1,2,3,4}` | How many of the four 16/32/48/64 repeats to render (default `auto`) |
 | `--ticks-per-beat N` | MIDI resolution (default 480) |
 | `--drum-map SPEC` | Same grammar and config file as `ksp-dump` (default `chromatic:36`) |

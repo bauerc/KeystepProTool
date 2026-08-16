@@ -104,6 +104,83 @@ def test_selecting_a_track_and_pattern(
     assert "1 note(s)" in capsys.readouterr().out
 
 
+def test_selecting_several_tracks(
+    project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    destination = tmp_path / "out.mid"
+    argv = [
+        str(project_files_dir / "project_9.KeyStepPro"),
+        "-o",
+        str(destination),
+        "--tracks",
+        "1,3",
+    ]
+    assert main(argv) == 0
+    assert [t.name for t in mido.MidiFile(destination).tracks] == [
+        "project_9.KeyStepPro",
+        "Track 1 (drum)",
+        "Track 3",
+    ]
+    assert "3 note(s)" in capsys.readouterr().out
+
+
+def test_selecting_a_range_of_patterns(
+    project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    destination = tmp_path / "out.mid"
+    argv = [
+        str(project_files_dir / "project_9.KeyStepPro"),
+        "-o",
+        str(destination),
+        "--patterns",
+        "2-3",
+    ]
+    assert main(argv) == 0
+    assert "from pattern(s) 2, 3" in capsys.readouterr().out
+
+
+def test_the_singular_spellings_are_the_same_option(
+    project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--track 1`` is ``--tracks 1``, so a list reaches it too."""
+    source = str(project_files_dir / "project_9.KeyStepPro")
+    assert main([source, "-o", str(tmp_path / "plural.mid"), "--tracks", "1"]) == 0
+    plural = capsys.readouterr().out
+
+    assert main([source, "-o", str(tmp_path / "singular.mid"), "--track", "1"]) == 0
+    singular = capsys.readouterr().out
+
+    assert singular.replace("singular.mid", "") == plural.replace("plural.mid", "")
+
+
+@pytest.mark.parametrize(
+    ("argument", "message"),
+    [
+        ("bad", "--tracks: 'bad' is not a number or a range"),
+        ("9", "--tracks: 9 is out of range 1-4"),
+        ("3-1", "--tracks: '3-1' ends before it starts"),
+    ],
+)
+def test_a_bad_selection_is_a_usage_failure(
+    project_files_dir: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    argument: str,
+    message: str,
+) -> None:
+    destination = tmp_path / "out.mid"
+    argv = [
+        str(project_files_dir / "project_9.KeyStepPro"),
+        "-o",
+        str(destination),
+        "--tracks",
+        argument,
+    ]
+    assert main(argv) == 2
+    assert not destination.exists()
+    assert message in capsys.readouterr().err
+
+
 def test_a_selection_holding_no_notes_is_an_error_not_an_empty_file(
     project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
