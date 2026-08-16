@@ -52,10 +52,6 @@ struct Outcome: Sendable, Equatable {
     var wroteFile: Bool { !failed && !dryRun }
 
     func findings(verbose: Bool) -> [String] { verbose ? all : collapsed }
-
-    /// True only when collapsing is actually hiding something, so the toggle appears when it has
-    /// work to do and not otherwise.
-    var hasDetail: Bool { all.count > collapsed.count }
 }
 
 enum Conversion {

@@ -6,9 +6,8 @@ import Testing
 /// The staged phase: a drop no longer writes, and the write happens when Convert says so.
 @MainActor
 @Suite struct AppModelTests {
-    /// A model whose destinations are a directory the test owns, so nothing reaches MCC's Templates
-    /// folder or `~/Downloads` on the machine running this -- and whose Finder reveal does nothing,
-    /// so a test run does not open windows.
+    /// Destinations the test owns, so nothing reaches MCC's Templates folder, and a reveal that
+    /// does nothing, so a test run opens no Finder windows.
     private func model(writingInto directory: URL) -> AppModel {
         AppModel(
             destination: { _ in Destination(directory: directory, note: nil) }, reveal: { _ in })
@@ -78,8 +77,7 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: written.path))
     }
 
-    /// A dry run is a look at what would happen, so the file stays staged: switch the toggle off,
-    /// press Convert again and it is written for real.
+    /// A dry run is a look at what would happen, so the file stays staged.
     @Test func adryRunKeepsTheFileStagedAndWritesNothing() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

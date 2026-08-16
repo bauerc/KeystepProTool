@@ -172,12 +172,12 @@ struct DropView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Collapsed behind a disclosure either way; the sidebar's toggle is what decides whether the
-    /// list inside is one line per kind or one per occurrence.
+    /// The sidebar's toggle decides whether the list inside is one line per kind or one per
+    /// occurrence. "Finding", not "note": a note is a melodic event (ADR 0001).
     @ViewBuilder
     private func findings(_ outcome: Outcome) -> some View {
         if !outcome.all.isEmpty {
-            DisclosureGroup("\(outcome.all.count) note(s)") {
+            DisclosureGroup("\(outcome.all.count) finding(s)") {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(outcome.findings(verbose: model.settings.verbose), id: \.self) {
                         finding in

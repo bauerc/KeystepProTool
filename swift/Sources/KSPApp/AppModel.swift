@@ -3,11 +3,7 @@ import Foundation
 import KSPKit
 import Observation
 
-/// The window's state. The one place in the app that is mutable, and it is main-actor confined --
-/// everything below it is a value type the runners already declare `Sendable`.
-///
-/// No SwiftUI here: the phases, the settings and the two machine-facing dependencies are all
-/// testable without a window, which is what `AppModelTests` does.
+/// The window's state, main-actor confined. No SwiftUI, so the phases test without a window.
 @MainActor
 @Observable
 final class AppModel {
@@ -15,17 +11,15 @@ final class AppModel {
 
     enum Phase {
         case idle
-        /// Dropped, understood, and waiting for Convert. Nothing has been written.
+        /// Dropped and waiting for Convert. Nothing has been written.
         case staged(Staged)
         case working(String)
         case done(Outcome)
     }
 
-    /// A drop the window is holding: what it would do, and what the last dry run said about it.
     struct Staged {
         var plan: Conversion.Plan
-        /// The result of a dry run of this very plan, which leaves the file staged so the user can
-        /// switch Dry run off and press Convert again.
+        /// What a dry run of this plan said, if one has been made.
         var preview: Outcome?
     }
 
@@ -33,9 +27,7 @@ final class AppModel {
     var name: String = ""
     var settings = Settings()
 
-    /// Where each direction's result goes, and how a written file is shown to the user. Injected
-    /// because the alternative is a test that writes into MIDI Control Center's Templates folder
-    /// and opens Finder windows.
+    // Injected: the alternative is a test that writes into MCC's Templates folder and opens Finder.
     private let destination: (Job) -> Destination
     private let reveal: ([URL]) -> Void
 
@@ -47,7 +39,7 @@ final class AppModel {
         self.reveal = reveal
     }
 
-    /// A `.KeyStepPro` lands where MCC will list it; a `.mid` lands beside the project it came from.
+    /// A project lands where MCC will list it; a MIDI file lands beside what it came from.
     nonisolated static func destination(for job: Job) -> Destination {
         switch job {
         case .toProject: return Destinations.forProjects()
@@ -74,19 +66,15 @@ final class AppModel {
         phase = .staged(Staged(plan: plan(for: job)))
     }
 
-    /// Run the staged conversion.
-    ///
-    /// The plan is recomputed here rather than reused: a name can be taken between the drop and the
-    /// press, and the window would otherwise promise a path the runner then refuses.
     func convert() async {
         guard let staged else { return }
+        // Re-planned rather than reused: a name can be taken between the drop and the press.
         let plan = plan(for: staged.plan.job)
         phase = .working(plan.source.lastPathComponent)
 
         let outcome = await Conversion.run(plan, settings: settings)
 
-        // A dry run wrote nothing, so the file stays staged: switch the toggle off, press Convert
-        // again, and it is written for real.
+        // A dry run wrote nothing, so the file stays staged and can be converted for real.
         guard !outcome.dryRun else {
             phase = .staged(Staged(plan: plan, preview: outcome))
             return
@@ -99,9 +87,7 @@ final class AppModel {
     }
 
     /// Drop the staged file without writing anything.
-    func cancel() {
-        reset()
-    }
+    func cancel() { reset() }
 
     /// Rename what was just written, in place. MCC's Project Browser lists the filename, so this
     /// is how a project gets the name it will carry on the device.

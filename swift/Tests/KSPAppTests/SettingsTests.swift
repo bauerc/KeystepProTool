@@ -4,11 +4,8 @@ import Testing
 
 @testable import KSPApp
 
-/// The mapping from what the window offers onto what the runners take.
-///
-/// Every later options issue adds a control here, so these tests are the hook that says a control
-/// reaches the runner -- and, just as importantly, that the controls not yet built leave the
-/// runner's own defaults alone.
+/// The mapping from what the window offers onto what the runners take: that a control reaches the
+/// runner, and that the controls not yet built leave the runner's own defaults alone.
 @Suite struct SettingsTests {
     private let source = URL(filePath: "/tmp/song.mid")
     private let output = URL(filePath: "/tmp/song.KeyStepPro")
@@ -40,8 +37,7 @@ import Testing
         #expect(settings.exportOptions(source: output, output: source).dryRun == on)
     }
 
-    /// "Show every finding" has to reach the runner, not just the renderer: the runner is what
-    /// decides whether the findings are listed one per kind or one per occurrence.
+    /// "Show every finding" has to reach the runner, not just the renderer.
     @Test(arguments: [false, true])
     func showingEveryFindingReachesBothRunners(on: Bool) {
         let settings = Settings(dryRun: false, verbose: on)
@@ -49,8 +45,7 @@ import Testing
         #expect(settings.exportOptions(source: output, output: source).verbose == on)
     }
 
-    /// The window never waives the runner's overwrite guard: `Naming.vacant` has already found a
-    /// free path, so `force` would only mask a clash that appeared in between.
+    /// The window never waives the runner's overwrite guard.
     @Test func neitherDirectionForcesAnOverwrite() {
         let settings = Settings(dryRun: false, verbose: true)
         #expect(!settings.convertOptions(source: source, output: output).force)
@@ -64,8 +59,7 @@ import Testing
         #expect(!settings.exportOptions(source: output, output: source).quiet)
     }
 
-    /// Everything the window does not offer yet keeps the runner's own default, which is what makes
-    /// "the app on defaults converts what the CLI on defaults converts" true by construction.
+    /// Everything the window does not offer yet keeps the runner's own default.
     @Test func anImportLeavesEveryUnofferedOptionAtItsDefault() {
         let mapped = Settings(dryRun: true, verbose: true)
             .convertOptions(source: source, output: output)

@@ -118,8 +118,7 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: plan.target.path))
     }
 
-    /// Exporting the other way round, dry, for the same reason -- the two runners take the flag
-    /// separately and only one of them was ever going to be wired up by accident.
+    /// The other direction takes the flag separately, so it is asserted separately.
     @Test func adryRunExportsNothingEither() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
