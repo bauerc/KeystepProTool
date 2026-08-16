@@ -25,14 +25,30 @@ private func formatSkip(_ skip: [Int]) -> String {
     return skip.map(String.init).joined(separator: ",")
 }
 
-/// Why this note will not play, or `""` when it will.
+/// Why this note will not play, or `nil` when it will.
 ///
 /// Two mechanisms, both toggled the same way on the device, so both read as "disabled" and name
-/// their reason rather than inventing separate words.
+/// their reason rather than inventing separate words. Split from the text below so a caller that
+/// counts rather than prints -- ``ProjectSummary`` -- asks the same question the dump answers,
+/// instead of restating the rule. `MIDIExport.renderPattern` filters an export on this same pair.
+enum Disablement {
+    case stepTurnedOff
+    case pastLastStep
+}
+
+func disablement(_ note: Note, lastStep: Int?) -> Disablement? {
+    if !note.active { return .stepTurnedOff }
+    if let lastStep, note.step > lastStep { return .pastLastStep }
+    return nil
+}
+
+/// The marker the dump prints beside a disabled note, or `""` when it will play.
 private func disabledMarker(_ note: Note, lastStep: Int?) -> String {
-    if !note.active { return "  [DISABLED: step turned off]" }
-    if let lastStep, note.step > lastStep { return "  [DISABLED: past last step]" }
-    return ""
+    switch disablement(note, lastStep: lastStep) {
+    case .stepTurnedOff: return "  [DISABLED: step turned off]"
+    case .pastLastStep: return "  [DISABLED: past last step]"
+    case nil: return ""
+    }
 }
 
 /// Root note and scale, both decoded by protocol T5.6.
