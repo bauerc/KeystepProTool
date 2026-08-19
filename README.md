@@ -221,6 +221,7 @@ wrote out/project_9_track1_pattern3.mid
 | `--tracks LIST` / `--patterns LIST` | Export only these tracks or patterns — comma-separated numbers and `N-M` ranges (`1,3`, `2-5`, `1,3-5`) |
 | `--track LIST` / `--pattern LIST` | The same two options under their singular names |
 | `--passes {auto,1,2,3,4}` | How many of the four 16/32/48/64 repeats to render (default `auto`) |
+| `--repeat N` | Lay the whole export down N times end to end, 1–10 (default 1) |
 | `--ticks-per-beat N` | MIDI resolution (default 480) |
 | `--drum-map SPEC` | Same grammar and config file as `ksp-dump` (default `chromatic:36`) |
 | `--default-gate STEPS` | Length used where a gate value is outside the measured 0–127 ladder (default 0.5) |
@@ -252,6 +253,11 @@ plays in, and the device runs them as repeats of the pattern rather than as page
 `--passes auto` expands a pattern to four repeats when any of its notes sits one out, and renders
 one when none do — so a project nobody has masked comes out exactly as it did before the flag
 existed. `--passes 1` flattens the cycle deliberately, and says that it did.
+
+`--repeat` is the other thing entirely: it lays the whole export down again end to end, up to ten
+times, and exists only in the `.mid`. The device stores no such count, so no repeat of it can be
+written back to a project — which is why it is capped separately from `--passes` and named apart
+from it.
 
 Where a pattern holds both a melodic and a drum note set, only the one the track's mode flag
 (parameter `86` bit 6) says the device plays is exported — the other is leftovers from before the

@@ -69,6 +69,15 @@ struct Export: ParsableCommand {
             """)
     var passes: Passes = .auto
 
+    @Option(
+        name: .customLong("repeat"),
+        help: ArgumentHelp(
+            """
+            lay the whole export down this many times end to end (1-\(MIDIExport.maxRepeat)); \
+            export-only, and not the step-skip cycle --passes renders
+            """, valueName: "N"))
+    var repeatCount = 1
+
     @Option(name: .customLong("ticks-per-beat"), help: "MIDI resolution")
     var ticksPerBeat = MIDIExport.defaultTicksPerBeat
 
@@ -157,6 +166,7 @@ struct Export: ParsableCommand {
                 output: output.map { URL(filePath: $0) },
                 split: split, tracks: selectedTracks,
                 patterns: selectedPatterns, passes: passes.count,
+                repeatCount: repeatCount,
                 ticksPerBeat: ticksPerBeat, drumMapSpec: drumMapSpec,
                 drumChannel: drumChannel - 1, defaultGate: defaultGate,
                 includeStale: includeStale, includeDisabled: includeDisabled,

@@ -108,6 +108,11 @@ class ExportOptions:
     its length (spec 5, protocol T5.8), so a single pass sounds every masked
     note at once -- musically wrong, and the reason this defaults to auto."""
 
+    repeat: int = 1
+    """How many times to lay the whole export down end to end, 1-``MAX_REPEAT``.
+    Export-only: the device stores no such count, so this is not ``passes`` and
+    no repeat of it can be written back to a project file."""
+
     def __post_init__(self) -> None:
         if self.ticks_per_beat < 1:
             raise ValueError("ticks_per_beat must be at least 1")
@@ -123,6 +128,8 @@ class ExportOptions:
             raise ValueError("default_gate must be greater than 0")
         if self.passes is not None and not 1 <= self.passes <= constants.SKIP_CYCLE_PASSES:
             raise ValueError(f"passes must be 1-{constants.SKIP_CYCLE_PASSES}, or None for auto")
+        if not 1 <= self.repeat <= MAX_REPEAT:
+            raise ValueError(f"repeat must be 1-{MAX_REPEAT}")
 
 
 @dataclass(frozen=True)
@@ -707,7 +714,7 @@ def export_project(project: Project, options: ExportOptions | None = None) -> Ex
     """
     options = options or ExportOptions()
     renderings = render_project(project, options)
-    return _result(arrange(renderings), project, options)
+    return _result(arrange(renderings, repeat=options.repeat), project, options)
 
 
 def export_split(
@@ -728,7 +735,7 @@ def export_split(
 
     results = []
     for _, group in sorted(parts.items()):
-        result = _result(arrange(group), project, options)
+        result = _result(arrange(group, repeat=options.repeat), project, options)
         if not result.is_empty:
             results.append(result)
     return tuple(results)
