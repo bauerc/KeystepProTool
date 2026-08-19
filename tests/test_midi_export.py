@@ -12,10 +12,13 @@ from typing import Any
 import mido
 import pytest
 
+from ksp import constants
 from ksp.diagnostics import Code
 from ksp.drum_map import DEFAULT_CHROMATIC_LOW, DrumMap
 from ksp.midi_export import (
+    DEFAULT_FLAT_VELOCITY,
     DRUM_CHANNEL,
+    MIN_VELOCITY,
     ExportOptions,
     ExportResult,
     PatternBoundary,
@@ -822,6 +825,97 @@ class TestRepeat:
 
         assert [n.tick for n in arrangement.tracks[0].notes] == [0, cycle - 5, 2 * cycle - 5]
         assert sum("held at the start" in w for w in arrangement.warnings) == 1
+
+
+class TestFlatVelocity:
+    """One velocity on every note, instead of the ones the pattern stores.
+
+    A flat render reads a pattern's written content rather than its
+    performance. It is a substitution, not a clamp: the fixed value wins over
+    a stored 0 or 1 as much as over a stored 120.
+    """
+
+    STORED = (60, 70, 90, 100, 60, 70, 90, 100, 60, 120)
+    """project_5 track 3 pattern 1, read off the device display."""
+
+    def _seq(self, project: Project, options: ExportOptions) -> Rendering:
+        return render_pattern(
+            project.track(3).pattern(1), track_number=3, kind=NoteKind.SEQ, options=options
+        )
+
+    def test_the_substitute_is_the_measured_device_value(self) -> None:
+        """Not an invented default: what a freshly placed note carries on the
+        device, so the number is never re-typed above this module."""
+        assert DEFAULT_FLAT_VELOCITY == constants.FRESH_VELOCITY
+
+    def test_unset_keeps_every_stored_velocity(self, project_5: Project) -> None:
+        assert tuple(n.velocity for n in self._seq(project_5, ONE_PASS).notes) == self.STORED
+
+    def test_set_replaces_all_of_them(self, project_5: Project) -> None:
+        """Asserted as the whole list: project_5 already stores a 100, so a
+        substitution that only reached some notes would still show one."""
+        options = replace(ONE_PASS, flat_velocity=DEFAULT_FLAT_VELOCITY)
+        assert [n.velocity for n in self._seq(project_5, options).notes] == [
+            DEFAULT_FLAT_VELOCITY
+        ] * 10
+
+    @pytest.mark.parametrize("stored", [0, 1])
+    def test_a_stored_floor_value_is_replaced_rather_than_clamped(
+        self, project_5: Project, stored: int
+    ) -> None:
+        """``MIN_VELOCITY`` only rescues a stored velocity that is being kept."""
+        quiet = _with_velocity(project_5.track(3).pattern(1), stored)
+        options = replace(ONE_PASS, flat_velocity=DEFAULT_FLAT_VELOCITY)
+
+        def render(options: ExportOptions) -> list[int]:
+            rendering = render_pattern(quiet, track_number=3, kind=NoteKind.SEQ, options=options)
+            return [n.velocity for n in rendering.notes]
+
+        assert render(ONE_PASS) == [MIN_VELOCITY] * 10
+        assert render(options) == [DEFAULT_FLAT_VELOCITY] * 10
+
+    def test_the_drum_set_flattens_too(self, project_5: Project) -> None:
+        """Every note means every note: a drum hit's velocity is stored the
+        same way and is replaced the same way."""
+        options = replace(ONE_PASS, flat_velocity=DEFAULT_FLAT_VELOCITY)
+        drums = project_5.track(1).pattern(1)
+
+        stored = render_pattern(drums, track_number=1, kind=NoteKind.DRUM, options=ONE_PASS)
+        flat = render_pattern(drums, track_number=1, kind=NoteKind.DRUM, options=options)
+
+        assert [n.velocity for n in stored.notes] == [127, 50]
+        assert [n.velocity for n in flat.notes] == [DEFAULT_FLAT_VELOCITY] * 2
+
+    @pytest.mark.parametrize("velocity", [-1, 0, 128])
+    def test_a_velocity_outside_the_range_is_rejected(self, velocity: int) -> None:
+        with pytest.raises(ValueError, match="flat_velocity must be 1-127"):
+            ExportOptions(flat_velocity=velocity)
+
+    def test_zero_is_refused_as_a_note_off_rather_than_silenced(self) -> None:
+        """The one value a caller might reasonably expect to mean silence."""
+        with pytest.raises(ValueError, match="0 is a MIDI note-off, not a silent note"):
+            ExportOptions(flat_velocity=0)
+
+    def test_nothing_else_about_the_rendering_moves(self, project_files_dir: Path) -> None:
+        """Velocity is the only field substituted, so an off-ladder gate still
+        falls back to the default length and still says so."""
+        pattern = _drum_gates_off_the_ladder(
+            load(project_files_dir / "initial_project.KeyStepPro").track(1).pattern(1)
+        )
+        options = ExportOptions(flat_velocity=DEFAULT_FLAT_VELOCITY)
+
+        stored = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM)
+        flat = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM, options=options)
+
+        assert flat.warnings == stored.warnings
+        assert any("off the 0-127 ladder" in w for w in flat.warnings)
+        assert [n.tick for n in flat.notes] == [n.tick for n in stored.notes]
+        assert [n.duration_ticks for n in flat.notes] == [n.duration_ticks for n in stored.notes]
+
+
+def _with_velocity(pattern: Pattern, velocity: int) -> Pattern:
+    """Every note of *pattern* stored at *velocity*."""
+    return replace(pattern, notes=tuple(replace(n, velocity=velocity) for n in pattern.notes))
 
 
 def test_tracks_of_different_total_lengths_are_reported(project_9: Project) -> None:

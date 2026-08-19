@@ -54,6 +54,17 @@ DRUM_CHANNEL: Final = DEFAULT_DRUM_CHANNEL - 1
 #: note-off in MIDI, which is a different thing. Exported at 1 instead.
 MIN_VELOCITY: Final = 1
 
+#: The loudest a MIDI note-on can be. Export-only, like ``MIN_VELOCITY``:
+#: ``constants.SENTINEL`` is 127 as well but marks an empty slot, so a velocity
+#: limit must not be spelled with it.
+MAX_VELOCITY: Final = 127
+
+#: What a flat render substitutes unless the caller names another value: the
+#: measured velocity a freshly placed note carries on the device, so a flat
+#: export sounds like the pattern unedited rather than like an invented
+#: default. Named here so nothing above has to re-type the number.
+DEFAULT_FLAT_VELOCITY: Final = constants.FRESH_VELOCITY
+
 #: How many times an arrangement may be laid down end to end. Export-only: the
 #: device stores no such count, so this is not ``passes`` and no repeat of it
 #: can be written back to a project file.
@@ -108,6 +119,17 @@ class ExportOptions:
     its length (spec 5, protocol T5.8), so a single pass sounds every masked
     note at once -- musically wrong, and the reason this defaults to auto."""
 
+    flat_velocity: int | None = None
+    """Render every note at this velocity instead of the one it stores.
+    ``None`` keeps the stored values, which is what an export of a performance
+    wants; a flat render reads a pattern's *written* content, or feeds
+    something that will re-velocity it anyway. ``DEFAULT_FLAT_VELOCITY`` is the
+    value to pass to hear the pattern as the device would have played it
+    unedited. A note stored at velocity 0 is silent on the device but takes the
+    fixed value like any other, so a flat render can sound a note the hardware
+    does not -- written content, not audible content. 0 itself is not
+    available: it is a note-off in MIDI, not a silent note."""
+
     def __post_init__(self) -> None:
         if self.ticks_per_beat < 1:
             raise ValueError("ticks_per_beat must be at least 1")
@@ -123,6 +145,13 @@ class ExportOptions:
             raise ValueError("default_gate must be greater than 0")
         if self.passes is not None and not 1 <= self.passes <= constants.SKIP_CYCLE_PASSES:
             raise ValueError(f"passes must be 1-{constants.SKIP_CYCLE_PASSES}, or None for auto")
+        if self.flat_velocity is not None and not (
+            MIN_VELOCITY <= self.flat_velocity <= MAX_VELOCITY
+        ):
+            raise ValueError(
+                f"flat_velocity must be {MIN_VELOCITY}-{MAX_VELOCITY}; "
+                "0 is a MIDI note-off, not a silent note"
+            )
 
 
 @dataclass(frozen=True)
@@ -470,7 +499,11 @@ def _render_note(
         tick=tick,
         duration_ticks=max(1, round(gate * step_ticks)),
         pitch=pitch,
-        velocity=max(MIN_VELOCITY, note.velocity),
+        velocity=(
+            options.flat_velocity
+            if options.flat_velocity is not None
+            else max(MIN_VELOCITY, note.velocity)
+        ),
         channel=channel,
     )
 

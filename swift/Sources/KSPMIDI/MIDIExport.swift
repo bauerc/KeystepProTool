@@ -30,6 +30,16 @@ public enum MIDIExport {
     /// which is a different thing. Exported at 1 instead.
     public static let minVelocity = 1
 
+    /// The loudest a MIDI note-on can be. Export-only, like `minVelocity`: `Constants.sentinel`
+    /// is 127 as well but marks an empty slot, so a velocity limit must not be spelled with it.
+    public static let maxVelocity = 127
+
+    /// What a flat render substitutes unless the caller names another value: the measured
+    /// velocity a freshly placed note carries on the device, so a flat export sounds like the
+    /// pattern unedited rather than like an invented default. Named here so nothing above has to
+    /// re-type the number.
+    public static let defaultFlatVelocity = Constants.freshVelocity
+
     /// How many times an arrangement may be laid down end to end. Export-only: the device stores
     /// no such count, so this is not `passes` and no repeat of it can be written back to a project
     /// file.
@@ -71,6 +81,15 @@ public struct ExportOptions: Sendable, Hashable {
     /// holds a note that does not play on all four, one otherwise.
     public let passes: Int?
 
+    /// Render every note at this velocity instead of the one it stores. `nil` keeps the stored
+    /// values, which is what an export of a performance wants; a flat render reads a pattern's
+    /// *written* content. `MIDIExport.defaultFlatVelocity` is the value to pass to hear the
+    /// pattern as the device would have played it unedited. A note stored at velocity 0 is silent
+    /// on the device but takes the fixed value like any other, so a flat render can sound a note
+    /// the hardware does not -- written content, not audible content. 0 itself is not available:
+    /// it is a note-off in MIDI, not a silent note.
+    public let flatVelocity: Int?
+
     public init(
         ticksPerBeat: Int = MIDIExport.defaultTicksPerBeat,
         drumMap: DrumMap? = nil,
@@ -81,7 +100,8 @@ public struct ExportOptions: Sendable, Hashable {
         includeStale: Bool = false,
         includeDisabled: Bool = false,
         markers: Bool = true,
-        passes: Int? = nil
+        passes: Int? = nil,
+        flatVelocity: Int? = nil
     ) throws {
         if ticksPerBeat < 1 {
             throw KSPError.value("ticks_per_beat must be at least 1")
@@ -102,6 +122,13 @@ public struct ExportOptions: Sendable, Hashable {
             throw KSPError.value(
                 "passes must be 1-\(Constants.skipCyclePasses), or None for auto")
         }
+        if let flatVelocity,
+            !(MIDIExport.minVelocity...MIDIExport.maxVelocity ~= flatVelocity)
+        {
+            throw KSPError.value(
+                "flat_velocity must be \(MIDIExport.minVelocity)-\(MIDIExport.maxVelocity); "
+                    + "0 is a MIDI note-off, not a silent note")
+        }
         self.ticksPerBeat = ticksPerBeat
         self.drumMap = try drumMap ?? DrumMap.chromatic()
         self.drumChannel = drumChannel
@@ -112,6 +139,7 @@ public struct ExportOptions: Sendable, Hashable {
         self.includeDisabled = includeDisabled
         self.markers = markers
         self.passes = passes
+        self.flatVelocity = flatVelocity
     }
 
     /// A copy with a different pass count, standing in for Python's `replace(options, passes=)`.
@@ -120,7 +148,7 @@ public struct ExportOptions: Sendable, Hashable {
             ticksPerBeat: ticksPerBeat, drumMap: drumMap, drumChannel: drumChannel,
             defaultGate: defaultGate, applySwing: applySwing, applyTimeShift: applyTimeShift,
             includeStale: includeStale, includeDisabled: includeDisabled, markers: markers,
-            passes: passes)
+            passes: passes, flatVelocity: flatVelocity)
     }
 }
 
@@ -515,7 +543,7 @@ extension MIDIExport {
             tick: tick,
             durationTicks: max(1, Arithmetic.pyRound((gate ?? 0) * Double(stepTicks))),
             pitch: pitch,
-            velocity: max(minVelocity, note.velocity),
+            velocity: options.flatVelocity ?? max(minVelocity, note.velocity),
             channel: channel)
     }
 }
