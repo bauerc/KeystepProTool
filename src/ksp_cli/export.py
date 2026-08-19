@@ -220,6 +220,14 @@ def export(
             help="ignore each note's time shift and place every step on a flat grid",
         ),
     ] = False,
+    no_markers: Annotated[
+        bool,
+        typer.Option(
+            "--no-markers",
+            rich_help_panel=_SELECTION_PANEL,
+            help="omit the marker that names the start of each pattern",
+        ),
+    ] = False,
     dry_run: Annotated[
         bool,
         typer.Option(
@@ -275,6 +283,7 @@ def export(
             apply_time_shift=not no_time_shift,
             include_stale=include_stale,
             include_disabled=include_disabled,
+            markers=not no_markers,
         )
     except ValueError as exc:
         fail(str(exc), prog=PROG, code=2)

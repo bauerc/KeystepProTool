@@ -186,6 +186,12 @@ track becomes its own MIDI track; Track 1's drum set becomes a second one on cha
 The device loops each track independently, so tracks of different total lengths drift apart on the
 hardware while this layout keeps re-aligning them. When that happens the export says so.
 
+Each pattern start carries a **marker** meta event naming the pattern — `pattern 2`, `pattern 3`
+— so the seams of a merged export are exact rather than found by eye. A DAW puts them on its
+marker ruler: Logic Pro's Marker track, Reaper's project markers, Pro Tools' Memory Locations.
+They sit on the conductor track, where a DAW's ruler is global anyway, and pattern N starts at the
+same point on every track. `--no-markers` leaves them out.
+
 `--split` skips the layout question altogether and writes one file per (track, pattern), each
 starting at its own tick 0:
 
@@ -214,6 +220,7 @@ wrote out/project_9_track1_pattern3.mid
 | `--drum-channel N` | MIDI channel for drum lanes (default 10) |
 | `--include-stale` | Export both note sets of a pattern that holds both |
 | `--include-disabled` | Export disabled notes — step turned off, or past the pattern's last step (the device plays neither) |
+| `--no-markers` | Omit the marker that names the start of each pattern |
 | `--no-swing` | Place every step on a flat grid |
 | `--no-time-shift` | Ignore each note's time shift and place every step on a flat grid |
 | `--dry-run` | Report what would be written, and write nothing |

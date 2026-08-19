@@ -81,6 +81,12 @@ class ExportOptions:
     Turn it on to see everything the file holds, e.g. to recover an edit that
     was disabled rather than deleted."""
 
+    markers: bool = True
+    """Mark the start of every pattern with a marker meta event, so a DAW's
+    marker ruler shows where one pattern ends and the next begins. On by
+    default: a merged export is otherwise an undifferentiated run of notes
+    whose seams can only be found by eye."""
+
     passes: int | None = None
     """How many of the four 16/32/48/64 repeats to render. ``None`` is auto:
     four when a pattern holds a note that does not play on all four, one
@@ -147,14 +153,32 @@ class ArrangedTrack:
 
 
 @dataclass(frozen=True)
+class PatternBoundary:
+    """Where one pattern starts on the timeline, and which pattern it is."""
+
+    pattern_number: int
+    tick: int
+
+    @property
+    def marker_text(self) -> str:
+        return f"pattern {self.pattern_number}"
+
+
+@dataclass(frozen=True)
 class Arrangement:
     """Renderings placed on a timeline, ready to become a file."""
 
     tracks: tuple[ArrangedTrack, ...]
     length_ticks: int
-    pattern_numbers: tuple[int, ...]
+    boundaries: tuple[PatternBoundary, ...]
+    """Ascending by tick: the build layer walks them into MIDI deltas."""
+
     track_numbers: tuple[int, ...]
     diagnostics: Report = EMPTY_REPORT
+
+    @property
+    def pattern_numbers(self) -> tuple[int, ...]:
+        return tuple(b.pattern_number for b in self.boundaries)
 
     @property
     def warnings(self) -> tuple[str, ...]:
@@ -507,7 +531,7 @@ def arrange(renderings: Sequence[Rendering]) -> Arrangement:
     return Arrangement(
         tracks=tracks,
         length_ticks=cursor,
-        pattern_numbers=tuple(sorted(offsets)),
+        boundaries=tuple(PatternBoundary(number, offsets[number]) for number in sorted(offsets)),
         track_numbers=tuple(sorted({r.track_number for r in renderings})),
         diagnostics=collector.report(),
     )
@@ -561,25 +585,50 @@ def _resolve_overlaps(notes: list[RenderedNote], collector: Collector) -> tuple[
 
 
 def build_midi_file(
-    arrangement: Arrangement, *, name: str, tempo_bpm: float, ticks_per_beat: int
+    arrangement: Arrangement,
+    *,
+    name: str,
+    tempo_bpm: float,
+    ticks_per_beat: int,
+    markers: bool = True,
 ) -> mido.MidiFile:
     """Turn an arrangement into a type-1 MIDI file. The only ``mido`` layer."""
     midi = mido.MidiFile(type=1, ticks_per_beat=ticks_per_beat)
-    midi.tracks.append(_conductor_track(name, tempo_bpm, arrangement.length_ticks))
+    boundaries = arrangement.boundaries if markers else ()
+    midi.tracks.append(
+        _conductor_track(name, tempo_bpm, arrangement.length_ticks, boundaries=boundaries)
+    )
     for track in arrangement.tracks:
         midi.tracks.append(_midi_track(track))
     return midi
 
 
-def _conductor_track(name: str, tempo_bpm: float, total_ticks: int) -> mido.MidiTrack:
-    """Track 0: name, tempo and time signature, no notes."""
+def _conductor_track(
+    name: str,
+    tempo_bpm: float,
+    total_ticks: int,
+    *,
+    boundaries: Sequence[PatternBoundary],
+) -> mido.MidiTrack:
+    """Track 0: name, tempo, time signature and the pattern markers, no notes."""
     # End-of-track sits at the end of the last pattern rather than the last
     # note, so a DAW sees the arrangement's real length.
     track = mido.MidiTrack()
     track.append(mido.MetaMessage("track_name", name=name, time=0))
     track.append(mido.MetaMessage("set_tempo", tempo=mido.bpm2tempo(tempo_bpm), time=0))
     track.append(mido.MetaMessage("time_signature", numerator=4, denominator=4, time=0))
-    track.append(mido.MetaMessage("end_of_track", time=total_ticks))
+
+    # A DAW shows these on its marker ruler, which is what makes cutting a
+    # merged export exact rather than by eye.
+    previous_tick = 0
+    for boundary in boundaries:
+        track.append(
+            mido.MetaMessage(
+                "marker", text=boundary.marker_text, time=boundary.tick - previous_tick
+            )
+        )
+        previous_tick = boundary.tick
+    track.append(mido.MetaMessage("end_of_track", time=total_ticks - previous_tick))
     return track
 
 
@@ -736,6 +785,7 @@ def _result(arrangement: Arrangement, project: Project, options: ExportOptions) 
             name=project.source_name or project.device,
             tempo_bpm=project.tempo_bpm,
             ticks_per_beat=options.ticks_per_beat,
+            markers=options.markers,
         ),
         note_count=arrangement.note_count,
         pattern_numbers=arrangement.pattern_numbers,

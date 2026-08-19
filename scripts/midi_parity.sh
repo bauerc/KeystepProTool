@@ -188,6 +188,7 @@ if has export; then
         add export "$(basename "$project") --drum-channel 16" "$project" --drum-channel 16
         add export "$(basename "$project") --tracks 1,3" "$project" --tracks 1,3
         add export "$(basename "$project") --patterns 1-4" "$project" --patterns 1-4
+        add export "$(basename "$project") --no-markers" "$project" --no-markers
         add split "$(basename "$project") --split" "$project" --split
     done
     # A refused selection, once rather than per project: the message does not depend on the file,

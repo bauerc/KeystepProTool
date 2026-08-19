@@ -113,6 +113,11 @@ struct Export: ParsableCommand {
         help: "ignore each note's time shift and place every step on a flat grid")
     var noTimeShift = false
 
+    @Flag(
+        name: .customLong("no-markers"),
+        help: "omit the marker that names the start of each pattern")
+    var noMarkers = false
+
     @Flag(name: .customLong("dry-run"), help: "report what would be written, and write nothing")
     var dryRun = false
 
@@ -155,7 +160,7 @@ struct Export: ParsableCommand {
                 ticksPerBeat: ticksPerBeat, drumMapSpec: drumMapSpec,
                 drumChannel: drumChannel - 1, defaultGate: defaultGate,
                 includeStale: includeStale, includeDisabled: includeDisabled,
-                applySwing: !noSwing, applyTimeShift: !noTimeShift,
+                applySwing: !noSwing, applyTimeShift: !noTimeShift, markers: !noMarkers,
                 dryRun: dryRun, force: force, quiet: quiet, verbose: verbose,
                 configPath: drumMapConfigPath))
         try emit(result)
