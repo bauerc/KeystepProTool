@@ -20,6 +20,8 @@ For exporting KeyStepPro Project to MIDI:
     - Determine which parts of a midi track go to which track on the Keystep Pro
     - Determine which parts of a single midi track get split into which pattern numbers for a track, with an effective UI to mark and segment the midi file within the limits of the KeyPad Pros design
     - Load multiple MIDI files at a time to import
+    - Determine which source tracks are treated as drums and which are not, since some DAWs such as Logic do not export drum parts on MIDI channel 10
+    - Determine which MIDI channel automatic drum labelling listens to, rather than assuming channel 10
     - If a MIDI file contains more than 4 tracks, the ability to select which of the tracks will be exported by easily checking or unchecking a button/selection
     - Only be able to export no more than 192 midi notes per pattern
     - Only be able to export no more than 64 steps per pattern
