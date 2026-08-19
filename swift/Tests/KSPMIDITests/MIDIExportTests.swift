@@ -748,6 +748,115 @@ private func exported5Flat() throws -> ExportResult {
     }
 }
 
+/// One velocity on every note, instead of the ones the pattern stores.
+///
+/// A flat render reads a pattern's written content rather than its performance. It is a
+/// substitution, not a clamp: the fixed value wins over a stored 0 or 1 as much as over a stored
+/// 120.
+@Suite struct FlatVelocityTests {
+    /// project_5 track 3 pattern 1, read off the device display.
+    let stored = [60, 70, 90, 100, 60, 70, 90, 100, 60, 120]
+
+    private func seq(_ project: Project, _ options: ExportOptions) throws -> Rendering {
+        try MIDIExport.renderPattern(
+            project.track(3).pattern(1), trackNumber: 3, kind: .seq, options: options)
+    }
+
+    /// Not an invented default: what a freshly placed note carries on the device, so the number
+    /// is never re-typed above this module.
+    @Test func theSubstituteIsTheMeasuredDeviceValue() {
+        #expect(MIDIExport.defaultFlatVelocity == Constants.freshVelocity)
+    }
+
+    @Test func unsetKeepsEveryStoredVelocity() throws {
+        #expect(try seq(project5(), onePass()).notes.map(\.velocity) == stored)
+    }
+
+    /// Asserted as the whole list: project_5 already stores a 100, so a substitution that only
+    /// reached some notes would still show one.
+    @Test func setReplacesAllOfThem() throws {
+        let options = try ExportOptions(passes: 1, flatVelocity: MIDIExport.defaultFlatVelocity)
+        #expect(
+            try seq(project5(), options).notes.map(\.velocity)
+                == Array(repeating: MIDIExport.defaultFlatVelocity, count: 10))
+    }
+
+    /// `minVelocity` only rescues a stored velocity that is being kept.
+    @Test(arguments: [0, 1]) func aStoredFloorValueIsReplacedRatherThanClamped(_ value: Int) throws
+    {
+        let quiet = try withVelocity(project5().track(3).pattern(1), value)
+        let flat = try ExportOptions(passes: 1, flatVelocity: MIDIExport.defaultFlatVelocity)
+
+        func render(_ options: ExportOptions) throws -> [Int] {
+            try MIDIExport.renderPattern(quiet, trackNumber: 3, kind: .seq, options: options)
+                .notes.map(\.velocity)
+        }
+
+        #expect(try render(onePass()) == Array(repeating: MIDIExport.minVelocity, count: 10))
+        #expect(try render(flat) == Array(repeating: MIDIExport.defaultFlatVelocity, count: 10))
+    }
+
+    /// Every note means every note: a drum hit's velocity is stored the same way and is replaced
+    /// the same way.
+    @Test func theDrumSetFlattensToo() throws {
+        let drums = try project5().track(1).pattern(1)
+        let options = try ExportOptions(passes: 1, flatVelocity: MIDIExport.defaultFlatVelocity)
+
+        let stored = try MIDIExport.renderPattern(
+            drums, trackNumber: 1, kind: .drum, options: onePass())
+        let flat = try MIDIExport.renderPattern(
+            drums, trackNumber: 1, kind: .drum, options: options)
+
+        #expect(stored.notes.map(\.velocity) == [127, 50])
+        #expect(
+            flat.notes.map(\.velocity) == Array(repeating: MIDIExport.defaultFlatVelocity, count: 2)
+        )
+    }
+
+    @Test(arguments: [-1, 0, 128]) func aVelocityOutsideTheRangeIsRejected(_ value: Int) throws {
+        let thrown = #expect(throws: KSPError.self) {
+            try ExportOptions(flatVelocity: value)
+        }
+        #expect(thrown?.description.contains("flat_velocity must be 1-127") == true)
+    }
+
+    /// The one value a caller might reasonably expect to mean silence.
+    @Test func zeroIsRefusedAsANoteOffRatherThanSilenced() throws {
+        let thrown = #expect(throws: KSPError.self) { try ExportOptions(flatVelocity: 0) }
+        #expect(
+            thrown?.description.contains("0 is a MIDI note-off, not a silent note") == true)
+    }
+
+    /// Velocity is the only field substituted, so an off-ladder gate still falls back to the
+    /// default length and still says so.
+    @Test func nothingElseAboutTheRenderingMoves() throws {
+        let pattern = try drumGatesOffTheLadder(initialProject().track(1).pattern(1))
+        let options = try ExportOptions(flatVelocity: MIDIExport.defaultFlatVelocity)
+
+        let stored = try MIDIExport.renderPattern(pattern, trackNumber: 1, kind: .drum)
+        let flat = try MIDIExport.renderPattern(
+            pattern, trackNumber: 1, kind: .drum, options: options)
+
+        #expect(flat.warnings == stored.warnings)
+        #expect(flat.warnings.contains { $0.contains("off the 0-127 ladder") })
+        #expect(flat.notes.map(\.tick) == stored.notes.map(\.tick))
+        #expect(flat.notes.map(\.durationTicks) == stored.notes.map(\.durationTicks))
+    }
+
+    /// `with(passes:)` rebuilds the whole struct, so a field it forgets is dropped on exactly the
+    /// patterns that need four passes.
+    @Test func theAutoPassPathKeepsTheFixedVelocity() throws {
+        let renderings = try MIDIExport.renderProject(
+            project5(), options: ExportOptions(flatVelocity: MIDIExport.defaultFlatVelocity))
+
+        #expect(renderings.contains { $0.notes.count > 10 })
+        #expect(
+            renderings.allSatisfy {
+                $0.notes.allSatisfy { $0.velocity == MIDIExport.defaultFlatVelocity }
+            })
+    }
+}
+
 // MARK: - Case builders
 
 /// Corrupt every drum gate in `pattern`.
@@ -816,4 +925,16 @@ private func replacing(
         drumSwingPercent: pattern.drumSwingPercent, drumBits: pattern.drumBits,
         rootNote: pattern.rootNote, scale: pattern.scale, notes: notes ?? pattern.notes,
         diagnostics: pattern.diagnostics)
+}
+
+/// A copy of `pattern` with every note stored at `velocity`.
+private func withVelocity(_ pattern: Pattern, _ velocity: Int) -> Pattern {
+    let notes = pattern.notes.map { note in
+        Note(
+            kind: note.kind, slot: note.slot, index: note.index, step: note.step,
+            pitch: note.pitch, velocity: velocity, gateRaw: note.gateRaw, gate: note.gate,
+            timeShift: note.timeShift, randomness: note.randomness, skip: note.skip,
+            active: note.active)
+    }
+    return replacing(pattern, notes: notes)
 }
