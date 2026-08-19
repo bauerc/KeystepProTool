@@ -54,6 +54,17 @@ struct Outcome: Sendable, Equatable {
     func findings(verbose: Bool) -> [String] { verbose ? all : collapsed }
 }
 
+/// What the staged view knows about the project that was dropped.
+///
+/// ``absent`` is a MIDI drop: there is no project to read, so the section does not appear at all --
+/// which is not the same as a project that read as empty.
+enum SummaryState: Equatable {
+    case absent
+    case loading
+    case ready(ProjectSummary)
+    case failed(String)
+}
+
 enum Conversion {
     /// A conversion decided but not yet run: what was dropped, where its result would go, and
     /// anything the user should know about that placement before pressing Convert.
@@ -113,6 +124,20 @@ enum Conversion {
         return outcome(from: result, note: plan.note, dryRun: settings.dryRun)
     }
 
+    /// Read a staged project off the main actor, for the staged view to show what is in it.
+    ///
+    /// Detached for the same reason ``run(_:settings:)`` is: the parse is the same 3.5 MB. Nothing
+    /// here renders text -- ``SummaryRunner`` returns a structure and no `RunResult`, which is what
+    /// keeps a preview off the two CLIs' output contract.
+    static func summarise(_ source: URL) async -> SummaryState {
+        let result = await Task.detached(priority: .userInitiated) {
+            SummaryRunner.run(SummaryRunner.Options(path: source))
+        }.value
+
+        if let summary = result.summary { return .ready(summary) }
+        return .failed(result.message ?? "That project could not be read.")
+    }
+
     private static func outcome(from result: RunResult, note: String?, dryRun: Bool) -> Outcome {
         guard result.code == 0, let written = result.destinations.first else {
             return Outcome(
@@ -147,6 +172,12 @@ extension Job {
         case .toProject: return "KeyStepPro"
         case .toMIDI: return "mid"
         }
+    }
+
+    /// Whether what was dropped is a project, and so has a summary to read.
+    var isProject: Bool {
+        if case .toMIDI = self { return true }
+        return false
     }
 
     /// Which way this is about to go, for the staged view to state before anything is written.

@@ -64,6 +64,13 @@ lands in MIDI Control Center's Templates folder, where the Project Browser will 
 you get a `.mid` beside it. **Cancel** drops it again without writing anything. One file at a time;
 everything else is the CLI's job.
 
+**What is in it.** A dropped `.KeyStepPro` is read while it sits there, and the staged view lists
+all four tracks against all sixteen of each one's pattern slots. A slot that holds nothing is dimmed
+and just numbered; one that holds something carries how many of its notes are switched on, and
+hovering any slot says more. Those counts are *enabled*, not audible: a note on a switched-off step
+or past the last step is not counted, and the other reasons one might not sound are the format
+spec's. A project that will not read says so there rather than showing an empty list.
+
 **Options.** The sidebar carries **Dry run** — report what would be written and write nothing,
 which is worth having against a 3.5 MB project — and **Show every finding**, which lists each
 finding rather than one line per kind. A dry run leaves the file where it is, so switching the

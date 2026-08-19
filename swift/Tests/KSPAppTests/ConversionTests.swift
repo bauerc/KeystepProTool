@@ -152,3 +152,54 @@ import Testing
         #expect(!outcome.headline.isEmpty)
     }
 }
+
+/// Reading a dropped project so the staged view can show what is in it.
+@Suite struct ConversionSummaryTests {
+    /// The one end-to-end read: the app reaches the shipped runner, and what comes back is the
+    /// structural summary rather than any rendered text.
+    @Test func summarisingAProjectReportsItsTracksAndPatterns() async throws {
+        let state = await Conversion.summarise(
+            RepoData.projectFiles.appending(path: "project_5.KeyStepPro"))
+
+        guard case .ready(let summary) = state else {
+            Issue.record("a readable project should have been summarised, got \(state)")
+            return
+        }
+        #expect(summary.sourceName == "project_5.KeyStepPro")
+        #expect(summary.tracks.count == 4)
+        #expect(summary.tracks.allSatisfy { $0.patterns.count == 16 })
+        #expect(!summary.isEmpty)
+    }
+
+    /// An empty project still summarises: the staged view wants four tracks of dimmed slots, not a
+    /// failure.
+    @Test func anemptyProjectSummarisesAsEmptyRatherThanFailing() async throws {
+        let state = await Conversion.summarise(
+            RepoData.projectFiles.appending(path: "user_empty_project.KeyStepPro"))
+
+        guard case .ready(let summary) = state else {
+            Issue.record("an empty project should still have been summarised, got \(state)")
+            return
+        }
+        #expect(summary.tracks.count == 4)
+        #expect(summary.isEmpty)
+    }
+
+    /// A file named like a project that is not one: the window shows why, not an empty list.
+    @Test func anunreadableProjectComesBackAsAFailureNamingTheFile() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let broken = directory.appending(path: "broken.KeyStepPro")
+        try Data("not a project".utf8).write(to: broken)
+
+        let state = await Conversion.summarise(broken)
+
+        guard case .failed(let message) = state else {
+            Issue.record("an unreadable project should have failed, got \(state)")
+            return
+        }
+        #expect(message.contains("broken.KeyStepPro"))
+        // The runner spells failures "<prog>: <message>" for a terminal; the window has none.
+        #expect(!message.hasPrefix("ksp-swift-cli"))
+    }
+}
