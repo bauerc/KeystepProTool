@@ -234,6 +234,76 @@ def test_passes_can_be_pinned_to_one(project_files_dir: Path, tmp_path: Path) ->
     assert mido.MidiFile(destination).length == pytest.approx(2.0)  # 16 sixteenths
 
 
+class TestRepeat:
+    """``--repeat`` loops the export; it is not ``--passes``."""
+
+    def test_the_export_is_laid_down_again(self, project_files_dir: Path, tmp_path: Path) -> None:
+        destination = tmp_path / "out.mid"
+        argv = [
+            str(project_files_dir / "project_5.KeyStepPro"),
+            "-o",
+            str(destination),
+            "--passes",
+            "1",
+            "--repeat",
+            "3",
+        ]
+        assert main(argv) == 0
+        assert mido.MidiFile(destination).length == pytest.approx(6.0)  # 3 x 16 sixteenths
+
+    def test_the_count_is_reported_only_when_it_is_not_one(
+        self, project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        argv = [str(project_files_dir / "project_5.KeyStepPro"), "-o", str(tmp_path / "one.mid")]
+        assert main(argv) == 0
+        assert "repeated" not in capsys.readouterr().out
+
+        assert main([*argv[:2], str(tmp_path / "two.mid"), "--repeat", "2"]) == 0
+        assert "  repeated 2 times end to end" in capsys.readouterr().out
+
+    def test_each_split_file_is_repeated_too(self, project_files_dir: Path, tmp_path: Path) -> None:
+        argv = [
+            str(project_files_dir / "project_9.KeyStepPro"),
+            "--split",
+            "--passes",
+            "1",
+            "--repeat",
+            "2",
+            "-o",
+            str(tmp_path),
+        ]
+        assert main(argv) == 0
+        assert sorted(p.name for p in tmp_path.iterdir()) == [
+            "project_9_track1_pattern2.mid",
+            "project_9_track1_pattern3.mid",
+            "project_9_track3_pattern2.mid",
+        ]
+        # One 16-step pattern per file, laid down twice.
+        assert mido.MidiFile(tmp_path / "project_9_track3_pattern2.mid").length == pytest.approx(
+            4.0
+        )
+
+    @pytest.mark.parametrize("count", ["0", "11"])
+    def test_a_count_outside_the_range_is_a_usage_failure(
+        self,
+        project_files_dir: Path,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        count: str,
+    ) -> None:
+        destination = tmp_path / "out.mid"
+        argv = [
+            str(project_files_dir / "project_5.KeyStepPro"),
+            "-o",
+            str(destination),
+            "--repeat",
+            count,
+        ]
+        assert main(argv) == 2
+        assert not destination.exists()
+        assert "repeat must be 1-10" in capsys.readouterr().err
+
+
 def test_each_pattern_start_is_marked(project_files_dir: Path, tmp_path: Path) -> None:
     """project_9 holds patterns 2 and 3, one 16-step pattern apart."""
     destination = tmp_path / "out.mid"

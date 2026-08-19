@@ -473,6 +473,13 @@ private func exported5Flat() throws -> ExportResult {
         #expect(thrown?.description.contains(message) == true)
     }
 
+    @Test(arguments: [0, 11]) func aRepeatCountOutsideTheRangeIsRejected(_ count: Int) {
+        let thrown = #expect(throws: KSPError.self) {
+            try ExportOptions(repeatCount: count)
+        }
+        #expect(thrown?.description.contains("repeat must be 1-10") == true)
+    }
+
     /// `defaultGate` names the fallback instead of burying it in the code, and it only ever applies
     /// to gates that did not decode -- a measured one is never overridden.
     @Test func theFallbackLengthIsTheCallersToName() throws {
@@ -630,6 +637,27 @@ private func exported5Flat() throws -> ExportResult {
             try MIDIExport.arrange(renderings, repeat: count)
         }
         #expect(thrown?.description.contains("repeat must be 1-10") == true)
+    }
+
+    /// The count rides on the options, which is what a CLI flag can set.
+    @Test func awholeExportHonoursTheOption() throws {
+        let once = try MIDIExport.exportProject(project9(), options: onePass())
+        let twice = try MIDIExport.exportProject(
+            project9(), options: ExportOptions(passes: 1, repeatCount: 2))
+
+        #expect(twice.noteCount == 2 * once.noteCount)
+        #expect(twice.patternNumbers == once.patternNumbers)
+    }
+
+    /// A split piece is a clip, and a repeated clip is a looped one: the count means the same
+    /// thing wherever the arrangement is laid out.
+    @Test func eachSplitFileIsRepeatedToo() throws {
+        let once = try MIDIExport.exportSplit(project9(), options: onePass())
+        let twice = try MIDIExport.exportSplit(
+            project9(), options: ExportOptions(passes: 1, repeatCount: 2))
+
+        #expect(twice.map(\.patternNumbers) == once.map(\.patternNumbers))
+        #expect(twice.map(\.noteCount) == once.map { 2 * $0.noteCount })
     }
 
     /// What a rendering says about itself -- an off-ladder gate, a stale note set, tracks of

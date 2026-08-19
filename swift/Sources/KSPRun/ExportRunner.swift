@@ -13,6 +13,7 @@ public enum ExportRunner {
         public var tracks: Set<Int>
         public var patterns: Set<Int>
         public var passes: Int?
+        public var repeatCount: Int
         public var ticksPerBeat: Int
         public var drumMapSpec: String?
         /// 0-based, as `KSPMIDI` counts channels -- the CLI's `--drum-channel` is 1-based and
@@ -34,7 +35,7 @@ public enum ExportRunner {
         // memberwise initialiser is internal, and every caller is in another module.
         public init(
             path: URL, output: URL? = nil, split: Bool = false, tracks: Set<Int> = [],
-            patterns: Set<Int> = [], passes: Int? = nil,
+            patterns: Set<Int> = [], passes: Int? = nil, repeatCount: Int = 1,
             ticksPerBeat: Int = MIDIExport.defaultTicksPerBeat, drumMapSpec: String? = nil,
             drumChannel: Int = MIDIExport.drumChannel,
             defaultGate: Double = Constants.defaultGateLength, includeStale: Bool = false,
@@ -49,6 +50,7 @@ public enum ExportRunner {
             self.tracks = tracks
             self.patterns = patterns
             self.passes = passes
+            self.repeatCount = repeatCount
             self.ticksPerBeat = ticksPerBeat
             self.drumMapSpec = drumMapSpec
             self.drumChannel = drumChannel
@@ -95,7 +97,8 @@ public enum ExportRunner {
                 drumChannel: options.drumChannel, defaultGate: options.defaultGate,
                 applySwing: options.applySwing, applyTimeShift: options.applyTimeShift,
                 includeStale: options.includeStale, includeDisabled: options.includeDisabled,
-                markers: options.markers, passes: options.passes)
+                markers: options.markers, passes: options.passes,
+                repeatCount: options.repeatCount)
         } catch {
             return fail("\(error)", code: 2)
         }
@@ -158,7 +161,11 @@ public enum ExportRunner {
         if !options.quiet {
             result.stdout =
                 planned
-                .map { summary($0.result, destination: $0.destination, dryRun: options.dryRun) }
+                .map {
+                    summary(
+                        $0.result, destination: $0.destination, dryRun: options.dryRun,
+                        repeat: options.repeatCount)
+                }
                 .joined(separator: "\n")
         }
         return result
@@ -189,14 +196,19 @@ public enum ExportRunner {
         return "\(stem)_track\(result.trackNumbers[0])_pattern\(result.patternNumbers[0]).mid"
     }
 
-    static func summary(_ result: ExportResult, destination: URL, dryRun: Bool) -> String {
+    static func summary(_ result: ExportResult, destination: URL, dryRun: Bool, repeat count: Int)
+        -> String
+    {
         let patterns = result.patternNumbers.map(String.init).joined(separator: ", ")
         let tracks = result.trackNames.joined(separator: ", ")
         let verb = dryRun ? "would write" : "wrote"
+        // A count of one is what every export has always done, so saying it would be noise on the
+        // line every run prints.
+        let looped = count == 1 ? "" : "\n  repeated \(count) times end to end"
         return """
             \(verb) \(destination.relativePath)
               \(result.noteCount) note(s) from pattern(s) \(patterns)
               tracks: \(tracks)
-            """
+            """ + looped
     }
 }

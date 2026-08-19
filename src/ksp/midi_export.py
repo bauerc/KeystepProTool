@@ -130,6 +130,11 @@ class ExportOptions:
     does not -- written content, not audible content. 0 itself is not
     available: it is a note-off in MIDI, not a silent note."""
 
+    repeat: int = 1
+    """How many times to lay the whole export down end to end, 1-``MAX_REPEAT``.
+    Export-only: the device stores no such count, so this is not ``passes`` and
+    no repeat of it can be written back to a project file."""
+
     def __post_init__(self) -> None:
         if self.ticks_per_beat < 1:
             raise ValueError("ticks_per_beat must be at least 1")
@@ -152,6 +157,8 @@ class ExportOptions:
                 f"flat_velocity must be {MIN_VELOCITY}-{MAX_VELOCITY}; "
                 "0 is a MIDI note-off, not a silent note"
             )
+        if not 1 <= self.repeat <= MAX_REPEAT:
+            raise ValueError(f"repeat must be 1-{MAX_REPEAT}")
 
 
 @dataclass(frozen=True)
@@ -740,7 +747,7 @@ def export_project(project: Project, options: ExportOptions | None = None) -> Ex
     """
     options = options or ExportOptions()
     renderings = render_project(project, options)
-    return _result(arrange(renderings), project, options)
+    return _result(arrange(renderings, repeat=options.repeat), project, options)
 
 
 def export_split(
@@ -761,7 +768,7 @@ def export_split(
 
     results = []
     for _, group in sorted(parts.items()):
-        result = _result(arrange(group), project, options)
+        result = _result(arrange(group, repeat=options.repeat), project, options)
         if not result.is_empty:
             results.append(result)
     return tuple(results)

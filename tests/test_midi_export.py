@@ -601,6 +601,8 @@ def test_the_chromatic_drum_map_base_is_configurable(project_5: Project) -> None
         ({"ticks_per_beat": 0}, "at least 1"),
         ({"ticks_per_beat": 100}, "not divisible"),
         ({"passes": 5}, "passes must be 1-4"),
+        ({"repeat": 0}, "repeat must be 1-10"),
+        ({"repeat": 11}, "repeat must be 1-10"),
         ({"drum_channel": 16}, "0-15"),
         ({"default_gate": 0}, "greater than 0"),
     ],
@@ -780,6 +782,23 @@ class TestRepeat:
         renderings = render_project(project_9, ONE_PASS)
         with pytest.raises(ValueError, match="repeat must be 1-10"):
             arrange(renderings, repeat=repeat)
+
+    def test_a_whole_export_honours_the_option(self, project_9: Project) -> None:
+        """The count rides on the options, which is what a CLI flag can set."""
+        once = export_project(project_9, ONE_PASS)
+        twice = export_project(project_9, replace(ONE_PASS, repeat=2))
+
+        assert twice.note_count == 2 * once.note_count
+        assert twice.pattern_numbers == once.pattern_numbers
+
+    def test_each_split_file_is_repeated_too(self, project_9: Project) -> None:
+        """A split piece is a clip, and a repeated clip is a looped one: the
+        count means the same thing wherever the arrangement is laid out."""
+        once = export_split(project_9, ONE_PASS)
+        twice = export_split(project_9, replace(ONE_PASS, repeat=2))
+
+        assert [r.pattern_numbers for r in twice] == [r.pattern_numbers for r in once]
+        assert [r.note_count for r in twice] == [2 * r.note_count for r in once]
 
     def test_the_material_s_own_diagnostics_are_not_repeated(self, project_9: Project) -> None:
         """What a rendering says about itself -- an off-ladder gate, a stale

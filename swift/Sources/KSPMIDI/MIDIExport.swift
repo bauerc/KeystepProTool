@@ -90,6 +90,11 @@ public struct ExportOptions: Sendable, Hashable {
     /// it is a note-off in MIDI, not a silent note.
     public let flatVelocity: Int?
 
+    /// How many times to lay the whole export down end to end, 1-``MIDIExport/maxRepeat``.
+    /// Export-only: the device stores no such count, so this is not `passes` and no repeat of it
+    /// can be written back to a project file.
+    public let repeatCount: Int
+
     public init(
         ticksPerBeat: Int = MIDIExport.defaultTicksPerBeat,
         drumMap: DrumMap? = nil,
@@ -101,7 +106,8 @@ public struct ExportOptions: Sendable, Hashable {
         includeDisabled: Bool = false,
         markers: Bool = true,
         passes: Int? = nil,
-        flatVelocity: Int? = nil
+        flatVelocity: Int? = nil,
+        repeatCount: Int = 1
     ) throws {
         if ticksPerBeat < 1 {
             throw KSPError.value("ticks_per_beat must be at least 1")
@@ -129,6 +135,9 @@ public struct ExportOptions: Sendable, Hashable {
                 "flat_velocity must be \(MIDIExport.minVelocity)-\(MIDIExport.maxVelocity); "
                     + "0 is a MIDI note-off, not a silent note")
         }
+        if !(1...MIDIExport.maxRepeat ~= repeatCount) {
+            throw KSPError.value("repeat must be 1-\(MIDIExport.maxRepeat)")
+        }
         self.ticksPerBeat = ticksPerBeat
         self.drumMap = try drumMap ?? DrumMap.chromatic()
         self.drumChannel = drumChannel
@@ -140,6 +149,7 @@ public struct ExportOptions: Sendable, Hashable {
         self.markers = markers
         self.passes = passes
         self.flatVelocity = flatVelocity
+        self.repeatCount = repeatCount
     }
 
     /// A copy with a different pass count, standing in for Python's `replace(options, passes=)`.
@@ -148,7 +158,7 @@ public struct ExportOptions: Sendable, Hashable {
             ticksPerBeat: ticksPerBeat, drumMap: drumMap, drumChannel: drumChannel,
             defaultGate: defaultGate, applySwing: applySwing, applyTimeShift: applyTimeShift,
             includeStale: includeStale, includeDisabled: includeDisabled, markers: markers,
-            passes: passes, flatVelocity: flatVelocity)
+            passes: passes, flatVelocity: flatVelocity, repeatCount: repeatCount)
     }
 }
 
@@ -818,7 +828,8 @@ extension MIDIExport {
     {
         let options = try options ?? ExportOptions()
         let renderings = try renderProject(project, options: options)
-        return try result(arrange(renderings), project: project, options: options)
+        return try result(
+            arrange(renderings, repeat: options.repeatCount), project: project, options: options)
     }
 
     /// One file per non-empty (track, pattern), each starting at tick 0.
@@ -848,7 +859,8 @@ extension MIDIExport {
             .sorted { ($0.first, $0.second) < ($1.first, $1.second) }
             .compactMap { key -> ExportResult? in
                 guard let group = parts[key] else { return nil }
-                let result = try result(arrange(group), project: project, options: options)
+                let result = try result(
+                    arrange(group, repeat: options.repeatCount), project: project, options: options)
                 return result.isEmpty ? nil : result
             }
     }

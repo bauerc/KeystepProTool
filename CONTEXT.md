@@ -59,6 +59,13 @@ A snapshot of the Patterns and Chains current in all four tracks, together with 
 status and which track is selected — so one Scene carries four independent Chains, one per track.
 Scenes are stored in the Project.
 
+**Export repeat**:
+How many times a whole export is laid down end to end in the exported file, up to ten. Ours rather
+than the device's: no hardware control sets it and no Project stores one, so it exists only in the
+`.mid` and only `--repeat` names it. Not Step skip, whose "repeats" are the device's four sequences
+*within* one Pattern.
+_Avoid_: loop, pass
+
 ## Timing and expression
 
 **Beat**:
