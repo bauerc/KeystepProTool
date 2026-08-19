@@ -39,6 +39,13 @@ import Testing
             result.stderr == "ksp-swift-cli export: --tracks: 'bad' is not a number or a range\n")
     }
 
+    /// The range is checked where the export options are built, so both CLIs name the same limit.
+    @Test(arguments: ["0", "11"]) func aRepeatCountOutsideItsRangeIsTwo(_ count: String) throws {
+        let result = try Self.run(["export", Self.project, "--repeat", count])
+        #expect(result.code == 2)
+        #expect(result.stderr == "ksp-swift-cli export: repeat must be 1-10\n")
+    }
+
     @Test func anUnknownOptionIsTwo() throws {
         // Not 64, which is what ArgumentParser exits with if the entry point stops mapping.
         let result = try Self.run(["dump", Self.project, "--nope"])

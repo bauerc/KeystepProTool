@@ -189,7 +189,9 @@ if has export; then
         add export "$(basename "$project") --tracks 1,3" "$project" --tracks 1,3
         add export "$(basename "$project") --patterns 1-4" "$project" --patterns 1-4
         add export "$(basename "$project") --no-markers" "$project" --no-markers
+        add export "$(basename "$project") --repeat 2" "$project" --repeat 2
         add split "$(basename "$project") --split" "$project" --split
+        add split "$(basename "$project") --split --repeat 2" "$project" --split --repeat 2
     done
     # A refused selection, once rather than per project: the message does not depend on the file,
     # and it is the only place the two cores' usage wording is compared rather than assumed.
@@ -200,6 +202,10 @@ if has export; then
         --tracks 3-99999999999999999999
     add export "--tracks bad and --drum-map bad" project_files/project_9.KeyStepPro \
         --tracks bad --drum-map garbage
+    # A repeat past its limit. Both cores check it in the format core, but the export options are
+    # built in a different place on each side -- the CLI in Python, the runner in Swift -- so this
+    # is where that difference is held to one message.
+    add export "--repeat past its limit" project_files/project_9.KeyStepPro --repeat 11
 else
     echo "midi_parity: ksp-swift-cli has no 'export' yet -- skipping the ksp2midi direction"
 fi

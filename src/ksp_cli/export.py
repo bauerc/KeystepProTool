@@ -22,6 +22,7 @@ from ksp.diagnostics import Report
 from ksp.midi_export import (
     DEFAULT_TICKS_PER_BEAT,
     DRUM_CHANNEL,
+    MAX_REPEAT,
     ExportOptions,
     ExportResult,
     export_project,
@@ -58,14 +59,17 @@ class Passes(enum.StrEnum):
     FOUR = "4"
 
 
-def _summary(result: ExportResult, destination: Path, dry_run: bool) -> str:
+def _summary(result: ExportResult, destination: Path, dry_run: bool, repeat: int) -> str:
     patterns = ", ".join(str(n) for n in result.pattern_numbers)
     tracks = ", ".join(result.track_names)
     verb = "would write" if dry_run else "wrote"
+    # A count of one is what every export has always done, so saying it would
+    # be noise on the line every run prints.
+    looped = f"\n  repeated {repeat} times end to end" if repeat != 1 else ""
     return (
         f"{verb} {destination}\n"
         f"  {result.note_count} note(s) from pattern(s) {patterns}\n"
-        f"  tracks: {tracks}"
+        f"  tracks: {tracks}{looped}"
     )
 
 
@@ -155,6 +159,17 @@ def export(
             ),
         ),
     ] = Passes.AUTO,
+    repeat: Annotated[
+        int,
+        typer.Option(
+            metavar="N",
+            rich_help_panel=_SELECTION_PANEL,
+            help=(
+                f"lay the whole export down this many times end to end (1-{MAX_REPEAT}); "
+                "export-only, and not the step-skip cycle --passes renders"
+            ),
+        ),
+    ] = 1,
     ticks_per_beat: Annotated[
         int, typer.Option(rich_help_panel=_TIMING_PANEL, help="MIDI resolution")
     ] = DEFAULT_TICKS_PER_BEAT,
@@ -276,6 +291,7 @@ def export(
         options = ExportOptions(
             ticks_per_beat=ticks_per_beat,
             passes=None if passes is Passes.AUTO else int(passes.value),
+            repeat=repeat,
             drum_map=drum_map,
             drum_channel=drum_channel - 1,
             default_gate=default_gate,
@@ -317,7 +333,12 @@ def export(
 
     print_report(_report(planned), prog=PROG, verbose=verbose)
     if not quiet:
-        print("\n".join(_summary(result, destination, dry_run) for result, destination in planned))
+        print(
+            "\n".join(
+                _summary(result, destination, dry_run, options.repeat)
+                for result, destination in planned
+            )
+        )
 
 
 def register(app: typer.Typer) -> None:

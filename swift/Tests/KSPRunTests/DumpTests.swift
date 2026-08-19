@@ -12,8 +12,6 @@ import Testing
 @Suite struct DumpTests {
     /// Keeps the suite independent of whoever's machine it runs on: the config file the CLI would
     /// otherwise read is a real path under `~/.config`.
-    static let noPersonalConfig = URL(filePath: "/nonexistent/keysteppro/drum_map.json")
-
     static func run(
         _ name: String, showAll: Bool = false, track: Int? = nil, pattern: Int? = nil,
         asJSON: Bool = false, drumMap: String? = nil, verbose: Bool = false,
@@ -165,7 +163,7 @@ import Testing
         let result = DumpRunner.run(
             DumpRunner.Options(
                 path: URL(filePath: "/nonexistent/nope.KeyStepPro"),
-                configPath: Self.noPersonalConfig))
+                configPath: noPersonalConfig))
         #expect(result.code == 1)
         #expect(result.stderr.hasPrefix("ksp-swift-cli dump:"))
     }
@@ -175,7 +173,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: path) }
 
         let result = DumpRunner.run(
-            DumpRunner.Options(path: path, configPath: Self.noPersonalConfig))
+            DumpRunner.Options(path: path, configPath: noPersonalConfig))
         #expect(result.code == 1)
         #expect(result.stderr.contains("missing 'device'"))
     }
@@ -217,7 +215,7 @@ import Testing
     }
 
     @Test func itFallsBackToTheDocumentedDefault() throws {
-        #expect(try resolveDrumMap(nil, configPath: Self.noPersonalConfig)?.notes == Array(36..<60))
+        #expect(try resolveDrumMap(nil, configPath: noPersonalConfig)?.notes == Array(36..<60))
     }
 
     // MARK: - Helpers
