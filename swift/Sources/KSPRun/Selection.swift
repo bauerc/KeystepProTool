@@ -60,7 +60,7 @@ private func number(
     guard let numeral = numeral(trimmed) else {
         throw KSPError.value("\(option): '\(item)' is not a number or a range")
     }
-    return Number(value: numeral.hasPrefix("-") ? .min : .max, spelled: numeral)
+    return Number(value: trimmed.first == "-" ? .min : .max, spelled: numeral)
 }
 
 /// `text` as Python would print the integer it spells, or `nil` if it spells none. Only reached

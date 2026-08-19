@@ -14,7 +14,7 @@ import typer
 from ksp.constants import SKIP_SEQUENCES, root_note_name
 from ksp.diagnostics import Collector, Report
 from ksp.drum_map import DrumMap
-from ksp.model import Note, NoteKind, Pattern, Project, Track
+from ksp.model import Disablement, Note, NoteKind, Pattern, Project, Track, disablement
 
 # The --drum-map grammar is shared with ksp2midi so both commands accept the
 # same syntax and the same config file. CONFIG_PATH stays a name in this
@@ -61,16 +61,14 @@ def _format_skip(skip: Sequence[int]) -> str:
 
 
 def _disabled_marker(note: Note, last_step: int | None) -> str:
-    """Why this note will not play, or "" when it will.
-
-    Two mechanisms, both toggled the same way on the device, so both read as
-    "disabled" and name their reason rather than inventing separate words.
-    """
-    if not note.active:
-        return "  [DISABLED: step turned off]"
-    if last_step is not None and note.step > last_step:
-        return "  [DISABLED: past last step]"
-    return ""
+    """The marker printed beside a disabled note, or "" when it will play."""
+    match disablement(note, last_step):
+        case Disablement.STEP_TURNED_OFF:
+            return "  [DISABLED: step turned off]"
+        case Disablement.PAST_LAST_STEP:
+            return "  [DISABLED: past last step]"
+        case None:
+            return ""
 
 
 def _scale_line(pattern: Pattern) -> str:

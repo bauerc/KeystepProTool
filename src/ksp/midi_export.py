@@ -26,7 +26,16 @@ import mido
 from ksp import constants
 from ksp.diagnostics import EMPTY_REPORT, Code, Collector, Diagnostic, Report, Site
 from ksp.drum_map import DEFAULT_DRUM_CHANNEL, DrumMap
-from ksp.model import Note, NoteKind, Pattern, PlaybackDirection, Project, Track
+from ksp.model import (
+    Disablement,
+    Note,
+    NoteKind,
+    Pattern,
+    PlaybackDirection,
+    Project,
+    Track,
+    disablement,
+)
 
 #: 480 divides evenly by 3 and 4, so every step size the device offers stays
 #: exact, triplets included: the finest is a 1/32 triplet at 20 ticks.
@@ -281,8 +290,8 @@ def render_pattern(
     # device plays, not everything the file holds.
     last = declared_step_count(pattern, kind)
     playable = pattern.notes_of(kind)
-    step_off = [n for n in playable if not n.active]
-    past_last = [n for n in playable if n.active and n.step > last]
+    step_off = [n for n in playable if disablement(n, last) is Disablement.STEP_TURNED_OFF]
+    past_last = [n for n in playable if disablement(n, last) is Disablement.PAST_LAST_STEP]
     said_step_off = False
 
     if options.include_disabled:
@@ -312,7 +321,7 @@ def render_pattern(
                 site=site,
                 subjects=len(past_last),
             )
-        playable = tuple(n for n in playable if n.active and n.step <= last)
+        playable = tuple(n for n in playable if disablement(n, last) is None)
 
     steps = step_count(pattern, kind, playable)
     pass_ticks = steps * step_ticks
