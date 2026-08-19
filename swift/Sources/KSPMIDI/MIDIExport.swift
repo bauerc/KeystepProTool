@@ -57,6 +57,11 @@ public struct ExportOptions: Sendable, Hashable {
     /// plays neither, so exporting them invents audio the hardware never makes.
     public let includeDisabled: Bool
 
+    /// Mark the start of every pattern with a marker meta event, so a DAW's marker ruler shows
+    /// where one pattern ends and the next begins. A merged export is otherwise an
+    /// undifferentiated run of notes whose seams can only be found by eye.
+    public let markers: Bool
+
     /// How many of the four 16/32/48/64 repeats to render. `nil` is auto: four when a pattern
     /// holds a note that does not play on all four, one otherwise.
     public let passes: Int?
@@ -70,6 +75,7 @@ public struct ExportOptions: Sendable, Hashable {
         applyTimeShift: Bool = true,
         includeStale: Bool = false,
         includeDisabled: Bool = false,
+        markers: Bool = true,
         passes: Int? = nil
     ) throws {
         if ticksPerBeat < 1 {
@@ -99,6 +105,7 @@ public struct ExportOptions: Sendable, Hashable {
         self.applyTimeShift = applyTimeShift
         self.includeStale = includeStale
         self.includeDisabled = includeDisabled
+        self.markers = markers
         self.passes = passes
     }
 
@@ -107,7 +114,8 @@ public struct ExportOptions: Sendable, Hashable {
         try ExportOptions(
             ticksPerBeat: ticksPerBeat, drumMap: drumMap, drumChannel: drumChannel,
             defaultGate: defaultGate, applySwing: applySwing, applyTimeShift: applyTimeShift,
-            includeStale: includeStale, includeDisabled: includeDisabled, passes: passes)
+            includeStale: includeStale, includeDisabled: includeDisabled, markers: markers,
+            passes: passes)
     }
 }
 
@@ -183,24 +191,41 @@ public struct ArrangedTrack: Sendable, Hashable {
     }
 }
 
+/// Where one pattern starts on the timeline, and which pattern it is.
+public struct PatternBoundary: Sendable, Hashable {
+    public let patternNumber: Int
+    public let tick: Int
+
+    public init(patternNumber: Int, tick: Int) {
+        self.patternNumber = patternNumber
+        self.tick = tick
+    }
+
+    public var markerText: String { "pattern \(patternNumber)" }
+}
+
 /// Renderings placed on a timeline, ready to become a file.
 public struct Arrangement: Sendable, Hashable {
     public let tracks: [ArrangedTrack]
     public let lengthTicks: Int
-    public let patternNumbers: [Int]
+
+    /// Ascending by tick: the build layer walks them into MIDI deltas.
+    public let boundaries: [PatternBoundary]
     public let trackNumbers: [Int]
     public let diagnostics: Report
 
     public init(
-        tracks: [ArrangedTrack], lengthTicks: Int, patternNumbers: [Int], trackNumbers: [Int],
-        diagnostics: Report = Report()
+        tracks: [ArrangedTrack], lengthTicks: Int, boundaries: [PatternBoundary],
+        trackNumbers: [Int], diagnostics: Report = Report()
     ) {
         self.tracks = tracks
         self.lengthTicks = lengthTicks
-        self.patternNumbers = patternNumbers
+        self.boundaries = boundaries
         self.trackNumbers = trackNumbers
         self.diagnostics = diagnostics
     }
+
+    public var patternNumbers: [Int] { boundaries.map(\.patternNumber) }
 
     public var warnings: [String] { diagnostics.messages }
 
@@ -554,7 +579,9 @@ extension MIDIExport {
         return Arrangement(
             tracks: tracks,
             lengthTicks: cursor,
-            patternNumbers: offsets.keys.sorted(),
+            boundaries: offsets.sorted { $0.key < $1.key }.map {
+                PatternBoundary(patternNumber: $0.key, tick: $0.value)
+            },
             trackNumbers: Set(renderings.map(\.trackNumber)).sorted(),
             diagnostics: collector.report())
     }
@@ -626,10 +653,13 @@ struct Pair: Hashable {
 extension MIDIExport {
     /// Turn an arrangement into a type-1 MIDI file. The only `SwiftMIDIFile` layer.
     public static func buildMIDIFile(
-        _ arrangement: Arrangement, name: String, tempoBPM: Double, ticksPerBeat: Int
+        _ arrangement: Arrangement, name: String, tempoBPM: Double, ticksPerBeat: Int,
+        markers: Bool = true
     ) -> MusicalMIDI1File {
         var tracks = [
-            conductorTrack(name: name, tempoBPM: tempoBPM, totalTicks: arrangement.lengthTicks)
+            conductorTrack(
+                name: name, tempoBPM: tempoBPM, totalTicks: arrangement.lengthTicks,
+                boundaries: markers ? arrangement.boundaries : [])
         ]
         tracks.append(contentsOf: arrangement.tracks.map(midiTrack))
         return MusicalMIDI1File(
@@ -649,8 +679,10 @@ extension MIDIExport {
         UInt32(Arithmetic.pyRound(60 * 1_000_000 / bpm))
     }
 
-    /// Track 0: name, tempo and time signature, no notes.
-    static func conductorTrack(name: String, tempoBPM: Double, totalTicks: Int)
+    /// Track 0: name, tempo, time signature and the pattern markers, no notes.
+    static func conductorTrack(
+        name: String, tempoBPM: Double, totalTicks: Int, boundaries: [PatternBoundary]
+    )
         -> MusicalMIDI1File.Track
     {
         var track = MusicalMIDI1File.Track()
@@ -663,9 +695,20 @@ extension MIDIExport {
                         MIDIFileEvent.MusicalTempo(
                             microsecondsPerQuarter: bpmToMicroseconds(tempoBPM))))))
         track.events.append(.timeSignature(numerator: 4, denominator: 2))
+
+        // A DAW shows these on its marker ruler, which is what makes cutting a merged export exact
+        // rather than by eye.
+        var previousTick = 0
+        for boundary in boundaries {
+            track.events.append(
+                .text(
+                    delta: .ticks(UInt32(boundary.tick - previousTick)), type: .marker,
+                    string: boundary.markerText))
+            previousTick = boundary.tick
+        }
         // End-of-track sits at the end of the last pattern rather than the last note, so a DAW
         // sees the arrangement's real length.
-        track.deltaTimeBeforeEndOfTrack = .ticks(UInt32(totalTicks))
+        track.deltaTimeBeforeEndOfTrack = .ticks(UInt32(totalTicks - previousTick))
         return track
     }
 
@@ -845,7 +888,8 @@ extension MIDIExport {
                 arrangement,
                 name: project.sourceName.isEmpty ? project.device : project.sourceName,
                 tempoBPM: project.tempoBPM,
-                ticksPerBeat: options.ticksPerBeat),
+                ticksPerBeat: options.ticksPerBeat,
+                markers: options.markers),
             noteCount: arrangement.noteCount,
             patternNumbers: arrangement.patternNumbers,
             trackNames: arrangement.tracks.map(\.name),

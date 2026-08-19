@@ -23,6 +23,7 @@ public enum ExportRunner {
         public var includeDisabled: Bool
         public var applySwing: Bool
         public var applyTimeShift: Bool
+        public var markers: Bool
         public var dryRun: Bool
         public var force: Bool
         public var quiet: Bool
@@ -38,7 +39,8 @@ public enum ExportRunner {
             drumChannel: Int = MIDIExport.drumChannel,
             defaultGate: Double = Constants.defaultGateLength, includeStale: Bool = false,
             includeDisabled: Bool = false, applySwing: Bool = true, applyTimeShift: Bool = true,
-            dryRun: Bool = false, force: Bool = false, quiet: Bool = false, verbose: Bool = false,
+            markers: Bool = true, dryRun: Bool = false, force: Bool = false, quiet: Bool = false,
+            verbose: Bool = false,
             configPath: URL
         ) {
             self.path = path
@@ -55,6 +57,7 @@ public enum ExportRunner {
             self.includeDisabled = includeDisabled
             self.applySwing = applySwing
             self.applyTimeShift = applyTimeShift
+            self.markers = markers
             self.dryRun = dryRun
             self.force = force
             self.quiet = quiet
@@ -92,7 +95,7 @@ public enum ExportRunner {
                 drumChannel: options.drumChannel, defaultGate: options.defaultGate,
                 applySwing: options.applySwing, applyTimeShift: options.applyTimeShift,
                 includeStale: options.includeStale, includeDisabled: options.includeDisabled,
-                passes: options.passes)
+                markers: options.markers, passes: options.passes)
         } catch {
             return fail("\(error)", code: 2)
         }

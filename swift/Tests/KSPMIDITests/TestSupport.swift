@@ -88,6 +88,21 @@ func played(_ midi: MusicalMIDI1File, _ trackName: String) throws -> [PlayedNote
     return notes.stableSorted { ($0.start, $0.note) < ($1.start, $1.note) }
 }
 
+/// Every marker in the file as (absolute tick, text), conductor track first.
+func markers(_ midi: MusicalMIDI1File) -> [(tick: Int, text: String)] {
+    var found: [(tick: Int, text: String)] = []
+    for track in midi.tracks {
+        var tick = 0
+        for event in track.events {
+            tick += Int(event.delta.ticks(using: midi.timebase))
+            if case .text(let text) = event.event, text.textType == .marker {
+                found.append((tick, text.text))
+            }
+        }
+    }
+    return found
+}
+
 /// The name a track carries in its own track-name meta event.
 extension MusicalMIDI1File.Track {
     var name: String? {

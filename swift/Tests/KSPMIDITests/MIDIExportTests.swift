@@ -216,6 +216,45 @@ private func exported5Flat() throws -> ExportResult {
         #expect(arrangement.lengthTicks == 32 * ticksPerStep)
     }
 
+    /// The seam between two patterns is invisible in a merged export.
+    ///
+    /// project_9 holds patterns 2 and 3, so the second marker also proves the text carries the
+    /// pattern's own number rather than its position in the file.
+    @Test func aMarkerNamesTheStartOfEveryPattern() throws {
+        let found = try markers(MIDIExport.exportProject(project9(), options: onePass()).midi)
+        #expect(found.map(\.tick) == [0, 16 * ticksPerStep])
+        #expect(found.map(\.text) == ["pattern 2", "pattern 3"])
+    }
+
+    /// The markers sit in front of end-of-track, whose delta shrinks to suit.
+    @Test func theConductorTrackStillEndsWhereTheMusicDoes() throws {
+        let midi = try MIDIExport.exportProject(project9(), options: onePass()).midi
+        let conductor = midi.tracks[0]
+        let events = conductor.events.reduce(0) { $0 + Int($1.delta.ticks(using: midi.timebase)) }
+        let end = Int(conductor.deltaTimeBeforeEndOfTrack.ticks(using: midi.timebase))
+        #expect(events + end == 32 * ticksPerStep)
+    }
+
+    @Test func theMarkersCanBeLeftOut() throws {
+        let midi = try MIDIExport.exportProject(
+            project9(), options: ExportOptions(markers: false, passes: 1)
+        ).midi
+        #expect(markers(midi).isEmpty)
+        let conductor = midi.tracks[0]
+        let end = Int(conductor.deltaTimeBeforeEndOfTrack.ticks(using: midi.timebase))
+        #expect(end == 32 * ticksPerStep)
+    }
+
+    /// Each file starts at its own tick 0, so its one marker names it there.
+    @Test func aSplitFileIsMarkedWithThePatternItHolds() throws {
+        let results = try MIDIExport.exportSplit(project9(), options: onePass())
+        #expect(
+            results.map { markers($0.midi).map(\.text) } == [
+                ["pattern 2"], ["pattern 3"], ["pattern 2"],
+            ])
+        #expect(results.allSatisfy { markers($0.midi).allSatisfy { $0.tick == 0 } })
+    }
+
     /// project_9 pattern 3's only hit is masked to 32, i.e. the second repeat. The device runs the
     /// four sequences as repeats of the pattern (spec 5, protocol T5.8), so that note is silent on
     /// the first pass and sounds on the second -- the whole difference between the repeats reading

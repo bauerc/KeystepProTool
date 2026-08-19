@@ -18,6 +18,7 @@ from ksp.midi_export import (
     DRUM_CHANNEL,
     ExportOptions,
     ExportResult,
+    PatternBoundary,
     arrange,
     build_midi_file,
     export_project,
@@ -95,6 +96,18 @@ def played(midi: mido.MidiFile, track_name: str) -> list[PlayedNote]:
             )
     assert not open_notes, f"note(s) left hanging: {sorted(open_notes)}"
     return sorted(notes, key=lambda n: (n.start, n.note))
+
+
+def markers(midi: mido.MidiFile) -> list[tuple[int, str]]:
+    """Every marker in the file as (absolute tick, text), conductor track first."""
+    found = []
+    for track in midi.tracks:
+        tick = 0
+        for message in track:
+            tick += message.time
+            if message.type == "marker":
+                found.append((tick, message.text))
+    return found
 
 
 @pytest.fixture
@@ -309,6 +322,38 @@ def test_patterns_are_laid_end_to_end_and_stay_aligned_across_tracks(
 def test_the_file_lasts_as_long_as_its_patterns(project_9: Project) -> None:
     """Two 16-step patterns at 120 BPM in 1/16 steps: two bars, four seconds."""
     assert export_project(project_9, ExportOptions(passes=1)).midi.length == pytest.approx(4.0)
+
+
+def test_a_marker_names_the_start_of_every_pattern(project_9: Project) -> None:
+    """The seam between two patterns is invisible in a merged export.
+
+    project_9 holds patterns 2 and 3, so the second marker also proves the text
+    carries the pattern's own number rather than its position in the file.
+    """
+    result = export_project(project_9, ExportOptions(passes=1))
+    assert markers(result.midi) == [(0, "pattern 2"), (16 * TICKS_PER_STEP, "pattern 3")]
+
+
+def test_the_conductor_track_still_ends_where_the_music_does(project_9: Project) -> None:
+    """The markers sit in front of end-of-track, whose delta shrinks to suit."""
+    conductor = export_project(project_9, ExportOptions(passes=1)).midi.tracks[0]
+    assert sum(m.time for m in conductor) == 32 * TICKS_PER_STEP
+
+
+def test_the_markers_can_be_left_out(project_9: Project) -> None:
+    result = export_project(project_9, ExportOptions(passes=1, markers=False))
+    assert markers(result.midi) == []
+    assert sum(m.time for m in result.midi.tracks[0]) == 32 * TICKS_PER_STEP
+
+
+def test_a_split_file_is_marked_with_the_pattern_it_holds(project_9: Project) -> None:
+    """Each file starts at its own tick 0, so its one marker names it there."""
+    results = export_split(project_9, ExportOptions(passes=1))
+    assert [markers(r.midi) for r in results] == [
+        [(0, "pattern 2")],
+        [(0, "pattern 3")],
+        [(0, "pattern 2")],
+    ]
 
 
 def test_a_masked_note_lands_on_the_repeat_it_plays_in(project_9: Project) -> None:
@@ -618,6 +663,7 @@ class TestRenderLayer:
         assert arrangement.note_count == 12
         assert arrangement.length_ticks == 16 * TICKS_PER_STEP
         assert arrangement.pattern_numbers == (1,)
+        assert arrangement.boundaries == (PatternBoundary(pattern_number=1, tick=0),)
         assert arrangement.track_numbers == (1, 3)
 
         midi = build_midi_file(arrangement, name="x", tempo_bpm=120.0, ticks_per_beat=480)

@@ -234,6 +234,32 @@ def test_passes_can_be_pinned_to_one(project_files_dir: Path, tmp_path: Path) ->
     assert mido.MidiFile(destination).length == pytest.approx(2.0)  # 16 sixteenths
 
 
+def test_each_pattern_start_is_marked(project_files_dir: Path, tmp_path: Path) -> None:
+    """project_9 holds patterns 2 and 3, one 16-step pattern apart."""
+    destination = tmp_path / "out.mid"
+    argv = [
+        str(project_files_dir / "project_9.KeyStepPro"),
+        "-o",
+        str(destination),
+        "--passes",
+        "1",
+    ]
+    assert main(argv) == 0
+    assert [m.text for m in mido.MidiFile(destination).tracks[0] if m.type == "marker"] == [
+        "pattern 2",
+        "pattern 3",
+    ]
+
+
+def test_no_markers_leaves_them_out(project_files_dir: Path, tmp_path: Path) -> None:
+    destination = tmp_path / "out.mid"
+    argv = [str(project_files_dir / "project_9.KeyStepPro"), "-o", str(destination), "--no-markers"]
+    assert main(argv) == 0
+    written = mido.MidiFile(destination)
+    assert not [m for t in written.tracks for m in t if m.type == "marker"]
+    assert written.length == pytest.approx(10.0)  # unchanged: 80 sixteenths at 120 BPM
+
+
 class TestDrumMap:
     """``ksp2midi`` shares ``ksp-dump``'s drum-map grammar and config file."""
 
