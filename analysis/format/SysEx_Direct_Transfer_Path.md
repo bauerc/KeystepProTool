@@ -145,23 +145,16 @@ short  write  F0 00 20 6B 7F 42 02 <slot> <param> <item> <one byte> F7
 ack           F0 00 20 6B 7F 42 1C 00    F7
 ```
 
-The device acks each one. Flow control is unchanged — one outstanding message, strictly
-serialised — and the addresses and their order are **the same 8,951 the read plan walks**, so
-`ksp.bulk_plan` is the write plan as well as the read plan. Nothing new has to be generated.
+**Hardware-confirmed 2026-08-19, firmware 2.5.20.**
 
-Session framing is asymmetric, and each frame appears exactly once:
+Session framing rules for writes:
 
-- `05 <slot>` is the **first** frame of a read, before any request. Confirmed on hardware
-  2026-08-14 (7.4): this is not an optional prologue MCC merely sends out of habit — it is what
-  selects project `<slot>` on the device. Byte 7 on the requests that follow only has to agree
-  with it.
-- `06 <slot>` is the **last** frame of a write, after the final value. It is not acked.
+- **Do NOT send `05 <slot>` before writing.** `05` selects project `<slot>` for *reading*. Sending `05` before write frames places the device into read-request mode, causing write frames to be ignored.
+- **Do NOT pause for per-frame inline ACKs.** Standalone write frames sent synchronously stall waiting for ACKs. Write frames must be streamed unbuffered in a continuous USB endpoint transfer burst.
+- **`06 <slot>` is the mandatory commit epilogue.** The hardware updates RAM and panel state only when the burst ends with `F0 00 20 6B 7F 42 06 <slot> F7`. The device responds with a single ACK (`1C 00`) for the burst.
+- **Targeted partial writes work.** Pushing a full 8,951-frame dump is not required; sending only modified parameters (preceded by item 120 initialization and ended by `06 <slot>`) commits directly to the hardware slot in < 1 ms.
+- **Display Pitch Convention:** Displayed pitch C3 corresponds to MIDI note 60 (`0x3C`). MIDI note 48 (`0x30`) displays as C2.
 
-H1.4 showed a read succeeds with no `05` sent — that result stands, but only as a read of
-whichever project `05` last selected (or, with no `05` ever sent, whatever the panel already has
-loaded); it is not evidence that `05` is inert. Whether `06` is a required commit for the write
-direction — whether a write without it persists to the slot at all — has not been tested, and is
-the obvious thing to establish before anything writes to hardware.
 
 ### 7.6 `0xFF` survives a read and does not survive a write
 

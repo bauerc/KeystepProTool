@@ -67,9 +67,40 @@ class ReadRequest:
 
 
 def prologue(slot: int = DEFAULT_SLOT) -> bytes:
-    """The ``05 <slot>`` frame MCC opens a read with."""
+    """The ``05 <slot>`` frame MCC opens a transfer with."""
     _check_slot(slot)
     return HEADER + bytes((CMD_PROLOGUE, slot, END))
+
+
+def epilogue(slot: int = DEFAULT_SLOT) -> bytes:
+    """The ``06 <slot>`` frame MCC closes a write transfer with."""
+    _check_slot(slot)
+    return HEADER + bytes((0x06, slot, END))
+
+
+def short_write(slot: int, param: int, item: int, value: int) -> bytes:
+    """A short-form single scalar SysEx write message."""
+    _check_slot(slot)
+    return HEADER + bytes((CMD_SCALAR_REPLY, slot, param, item, value, END))
+
+
+def long_write(
+    slot: int,
+    param: int,
+    indices: tuple[int, ...],
+    item: int,
+    count_bytes: bytes,
+) -> bytes:
+    """A long-form multi-indexed SysEx write message."""
+    _check_slot(slot)
+    if not 1 <= len(indices) <= 3:
+        raise ValueError(f"{len(indices)} indices, expected 1 to 3")
+    return (
+        HEADER
+        + bytes((CMD_READ_REPLY, slot, param, len(indices), item, *indices, len(count_bytes)))
+        + count_bytes
+        + bytes((END,))
+    )
 
 
 def build_read_request(request: ReadRequest, slot: int = DEFAULT_SLOT) -> bytes:
