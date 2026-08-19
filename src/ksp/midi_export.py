@@ -54,6 +54,11 @@ DRUM_CHANNEL: Final = DEFAULT_DRUM_CHANNEL - 1
 #: note-off in MIDI, which is a different thing. Exported at 1 instead.
 MIN_VELOCITY: Final = 1
 
+#: How many times an arrangement may be laid down end to end. Export-only: the
+#: device stores no such count, so this is not ``passes`` and no repeat of it
+#: can be written back to a project file.
+MAX_REPEAT: Final = 10
+
 
 @dataclass(frozen=True)
 class ExportOptions:
@@ -187,7 +192,9 @@ class Arrangement:
 
     @property
     def pattern_numbers(self) -> tuple[int, ...]:
-        return tuple(b.pattern_number for b in self.boundaries)
+        # Which patterns are in this file, not how often each is played: a
+        # repeat count puts the same pattern on the timeline more than once.
+        return tuple(dict.fromkeys(b.pattern_number for b in self.boundaries))
 
     @property
     def warnings(self) -> tuple[str, ...]:
@@ -501,12 +508,20 @@ def _placed(note: RenderedNote, offset: int, collector: Collector) -> RenderedNo
     return replace(note, tick=0)
 
 
-def arrange(renderings: Sequence[Rendering]) -> Arrangement:
+def arrange(renderings: Sequence[Rendering], *, repeat: int = 1) -> Arrangement:
     """Lay renderings end to end in pattern order, aligned across tracks.
 
     A pattern occupies the longest length any track gives it, so tracks of
     unequal length stay aligned at every pattern boundary instead of drifting.
+
+    *repeat* lays the whole arrangement down again that many times, every track
+    shifted by the same cycle so pattern N still starts together on all of them.
+    It is not ``passes``: that is the device's own step-skip cycle inside a
+    pattern, while this exists only in the exported file.
     """
+    if not 1 <= repeat <= MAX_REPEAT:
+        raise ValueError(f"repeat must be 1-{MAX_REPEAT}")
+
     collector = Collector()
     for rendering in renderings:
         collector.extend(rendering.diagnostics)
@@ -522,14 +537,18 @@ def arrange(renderings: Sequence[Rendering]) -> Arrangement:
         offsets[number] = cursor
         cursor += lengths[number]
 
+    # A repeat is placed, not copied afterwards: every round goes through the
+    # same offset arithmetic, so a note held past the end of one round is seen
+    # against the round that follows it rather than colliding with its own copy.
     groups: dict[str, list[RenderedNote]] = {}
     for rendering in sorted(
         renderings, key=lambda r: (r.track_number, r.kind is NoteKind.DRUM, r.pattern_number)
     ):
-        offset = offsets[rendering.pattern_number]
-        groups.setdefault(rendering.midi_track_name, []).extend(
-            _placed(n, offset, collector) for n in rendering.notes
-        )
+        for repetition in range(repeat):
+            offset = repetition * cursor + offsets[rendering.pattern_number]
+            groups.setdefault(rendering.midi_track_name, []).extend(
+                _placed(n, offset, collector) for n in rendering.notes
+            )
 
     _warn_on_unequal_tracks(renderings, collector)
     tracks = tuple(
@@ -539,8 +558,12 @@ def arrange(renderings: Sequence[Rendering]) -> Arrangement:
     )
     return Arrangement(
         tracks=tracks,
-        length_ticks=cursor,
-        boundaries=tuple(PatternBoundary(number, offsets[number]) for number in sorted(offsets)),
+        length_ticks=cursor * repeat,
+        boundaries=tuple(
+            PatternBoundary(number, repetition * cursor + offsets[number])
+            for repetition in range(repeat)
+            for number in sorted(offsets)
+        ),
         track_numbers=tuple(sorted({r.track_number for r in renderings})),
         diagnostics=collector.report(),
     )

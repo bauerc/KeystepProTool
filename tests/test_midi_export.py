@@ -19,6 +19,8 @@ from ksp.midi_export import (
     ExportOptions,
     ExportResult,
     PatternBoundary,
+    RenderedNote,
+    Rendering,
     arrange,
     build_midi_file,
     export_project,
@@ -724,6 +726,102 @@ class TestSplit:
 
     def test_an_empty_project_produces_no_files(self, project_files_dir: Path) -> None:
         assert export_split(load(project_files_dir / "Default.KeyStepPro")) == ()
+
+
+class TestRepeat:
+    """A repeat count exists only in the exported file.
+
+    It is not ``passes``: that is the device's own step-skip cycle, capped at
+    four and rendered inside a pattern. This lays the whole arrangement down
+    again, which the hardware has no way to store.
+    """
+
+    CYCLE = 32 * TICKS_PER_STEP
+    """project_9's two 16-step patterns, which is one pass of the material."""
+
+    def test_one_repeat_is_what_the_layer_already_did(self, project_9: Project) -> None:
+        renderings = render_project(project_9, ONE_PASS)
+        assert arrange(renderings, repeat=1) == arrange(renderings)
+
+    def test_repeats_lie_end_to_end_and_stay_aligned_across_tracks(
+        self, project_9: Project
+    ) -> None:
+        """Every track shifts by the same cycle, so pattern N still starts
+        together on all of them in the second and third rounds."""
+        renderings = render_project(project_9, ONE_PASS)
+        once = arrange(renderings)
+        thrice = arrange(renderings, repeat=3)
+
+        assert thrice.length_ticks == 3 * self.CYCLE
+        assert thrice.note_count == 3 * once.note_count
+        assert [t.name for t in thrice.tracks] == [t.name for t in once.tracks]
+        for original, repeated in zip(once.tracks, thrice.tracks, strict=True):
+            assert [n.tick for n in repeated.notes] == [
+                n.tick + r * self.CYCLE for r in range(3) for n in original.notes
+            ]
+
+    def test_every_round_is_marked_but_the_pattern_list_is_not(self, project_9: Project) -> None:
+        """The marker ruler names every pattern start in every round; the
+        pattern list still answers which patterns are in the file."""
+        arrangement = arrange(render_project(project_9, ONE_PASS), repeat=3)
+
+        assert arrangement.boundaries == tuple(
+            PatternBoundary(number, r * self.CYCLE + offset)
+            for r in range(3)
+            for number, offset in ((2, 0), (3, 16 * TICKS_PER_STEP))
+        )
+        assert arrangement.pattern_numbers == (2, 3)
+
+    @pytest.mark.parametrize("repeat", [-1, 0, 11])
+    def test_a_count_outside_the_range_is_rejected(self, project_9: Project, repeat: int) -> None:
+        renderings = render_project(project_9, ONE_PASS)
+        with pytest.raises(ValueError, match="repeat must be 1-10"):
+            arrange(renderings, repeat=repeat)
+
+    def test_the_material_s_own_diagnostics_are_not_repeated(self, project_9: Project) -> None:
+        """What a rendering says about itself -- an off-ladder gate, a stale
+        note set, tracks of unequal length -- describes the material, so a
+        second round of it is not a second finding."""
+        renderings = render_project(project_9, ONE_PASS)
+        assert arrange(renderings, repeat=3).warnings == arrange(renderings).warnings
+
+    def test_a_gate_held_past_the_end_of_a_round_meets_the_next_one(self) -> None:
+        """Placing each round rather than copying the first is what makes this
+        work: the seam between rounds is resolved like any other collision,
+        instead of leaving two note-ons for one pitch with no note-off between.
+        """
+        cycle = 16 * TICKS_PER_STEP
+        held = Rendering(
+            track_number=1,
+            kind=NoteKind.SEQ,
+            pattern_number=1,
+            notes=(
+                RenderedNote(tick=0, duration_ticks=cycle + 600, pitch=60, velocity=100, channel=0),
+            ),
+            length_ticks=cycle,
+        )
+        arrangement = arrange([held], repeat=3)
+        notes = arrangement.tracks[0].notes
+
+        assert [n.tick for n in notes] == [0, cycle, 2 * cycle]
+        assert [n.duration_ticks for n in notes] == [cycle, cycle, cycle + 600]
+        assert any("own note-off" in w for w in arrangement.warnings)
+
+    def test_a_clipped_time_shift_is_clipped_only_where_there_is_no_room(self) -> None:
+        """Only the first round starts at tick 0, so only there does a negative
+        shift have nowhere to go; later rounds have the room to honour it."""
+        cycle = 16 * TICKS_PER_STEP
+        early = Rendering(
+            track_number=1,
+            kind=NoteKind.SEQ,
+            pattern_number=1,
+            notes=(RenderedNote(tick=-5, duration_ticks=120, pitch=60, velocity=100, channel=0),),
+            length_ticks=cycle,
+        )
+        arrangement = arrange([early], repeat=3)
+
+        assert [n.tick for n in arrangement.tracks[0].notes] == [0, cycle - 5, 2 * cycle - 5]
+        assert sum("held at the start" in w for w in arrangement.warnings) == 1
 
 
 def test_tracks_of_different_total_lengths_are_reported(project_9: Project) -> None:
