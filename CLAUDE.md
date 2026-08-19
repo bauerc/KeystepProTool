@@ -103,7 +103,8 @@ never *audible*: they answer the two reasons a note is switched off, not the spe
 might not play.
 
 **`KSPApp` owns no format logic** — only where a file goes, what it is called and which options the
-window offers. `Destination.swift`, `Folders.swift`, `Conversion.swift` and `Settings.swift` carry
+window offers. `Destination.swift`, `Folders.swift`, `Conversion.swift`, `Settings.swift` and
+`PatternGrid.swift` carry
 no SwiftUI so their rules are unit-tested; SwiftUI stays in `DropView.swift` and `KSPApp.swift`, and every mutable
 value lives on the one `@MainActor` `AppModel`, in `AppModel.swift` (Observation and AppKit, no
 SwiftUI). **A new option is a property on `Settings` and a line in its two mappings onto
@@ -114,6 +115,11 @@ are for, and so does the staged view's read of a dropped project: `DropView`'s `
 `AppModel.summarise()`, which asks `Conversion.summarise` for a `SummaryState`. **A preview reads
 through `SummaryRunner` and renders in `DropView`** — the runner returns no `RunResult` and so no
 CLI text, which is the whole reason a preview costs no Python mirror and no parity run.
+The preview itself is a track × pattern grid, and **what it decides lives in `PatternGrid.swift`,
+not in `DropView`**: what a cell prints, which chained cells are joined, and — in `AppLayout` — every
+dimension the window and the grid are both built from. That one enum is why the pattern axis fits:
+the staged pane scrolls vertically only, so a grid too wide for it is *silently clipped*, and a test
+holds the grid under a budget subtracted from the window. Change the sidebar and the test says so.
 `scripts/bundle_app.sh` wraps the built binary in a `.app`; it is deliberately **not** in
 `validate.sh`, which compiles the target through `KSPAppTests` instead.
 **Nothing may add a dependency to `KSPKit`.**

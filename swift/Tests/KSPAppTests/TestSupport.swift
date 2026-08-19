@@ -1,4 +1,7 @@
 import Foundation
+import KSPKit
+import KSPRun
+import Testing
 
 /// Repository data the tests read, resolved from this file's own path.
 ///
@@ -41,4 +44,47 @@ func withVolatileDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
     let suite = volatileSuite()
     defer { suite.defaults.removePersistentDomain(forName: suite.name) }
     try body(suite.defaults)
+}
+
+/// A project read through the shipped runner, for a test that wants real counts rather than made-up
+/// ones. A twin of ``KSPRunTests``' loader, for the reason ``RepoData`` is one.
+func summarise(_ name: String) throws -> ProjectSummary {
+    let result = SummaryRunner.run(
+        SummaryRunner.Options(path: RepoData.projectFiles.appending(path: name)))
+    #expect(result.message == nil)
+    return try #require(result.summary)
+}
+
+/// How many notes one slot holds and how many of those are switched on.
+typealias SlotCount = (held: Int, enabled: Int)
+
+/// A summary assembled by hand, for the cases no sample project has: a chain, and a pattern holding
+/// notes with every one of them switched off.
+///
+/// `chains` maps a track number onto its Chain in play order. The Chain goes onto **every** pattern
+/// it names, because ``TrackSummary/chain`` reads it back off the first pattern carrying one -- set
+/// it on a single pattern and the track's chain comes back empty, which would let a chain test pass
+/// without testing anything.
+func syntheticSummary(
+    tempoBPM: Double = 120, globalSwingPercent: Int = 50, currentScene: Int = 1,
+    drumTracks: Set<Int> = [], chains: [Int: [Int]] = [:],
+    notes: [Int: [Int: SlotCount]] = [:]
+) -> ProjectSummary {
+    ProjectSummary(
+        sourceName: "synthetic.KeyStepPro", tempoBPM: tempoBPM,
+        globalSwingPercent: globalSwingPercent, currentScene: currentScene,
+        tracks: (1...4).map { track in
+            let drum = drumTracks.contains(track)
+            let chain = chains[track] ?? []
+            return TrackSummary(
+                number: track, name: drum ? "Track \(track) (drum)" : "Track \(track)",
+                mode: drum ? .drum : .sequencer,
+                patterns: (1...16).map { pattern in
+                    let count = notes[track]?[pattern] ?? (held: 0, enabled: 0)
+                    return PatternSummary(
+                        number: pattern, mode: count.held == 0 ? .empty : (drum ? .drum : .seq),
+                        noteCount: count.held, enabledNoteCount: count.enabled, stepCount: 16,
+                        hasData: count.held > 0, chain: chain.contains(pattern) ? chain : [])
+                })
+        })
 }

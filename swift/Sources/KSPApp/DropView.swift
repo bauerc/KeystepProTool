@@ -13,14 +13,15 @@ struct DropView: View {
                 content
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(24)
+            .padding(AppLayout.mainPadding)
 
             Divider()
             options
         }
-        // Taller than v1's 380: the staged view now carries a summary above the buttons, and the
-        // rest of it must not be squeezed to make room.
-        .frame(width: 680, height: 440)
+        // Taller than v1's 380, and wider than its 680: the staged view now carries a sixteen-slot
+        // grid above the buttons, and the pattern axis must not be squeezed to make room. Every
+        // dimension comes from ``AppLayout``, which is where the fit is worked out and tested.
+        .frame(width: AppLayout.windowWidth, height: AppLayout.windowHeight)
         .dropDestination(for: URL.self) { urls, _ in
             // One file at a time in v1: a second would need its own name field and its own result.
             guard let first = urls.first else { return false }
@@ -62,7 +63,7 @@ struct DropView: View {
             .padding(16)
         }
         .toggleStyle(.checkbox)
-        .frame(width: 220)
+        .frame(width: AppLayout.sidebarWidth)
     }
 
     /// One kind of file: where it lands today, the way to change that, and the way back. The two
@@ -200,79 +201,105 @@ struct DropView: View {
             Label(message, systemImage: "exclamationmark.triangle")
                 .font(.caption).foregroundStyle(.orange).textSelection(.enabled)
         case .ready(let summary):
-            VStack(alignment: .leading, spacing: 6) {
-                Text(
-                    "\(Arithmetic.general(summary.tempoBPM)) BPM · swing "
-                        + "\(summary.globalSwingPercent)% · scene \(summary.currentScene)"
-                )
-                .font(.caption).foregroundStyle(.secondary)
-
-                // Not scrolled here: the staged view already scrolls as a whole, and a second
-                // scroller inside the first is a trap for a mouse wheel.
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(summary.tracks, id: \.number, content: trackRow)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            grid(PatternGrid(summary))
         }
     }
 
-    /// One track: what it is, how much is switched on in it, and all sixteen slots -- shown as two
-    /// rows of eight rather than a grid, which is #128's job and not this one's.
-    private func trackRow(_ track: TrackSummary) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(track.name).font(.caption).fontWeight(.medium)
-                Spacer()
-                Text(trackDetail(track)).font(.caption).foregroundStyle(.secondary)
-            }
+    /// The project as a grid: four tracks down, sixteen pattern slots across, so how the tracks line
+    /// up against each other can be seen rather than counted.
+    ///
+    /// Every decision here was taken in ``PatternGrid`` -- what a cell says, which cells are joined,
+    /// how wide the whole thing comes out. This only draws it.
+    ///
+    /// Not scrolled: the staged view already scrolls as a whole, and a second scroller inside the
+    /// first is a trap for a mouse wheel.
+    private func grid(_ grid: PatternGrid) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(grid.header).font(.caption).foregroundStyle(.secondary)
 
-            ForEach(Array(stride(from: 0, to: track.patterns.count, by: 8)), id: \.self) { start in
-                HStack(spacing: 6) {
-                    ForEach(
-                        track.patterns[start..<min(start + 8, track.patterns.count)], id: \.number
-                    ) { pattern in
-                        slot(pattern, in: track)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: AppLayout.gridOrigin, height: 1)
+                    HStack(spacing: AppLayout.cellSpacing) {
+                        ForEach(grid.columns, id: \.self) { column in
+                            Text("\(column)")
+                                .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+                                .frame(width: AppLayout.cellWidth)
+                        }
                     }
                 }
+                ForEach(grid.rows, id: \.track, content: trackRow)
+            }
+
+            Text(PatternGrid.legend).font(.caption2).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// One track: its name, its sixteen cells, the rails joining whatever it chains, and the chain
+    /// spelled out underneath. The per-track counts are the label's tooltip -- sixteen columns leave
+    /// no room to show them outright.
+    private func trackRow(_ row: PatternGrid.Row) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 0) {
+                Text(row.name)
+                    .font(.caption).fontWeight(.medium).lineLimit(1).minimumScaleFactor(0.8)
+                    .frame(width: AppLayout.labelWidth, alignment: .leading)
+                    .help(row.detail)
+                Color.clear.frame(width: AppLayout.labelGap, height: 1)
+                HStack(spacing: AppLayout.cellSpacing) {
+                    ForEach(row.cells, id: \.pattern, content: slot)
+                }
+            }
+            .padding(.bottom, 4)
+            // Drawn under the cells rather than behind them, so a rail and a chained cell's own
+            // tint cannot double up into banding across the gaps they are meant to close.
+            .overlay(alignment: .bottomLeading) { rails(row.runs) }
+
+            if let chain = row.chainDetail {
+                Text(chain)
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .padding(.leading, AppLayout.gridOrigin)
             }
         }
     }
 
-    /// One pattern slot. Dimmed when it holds nothing at all; otherwise its number and how many of
-    /// its notes are switched on -- so a pattern whose every step is off reads `3·0`, which a dimmed
-    /// cell could not say.
-    private func slot(_ pattern: PatternSummary, in track: TrackSummary) -> some View {
-        Text(
-            pattern.isEmpty ? "\(pattern.number)" : "\(pattern.number)·\(pattern.enabledNoteCount)"
-        )
-        .font(.caption).monospacedDigit()
-        .foregroundStyle(pattern.isEmpty ? Color.secondary : Color.primary)
-        .frame(maxWidth: .infinity)
-        .help(slotDetail(pattern, in: track))
+    /// One continuous bar per run of chained slots that are neighbours in both play order and grid
+    /// order. A chain that jumps gets no bar -- its cells are still tinted, and the caption under
+    /// the row says the order.
+    private func rails(_ runs: [PatternGrid.ChainRun]) -> some View {
+        ForEach(runs.indices, id: \.self) { index in
+            Capsule()
+                .fill(Color.accentColor)
+                .frame(width: runs[index].width, height: 2)
+                .offset(x: runs[index].x)
+        }
     }
 
-    /// Held and switched on are counted side by side rather than as a fraction: a pattern can hold
-    /// the other set's notes too, and what closed the gap is the diagnostics' to say, not a tooltip's.
-    /// Switched on is not audible either -- it is the two switches the device offers, not the six
-    /// reasons a note might not sound.
-    private func slotDetail(_ pattern: PatternSummary, in track: TrackSummary) -> String {
-        guard !pattern.isEmpty else { return "Pattern \(pattern.number) — empty" }
-        let noun = track.mode == .drum ? "triggers" : "notes"
-        return "Pattern \(pattern.number) — \(pattern.noteCount) \(noun) held, "
-            + "\(pattern.enabledNoteCount) switched on, \(pattern.stepCount) steps"
+    /// One pattern slot. The column header carries its number now, so the cell is free to print the
+    /// count: an em dash when it holds nothing at all, and otherwise how many of its events are
+    /// switched on -- so a Pattern whose every step is off reads `0` on a filled cell rather than
+    /// passing as empty.
+    private func slot(_ cell: PatternGrid.Cell) -> some View {
+        Text(cell.label)
+            .font(.caption).monospacedDigit()
+            // Shrunk rather than truncated: a count reading "1…" would be the one thing a cell is
+            // for. Three digits fit outright; the scale factor is what a fourth would use.
+            .lineLimit(1).minimumScaleFactor(0.7)
+            .foregroundStyle(cell.isEmpty ? Color.secondary : Color.primary)
+            .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
+            .background(
+                RoundedRectangle(cornerRadius: 3).fill(fill(cell))
+            )
+            .help(cell.detail)
     }
 
-    /// Says "switched on" because that is what the number is -- the same count the slots carry, not
-    /// everything the track holds.
-    private func trackDetail(_ track: TrackSummary) -> String {
-        guard !track.isEmpty else { return "empty" }
-        let held = track.patterns.count(where: { !$0.isEmpty })
-        let notes = track.patterns.reduce(0) { $0 + $1.enabledNoteCount }
-        let noun = track.mode == .drum ? "trigger" : "note"
-        return "\(held) pattern\(held == 1 ? "" : "s") · \(notes) "
-            + "\(noun)\(notes == 1 ? "" : "s") switched on"
+    /// Chained first, because a Chain can name a slot that holds nothing and the device still plays
+    /// it -- so that slot has to read as part of the run rather than as absent.
+    private func fill(_ cell: PatternGrid.Cell) -> Color {
+        if !cell.positions.isEmpty { return Color.accentColor.opacity(0.22) }
+        if cell.isEmpty { return .clear }
+        return Color.secondary.opacity(0.12)
     }
 
     @ViewBuilder
