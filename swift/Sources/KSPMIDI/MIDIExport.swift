@@ -29,6 +29,11 @@ public enum MIDIExport {
     /// A note stored with velocity 0 is silent on the device and would read as a note-off in MIDI,
     /// which is a different thing. Exported at 1 instead.
     public static let minVelocity = 1
+
+    /// How many times an arrangement may be laid down end to end. Export-only: the device stores
+    /// no such count, so this is not `passes` and no repeat of it can be written back to a project
+    /// file.
+    public static let maxRepeat = 10
 }
 
 /// Everything the project file cannot tell us about timing and mapping.
@@ -225,7 +230,12 @@ public struct Arrangement: Sendable, Hashable {
         self.diagnostics = diagnostics
     }
 
-    public var patternNumbers: [Int] { boundaries.map(\.patternNumber) }
+    /// Which patterns are in this file, not how often each is played: a repeat count puts the same
+    /// pattern on the timeline more than once.
+    public var patternNumbers: [Int] {
+        var seen: Set<Int> = []
+        return boundaries.map(\.patternNumber).filter { seen.insert($0).inserted }
+    }
 
     public var warnings: [String] { diagnostics.messages }
 
@@ -532,7 +542,18 @@ extension MIDIExport {
     ///
     /// A pattern occupies the longest length any track gives it, so tracks of unequal length stay
     /// aligned at every pattern boundary instead of drifting.
-    public static func arrange(_ renderings: [Rendering]) -> Arrangement {
+    ///
+    /// `repeat` lays the whole arrangement down again that many times, every track shifted by the
+    /// same cycle so pattern N still starts together on all of them. It is not `passes`: that is
+    /// the device's own step-skip cycle inside a pattern, while this exists only in the exported
+    /// file.
+    public static func arrange(_ renderings: [Rendering], repeat count: Int = 1) throws
+        -> Arrangement
+    {
+        if !(1...maxRepeat ~= count) {
+            throw KSPError.value("repeat must be 1-\(maxRepeat)")
+        }
+
         let collector = Collector()
         for rendering in renderings {
             collector.extend(rendering.diagnostics)
@@ -559,16 +580,22 @@ extension MIDIExport {
             (left.trackNumber, left.kind == .drum ? 1 : 0, left.patternNumber)
                 < (right.trackNumber, right.kind == .drum ? 1 : 0, right.patternNumber)
         }
+        // A repeat is placed, not copied afterwards: every round goes through the same offset
+        // arithmetic, so a note held past the end of one round is seen against the round that
+        // follows it rather than colliding with its own copy.
         for rendering in ordered {
-            let offset = offsets[rendering.patternNumber] ?? 0
             let name = rendering.midiTrackName
             if groups[name] == nil {
                 names.append(name)
                 groups[name] = []
             }
-            groups[name]?.append(
-                contentsOf: rendering.notes.map { placed($0, offset: offset, collector: collector) }
-            )
+            for repetition in 0..<count {
+                let offset = repetition * cursor + (offsets[rendering.patternNumber] ?? 0)
+                groups[name]?.append(
+                    contentsOf: rendering.notes.map {
+                        placed($0, offset: offset, collector: collector)
+                    })
+            }
         }
 
         warnOnUnequalTracks(renderings, collector: collector)
@@ -578,9 +605,11 @@ extension MIDIExport {
         }
         return Arrangement(
             tracks: tracks,
-            lengthTicks: cursor,
-            boundaries: offsets.sorted { $0.key < $1.key }.map {
-                PatternBoundary(patternNumber: $0.key, tick: $0.value)
+            lengthTicks: cursor * count,
+            boundaries: (0..<count).flatMap { repetition in
+                offsets.sorted { $0.key < $1.key }.map {
+                    PatternBoundary(patternNumber: $0.key, tick: repetition * cursor + $0.value)
+                }
             },
             trackNumbers: Set(renderings.map(\.trackNumber)).sorted(),
             diagnostics: collector.report())
@@ -761,7 +790,7 @@ extension MIDIExport {
     {
         let options = try options ?? ExportOptions()
         let renderings = try renderProject(project, options: options)
-        return result(arrange(renderings), project: project, options: options)
+        return try result(arrange(renderings), project: project, options: options)
     }
 
     /// One file per non-empty (track, pattern), each starting at tick 0.
@@ -787,11 +816,11 @@ extension MIDIExport {
         }
 
         return
-            keys
+            try keys
             .sorted { ($0.first, $0.second) < ($1.first, $1.second) }
             .compactMap { key -> ExportResult? in
                 guard let group = parts[key] else { return nil }
-                let result = result(arrange(group), project: project, options: options)
+                let result = try result(arrange(group), project: project, options: options)
                 return result.isEmpty ? nil : result
             }
     }

@@ -575,6 +575,109 @@ private func exported5Flat() throws -> ExportResult {
     }
 }
 
+/// A repeat count exists only in the exported file.
+///
+/// It is not `passes`: that is the device's own step-skip cycle, capped at four and rendered
+/// inside a pattern. This lays the whole arrangement down again, which the hardware has no way to
+/// store.
+@Suite struct RepeatTests {
+    /// project_9's two 16-step patterns, which is one pass of the material.
+    let cycle = 32 * ticksPerStep
+
+    @Test func oneRepeatIsWhatTheLayerAlreadyDid() throws {
+        let renderings = try MIDIExport.renderProject(project9(), options: onePass())
+        #expect(try MIDIExport.arrange(renderings, repeat: 1) == MIDIExport.arrange(renderings))
+    }
+
+    /// Every track shifts by the same cycle, so pattern N still starts together on all of them in
+    /// the second and third rounds.
+    @Test func repeatsLieEndToEndAndStayAlignedAcrossTracks() throws {
+        let renderings = try MIDIExport.renderProject(project9(), options: onePass())
+        let once = try MIDIExport.arrange(renderings)
+        let thrice = try MIDIExport.arrange(renderings, repeat: 3)
+
+        #expect(thrice.lengthTicks == 3 * cycle)
+        #expect(thrice.noteCount == 3 * once.noteCount)
+        #expect(thrice.tracks.map(\.name) == once.tracks.map(\.name))
+        for (original, repeated) in zip(once.tracks, thrice.tracks) {
+            #expect(
+                repeated.notes.map(\.tick)
+                    == (0..<3).flatMap { repetition in
+                        original.notes.map { $0.tick + repetition * cycle }
+                    })
+        }
+    }
+
+    /// The marker ruler names every pattern start in every round; the pattern list still answers
+    /// which patterns are in the file.
+    @Test func everyRoundIsMarkedButThePatternListIsNot() throws {
+        let arrangement = try MIDIExport.arrange(
+            MIDIExport.renderProject(project9(), options: onePass()), repeat: 3)
+
+        #expect(
+            arrangement.boundaries
+                == (0..<3).flatMap { repetition in
+                    [(2, 0), (3, 16 * ticksPerStep)].map { number, offset in
+                        PatternBoundary(patternNumber: number, tick: repetition * cycle + offset)
+                    }
+                })
+        #expect(arrangement.patternNumbers == [2, 3])
+    }
+
+    @Test(arguments: [-1, 0, 11]) func aCountOutsideTheRangeIsRejected(_ count: Int) throws {
+        let renderings = try MIDIExport.renderProject(project9(), options: onePass())
+        let thrown = #expect(throws: KSPError.self) {
+            try MIDIExport.arrange(renderings, repeat: count)
+        }
+        #expect(thrown?.description.contains("repeat must be 1-10") == true)
+    }
+
+    /// What a rendering says about itself -- an off-ladder gate, a stale note set, tracks of
+    /// unequal length -- describes the material, so a second round of it is not a second finding.
+    @Test func theMaterialsOwnDiagnosticsAreNotRepeated() throws {
+        let renderings = try MIDIExport.renderProject(project9(), options: onePass())
+        #expect(
+            try MIDIExport.arrange(renderings, repeat: 3).warnings
+                == MIDIExport.arrange(renderings).warnings)
+    }
+
+    /// Placing each round rather than copying the first is what makes this work: the seam between
+    /// rounds is resolved like any other collision, instead of leaving two note-ons for one pitch
+    /// with no note-off between.
+    @Test func agateHeldPastTheEndOfAroundMeetsTheNextOne() throws {
+        let length = 16 * ticksPerStep
+        let held = Rendering(
+            trackNumber: 1, kind: .seq, patternNumber: 1,
+            notes: [
+                RenderedNote(
+                    tick: 0, durationTicks: length + 600, pitch: 60, velocity: 100, channel: 0)
+            ],
+            lengthTicks: length)
+        let arrangement = try MIDIExport.arrange([held], repeat: 3)
+        let notes = arrangement.tracks[0].notes
+
+        #expect(notes.map(\.tick) == [0, length, 2 * length])
+        #expect(notes.map(\.durationTicks) == [length, length, length + 600])
+        #expect(arrangement.warnings.contains { $0.contains("own note-off") })
+    }
+
+    /// Only the first round starts at tick 0, so only there does a negative shift have nowhere to
+    /// go; later rounds have the room to honour it.
+    @Test func aclippedTimeShiftIsClippedOnlyWhereThereIsNoRoom() throws {
+        let length = 16 * ticksPerStep
+        let early = Rendering(
+            trackNumber: 1, kind: .seq, patternNumber: 1,
+            notes: [
+                RenderedNote(tick: -5, durationTicks: 120, pitch: 60, velocity: 100, channel: 0)
+            ],
+            lengthTicks: length)
+        let arrangement = try MIDIExport.arrange([early], repeat: 3)
+
+        #expect(arrangement.tracks[0].notes.map(\.tick) == [0, length - 5, 2 * length - 5])
+        #expect(arrangement.warnings.count { $0.contains("held at the start") } == 1)
+    }
+}
+
 /// One file per non-empty (track, pattern), each from its own tick 0.
 @Suite struct SplitTests {
     /// project_9 uses pattern 2 on two tracks and pattern 3 on one.
