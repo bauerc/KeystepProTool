@@ -293,3 +293,137 @@ import Testing
         }
     }
 }
+
+/// What a dropped project shows about itself before Convert is pressed.
+@MainActor
+@Suite struct AppModelSummaryTests {
+    private func model() -> AppModel {
+        AppModel(
+            store: FolderStore(defaults: volatileDefaults()),
+            destination: { _, _ in
+                Destination(directory: FileManager.default.temporaryDirectory, note: nil)
+            },
+            reveal: { _ in }, chooseFolder: { _ in nil })
+    }
+
+    private var projectFixture: URL {
+        RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+    }
+
+    /// The drop stages immediately and the read follows, so a 3.5 MB parse never happens between
+    /// the file leaving the cursor and the window redrawing.
+    @Test func adroppedProjectIsStagedLoadingAndThenSummarised() async throws {
+        let model = model()
+
+        model.accept(projectFixture)
+
+        #expect(try #require(model.staged).summary == .loading)
+
+        await model.summarise()
+
+        guard case .ready(let summary) = try #require(model.staged).summary else {
+            Issue.record("the staged project should have been summarised")
+            return
+        }
+        #expect(summary.sourceName == "project_5.KeyStepPro")
+        #expect(summary.tracks.count == 4)
+    }
+
+    /// The other direction has no project to read: the staged view shows the plan and nothing else.
+    @Test func adroppedMIDIFileHasNothingToSummarise() async throws {
+        let model = model()
+
+        model.accept(RepoData.projectFiles.appending(path: "m6-test-file.mid"))
+        await model.summarise()
+
+        #expect(try #require(model.staged).summary == .absent)
+    }
+
+    /// A project that will not read stays staged and says why -- the window must not offer an empty
+    /// list instead.
+    @Test func anunreadableProjectStaysStagedAndShowsTheFailure() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let broken = directory.appending(path: "broken.KeyStepPro")
+        try Data("not a project".utf8).write(to: broken)
+        let model = model()
+
+        model.accept(broken)
+        await model.summarise()
+
+        guard case .failed(let message) = try #require(model.staged).summary else {
+            Issue.record("an unreadable project should have shown its failure")
+            return
+        }
+        #expect(message.contains("broken.KeyStepPro"))
+    }
+
+    /// The read outlives the drop it was for. Whichever guard catches it, a cancelled drop must not
+    /// be reopened by a summary that arrives afterwards.
+    @Test func asummaryArrivingAfterACancelIsDropped() async throws {
+        let model = model()
+        model.accept(projectFixture)
+
+        let reading = Task { await model.summarise() }
+        await Task.yield()
+        model.cancel()
+        await reading.value
+
+        guard case .idle = model.phase else {
+            Issue.record("a cancelled drop should have stayed cancelled")
+            return
+        }
+    }
+
+    /// Dropping the same file again is a new drop, so it is a new read. The staged view keys its
+    /// `.task` on this identity: were it the path, the second drop would wait for a read that never
+    /// started and show a spinner for good.
+    @Test func redroppingTheSameProjectIsAnewDropAndIsReadAgain() async throws {
+        let model = model()
+        model.accept(projectFixture)
+        await model.summarise()
+        let first = try #require(model.staged).id
+
+        model.accept(projectFixture)
+
+        let restaged = try #require(model.staged)
+        #expect(restaged.id != first)
+        #expect(restaged.summary == .loading)
+
+        await model.summarise()
+
+        guard case .ready = try #require(model.staged).summary else {
+            Issue.record("the second drop should have been read too")
+            return
+        }
+    }
+
+    /// A dry run is the same drop still staged, so its summary is not read a second time.
+    @Test func adryRunKeepsTheSummaryItAlreadyHas() async throws {
+        let model = model()
+        model.settings.dryRun = true
+        model.accept(projectFixture)
+        await model.summarise()
+        let staged = try #require(model.staged)
+
+        await model.convert()
+
+        let after = try #require(model.staged)
+        #expect(after.id == staged.id)
+        #expect(after.summary == staged.summary)
+        #expect(after.preview != nil)
+    }
+
+    /// Reading is idempotent: the view drives it from `.task`, which can run again for the same
+    /// staged file.
+    @Test func summarisingTwiceKeepsTheFirstAnswer() async throws {
+        let model = model()
+        model.accept(projectFixture)
+
+        await model.summarise()
+        let first = try #require(model.staged).summary
+        await model.summarise()
+
+        #expect(try #require(model.staged).summary == first)
+    }
+}

@@ -110,7 +110,11 @@ SwiftUI). **A new option is a property on `Settings` and a line in its two mappi
 `ConvertRunner.Options`/`ExportRunner.Options`** — an option left out of those mappings keeps the
 runner's own default, which is what makes the app on defaults convert what the CLI on defaults
 converts. Conversions run in a `Task.detached`, which is what the `Sendable` `Options`/`RunResult`
-are for. `scripts/bundle_app.sh` wraps the built binary in a `.app`; it is deliberately **not** in
+are for, and so does the staged view's read of a dropped project: `DropView`'s `.task` asks
+`AppModel.summarise()`, which asks `Conversion.summarise` for a `SummaryState`. **A preview reads
+through `SummaryRunner` and renders in `DropView`** — the runner returns no `RunResult` and so no
+CLI text, which is the whole reason a preview costs no Python mirror and no parity run.
+`scripts/bundle_app.sh` wraps the built binary in a `.app`; it is deliberately **not** in
 `validate.sh`, which compiles the target through `KSPAppTests` instead.
 **Nothing may add a dependency to `KSPKit`.**
 `swift-midi-file` is Apple-only, so `Package.swift` gates `KSPMIDI` and everything above it off on

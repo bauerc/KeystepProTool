@@ -21,6 +21,12 @@ final class AppModel {
         var job: Job
         /// What a dry run said, if one has been made since the name last changed.
         var preview: Outcome?
+        /// What was dropped, read for showing rather than converting. Only a project has one.
+        var summary: SummaryState = .absent
+        /// This drop, as distinct from the one before it. The view keys its read off this rather
+        /// than off the path, because dropping the same file again is a new drop and needs a new
+        /// read -- the path alone would leave the second one waiting forever.
+        let id = UUID()
     }
 
     var phase: Phase = .idle
@@ -104,7 +110,26 @@ final class AppModel {
             return
         }
         name = Naming.stem(of: url)
-        phase = .staged(Staged(job: job))
+        // A project is read for the staged view; a MIDI file has nothing to read yet (#145).
+        phase = .staged(Staged(job: job, summary: job.isProject ? .loading : .absent))
+    }
+
+    /// Read the staged project, for the staged view to show what is in it before Convert is pressed.
+    ///
+    /// Awaitable rather than started from ``accept(_:)``: the view drives it from `.task`, and a
+    /// test can drive it without a window. Once a summary has landed a further call costs nothing;
+    /// one made while a read is still in flight does start a second read, and deliberately so --
+    /// that is how a result thrown away below is asked for again.
+    func summarise() async {
+        guard let staged, staged.job.isProject, staged.summary == .loading else { return }
+        let state = await Conversion.summarise(staged.job.source)
+
+        // The drop can be cancelled, converted or replaced while the read is in flight, and a late
+        // answer must not reopen a window that has moved on. Thrown away rather than held: the view
+        // asks again when it comes back to a summary still waiting.
+        guard case .staged(var current) = phase, current.id == staged.id else { return }
+        current.summary = state
+        phase = .staged(current)
     }
 
     /// Where the staged file would land under the name currently typed. Recomputed as the name is
@@ -128,9 +153,12 @@ final class AppModel {
 
         let outcome = await Conversion.run(plan, settings: settings)
 
-        // A dry run wrote nothing, so the file stays staged and can be converted for real.
+        // A dry run wrote nothing, so the file stays staged and can be converted for real. The same
+        // drop rather than a new one: it is still the file that was dropped, summary and all.
         guard !outcome.dryRun else {
-            phase = .staged(Staged(job: staged.job, preview: outcome))
+            var current = staged
+            current.preview = outcome
+            phase = .staged(current)
             return
         }
         if let written = outcome.written { reveal([written]) }
