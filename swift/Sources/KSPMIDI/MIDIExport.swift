@@ -335,8 +335,8 @@ extension MIDIExport {
         // so the default export is what the device plays, not everything the file holds.
         let last = declaredStepCount(pattern, kind)
         var playable = pattern.notes(of: kind)
-        let stepOff = playable.filter { !$0.active }
-        let pastLast = playable.filter { $0.active && $0.step > last }
+        let stepOff = playable.filter { disablement($0, lastStep: last) == .stepTurnedOff }
+        let pastLast = playable.filter { disablement($0, lastStep: last) == .pastLastStep }
         var saidStepOff = false
 
         if options.includeDisabled {
@@ -363,7 +363,7 @@ extension MIDIExport {
                         + "exported; --include-disabled exports them",
                     site: site, subjects: pastLast.count)
             }
-            playable = playable.filter { $0.active && $0.step <= last }
+            playable = playable.filter { disablement($0, lastStep: last) == nil }
         }
 
         let steps = stepCount(pattern, kind, notes: playable)

@@ -1,5 +1,3 @@
-import KSPKit
-
 /// The two ways a note is switched off. Both are toggled the same way on the device, so both read
 /// as "disabled" and name their reason rather than inventing separate words.
 ///
@@ -7,16 +5,17 @@ import KSPKit
 /// audibility). The other four -- velocity 0, the step-skip mask, randomness, and an empty pool
 /// entry -- are not disablement, so nothing here claims a note is audible, only that the user has
 /// not switched it off.
-enum Disablement {
+public enum Disablement: Sendable, Hashable {
     case stepTurnedOff
     case pastLastStep
 }
 
 /// Why this note will not play, or `nil` when the user has left it on.
 ///
-/// Stated once because two callers need it: the dump prints a marker beside it, `ProjectSummary`
-/// counts it, and `MIDIExport.renderPattern` filters an export on the same pair.
-func disablement(_ note: Note, lastStep: Int?) -> Disablement? {
+/// In the format core rather than beside any one caller, because every layer above needs it: the
+/// dump prints a marker beside it, `ProjectSummary` counts it, and `MIDIExport.renderPattern`
+/// filters an export on the same pair.
+public func disablement(_ note: Note, lastStep: Int?) -> Disablement? {
     if !note.active { return .stepTurnedOff }
     if let lastStep, note.step > lastStep { return .pastLastStep }
     return nil

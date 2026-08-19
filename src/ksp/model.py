@@ -10,7 +10,7 @@ dict, so they stay byte-comparable with what MCC produces.
 
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, replace
-from enum import StrEnum
+from enum import Enum, StrEnum, auto
 from typing import Any
 
 from ksp import constants
@@ -199,6 +199,34 @@ class Note:
             data["drum_note"] = note
             data["drum_note_name"] = note_name(note)
         return data
+
+
+class Disablement(Enum):
+    """The two ways a note is switched off.
+
+    Both are toggled the same way on the device, so both read as "disabled" and
+    name their reason rather than inventing separate words. These are rows 2 and
+    3 of the spec's six reasons a note might not play (4, existence versus
+    audibility); the other four are not disablement, so nothing here claims a
+    note is audible, only that the user has not switched it off.
+    """
+
+    STEP_TURNED_OFF = auto()
+    PAST_LAST_STEP = auto()
+
+
+def disablement(note: Note, last_step: int | None) -> Disablement | None:
+    """Why *note* will not play, or ``None`` when the user has left it on.
+
+    Here rather than beside any one caller, because every layer above needs it:
+    the dump prints a marker beside it and :func:`ksp.midi_export.render_pattern`
+    filters an export on the same pair.
+    """
+    if not note.active:
+        return Disablement.STEP_TURNED_OFF
+    if last_step is not None and note.step > last_step:
+        return Disablement.PAST_LAST_STEP
+    return None
 
 
 @dataclass(frozen=True)
