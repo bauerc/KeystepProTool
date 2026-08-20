@@ -12,6 +12,9 @@ struct Settings: Sendable, Equatable {
     var verbose = false
     /// The slots the export runs over, per track, empty meaning all.
     var cells: [Int: Set<Int>] = [:]
+    /// Write each selected slot to its own file rather than one file holding all of them. Off is
+    /// what the app has always done, and what the CLI does without `--split`.
+    var splitPerPattern = false
 
     /// This, carrying what the grid ticked. `ConvertRunner`'s `track`/`pattern` are routing, not
     /// selection, so the import mapping is untouched.
@@ -32,8 +35,10 @@ struct Settings: Sendable, Equatable {
 
     /// A `.KeyStepPro` in, a `.mid` out.
     func exportOptions(source: URL, output: URL) -> ExportRunner.Options {
+        // Splitting makes `output` the folder the runner fills, which is what `Conversion.plan`
+        // hands over: the runner names the files itself, after the source and each slot it found.
         ExportRunner.Options(
-            path: source, output: output, cells: cells, dryRun: dryRun, verbose: verbose,
-            configPath: drumMapConfigPath)
+            path: source, output: output, split: splitPerPattern, cells: cells, dryRun: dryRun,
+            verbose: verbose, configPath: drumMapConfigPath)
     }
 }

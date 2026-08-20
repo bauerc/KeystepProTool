@@ -96,12 +96,28 @@ enum Naming {
         in directory: URL, stem: String, extension ext: String,
         exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
     ) -> URL {
+        firstFree(in: directory, stem: stem, extension: ext, exists: exists)
+    }
+
+    /// The same ladder for a folder, which a split export fills with files it names itself: nothing
+    /// inside a folder this new can be in the way of a run whose filenames the app cannot know.
+    static func vacantFolder(
+        in directory: URL, stem: String,
+        exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
+    ) -> URL {
+        firstFree(in: directory, stem: stem, extension: nil, exists: exists)
+    }
+
+    private static func firstFree(
+        in directory: URL, stem: String, extension ext: String?, exists: (URL) -> Bool
+    ) -> URL {
         let base = sanitised(stem)
-        var candidate = directory.appending(path: "\(base).\(ext)")
-        var suffix = 2
+        let tail = ext.map { ".\($0)" } ?? ""
+        var candidate = directory.appending(path: "\(base)\(tail)")
+        var attempt = 2
         while exists(candidate) {
-            candidate = directory.appending(path: "\(base) \(suffix).\(ext)")
-            suffix += 1
+            candidate = directory.appending(path: "\(base) \(attempt)\(tail)")
+            attempt += 1
         }
         return candidate
     }
