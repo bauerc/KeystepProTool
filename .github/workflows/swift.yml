@@ -54,14 +54,20 @@ jobs:
 
       # Gates the macOS seed job. It runs here because this job is already paid for at 1x, and
       # starting a macOS runner merely to ask the question would cost the 10 units it saves.
+      #
+      # POSIX sh, not bash: the container has no bash on the path, so Actions runs `sh -e` here.
+      # A `git diff` that cannot answer seeds rather than skips -- a needless reseed costs one
+      # run, a wrongly skipped one leaves every later PR cold.
       - name: Did dependencies change
         id: deps
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           changed=$(git diff --name-only HEAD^ HEAD 2> /dev/null || echo swift/Package.resolved)
-          grep -qx 'swift/Package.resolved' <<< "$changed" \
-            && echo changed=true >> "$GITHUB_OUTPUT" \
-            || echo changed=false >> "$GITHUB_OUTPUT"
+          if printf '%s\n' "$changed" | grep -qx 'swift/Package.resolved'; then
+            echo changed=true >> "$GITHUB_OUTPUT"
+          else
+            echo changed=false >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Format
         run: swift format lint --strict --recursive --parallel Sources Tests Package.swift
