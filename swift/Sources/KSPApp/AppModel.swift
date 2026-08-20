@@ -106,7 +106,7 @@ final class AppModel {
         guard let job = Conversion.job(for: url) else {
             phase = .done(
                 Outcome(
-                    written: nil,
+                    written: [],
                     headline: "\(url.lastPathComponent) is not a MIDI file or a KeyStep Pro "
                         + "project.", report: Report(), note: nil))
             return
@@ -189,7 +189,7 @@ final class AppModel {
             phase = .staged(current)
             return
         }
-        if let written = outcome.written { reveal([written]) }
+        if !outcome.written.isEmpty { reveal(outcome.written) }
         phase = .done(outcome)
     }
 
