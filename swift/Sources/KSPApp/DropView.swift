@@ -45,6 +45,24 @@ struct DropView: View {
 
                 Divider()
 
+                Text("MIDI files").font(.headline)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Picker("", selection: $model.settings.splitPerPattern) {
+                        Text("One file for everything").tag(false)
+                        Text("One file per pattern").tag(true)
+                    }
+                    .pickerStyle(.radioGroup)
+                    .labelsHidden()
+                    // The choice moves the destination and the file list both, so a preview taken
+                    // before it was made no longer describes this run.
+                    .onChange(of: model.settings.splitPerPattern) { model.discardPreview() }
+                    Text("Each file holds one slot and starts at its own bar 1.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                Divider()
+
                 Text("Options").font(.headline)
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -148,10 +166,8 @@ struct DropView: View {
                             TextField("Name", text: $model.name)
                                 .textFieldStyle(.roundedBorder)
                                 .onChange(of: model.name) { model.discardPreview() }
-                            Text(
-                                "This is the name MIDI Control Center's Project Browser will show."
-                            )
-                            .font(.caption).foregroundStyle(.secondary)
+                            Text(nameNote(plan))
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                     }
 
@@ -422,6 +438,15 @@ struct DropView: View {
             Button("Convert another") { model.reset() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// What the name field renames. A split run names its own files, so the name reaches the folder
+    /// they land in instead.
+    private func nameNote(_ plan: Conversion.Plan) -> String {
+        plan.intoFolder
+            ? "This names the folder the files land in. Each file is named after the project and "
+                + "the slot it holds."
+            : "This is the name MIDI Control Center's Project Browser will show."
     }
 
     /// The files by name, under a headline that could only give their count.

@@ -84,11 +84,14 @@ enum Conversion {
     /// anything the user should know about that placement before pressing Convert.
     struct Plan: Sendable, Hashable {
         let job: Job
-        /// Where the result lands. Never empty; one entry until split lands (#130).
+        /// Where the result lands. Never empty.
         let targets: [URL]
         /// A fallback directory, a name already taken, or both. `nil` when the obvious thing
         /// happened.
         let note: String?
+        /// Whether ``target`` is the folder the run fills rather than the file it writes. A split
+        /// export names its own files, so the app can only claim the folder they go in.
+        let intoFolder: Bool
 
         var target: URL { targets[0] }
         /// A name applies to one file. Several would rename an arbitrary one, so none is offered.
@@ -112,16 +115,28 @@ enum Conversion {
     /// Separated from ``run(_:settings:)`` so the staged view can show the destination and its notes
     /// while the user is still deciding, and so pressing Convert re-asks the same question against
     /// the filesystem as it is at that moment.
-    static func plan(_ job: Job, named stem: String, into destination: Destination) -> Plan {
+    static func plan(
+        _ job: Job, named stem: String, into destination: Destination, splitting: Bool = false
+    ) -> Plan {
         let base = Naming.sanitised(stem)
-        let target = Naming.vacant(
-            in: destination.directory, stem: base, extension: job.extensionOfResult)
+        // Only an export splits: a `.mid` in becomes one project however the control is set.
+        let intoFolder = splitting && job.writesMIDI
+        let target =
+            intoFolder
+            ? Naming.vacantFolder(in: destination.directory, stem: base)
+            : Naming.vacant(
+                in: destination.directory, stem: base, extension: job.extensionOfResult)
         // Both notes can apply at once -- a fallback directory that already holds that name -- so
         // they are collected rather than chosen between.
-        let clashed = target.deletingPathExtension().lastPathComponent != base
-        let note = [destination.note, clashed ? collisionNote(target) : nil]
+        let claimed =
+            intoFolder
+            ? target.lastPathComponent
+            : target.deletingPathExtension()
+                .lastPathComponent
+        let note = [destination.note, claimed != base ? collisionNote(target) : nil]
             .compactMap { $0 }.joined(separator: " ")
-        return Plan(job: job, targets: [target], note: note.isEmpty ? nil : note)
+        return Plan(
+            job: job, targets: [target], note: note.isEmpty ? nil : note, intoFolder: intoFolder)
     }
 
     /// Run one conversion off the main actor.
@@ -195,6 +210,12 @@ enum Conversion {
 }
 
 extension Job {
+    /// True for the export direction, the only one that can write more than one file.
+    var writesMIDI: Bool {
+        if case .toMIDI = self { return true }
+        return false
+    }
+
     /// What the conversion produces, which is the opposite of what was dropped.
     var extensionOfResult: String {
         switch self {

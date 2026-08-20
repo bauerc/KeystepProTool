@@ -45,6 +45,20 @@ import Testing
         #expect(settings.exportOptions(source: output, output: source).verbose == on)
     }
 
+    /// Only the export splits: a `.mid` in becomes one project, so `ConvertRunner` has no such
+    /// option to carry it to.
+    @Test(arguments: [false, true])
+    func splittingPerPatternReachesTheExport(on: Bool) {
+        let settings = Settings(splitPerPattern: on)
+        #expect(settings.exportOptions(source: output, output: source).split == on)
+    }
+
+    /// One file is what the app has always written, and what the CLI writes on defaults.
+    @Test func afreshSettingsWritesOneFile() {
+        #expect(!Settings().splitPerPattern)
+        #expect(!Settings().exportOptions(source: output, output: source).split)
+    }
+
     /// The window never waives the runner's overwrite guard.
     @Test func neitherDirectionForcesAnOverwrite() {
         let settings = Settings(dryRun: false, verbose: true)
@@ -84,7 +98,6 @@ import Testing
         let defaults = ExportRunner.Options(
             path: output, output: source, configPath: mapped.configPath)
 
-        #expect(mapped.split == defaults.split)
         #expect(mapped.tracks == defaults.tracks)
         #expect(mapped.patterns == defaults.patterns)
         #expect(mapped.passes == defaults.passes)

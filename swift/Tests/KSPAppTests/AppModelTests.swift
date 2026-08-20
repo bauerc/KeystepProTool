@@ -25,6 +25,10 @@ import Testing
 
     private var midiFixture: URL { RepoData.projectFiles.appending(path: "m6-test-file.mid") }
 
+    private var projectFixture: URL {
+        RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+    }
+
     @Test func adropStagesTheFileAndWritesNothing() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -89,6 +93,34 @@ import Testing
         let plan = model.plan(for: try #require(model.staged).job)
         #expect(plan.target.lastPathComponent == "My Song 2.KeyStepPro")
         #expect(plan.note?.contains("My Song 2.KeyStepPro") == true)
+    }
+
+    /// With the control on, the typed name names the folder the files land in -- the runner names
+    /// the files themselves.
+    @Test func thetypedNameNamesTheFolderWhenTheExportSplits() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.accept(projectFixture)
+        model.settings.splitPerPattern = true
+
+        model.name = "My Song"
+
+        let plan = model.plan(for: try #require(model.staged).job)
+        #expect(plan.intoFolder)
+        #expect(plan.target == directory.appending(path: "My Song"))
+    }
+
+    /// The control is off by default, so a drop still plans one file.
+    @Test func anexportPlansOneFileUntilTheControlIsSwitched() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.accept(projectFixture)
+
+        let plan = model.plan(for: try #require(model.staged).job)
+        #expect(!plan.intoFolder)
+        #expect(plan.target == directory.appending(path: "project_5.mid"))
     }
 
     /// A dry run describes one name, so editing the name drops it rather than leaving a stale

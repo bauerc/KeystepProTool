@@ -158,4 +158,31 @@ import Testing
         #expect(url.lastPathComponent == "song 3.KeyStepPro")
     }
 
+    /// A split export names its own files, so the app claims the folder instead and lets the runner
+    /// fill it. Same ladder, so a second run of the same project cannot land on the first one.
+    @Test func anUntakenFolderNameIsLeftAlone() {
+        let url = Naming.vacantFolder(
+            in: URL(filePath: "/tmp"), stem: "song", exists: { _ in false })
+
+        #expect(url.lastPathComponent == "song")
+        #expect(url.pathExtension.isEmpty)
+    }
+
+    @Test func aTakenFolderNameClimbsUntilOneIsFree() {
+        let taken: Set<String> = ["song", "song 2"]
+
+        let url = Naming.vacantFolder(
+            in: URL(filePath: "/tmp"), stem: "song",
+            exists: { taken.contains($0.lastPathComponent) })
+
+        #expect(url.lastPathComponent == "song 3")
+    }
+
+    @Test func aFolderNameIsSanitisedLikeAFileName() {
+        let url = Naming.vacantFolder(
+            in: URL(filePath: "/tmp"), stem: "a/b:c", exists: { _ in false })
+
+        #expect(url.lastPathComponent == Naming.sanitised("a/b:c"))
+    }
+
 }
