@@ -14,8 +14,23 @@ name: swift
 # `uv` beside Swift, so ./scripts/validate.sh runs them on a dev machine and nowhere else.
 #
 # The container image carries swift-format, so no toolchain setup step is needed there.
+#
+# `swift-macos` was 90% of this repository's Actions bill: the 10x multiplier, times a `swift test`
+# that recompiled five dependency packages every run, landing a 134s median just over the 120s
+# boundary and so billing three minutes for two minutes of work. Two things hold it down.
+#
+# It runs on pull requests only. A push to main is the merge commit of a PR that already passed, so
+# the second run bought a re-test of the same tree; main is no longer independently macOS-verified.
+#
+# And it restores a warm `.build`. Measured locally: a cold build is 53s and 544 build steps, while
+# a rebuild with every one of our own sources touched is 7.7s and 101 -- the dependencies are ~85%
+# of it, and they only change when Package.resolved does. Caches written on a PR branch are
+# readable only by that branch, so `swift-macos-seed` below is the one writer, on main.
 
 on:
+  # Seeds the macOS cache on demand. Without it the first seed waits for whenever Package.resolved
+  # next moves, and every PR until then pays the cold build this workflow exists to avoid.
+  workflow_dispatch:
   push:
     branches: [main]
     paths: ["swift/**", ".github/workflows/swift.yml"]
@@ -30,11 +45,32 @@ jobs:
   swift:
     runs-on: ubuntu-latest
     container: swift:6.2
+    outputs:
+      deps-changed: ${{ steps.deps.outputs.changed }}
     defaults:
       run:
         working-directory: swift
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # HEAD^ only, for the Package.resolved check below
+
+      # Gates the macOS seed job. It runs here because this job is already paid for at 1x, and
+      # starting a macOS runner merely to ask the question would cost the 10 units it saves.
+      #
+      # POSIX sh, not bash: the container has no bash on the path, so Actions runs `sh -e` here.
+      # A `git diff` that cannot answer seeds rather than skips -- a needless reseed costs one
+      # run, a wrongly skipped one leaves every later PR cold.
+      - name: Did dependencies change
+        id: deps
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          changed=$(git diff --name-only HEAD^ HEAD 2> /dev/null || echo swift/Package.resolved)
+          if printf '%s\n' "$changed" | grep -qx 'swift/Package.resolved'; then
+            echo changed=true >> "$GITHUB_OUTPUT"
+          else
+            echo changed=false >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Format
         run: swift format lint --strict --recursive --parallel Sources Tests Package.swift
@@ -48,6 +84,7 @@ jobs:
   # is invisible to the Linux job above. Xcode's toolchain ships Swift Testing on the search paths,
   # so none of validate.sh's Command Line Tools bridging flags are needed here.
   swift-macos:
+    if: github.event_name == 'pull_request'
     runs-on: macos-latest
     defaults:
       run:
@@ -55,5 +92,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Restore, never save: a PR-branch cache is unreadable by every other PR and would only burn
+      # quota. A miss is not a failure -- it costs exactly what this job cost before.
+      #
+      # Keyed on Package.resolved alone. A runner image that brings a new Swift is safe without
+      # being in the key: SwiftPM stamps the build directory with the compiler version and rebuilds
+      # from scratch when it changes. That silently forfeits the cache until the next dependency
+      # bump reseeds it, so bump -v1 to force a reseed if the job's duration creeps back up.
+      - uses: actions/cache/restore@v4
+        with:
+          path: swift/.build
+          key: spm-macos-${{ hashFiles('swift/Package.resolved') }}-v1
+          restore-keys: spm-macos-
+
       - name: Test
         run: swift test
+
+  # The only writer of the cache the PR job reads, and the reason it is on main: Actions scopes a
+  # cache to the branch that wrote it, plus the default branch. Gated on the Linux job's answer so
+  # a macOS runner starts only when the dependencies actually moved -- rare, and the whole point.
+  swift-macos-seed:
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'push' && needs.swift.outputs.deps-changed == 'true')
+    needs: swift
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: swift
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: swift build --build-tests
+
+      - uses: actions/cache/save@v4
+        with:
+          path: swift/.build
+          key: spm-macos-${{ hashFiles('swift/Package.resolved') }}-v1
