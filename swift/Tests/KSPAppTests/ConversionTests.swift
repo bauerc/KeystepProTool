@@ -1,4 +1,6 @@
 import Foundation
+import KSPKit
+import KSPRun
 import Testing
 
 @testable import KSPApp
@@ -44,6 +46,9 @@ import Testing
             into: Destination(directory: directory, note: nil))
 
         #expect(plan.target == directory.appending(path: "fixture.KeyStepPro"))
+        // One target today, and the name field the staged view offers depends on it staying one.
+        #expect(plan.targets == [directory.appending(path: "fixture.KeyStepPro")])
+        #expect(plan.writesOneFile)
         #expect(plan.note == nil)
     }
 
@@ -91,7 +96,8 @@ import Testing
 
         let outcome = await Conversion.run(plan, settings: Settings())
 
-        let written = try #require(outcome.written, "conversion failed: \(outcome.headline)")
+        let written = try #require(
+            outcome.written.first, "conversion failed: \(outcome.headline)")
         #expect(!outcome.failed)
         #expect(outcome.wroteFile)
         #expect(written == directory.appending(path: "fixture.KeyStepPro"))
@@ -114,7 +120,7 @@ import Testing
         #expect(outcome.dryRun)
         // Nothing was written, so nothing may be revealed in Finder or renamed.
         #expect(!outcome.wroteFile)
-        #expect(outcome.written == plan.target)
+        #expect(outcome.written == [plan.target])
         #expect(!FileManager.default.fileExists(atPath: plan.target.path))
     }
 
@@ -145,11 +151,43 @@ import Testing
         let outcome = await Conversion.run(plan, settings: Settings())
 
         #expect(outcome.failed)
-        #expect(outcome.written == nil)
+        #expect(outcome.written.isEmpty)
         #expect(!outcome.wroteFile)
         // The runner spells failures "<prog>: <message>" for a terminal; the window drops the prefix.
         #expect(!outcome.headline.hasPrefix("ksp-swift-cli"))
         #expect(!outcome.headline.isEmpty)
+    }
+
+    /// Fabricated rather than run: nothing writes more than one file until split lands (#130), and
+    /// this is the plumbing that will carry it when it does.
+    @Test func everyDestinationOfARunIsKeptInTheOrderItWasWritten() {
+        let first = URL(filePath: "/tmp/song-track-1.mid")
+        let second = URL(filePath: "/tmp/song-track-2.mid")
+
+        let outcome = Conversion.outcome(
+            from: RunResult(code: 0, destinations: [first, second]), note: nil, dryRun: false)
+
+        #expect(outcome.written == [first, second])
+        #expect(!outcome.failed)
+        #expect(outcome.wroteFile)
+    }
+
+    /// One file still reads exactly as it did before the outcome went plural.
+    @Test func oneWrittenFileReadsAsItsNameAndSeveralAsACount() {
+        let one = Outcome(
+            written: [URL(filePath: "/tmp/song.mid")], headline: "", report: Report(), note: nil)
+        let two = Outcome(
+            written: [URL(filePath: "/tmp/a.mid"), URL(filePath: "/tmp/b.mid")], headline: "",
+            report: Report(), note: nil)
+        let none = Outcome(written: [], headline: "", report: Report(), note: nil)
+
+        #expect(one.resultLine == "song.mid")
+        #expect(two.resultLine == "2 files written")
+        #expect(none.resultLine == "Nothing was written")
+
+        #expect(one.previewLine == "Would write song.mid")
+        #expect(two.previewLine == "Would write 2 files")
+        #expect(none.previewLine == "Nothing would be written")
     }
 }
 

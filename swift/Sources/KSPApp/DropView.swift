@@ -141,17 +141,25 @@ struct DropView: View {
                         .font(.headline)
                     Text(staged.job.direction).font(.callout).foregroundStyle(.secondary)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        TextField("Name", text: $model.name)
-                            .textFieldStyle(.roundedBorder)
-                            .onChange(of: model.name) { model.discardPreview() }
-                        Text("This is the name MIDI Control Center's Project Browser will show.")
+                    // A name renames one file. A run writing several has no one file to apply it
+                    // to, so the field is not offered at all.
+                    if plan.writesOneFile {
+                        VStack(alignment: .leading, spacing: 4) {
+                            TextField("Name", text: $model.name)
+                                .textFieldStyle(.roundedBorder)
+                                .onChange(of: model.name) { model.discardPreview() }
+                            Text(
+                                "This is the name MIDI Control Center's Project Browser will show."
+                            )
                             .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Will be written to").font(.caption).foregroundStyle(.secondary)
-                        Text(plan.target.path).font(.callout).textSelection(.enabled)
+                        ForEach(plan.targets, id: \.self) { target in
+                            Text(target.path).font(.callout).textSelection(.enabled)
+                        }
                     }
 
                     if let note = plan.note {
@@ -306,13 +314,13 @@ struct DropView: View {
     private func dryRunPreview(_ preview: Outcome) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(
-                preview.failed
-                    ? "Nothing would be written"
-                    : "Would write \(preview.written?.lastPathComponent ?? "")",
+                preview.previewLine,
                 systemImage: preview.failed ? "exclamationmark.triangle" : "eye"
             )
             .font(.subheadline)
             .foregroundStyle(preview.failed ? Color.orange : Color.secondary)
+
+            if preview.written.count > 1 { writtenFiles(preview.written) }
 
             Text(preview.headline).font(.caption).textSelection(.enabled)
             findings(preview)
@@ -320,26 +328,45 @@ struct DropView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// What was written, all of it. Shaped like ``staged(_:)`` and for the same reason: the window
+    /// is fixed-size, so a list of files scrolls and "Convert another" stays put.
     @ViewBuilder
     private func done(_ outcome: Outcome) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(
-                outcome.failed ? "Nothing was written" : outcome.written?.lastPathComponent ?? "",
-                systemImage: outcome.failed ? "exclamationmark.triangle" : "checkmark.circle"
-            )
-            .font(.headline)
-            .foregroundStyle(outcome.failed ? Color.orange : Color.green)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label(
+                        outcome.resultLine,
+                        systemImage: outcome.failed
+                            ? "exclamationmark.triangle" : "checkmark.circle"
+                    )
+                    .font(.headline)
+                    .foregroundStyle(outcome.failed ? Color.orange : Color.green)
 
-            Text(outcome.headline).font(.callout).textSelection(.enabled)
+                    if outcome.written.count > 1 { writtenFiles(outcome.written) }
 
-            if let note = outcome.note {
-                Text(note).font(.caption).foregroundStyle(.secondary)
+                    Text(outcome.headline).font(.callout).textSelection(.enabled)
+
+                    if let note = outcome.note {
+                        Text(note).font(.caption).foregroundStyle(.secondary)
+                    }
+
+                    findings(outcome)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            findings(outcome)
-
-            Spacer()
             Button("Convert another") { model.reset() }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The files by name, under a headline that could only give their count.
+    private func writtenFiles(_ written: [URL]) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(written, id: \.self) { url in
+                Text(url.lastPathComponent).font(.caption).textSelection(.enabled)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

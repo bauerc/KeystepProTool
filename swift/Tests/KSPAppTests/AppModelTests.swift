@@ -6,13 +6,21 @@ import Testing
 /// The staged phase: a drop no longer writes, and the write happens when Convert says so.
 @MainActor
 @Suite struct AppModelTests {
-    /// Destinations the test owns, so nothing reaches MCC's Templates folder; a reveal that does
-    /// nothing, so a test run opens no Finder windows; and a folder panel that never opens.
-    private func model(writingInto directory: URL) -> AppModel {
+    /// What was handed to Finder, instead of handing it to Finder. A class so the model and the
+    /// test share the one instance.
+    private final class RevealLog {
+        var revealed: [[URL]] = []
+    }
+
+    /// Destinations the test owns, so nothing reaches MCC's Templates folder; a reveal that records
+    /// rather than opening a window; and a folder panel that never opens.
+    private func model(writingInto directory: URL, revealing log: RevealLog = RevealLog())
+        -> AppModel
+    {
         AppModel(
             store: FolderStore(defaults: volatileDefaults()),
             destination: { _, _ in Destination(directory: directory, note: nil) },
-            reveal: { _ in }, chooseFolder: { _ in nil })
+            reveal: { log.revealed.append($0) }, chooseFolder: { _ in nil })
     }
 
     private var midiFixture: URL { RepoData.projectFiles.appending(path: "m6-test-file.mid") }
@@ -62,7 +70,8 @@ import Testing
             Issue.record("a conversion should have finished in the result view")
             return
         }
-        let written = try #require(outcome.written, "conversion failed: \(outcome.headline)")
+        let written = try #require(
+            outcome.written.first, "conversion failed: \(outcome.headline)")
         #expect(written == directory.appending(path: "My Song.KeyStepPro"))
         #expect(FileManager.default.fileExists(atPath: written.path))
     }
@@ -126,13 +135,15 @@ import Testing
             return
         }
         #expect(outcome.failed)
+        #expect(outcome.written.isEmpty)
         #expect(model.staged == nil)
     }
 
     @Test func convertingWritesTheFileAndFinishesTheJob() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let model = model(writingInto: directory)
+        let log = RevealLog()
+        let model = model(writingInto: directory, revealing: log)
         model.accept(midiFixture)
 
         await model.convert()
@@ -141,22 +152,27 @@ import Testing
             Issue.record("a conversion should have finished in the result view")
             return
         }
-        let written = try #require(outcome.written, "conversion failed: \(outcome.headline)")
+        let written = try #require(
+            outcome.written.first, "conversion failed: \(outcome.headline)")
         #expect(outcome.wroteFile)
         #expect(FileManager.default.fileExists(atPath: written.path))
+        // Finder is asked to select the whole list, so a split run reveals every file of it.
+        #expect(log.revealed == [outcome.written])
     }
 
     /// A dry run is a look at what would happen, so the file stays staged.
     @Test func adryRunKeepsTheFileStagedAndWritesNothing() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let model = model(writingInto: directory)
+        let log = RevealLog()
+        let model = model(writingInto: directory, revealing: log)
         model.settings.dryRun = true
         model.accept(midiFixture)
 
         await model.convert()
 
         let staged = try #require(model.staged, "a dry run should leave the file staged")
+        #expect(log.revealed.isEmpty)
         let preview = try #require(staged.preview, "a dry run should report what it would write")
         #expect(preview.dryRun)
         #expect(!preview.failed)
@@ -179,7 +195,8 @@ import Testing
             Issue.record("the second conversion should have finished in the result view")
             return
         }
-        let written = try #require(outcome.written, "conversion failed: \(outcome.headline)")
+        let written = try #require(
+            outcome.written.first, "conversion failed: \(outcome.headline)")
         // The dry run wrote nothing, so the real one gets the plain name rather than "… 2".
         #expect(written == directory.appending(path: "m6-test-file.KeyStepPro"))
         #expect(FileManager.default.fileExists(atPath: written.path))

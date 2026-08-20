@@ -22,8 +22,9 @@ enum Job: Sendable, Hashable {
 /// The one thing read out of the terminal text is the success summary, and only to drop its first
 /// line -- see ``summary(_:)``.
 struct Outcome: Sendable, Equatable {
-    /// What the run wrote -- or, under a dry run, what it would have written.
-    var written: URL?
+    /// What the run wrote, in the order written -- or, under a dry run, what it would have
+    /// written. Empty is the failure.
+    var written: [URL]
     var headline: String
     var note: String?
     /// True when nothing was written because the user asked for a report instead.
@@ -34,7 +35,7 @@ struct Outcome: Sendable, Equatable {
     let collapsed: [String]
     let all: [String]
 
-    init(written: URL?, headline: String, report: Report, note: String?, dryRun: Bool = false) {
+    init(written: [URL], headline: String, report: Report, note: String?, dryRun: Bool = false) {
         self.written = written
         self.headline = headline
         self.note = note
@@ -45,7 +46,20 @@ struct Outcome: Sendable, Equatable {
         self.all = report.render(verbose: true)
     }
 
-    var failed: Bool { written == nil }
+    var failed: Bool { written.isEmpty }
+
+    /// One file reads as its own name; several read as a count, with the names listed beneath.
+    var resultLine: String {
+        if failed { return "Nothing was written" }
+        return written.count == 1 ? written[0].lastPathComponent : "\(written.count) files written"
+    }
+
+    /// The same question asked before the write, which is a different sentence.
+    var previewLine: String {
+        if failed { return "Nothing would be written" }
+        return written.count == 1
+            ? "Would write \(written[0].lastPathComponent)" : "Would write \(written.count) files"
+    }
 
     /// Whether there is a file on disk to reveal. A dry run names one without creating it, so the
     /// two are not the same question.
@@ -70,10 +84,15 @@ enum Conversion {
     /// anything the user should know about that placement before pressing Convert.
     struct Plan: Sendable, Hashable {
         let job: Job
-        let target: URL
+        /// Where the result lands. Never empty; one entry until split lands (#130).
+        let targets: [URL]
         /// A fallback directory, a name already taken, or both. `nil` when the obvious thing
         /// happened.
         let note: String?
+
+        var target: URL { targets[0] }
+        /// A name applies to one file. Several would rename an arbitrary one, so none is offered.
+        var writesOneFile: Bool { targets.count == 1 }
 
         var source: URL { job.source }
     }
@@ -102,7 +121,7 @@ enum Conversion {
         let clashed = target.deletingPathExtension().lastPathComponent != base
         let note = [destination.note, clashed ? collisionNote(target) : nil]
             .compactMap { $0 }.joined(separator: " ")
-        return Plan(job: job, target: target, note: note.isEmpty ? nil : note)
+        return Plan(job: job, targets: [target], note: note.isEmpty ? nil : note)
     }
 
     /// Run one conversion off the main actor.
@@ -138,15 +157,17 @@ enum Conversion {
         return .failed(result.message ?? "That project could not be read.")
     }
 
-    private static func outcome(from result: RunResult, note: String?, dryRun: Bool) -> Outcome {
-        guard result.code == 0, let written = result.destinations.first else {
+    /// Internal rather than private so a test can put a multi-destination ``RunResult`` through it:
+    /// no option produces one until split lands (#130).
+    static func outcome(from result: RunResult, note: String?, dryRun: Bool) -> Outcome {
+        guard result.code == 0, !result.destinations.isEmpty else {
             return Outcome(
-                written: nil, headline: result.message ?? "Conversion failed.",
+                written: [], headline: result.message ?? "Conversion failed.",
                 report: result.diagnostics, note: nil, dryRun: dryRun)
         }
         return Outcome(
-            written: written, headline: summary(result), report: result.diagnostics, note: note,
-            dryRun: dryRun)
+            written: result.destinations, headline: summary(result), report: result.diagnostics,
+            note: note, dryRun: dryRun)
     }
 
     /// The runner's own summary, minus its first line -- which names the path this window is
