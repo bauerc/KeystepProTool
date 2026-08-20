@@ -17,7 +17,6 @@ deviation T6.2 settled at the device and ``test_round_trip`` bounds to that one
 byte. H3.2's diff on hardware will show the same byte and nothing else.
 """
 
-import re
 from pathlib import Path
 
 import pytest
@@ -45,6 +44,33 @@ def attached(monkeypatch: pytest.MonkeyPatch, device: FakeDevice) -> FakeDevice:
     """The command's transport, with the device standing in for the hardware."""
     monkeypatch.setattr(pull, "UsbMidiTransport", lambda **_: device)
     return device
+
+
+class _Clock:
+    """A clock that moves only when a step is charged for its cost.
+
+    The replayed device answers instantly, so a real clock cannot separate the
+    run's halves at the tenth of a second the summary prints.
+    """
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.now = 0.0
+        self._monkeypatch = monkeypatch
+        monkeypatch.setattr(pull, "monotonic", self)
+
+    def __call__(self) -> float:
+        return self.now
+
+    def charge(self, name: str, seconds: float) -> None:
+        """Make ``pull``'s *name* cost *seconds* on this clock."""
+        inner = getattr(pull, name)
+
+        def timed(*args: object, **kwargs: object) -> object:
+            result = inner(*args, **kwargs)
+            self.now += seconds
+            return result
+
+        self._monkeypatch.setattr(pull, name, timed)
 
 
 def test_the_dump_is_byte_identical_to_mcc_s_export(
@@ -154,22 +180,29 @@ def test_the_result_is_a_project_the_rest_of_the_tool_can_read(
 
 
 def test_the_summary_times_the_whole_run_not_just_the_read(
-    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    attached: FakeDevice,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The total has to include the template parse and the write.
 
     Both are 3.5 MB and neither is at the device, so a "total" measured from the
     first frame would understate a real run by most of it.
     """
+    clock = _Clock(monkeypatch)
+    clock.charge("load_template", 5.0)
+    clock.charge("read_raw", 2.0)
+    clock.charge("dump_path", 3.0)
+
     written = tmp_path / "pulled.KeyStepPro"
     assert main([str(written)]) == 0
 
-    line = next(line for line in capsys.readouterr().out.splitlines() if "s total" in line)
-    total, reading = (float(part) for part in re.findall(r"([\d.]+) s", line))
-    # The replayed device answers instantly, so the 3.5 MB parse and write are
-    # nearly all of this run. A total equal to the read time means the clock was
-    # started after them.
-    assert total > reading
+    out = capsys.readouterr().out
+    # Only the read is at the device; the parse before it and the write after it
+    # are the other 8 s, and a clock started later would drop them.
+    assert "read slot 1 in 2.0 s" in out
+    assert "  10.0 s total, 2.0 s of it at the device" in out
 
 
 def test_an_existing_file_is_not_overwritten_without_force(
