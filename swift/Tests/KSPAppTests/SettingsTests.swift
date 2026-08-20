@@ -1,4 +1,5 @@
 import Foundation
+import KSPKit
 import KSPRun
 import Testing
 
@@ -100,7 +101,6 @@ import Testing
 
         #expect(mapped.tracks == defaults.tracks)
         #expect(mapped.patterns == defaults.patterns)
-        #expect(mapped.passes == defaults.passes)
         #expect(mapped.ticksPerBeat == defaults.ticksPerBeat)
         #expect(mapped.drumMapSpec == defaults.drumMapSpec)
         #expect(mapped.drumChannel == defaults.drumChannel)
@@ -109,6 +109,29 @@ import Testing
         #expect(mapped.includeDisabled == defaults.includeDisabled)
         #expect(mapped.applySwing == defaults.applySwing)
         #expect(mapped.applyTimeShift == defaults.applyTimeShift)
+    }
+
+    /// A fresh window sits on auto, so the app on defaults exports what the CLI on defaults exports.
+    @Test func freshSettingsLeaveTheStepSkipCycleOnAuto() {
+        let settings = Settings()
+        #expect(settings.stepSkip == .auto)
+        #expect(settings.exportOptions(source: output, output: source).passes == nil)
+    }
+
+    /// Every choice the picker offers has to reach the export, auto included.
+    @Test(arguments: Settings.StepSkip.allCases)
+    func everyStepSkipChoiceReachesTheExport(choice: Settings.StepSkip) {
+        var settings = Settings()
+        settings.stepSkip = choice
+        #expect(settings.exportOptions(source: output, output: source).passes == choice.passes)
+    }
+
+    /// The cap is the device's four 16/32/48/64 sequences, not a number picked for the menu: if the
+    /// constant ever moves, the picker fails here rather than drifting quietly.
+    @Test func theStepSkipChoicesAreTheDevicesOwnSequences() {
+        #expect(
+            Settings.StepSkip.allCases.compactMap(\.passes) == Array(1...Constants.skipCyclePasses))
+        #expect(Settings.StepSkip.allCases.filter { $0.passes == nil } == [.auto])
     }
 
     /// The ticks reach the export per track, which is what an individually chosen cell needs.

@@ -61,6 +61,28 @@ struct DropView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Step Skip").font(.subheadline)
+
+                    Picker("Step Skip", selection: $model.settings.stepSkip) {
+                        ForEach(Settings.StepSkip.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .controlSize(.small)
+                    // The choice changes the notes written and the findings reported, so a preview
+                    // taken before it was made no longer describes this run.
+                    .onChange(of: model.settings.stepSkip) { model.discardPreview() }
+
+                    Text(
+                        "Auto expands the device's 16/32/48/64 cycle to four passes when a note "
+                            + "skips part of it; 1 flattens the cycle to a single pass that plays "
+                            + "every note whatever its mask. This is the device's own cycle, not "
+                            + "copies of the export."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
+                }
+
                 Divider()
 
                 Text("Options").font(.headline)
@@ -76,6 +98,7 @@ struct DropView: View {
                     Text("List each finding instead of one line per kind.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)

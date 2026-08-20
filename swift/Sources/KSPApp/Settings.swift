@@ -6,10 +6,29 @@ import KSPRun
 /// An option the sidebar does not offer is left off these mappings entirely, keeping the runner's
 /// own default -- which is what makes the app on defaults convert what the CLI on defaults converts.
 struct Settings: Sendable, Equatable {
+    /// Auto, or a fixed count of the device's four 16/32/48/64 sequences.
+    ///
+    /// A deliberate twin of `KSPSwiftCLI`'s `Passes`: SwiftPM forbids depending on an executable
+    /// target, and moving it down to `KSPRun` would drag ArgumentParser with it.
+    enum StepSkip: String, CaseIterable, Identifiable, Sendable {
+        case auto
+        case one = "1"
+        case two = "2"
+        case three = "3"
+        case four = "4"
+
+        var id: String { rawValue }
+        /// The count, or `nil` for auto -- which is what `ExportRunner.Options` wants for it.
+        var passes: Int? { Int(rawValue) }
+        var label: String { self == .auto ? "Auto" : rawValue }
+    }
+
     /// Report what would be written, and write nothing.
     var dryRun = false
     /// List every finding rather than one line per kind.
     var verbose = false
+    /// How much of the step-skip cycle the export renders. Export-only: an import has no cycle.
+    var stepSkip: StepSkip = .auto
     /// The slots the export runs over, per track, empty meaning all.
     var cells: [Int: Set<Int>] = [:]
     /// Write each selected slot to its own file rather than one file holding all of them. Off is
@@ -38,7 +57,8 @@ struct Settings: Sendable, Equatable {
         // Splitting makes `output` the folder the runner fills, which is what `Conversion.plan`
         // hands over: the runner names the files itself, after the source and each slot it found.
         ExportRunner.Options(
-            path: source, output: output, split: splitPerPattern, cells: cells, dryRun: dryRun,
-            verbose: verbose, configPath: drumMapConfigPath)
+            path: source, output: output, split: splitPerPattern, cells: cells,
+            passes: stepSkip.passes, dryRun: dryRun, verbose: verbose,
+            configPath: drumMapConfigPath)
     }
 }
