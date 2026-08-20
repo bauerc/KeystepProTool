@@ -46,9 +46,7 @@ import Testing
             into: Destination(directory: directory, note: nil))
 
         #expect(plan.target == directory.appending(path: "fixture.KeyStepPro"))
-        // One target today, and the name field the staged view offers depends on it staying one.
-        #expect(plan.targets == [directory.appending(path: "fixture.KeyStepPro")])
-        #expect(plan.writesOneFile)
+        #expect(!plan.intoFolder)
         #expect(plan.note == nil)
     }
 
@@ -155,6 +153,41 @@ import Testing
             outcome.written.map(\.lastPathComponent)
                 .contains("project_5_track1_pattern1.mid"))
         #expect(outcome.written.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+        // Named so the result can say where they went even when only one file is written.
+        #expect(outcome.folder == plan.target)
+    }
+
+    /// One file is the case the result view would otherwise report as a bare filename, leaving the
+    /// folder the user named nowhere on screen.
+    @Test func asplitExportOfOneSlotStillNamesItsFolder() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+        let plan = Conversion.plan(
+            .toMIDI(source), named: "fixture",
+            into: Destination(directory: directory, note: nil), splitting: true)
+
+        let outcome = await Conversion.run(
+            plan, settings: Settings(cells: [3: [1]], splitPerPattern: true))
+
+        #expect(!outcome.failed, "export failed: \(outcome.headline)")
+        #expect(outcome.written.count == 1)
+        #expect(outcome.folder == plan.target)
+    }
+
+    /// A run that wrote one named file has no folder to report -- the file's own name is the answer.
+    @Test func aplainExportReportsNoFolder() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+        let plan = Conversion.plan(
+            .toMIDI(source), named: "fixture",
+            into: Destination(directory: directory, note: nil))
+
+        let outcome = await Conversion.run(plan, settings: Settings())
+
+        #expect(!outcome.failed)
+        #expect(outcome.folder == nil)
     }
 
     /// The one end-to-end run, and the point of it is that the app reaches the *shipped* runner and

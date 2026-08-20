@@ -96,29 +96,28 @@ enum Naming {
         in directory: URL, stem: String, extension ext: String,
         exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
     ) -> URL {
-        stepped(in: directory, stem: stem, suffix: ".\(ext)", exists: exists)
+        firstFree(in: directory, stem: stem, extension: ext, exists: exists)
     }
 
-    /// The same ladder for a folder, which a split export fills with files it names itself.
-    ///
-    /// Claiming a folder nothing else holds is how the never-overwrite rule survives a run whose
-    /// filenames the app cannot know: nothing inside a folder this new can be in the way.
+    /// The same ladder for a folder, which a split export fills with files it names itself: nothing
+    /// inside a folder this new can be in the way of a run whose filenames the app cannot know.
     static func vacantFolder(
         in directory: URL, stem: String,
         exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
     ) -> URL {
-        stepped(in: directory, stem: stem, suffix: "", exists: exists)
+        firstFree(in: directory, stem: stem, extension: nil, exists: exists)
     }
 
-    private static func stepped(
-        in directory: URL, stem: String, suffix: String, exists: (URL) -> Bool
+    private static func firstFree(
+        in directory: URL, stem: String, extension ext: String?, exists: (URL) -> Bool
     ) -> URL {
         let base = sanitised(stem)
-        var candidate = directory.appending(path: "\(base)\(suffix)")
-        var step = 2
+        let tail = ext.map { ".\($0)" } ?? ""
+        var candidate = directory.appending(path: "\(base)\(tail)")
+        var attempt = 2
         while exists(candidate) {
-            candidate = directory.appending(path: "\(base) \(step)\(suffix)")
-            step += 1
+            candidate = directory.appending(path: "\(base) \(attempt)\(tail)")
+            attempt += 1
         }
         return candidate
     }

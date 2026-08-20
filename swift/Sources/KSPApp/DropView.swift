@@ -45,19 +45,19 @@ struct DropView: View {
 
                 Divider()
 
-                Text("MIDI files").font(.headline)
+                Text("MIDI export").font(.headline)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Picker("", selection: $model.settings.splitPerPattern) {
                         Text("One file for everything").tag(false)
-                        Text("One file per pattern").tag(true)
+                        Text("One file per pattern slot").tag(true)
                     }
                     .pickerStyle(.radioGroup)
                     .labelsHidden()
                     // The choice moves the destination and the file list both, so a preview taken
                     // before it was made no longer describes this run.
                     .onChange(of: model.settings.splitPerPattern) { model.discardPreview() }
-                    Text("Each file holds one slot and starts at its own bar 1.")
+                    Text("Each file holds one pattern slot and starts at its own bar 1.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
@@ -159,23 +159,18 @@ struct DropView: View {
                         .font(.headline)
                     Text(staged.job.direction).font(.callout).foregroundStyle(.secondary)
 
-                    // A name renames one file. A run writing several has no one file to apply it
-                    // to, so the field is not offered at all.
-                    if plan.writesOneFile {
-                        VStack(alignment: .leading, spacing: 4) {
-                            TextField("Name", text: $model.name)
-                                .textFieldStyle(.roundedBorder)
-                                .onChange(of: model.name) { model.discardPreview() }
-                            Text(nameNote(plan))
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField("Name", text: $model.name)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: model.name) { model.discardPreview() }
+                        Text(nameNote(plan))
+                            .font(.caption).foregroundStyle(.secondary)
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Will be written to").font(.caption).foregroundStyle(.secondary)
-                        ForEach(plan.targets, id: \.self) { target in
-                            Text(target.path).font(.callout).textSelection(.enabled)
-                        }
+                        Text(plan.intoFolder ? "Will be written into" : "Will be written to")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text(plan.target.path).font(.callout).textSelection(.enabled)
                     }
 
                     if let note = plan.note {
@@ -399,7 +394,10 @@ struct DropView: View {
             .font(.subheadline)
             .foregroundStyle(preview.failed ? Color.orange : Color.secondary)
 
-            if preview.written.count > 1 { writtenFiles(preview.written) }
+            if let folder = preview.folder { landedIn(folder) }
+            if preview.written.count > 1 || preview.folder != nil {
+                writtenFiles(preview.written)
+            }
 
             Text(preview.headline).font(.caption).textSelection(.enabled)
             findings(preview)
@@ -422,7 +420,10 @@ struct DropView: View {
                     .font(.headline)
                     .foregroundStyle(outcome.failed ? Color.orange : Color.green)
 
-                    if outcome.written.count > 1 { writtenFiles(outcome.written) }
+                    if let folder = outcome.folder { landedIn(folder) }
+                    if outcome.written.count > 1 || outcome.folder != nil {
+                        writtenFiles(outcome.written)
+                    }
 
                     Text(outcome.headline).font(.callout).textSelection(.enabled)
 
@@ -447,6 +448,11 @@ struct DropView: View {
             ? "This names the folder the files land in. Each file is named after the project and "
                 + "the slot it holds."
             : "This is the name MIDI Control Center's Project Browser will show."
+    }
+
+    /// The folder a split run filled. The headline counts its files; only this says where they are.
+    private func landedIn(_ folder: URL) -> some View {
+        Text(folder.path).font(.callout).textSelection(.enabled)
     }
 
     /// The files by name, under a headline that could only give their count.
