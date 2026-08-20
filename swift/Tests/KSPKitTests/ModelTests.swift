@@ -124,6 +124,34 @@ import Testing
         #expect([0, 1].map { Self.patterns(narrowed, $0) } == [[2], [2]])
     }
 
+    /// The cross product's blind spot: a different set of slots on each track.
+    @Test func selectCellsKeepsAdifferentPatternSetPerTrack() throws {
+        let narrowed = try Self.sample().select(cells: [1: [2, 3], 3: [7]])
+        #expect(Self.numbers(narrowed) == [1, 3])
+        #expect(Self.patterns(narrowed, 0) == [2, 3])
+        #expect(Self.patterns(narrowed, 1) == [7])
+    }
+
+    @Test func selectNoCellsMeansEverything() throws {
+        let project = try Self.sample()
+        let narrowed = project.select(cells: [:])
+        #expect(Self.numbers(narrowed) == Self.numbers(project))
+        #expect(Self.patterns(narrowed, 0) == Self.patterns(project, 0))
+    }
+
+    /// A track the map does not name is left out, the way an unticked row is.
+    @Test func selectCellsDropsAtrackItDoesNotName() throws {
+        #expect(Self.numbers(try Self.sample().select(cells: [2: [1]])) == [2])
+    }
+
+    @Test func selectCellsSurvivesTheFieldsItDoesNotNarrow() throws {
+        let project = try Self.sample()
+        let narrowed = project.select(cells: [1: [1]])
+        #expect(narrowed.tracks[0].drumMode == project.tracks[0].drumMode)
+        #expect(narrowed.tracks[0].itemID == project.tracks[0].itemID)
+        #expect(narrowed.tempoBPM == project.tempoBPM)
+    }
+
     @Test func selectionKeepsTheProjectOrder() throws {
         // A set has no order; the project's own order is what survives.
         #expect(Self.numbers(try Self.sample().select(tracks: [4, 2, 1])) == [1, 2, 4])

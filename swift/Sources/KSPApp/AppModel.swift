@@ -23,6 +23,8 @@ final class AppModel {
         var preview: Outcome?
         /// What was dropped, read for showing rather than converting. Only a project has one.
         var summary: SummaryState = .absent
+        /// Which cells the export runs over. Fully ticked once a summary lands.
+        var selection = GridSelection()
         /// This drop, as distinct from the one before it. The view keys its read off this rather
         /// than off the path, because dropping the same file again is a new drop and needs a new
         /// read -- the path alone would leave the second one waiting forever.
@@ -129,6 +131,7 @@ final class AppModel {
         // asks again when it comes back to a summary still waiting.
         guard case .staged(var current) = phase, current.id == staged.id else { return }
         current.summary = state
+        if case .ready(let summary) = state { current.selection = GridSelection(summary) }
         phase = .staged(current)
     }
 
@@ -136,6 +139,28 @@ final class AppModel {
     /// edited, so the window never promises a path it would not use.
     func plan(for job: Job) -> Conversion.Plan {
         Conversion.plan(job, named: name, into: destination(job, folders))
+    }
+
+    func toggle(track: Int, pattern: Int) {
+        mutateSelection { $0.toggle(track: track, pattern: pattern) }
+    }
+
+    func toggle(track: Int) { mutateSelection { $0.toggle(track: track) } }
+
+    func toggle(pattern: Int) { mutateSelection { $0.toggle(pattern: pattern) } }
+
+    /// A dry run describes one selection, so changing it drops the preview.
+    private func mutateSelection(_ change: (inout GridSelection) -> Void) {
+        guard case .staged(var staged) = phase else { return }
+        change(&staged.selection)
+        phase = .staged(staged)
+        discardPreview()
+    }
+
+    /// Why Convert is off, or `nil` when it is on. Only a project that has been read has a grid.
+    var blockReason: String? {
+        guard let staged, case .ready = staged.summary else { return nil }
+        return staged.selection.blockReason
     }
 
     /// A dry run describes one name. Editing the name makes it stale, so it is dropped.
@@ -146,12 +171,15 @@ final class AppModel {
     }
 
     func convert() async {
-        guard let staged else { return }
+        // The model's rule, not the button's, however Convert is reached.
+        guard let staged, blockReason == nil else { return }
         // Re-planned rather than reused: a name can be taken between the last keystroke and this.
         let plan = plan(for: staged.job)
         phase = .working(plan.source.lastPathComponent)
 
-        let outcome = await Conversion.run(plan, settings: settings)
+        let selection = staged.selection
+        let outcome = await Conversion.run(
+            plan, settings: settings.selecting(selection), excluded: selection.exclusionNote)
 
         // A dry run wrote nothing, so the file stays staged and can be converted for real. The same
         // drop rather than a new one: it is still the file that was dropped, summary and all.

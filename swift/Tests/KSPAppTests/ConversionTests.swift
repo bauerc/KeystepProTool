@@ -134,6 +134,71 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: plan.target.path))
     }
 
+    /// What the grid left out rides the same channel the placement notes do.
+    @Test func whatWasLeftOutIsCarriedIntoTheResult() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+        let plan = Conversion.plan(
+            .toMIDI(source), named: "fixture",
+            into: Destination(directory: directory, note: nil))
+
+        let outcome = await Conversion.run(
+            plan, settings: Settings(), excluded: "Excluded: Track 2")
+
+        #expect(!outcome.failed)
+        #expect(outcome.note == "Excluded: Track 2")
+    }
+
+    /// A name already taken and a track switched off can both apply.
+    @Test func acollisionAndAnExclusionAreBothReported() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+        try touch(directory, "fixture.mid")
+        let plan = Conversion.plan(
+            .toMIDI(source), named: "fixture",
+            into: Destination(directory: directory, note: nil))
+
+        let outcome = await Conversion.run(
+            plan, settings: Settings(), excluded: "Excluded: pattern slot 5")
+
+        #expect(outcome.note?.contains("fixture 2.mid") == true)
+        #expect(outcome.note?.contains("Excluded: pattern slot 5") == true)
+    }
+
+    /// Nothing unticked, nothing said.
+    @Test func afullConversionCarriesNoExclusion() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+        let plan = Conversion.plan(
+            .toMIDI(source), named: "fixture",
+            into: Destination(directory: directory, note: nil))
+
+        let outcome = await Conversion.run(plan, settings: Settings())
+
+        #expect(outcome.note == nil)
+    }
+
+    /// The run the exclusion explains is the one that fails.
+    @Test func afailedRunStillNamesWhatWasLeftOut() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+        let plan = Conversion.plan(
+            .toMIDI(source), named: "fixture",
+            into: Destination(directory: directory, note: nil))
+
+        // One empty slot: the runner refuses rather than writing an empty file.
+        let outcome = await Conversion.run(
+            plan, settings: Settings(cells: [1: [16]]),
+            excluded: "Excluded: pattern slots 1, 2")
+
+        #expect(outcome.failed)
+        #expect(outcome.note == "Excluded: pattern slots 1, 2")
+    }
+
     @Test func afailureCarriesTheMessageWithoutTheCommandPrefix() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
