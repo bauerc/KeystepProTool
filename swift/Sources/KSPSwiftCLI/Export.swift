@@ -78,6 +78,15 @@ struct Export: ParsableCommand {
             """, valueName: "N"))
     var repeatCount = 1
 
+    @Option(
+        name: .customLong("flat-velocity"),
+        help: ArgumentHelp(
+            """
+            render every note at this velocity instead of the one it stores: 'fresh' for the \
+            measured fresh-note velocity (\(MIDIExport.defaultFlatVelocity)), or 1-127
+            """, valueName: "VALUE"))
+    var flatVelocity: String?
+
     @Option(name: .customLong("ticks-per-beat"), help: "MIDI resolution")
     var ticksPerBeat = MIDIExport.defaultTicksPerBeat
 
@@ -149,11 +158,13 @@ struct Export: ParsableCommand {
     func run() throws {
         let selectedTracks: Set<Int>
         let selectedPatterns: Set<Int>
+        let parsedFlatVelocity: Int?
         do {
             selectedTracks = try parseSelection(
                 tracks, option: "--tracks", limit: Constants.trackItemIDs.count)
             selectedPatterns = try parseSelection(
                 patterns, option: "--patterns", limit: Constants.patternsPerTrack)
+            parsedFlatVelocity = try parseFlatVelocity(flatVelocity)
         } catch {
             // Through the runner's own failure shape rather than `ValidationError`, so the wording
             // matches `ksp2midi`'s byte for byte -- ArgumentParser's would not.
@@ -166,7 +177,7 @@ struct Export: ParsableCommand {
                 output: output.map { URL(filePath: $0) },
                 split: split, tracks: selectedTracks,
                 patterns: selectedPatterns, passes: passes.count,
-                repeatCount: repeatCount,
+                repeatCount: repeatCount, flatVelocity: parsedFlatVelocity,
                 ticksPerBeat: ticksPerBeat, drumMapSpec: drumMapSpec,
                 drumChannel: drumChannel - 1, defaultGate: defaultGate,
                 includeStale: includeStale, includeDisabled: includeDisabled,

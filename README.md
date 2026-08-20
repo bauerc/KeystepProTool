@@ -222,6 +222,7 @@ wrote out/project_9_track1_pattern3.mid
 | `--track LIST` / `--pattern LIST` | The same two options under their singular names |
 | `--passes {auto,1,2,3,4}` | How many of the four 16/32/48/64 repeats to render (default `auto`) |
 | `--repeat N` | Lay the whole export down N times end to end, 1–10 (default 1) |
+| `--flat-velocity VALUE` | Render every note at one velocity instead of its stored value — `fresh` for the measured fresh-note velocity (100), or 1–127 |
 | `--ticks-per-beat N` | MIDI resolution (default 480) |
 | `--drum-map SPEC` | Same grammar and config file as `ksp-dump` (default `chromatic:36`) |
 | `--default-gate STEPS` | Length used where a gate value is outside the measured 0–127 ladder (default 0.5) |

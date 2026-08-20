@@ -14,6 +14,7 @@ public enum ExportRunner {
         public var patterns: Set<Int>
         public var passes: Int?
         public var repeatCount: Int
+        public var flatVelocity: Int?
         public var ticksPerBeat: Int
         public var drumMapSpec: String?
         /// 0-based, as `KSPMIDI` counts channels -- the CLI's `--drum-channel` is 1-based and
@@ -36,6 +37,7 @@ public enum ExportRunner {
         public init(
             path: URL, output: URL? = nil, split: Bool = false, tracks: Set<Int> = [],
             patterns: Set<Int> = [], passes: Int? = nil, repeatCount: Int = 1,
+            flatVelocity: Int? = nil,
             ticksPerBeat: Int = MIDIExport.defaultTicksPerBeat, drumMapSpec: String? = nil,
             drumChannel: Int = MIDIExport.drumChannel,
             defaultGate: Double = Constants.defaultGateLength, includeStale: Bool = false,
@@ -51,6 +53,7 @@ public enum ExportRunner {
             self.patterns = patterns
             self.passes = passes
             self.repeatCount = repeatCount
+            self.flatVelocity = flatVelocity
             self.ticksPerBeat = ticksPerBeat
             self.drumMapSpec = drumMapSpec
             self.drumChannel = drumChannel
@@ -98,7 +101,7 @@ public enum ExportRunner {
                 applySwing: options.applySwing, applyTimeShift: options.applyTimeShift,
                 includeStale: options.includeStale, includeDisabled: options.includeDisabled,
                 markers: options.markers, passes: options.passes,
-                repeatCount: options.repeatCount)
+                flatVelocity: options.flatVelocity, repeatCount: options.repeatCount)
         } catch {
             return fail("\(error)", code: 2)
         }

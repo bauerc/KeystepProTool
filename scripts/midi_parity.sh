@@ -190,6 +190,7 @@ if has export; then
         add export "$(basename "$project") --patterns 1-4" "$project" --patterns 1-4
         add export "$(basename "$project") --no-markers" "$project" --no-markers
         add export "$(basename "$project") --repeat 2" "$project" --repeat 2
+        add export "$(basename "$project") --flat-velocity fresh" "$project" --flat-velocity fresh
         add split "$(basename "$project") --split" "$project" --split
         add split "$(basename "$project") --split --repeat 2" "$project" --split --repeat 2
     done
@@ -206,6 +207,16 @@ if has export; then
     # built in a different place on each side -- the CLI in Python, the runner in Swift -- so this
     # is where that difference is held to one message.
     add export "--repeat past its limit" project_files/project_9.KeyStepPro --repeat 11
+    # 0 is refused the same way as a bare too-loud out-of-range value; a word that is neither
+    # 'fresh' nor a number needs its own message; and a numeral too big for Swift's Int must still
+    # reach the range message rather than the "not a velocity" one, which pins the saturation
+    # FlatVelocity.swift does the same way Selection.swift does for --tracks.
+    add export "--flat-velocity refused alike"  project_files/project_9.KeyStepPro \
+        --flat-velocity 0
+    add export "--flat-velocity not a velocity" project_files/project_9.KeyStepPro \
+        --flat-velocity loud
+    add export "--flat-velocity past Int"       project_files/project_9.KeyStepPro \
+        --flat-velocity 99999999999999999999
 else
     echo "midi_parity: ksp-swift-cli has no 'export' yet -- skipping the ksp2midi direction"
 fi
