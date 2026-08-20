@@ -89,6 +89,14 @@ cycle, so every note lands where its mask says; on *1* it renders a single pass 
 note whatever its mask, which flattens the cycle. Either way the result's findings say which
 happened. This is the device's own cycle, not copies of the export.
 
+Under it sits **Repeat**, a 1–10 stepper, and that one *is* copies of the export: it lays the whole
+thing down again end to end. The line under the grid says what the two come to together — "4
+patterns × 2 repeats — 8 patterns end to end" — so the length is legible before Convert is pressed,
+and it moves as slots are unticked. Repeat exists only in the `.mid`: the device stores no such
+count, so no repeat of it can be written back to a project. At 1 the file is exactly what it was
+before the stepper existed. Splitting changes the unit rather than the count: each file holds one
+pattern, so the line gives the length per file instead.
+
 Install it with `make install` (see [Installation](#installation)), then:
 
 ```sh

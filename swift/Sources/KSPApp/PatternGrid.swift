@@ -192,3 +192,58 @@ struct PatternGrid: Equatable {
         self.rows = summary.tracks.map(Row.init)
     }
 }
+
+/// How long the export runs, in the two things that set it: the pattern slots the grid has ticked,
+/// and the repeat count. No SwiftUI, so the arithmetic and the wording both unit-test.
+///
+/// The count is exact, not an estimate: ``MIDIExport/arrange`` gives each pattern *number* one
+/// stretch of timeline, and ``MIDIExport/renderProject`` plans nothing for a slot holding no notes.
+/// ``ConversionTests`` pins it against both.
+struct ExportLength: Equatable {
+    /// Ticked slots that hold something, counted once however many tracks play them.
+    let patterns: Int
+    let repeatCount: Int
+    /// Splitting measures the length per file: `exportSplit` groups by (track, pattern) and
+    /// repeats each group, so every file is one pattern long however many slots were ticked.
+    let isSplit: Bool
+    /// Convert already refuses an empty selection in its own words; this keeps the line from
+    /// repeating it.
+    let isBlocked: Bool
+
+    /// What comes out end to end -- of the one file, or of each file when the export splits.
+    var total: Int { (isSplit ? 1 : patterns) * repeatCount }
+
+    /// `nil` only when Convert is already blocked with its own reason: a length as well would be a
+    /// second, quieter answer to the same question.
+    var line: String? {
+        if isBlocked { return nil }
+        // Ticks on nothing but empty slots leave Convert enabled, so this is the only thing that
+        // would say the run writes no notes. Staying silent here is what the block reason covers.
+        guard patterns > 0 else {
+            return "No ticked slot holds anything, so nothing would be written."
+        }
+        // No count of files here: a split drops any that came out empty, and a number this cannot
+        // be sure of is worse than the per-file length, which is exactly one pattern either way.
+        if isSplit {
+            guard repeatCount > 1 else { return "One pattern per file." }
+            return "One pattern × \(repeatCount) repeats per file. "
+                + "Repeats exist only in the .mid."
+        }
+        let counted = "\(patterns) pattern\(patterns == 1 ? "" : "s")"
+        guard repeatCount > 1 else { return "\(counted) end to end." }
+        return "\(counted) × \(repeatCount) repeats — \(total) patterns end to end. "
+            + "Repeats exist only in the .mid."
+    }
+
+    init(_ summary: ProjectSummary, selection: GridSelection, repeatCount: Int, isSplit: Bool) {
+        self.patterns = (1...AppLayout.columnCount).count { pattern in
+            summary.tracks.contains { track in
+                selection.isTicked(track: track.number, pattern: pattern)
+                    && track.patterns.contains { $0.number == pattern && !$0.isEmpty }
+            }
+        }
+        self.repeatCount = repeatCount
+        self.isSplit = isSplit
+        self.isBlocked = selection.blockReason != nil
+    }
+}

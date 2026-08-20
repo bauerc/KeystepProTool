@@ -6,6 +6,11 @@ import KSPRun
 /// An option the sidebar does not offer is left off these mappings entirely, keeping the runner's
 /// own default -- which is what makes the app on defaults convert what the CLI on defaults converts.
 struct Settings: Sendable, Equatable {
+    /// What the stepper offers. A deliberate twin of `MIDIExport.maxRepeat`, for the reason
+    /// ``StepSkip`` is one; a test pins the two together so the control cannot drift past what the
+    /// export accepts.
+    static let repeatRange = 1...10
+
     /// Auto, or a fixed count of the device's four 16/32/48/64 sequences.
     ///
     /// A deliberate twin of `KSPSwiftCLI`'s `Passes`: SwiftPM forbids depending on an executable
@@ -29,6 +34,9 @@ struct Settings: Sendable, Equatable {
     var verbose = false
     /// How much of the step-skip cycle the export renders. Export-only: an import has no cycle.
     var stepSkip: StepSkip = .auto
+    /// How many times the whole export is laid down end to end. Export-only, and not ``stepSkip``:
+    /// the device stores no such count, so no repeat of it can be written back.
+    var repeatCount = 1
     /// The slots the export runs over, per track, empty meaning all.
     var cells: [Int: Set<Int>] = [:]
     /// Write each selected slot to its own file rather than one file holding all of them. Off is
@@ -58,7 +66,7 @@ struct Settings: Sendable, Equatable {
         // hands over: the runner names the files itself, after the source and each slot it found.
         ExportRunner.Options(
             path: source, output: output, split: splitPerPattern, cells: cells,
-            passes: stepSkip.passes, dryRun: dryRun, verbose: verbose,
+            passes: stepSkip.passes, repeatCount: repeatCount, dryRun: dryRun, verbose: verbose,
             configPath: drumMapConfigPath)
     }
 }

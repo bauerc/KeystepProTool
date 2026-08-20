@@ -70,7 +70,7 @@ import PackageDescription
         .testTarget(name: "KSPSwiftCLITests", dependencies: ["KSPSwiftCLI"]),
         // Covers the app's file-placement rules, and is what makes `swift test` -- and so
         // validate.sh -- compile the GUI on every run rather than only when someone bundles it.
-        .testTarget(name: "KSPAppTests", dependencies: ["KSPApp"]),
+        .testTarget(name: "KSPAppTests", dependencies: ["KSPApp", "KSPMIDI"]),
     ]
 #endif
 

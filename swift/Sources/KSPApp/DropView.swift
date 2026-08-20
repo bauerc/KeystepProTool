@@ -83,6 +83,23 @@ struct DropView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 }
 
+                VStack(alignment: .leading, spacing: 4) {
+                    Stepper(value: $model.settings.repeatCount, in: Settings.repeatRange) {
+                        Text("Repeat ×\(model.settings.repeatCount)").font(.subheadline)
+                    }
+                    .controlSize(.small)
+                    // The choice changes how long the file runs, so a preview taken before it was
+                    // made no longer describes this run.
+                    .onChange(of: model.settings.repeatCount) { model.discardPreview() }
+
+                    Text(
+                        "Lay the whole export down this many times end to end. This one is not the "
+                            + "cycle above: it exists only in the .mid, and the device stores no "
+                            + "such count, so no repeat of it can be written back to a project."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
+                }
+
                 Divider()
 
                 Text("Options").font(.headline)
@@ -255,7 +272,11 @@ struct DropView: View {
             Label(message, systemImage: "exclamationmark.triangle")
                 .font(.caption).foregroundStyle(.orange).textSelection(.enabled)
         case .ready(let summary):
-            grid(PatternGrid(summary), selection: selection)
+            grid(
+                PatternGrid(summary), selection: selection,
+                length: ExportLength(
+                    summary, selection: selection, repeatCount: model.settings.repeatCount,
+                    isSplit: model.settings.splitPerPattern))
         }
     }
 
@@ -267,7 +288,9 @@ struct DropView: View {
     ///
     /// Not scrolled: the staged view already scrolls as a whole, and a second scroller inside the
     /// first is a trap for a mouse wheel.
-    private func grid(_ grid: PatternGrid, selection: GridSelection) -> some View {
+    private func grid(_ grid: PatternGrid, selection: GridSelection, length: ExportLength)
+        -> some View
+    {
         VStack(alignment: .leading, spacing: 6) {
             Text(grid.header).font(.caption).foregroundStyle(.secondary)
 
@@ -281,6 +304,10 @@ struct DropView: View {
                     }
                 }
                 ForEach(grid.rows, id: \.track) { trackRow($0, selection: selection) }
+            }
+
+            if let line = length.line {
+                Text(line).font(.caption).foregroundStyle(.secondary)
             }
 
             Text(PatternGrid.legend).font(.caption2).foregroundStyle(.secondary)
