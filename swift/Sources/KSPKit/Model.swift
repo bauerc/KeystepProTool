@@ -314,6 +314,13 @@ public struct Track: Sendable, Hashable {
     /// Pattern `number`, counting from 1.
     public func pattern(_ number: Int) -> Pattern { patterns[number - 1] }
 
+    /// A copy holding only the patterns `numbers` names.
+    func keeping(_ numbers: Set<Int>) -> Track {
+        Track(
+            number: number, itemID: itemID,
+            patterns: patterns.filter { numbers.contains($0.number) }, drumMode: drumMode)
+    }
+
     public func toJSON(drumMap: DrumMap? = nil) -> JSONNode {
         .object([
             ("track", .int(number)),
@@ -406,16 +413,27 @@ public struct Project: Sendable, Hashable {
     public func select(tracks: Set<Int> = [], patterns: Set<Int> = []) -> Project {
         var narrowed = self.tracks.filter { tracks.isEmpty || tracks.contains($0.number) }
         if !patterns.isEmpty {
-            narrowed = narrowed.map {
-                Track(
-                    number: $0.number, itemID: $0.itemID,
-                    patterns: $0.patterns.filter { patterns.contains($0.number) },
-                    drumMode: $0.drumMode)
-            }
+            narrowed = narrowed.map { $0.keeping(patterns) }
         }
-        return Project(
+        return replacing(tracks: narrowed)
+    }
+
+    /// A copy narrowed to `cells`, the patterns to keep per track number, empty meaning all.
+    ///
+    /// Keeps a different set on each track, which the cross product above cannot express. A track
+    /// `cells` does not name is dropped.
+    public func select(cells: [Int: Set<Int>]) -> Project {
+        guard !cells.isEmpty else { return self }
+        return replacing(
+            tracks: tracks.compactMap { track in
+                cells[track.number].map { track.keeping($0) }
+            })
+    }
+
+    private func replacing(tracks: [Track]) -> Project {
+        Project(
             device: device, version: version, tempoBPM: tempoBPM,
-            globalSwingPercent: globalSwingPercent, currentScene: currentScene, tracks: narrowed,
+            globalSwingPercent: globalSwingPercent, currentScene: currentScene, tracks: tracks,
             scenes: scenes, sourceName: sourceName, diagnostics: diagnostics)
     }
 

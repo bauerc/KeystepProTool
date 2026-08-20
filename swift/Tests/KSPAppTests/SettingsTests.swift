@@ -97,4 +97,42 @@ import Testing
         #expect(mapped.applySwing == defaults.applySwing)
         #expect(mapped.applyTimeShift == defaults.applyTimeShift)
     }
+
+    /// The ticks reach the export per track, which is what an individually chosen cell needs.
+    @Test func thegridsTicksReachTheExport() {
+        var selection = GridSelection(syntheticSummary())
+        selection.toggle(track: 3)
+        selection.toggle(track: 1, pattern: 5)
+
+        let mapped = Settings().selecting(selection)
+            .exportOptions(source: output, output: source)
+
+        let every = Set(1...16)
+        #expect(mapped.cells == [1: every.subtracting([5]), 2: every, 4: every])
+    }
+
+    /// Everything ticked sends nothing, so the app on defaults exports what the CLI on defaults
+    /// exports.
+    @Test func afullyTickedGridAsksForNothing() {
+        let mapped = Settings().selecting(GridSelection(syntheticSummary()))
+            .exportOptions(source: output, output: source)
+        let defaults = ExportRunner.Options(
+            path: output, output: source, configPath: mapped.configPath)
+
+        #expect(mapped.cells == defaults.cells)
+        #expect(mapped.cells.isEmpty)
+    }
+
+    /// The import's `track`/`pattern` are routing, not selection.
+    @Test func aselectionLeavesTheImportRoutingAlone() {
+        var selection = GridSelection(syntheticSummary())
+        selection.toggle(track: 3)
+
+        let mapped = Settings().selecting(selection).convertOptions(source: source, output: output)
+        let defaults = ConvertRunner.Options(
+            path: source, output: output, configPath: mapped.configPath)
+
+        #expect(mapped.track == defaults.track)
+        #expect(mapped.pattern == defaults.pattern)
+    }
 }

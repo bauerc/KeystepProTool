@@ -71,6 +71,12 @@ hovering any slot says more. Those counts are *enabled*, not audible: a note on 
 or past the last step is not counted, and the other reasons one might not sound are the format
 spec's. A project that will not read says so there rather than showing an empty list.
 
+**Ticking what is exported.** Every slot starts ticked, and the export follows the ticks. Click a
+slot to leave that one out, a track name to leave out the whole track, a slot number to leave that
+slot out on every track. Any set of cells will do — a slot dropped on one track alone is kept on the
+others — and the result names what was left out. Untick everything and Convert says so rather than
+writing an empty file.
+
 **Options.** The sidebar carries **Dry run** — report what would be written and write nothing,
 which is worth having against a 3.5 MB project — and **Show every finding**, which lists each
 finding rather than one line per kind. A dry run leaves the file where it is, so switching the
@@ -96,8 +102,8 @@ names, so a clash is as likely to be something else's as a re-run of this one.
 **If MCC is not installed**, `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/` will not
 be there and the file goes to `~/Downloads` instead, with a message saying where to move it.
 
-The app calls exactly the same `convert` and `export` that `ksp-swift-cli` calls — its output is
-byte-identical, and there is no second implementation to drift.
+The app calls exactly the same `convert` and `export` that `ksp-swift-cli` calls — on the same
+selection its output is byte-identical, and there is no second implementation to drift.
 
 
 ## `kspplus`
