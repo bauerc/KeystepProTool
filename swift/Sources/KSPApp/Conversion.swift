@@ -111,9 +111,7 @@ enum Conversion {
     /// The runners are synchronous and their `Options`/`RunResult` are `Sendable`, so the whole
     /// job crosses to a detached task and only the `Outcome` comes back.
     ///
-    /// `excluded` is what the grid left out, worded by ``GridSelection/exclusionNote``. It joins the
-    /// placement notes rather than the findings: a track the user switched off is the app's own
-    /// annotation, not something either runner has anything to say about.
+    /// `excluded` is what the grid left out: the app's own annotation, not a runner's finding.
     static func run(_ plan: Plan, settings: Settings, excluded: String? = nil) async -> Outcome {
         let target = plan.target
         let result = await Task.detached(priority: .userInitiated) {
@@ -149,8 +147,7 @@ enum Conversion {
         from result: RunResult, note: String?, excluded: String?, dryRun: Bool
     ) -> Outcome {
         guard result.code == 0, let written = result.destinations.first else {
-            // The placement notes describe a file that was not written, so they go; what the grid
-            // left out stays, because "no selected pattern holds notes" is a failure it explains.
+            // Nothing was written, so only the exclusion still explains anything.
             return Outcome(
                 written: nil, headline: result.message ?? "Conversion failed.",
                 report: result.diagnostics, note: excluded, dryRun: dryRun)

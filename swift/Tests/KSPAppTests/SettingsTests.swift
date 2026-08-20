@@ -85,6 +85,8 @@ import Testing
             path: output, output: source, configPath: mapped.configPath)
 
         #expect(mapped.split == defaults.split)
+        #expect(mapped.tracks == defaults.tracks)
+        #expect(mapped.patterns == defaults.patterns)
         #expect(mapped.passes == defaults.passes)
         #expect(mapped.ticksPerBeat == defaults.ticksPerBeat)
         #expect(mapped.drumMapSpec == defaults.drumMapSpec)
@@ -96,34 +98,32 @@ import Testing
         #expect(mapped.applyTimeShift == defaults.applyTimeShift)
     }
 
-    /// What the grid has ticked is the export's selection, and it reaches the runner as the two sets
-    /// `--tracks` / `--patterns` already fill.
+    /// The ticks reach the export per track, which is what an individually chosen cell needs.
     @Test func thegridsTicksReachTheExport() {
         var selection = GridSelection(syntheticSummary())
         selection.toggle(track: 3)
-        selection.toggle(pattern: 5)
+        selection.toggle(track: 1, pattern: 5)
 
         let mapped = Settings().selecting(selection)
             .exportOptions(source: output, output: source)
 
-        #expect(mapped.tracks == [1, 2, 4])
-        #expect(mapped.patterns == Set(1...16).subtracting([5]))
+        let every = Set(1...16)
+        #expect(mapped.cells == [1: every.subtracting([5]), 2: every, 4: every])
     }
 
-    /// The default drop: everything ticked sends nothing, so the runner's own "all" applies and the
-    /// app on defaults exports what the CLI on defaults exports.
+    /// Everything ticked sends nothing, so the app on defaults exports what the CLI on defaults
+    /// exports.
     @Test func afullyTickedGridAsksForNothing() {
         let mapped = Settings().selecting(GridSelection(syntheticSummary()))
             .exportOptions(source: output, output: source)
         let defaults = ExportRunner.Options(
             path: output, output: source, configPath: mapped.configPath)
 
-        #expect(mapped.tracks == defaults.tracks)
-        #expect(mapped.patterns == defaults.patterns)
+        #expect(mapped.cells == defaults.cells)
+        #expect(mapped.cells.isEmpty)
     }
 
-    /// The import's `track`/`pattern` are routing, not selection, so a ticked grid must not touch
-    /// them -- and a MIDI drop has no grid to tick in the first place.
+    /// The import's `track`/`pattern` are routing, not selection.
     @Test func aselectionLeavesTheImportRoutingAlone() {
         var selection = GridSelection(syntheticSummary())
         selection.toggle(track: 3)

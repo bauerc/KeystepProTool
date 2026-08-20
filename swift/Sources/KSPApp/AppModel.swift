@@ -23,8 +23,7 @@ final class AppModel {
         var preview: Outcome?
         /// What was dropped, read for showing rather than converting. Only a project has one.
         var summary: SummaryState = .absent
-        /// Which of the grid's cells the export will run over. Inert until a summary lands, and
-        /// fully ticked once one does -- so a fresh drop converts the whole project.
+        /// Which cells the export runs over. Fully ticked once a summary lands.
         var selection = GridSelection()
         /// This drop, as distinct from the one before it. The view keys its read off this rather
         /// than off the path, because dropping the same file again is a new drop and needs a new
@@ -132,8 +131,6 @@ final class AppModel {
         // asks again when it comes back to a summary still waiting.
         guard case .staged(var current) = phase, current.id == staged.id else { return }
         current.summary = state
-        // Sized and named from the project that was actually read, so the ticks and the grid drawn
-        // over them are the same four tracks.
         if case .ready(let summary) = state { current.selection = GridSelection(summary) }
         phase = .staged(current)
     }
@@ -144,20 +141,15 @@ final class AppModel {
         Conversion.plan(job, named: name, into: destination(job, folders))
     }
 
-    /// Tick or untick one pattern slot on one track.
-    ///
-    /// Each of the three drops any dry run for the same reason editing the name does: a preview
-    /// describes one selection, and a changed selection makes it stale.
     func toggle(track: Int, pattern: Int) {
         mutateSelection { $0.toggle(track: track, pattern: pattern) }
     }
 
-    /// A whole track's row.
     func toggle(track: Int) { mutateSelection { $0.toggle(track: track) } }
 
-    /// A whole pattern slot's column, across all four tracks.
     func toggle(pattern: Int) { mutateSelection { $0.toggle(pattern: pattern) } }
 
+    /// A dry run describes one selection, so changing it drops the preview.
     private func mutateSelection(_ change: (inout GridSelection) -> Void) {
         guard case .staged(var staged) = phase else { return }
         change(&staged.selection)
@@ -165,10 +157,7 @@ final class AppModel {
         discardPreview()
     }
 
-    /// Why Convert is off, or `nil` when it is on.
-    ///
-    /// Only a project has a grid to tick, and only a project that has been read has one sized to
-    /// it -- an unread or unreadable drop is blocked by neither.
+    /// Why Convert is off, or `nil` when it is on. Only a project that has been read has a grid.
     var blockReason: String? {
         guard let staged, case .ready = staged.summary else { return nil }
         return staged.selection.blockReason
@@ -182,8 +171,7 @@ final class AppModel {
     }
 
     func convert() async {
-        // The block is the model's rule, not the button's: a selection the core cannot express
-        // would be widened back to the whole project, so it must not run however Convert is reached.
+        // The model's rule, not the button's, however Convert is reached.
         guard let staged, blockReason == nil else { return }
         // Re-planned rather than reused: a name can be taken between the last keystroke and this.
         let plan = plan(for: staged.job)

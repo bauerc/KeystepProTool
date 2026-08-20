@@ -134,8 +134,7 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: plan.target.path))
     }
 
-    /// What the grid left out is the app's own annotation, so it rides the same channel the
-    /// placement notes do rather than being mistaken for a finding.
+    /// What the grid left out rides the same channel the placement notes do.
     @Test func whatWasLeftOutIsCarriedIntoTheResult() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -151,7 +150,7 @@ import Testing
         #expect(outcome.note == "Excluded: Track 2")
     }
 
-    /// Both can apply at once -- a name already taken and a track switched off.
+    /// A name already taken and a track switched off can both apply.
     @Test func acollisionAndAnExclusionAreBothReported() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -182,8 +181,7 @@ import Testing
         #expect(outcome.note == nil)
     }
 
-    /// The run the exclusion explains is the one that fails: "no selected pattern holds notes"
-    /// says nothing on its own about what the grid left out.
+    /// The run the exclusion explains is the one that fails.
     @Test func afailedRunStillNamesWhatWasLeftOut() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -192,9 +190,9 @@ import Testing
             .toMIDI(source), named: "fixture",
             into: Destination(directory: directory, note: nil))
 
-        // Every slot but one empty one: the runner refuses rather than writing an empty file.
+        // One empty slot: the runner refuses rather than writing an empty file.
         let outcome = await Conversion.run(
-            plan, settings: Settings(tracks: [], patterns: [16]),
+            plan, settings: Settings(cells: [1: [16]]),
             excluded: "Excluded: pattern slots 1, 2")
 
         #expect(outcome.failed)

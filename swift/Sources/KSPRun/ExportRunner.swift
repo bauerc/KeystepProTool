@@ -12,6 +12,9 @@ public enum ExportRunner {
         public var split: Bool
         public var tracks: Set<Int>
         public var patterns: Set<Int>
+        /// The slots to keep per track, empty meaning all. No CLI flag fills it -- the pair above
+        /// covers what a flag can say.
+        public var cells: [Int: Set<Int>]
         public var passes: Int?
         public var repeatCount: Int
         public var flatVelocity: Int?
@@ -36,7 +39,8 @@ public enum ExportRunner {
         // memberwise initialiser is internal, and every caller is in another module.
         public init(
             path: URL, output: URL? = nil, split: Bool = false, tracks: Set<Int> = [],
-            patterns: Set<Int> = [], passes: Int? = nil, repeatCount: Int = 1,
+            patterns: Set<Int> = [], cells: [Int: Set<Int>] = [:], passes: Int? = nil,
+            repeatCount: Int = 1,
             flatVelocity: Int? = nil,
             ticksPerBeat: Int = MIDIExport.defaultTicksPerBeat, drumMapSpec: String? = nil,
             drumChannel: Int = MIDIExport.drumChannel,
@@ -51,6 +55,7 @@ public enum ExportRunner {
             self.split = split
             self.tracks = tracks
             self.patterns = patterns
+            self.cells = cells
             self.passes = passes
             self.repeatCount = repeatCount
             self.flatVelocity = flatVelocity
@@ -179,6 +184,7 @@ public enum ExportRunner {
         -> [(result: ExportResult, destination: URL)]
     {
         let narrowed = project.select(tracks: options.tracks, patterns: options.patterns)
+            .select(cells: options.cells)
         if options.split {
             let directory = options.output ?? options.path.deletingLastPathComponent()
             return try MIDIExport.exportSplit(narrowed, options: exportOptions).map {

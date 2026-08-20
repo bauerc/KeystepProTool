@@ -163,8 +163,7 @@ struct DropView: View {
                         summary(staged.summary, selection: staged.selection)
                     }
 
-                    // Said as it is ticked rather than only after a run, and said once: the dry run
-                    // below carries the same sentence and would otherwise repeat it on one screen.
+                    // Said as it is ticked, and said once -- the dry run below carries it too.
                     if let excluded = staged.selection.exclusionNote {
                         Text(excluded).font(.caption).foregroundStyle(.secondary)
                     }
@@ -180,8 +179,7 @@ struct DropView: View {
             HStack(alignment: .firstTextBaseline) {
                 Button("Cancel") { model.cancel() }
                 Spacer()
-                // The button is never dead without the window saying why, which is why the reason
-                // and the `.disabled` are read from the one place.
+                // Never dead without saying why, so both come from the one place.
                 if let reason = model.blockReason {
                     Label(reason, systemImage: "exclamationmark.triangle")
                         .font(.caption).foregroundStyle(.orange)
@@ -249,7 +247,7 @@ struct DropView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// A whole pattern slot, on all four tracks at once.
+    /// A whole pattern slot, on every track at once.
     private func columnHeader(_ column: Int, state: GridSelection.Tick) -> some View {
         Button {
             model.toggle(pattern: column)
@@ -327,10 +325,7 @@ struct DropView: View {
     /// count: an em dash when it holds nothing at all, and otherwise how many of its events are
     /// switched on -- so a Pattern whose every step is off reads `0` on a filled cell rather than
     /// passing as empty.
-    /// Clicking one ticks or unticks it. The frame is the one it always had -- a tick changes what
-    /// is drawn inside it, never how wide it is, so the fit ``AppLayout`` works out still holds:
-    /// measured through `NSHostingView`, a row of sixteen `.plain` buttons and a row of sixteen
-    /// bare `Text`s both come out at 461 points, and the track label at 96 either way.
+    /// Clicking one ticks it. Measured: a `.plain` button is exactly as wide as the bare `Text`.
     private func slot(_ cell: PatternGrid.Cell, track: Int, selection: GridSelection) -> some View {
         let ticked = selection.isTicked(track: track, pattern: cell.pattern)
         return Button {
@@ -347,8 +342,7 @@ struct DropView: View {
                 .background(
                     RoundedRectangle(cornerRadius: 3).fill(ticked ? fill(cell) : .clear)
                 )
-                // Dashed rather than merely dimmer: an empty cell is already faint, and the two
-                // must not read alike -- one holds nothing, the other was switched off.
+                // Dashed, not merely dimmer: an empty cell is already faint.
                 .overlay {
                     if !ticked {
                         RoundedRectangle(cornerRadius: 3)

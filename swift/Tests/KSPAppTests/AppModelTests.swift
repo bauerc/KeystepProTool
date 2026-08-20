@@ -427,8 +427,7 @@ import Testing
         #expect(try #require(model.staged).summary == first)
     }
 
-    /// A drop converts the whole project until the user says otherwise, and the grid it is ticked
-    /// on is the one the summary just described.
+    /// A drop converts the whole project until the user says otherwise.
     @Test func asummarisedProjectStartsFullyTicked() async throws {
         let model = model()
         model.accept(projectFixture)
@@ -436,8 +435,7 @@ import Testing
         await model.summarise()
 
         let selection = try #require(model.staged).selection
-        #expect(selection.selectedTracks.isEmpty)
-        #expect(selection.selectedPatterns.isEmpty)
+        #expect(selection.selectedCells.isEmpty)
         #expect(selection.isTicked(track: 4, pattern: 16))
         #expect(model.blockReason == nil)
     }
@@ -448,12 +446,12 @@ import Testing
         model.accept(projectFixture)
         await model.summarise()
         model.toggle(track: 2)
-        #expect(try #require(model.staged).selection.selectedTracks == [1, 3, 4])
+        #expect(try #require(model.staged).selection.selectedCells[2] == nil)
 
         model.accept(projectFixture)
         await model.summarise()
 
-        #expect(try #require(model.staged).selection.selectedTracks.isEmpty)
+        #expect(try #require(model.staged).selection.selectedCells.isEmpty)
     }
 
     /// A dry run describes one selection, so changing the selection drops it -- the same rule the
@@ -470,26 +468,25 @@ import Testing
 
         #expect(try #require(model.staged).preview == nil)
         #expect(
-            try #require(model.staged).selection.selectedPatterns == Set(1...16).subtracting([5]))
+            try #require(model.staged).selection.selectedCells[1] == Set(1...16).subtracting([5]))
     }
 
-    /// One cell alone is not a rectangle, so Convert goes off and the window is told why.
-    @Test func aselectionTheCoreCannotExpressBlocksConvert() async throws {
+    /// Nothing ticked is the one selection there is no export for.
+    @Test func anemptySelectionBlocksConvert() async throws {
         let model = model()
         model.accept(projectFixture)
         await model.summarise()
 
-        model.toggle(track: 1, pattern: 3)
+        for track in 1...4 { model.toggle(track: track) }
 
-        #expect(model.blockReason?.contains("Pattern slot 3") == true)
+        #expect(model.blockReason?.contains("Nothing is ticked") == true)
 
-        model.toggle(track: 1, pattern: 3)
+        model.toggle(track: 1)
 
         #expect(model.blockReason == nil)
     }
 
-    /// The button is disabled, but the rule is the model's: a blocked selection converts nothing
-    /// rather than quietly exporting the whole project.
+    /// The button is disabled, but the rule is the model's.
     @Test func ablockedSelectionConvertsNothing() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -499,7 +496,7 @@ import Testing
             reveal: { _ in }, chooseFolder: { _ in nil })
         model.accept(projectFixture)
         await model.summarise()
-        model.toggle(track: 1, pattern: 3)
+        for track in 1...4 { model.toggle(track: track) }
 
         await model.convert()
 
@@ -519,8 +516,32 @@ import Testing
         #expect(model.blockReason == nil)
     }
 
-    /// The whole point of the ticks: the export runs over what is left, and the result says what
-    /// was not.
+    /// One cell, which no pair of sets could express: project_5 holds notes in slot 1 on the drum
+    /// track and on Track 3, and unticking the drum track's leaves Track 3's alone.
+    @Test func convertingWithOneCellUntickedLeavesOnlyThatCellOut() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = AppModel(
+            store: FolderStore(defaults: volatileDefaults()),
+            destination: { _, _ in Destination(directory: directory, note: nil) },
+            reveal: { _ in }, chooseFolder: { _ in nil })
+        model.accept(projectFixture)
+        await model.summarise()
+
+        model.toggle(track: 1, pattern: 1)
+        await model.convert()
+
+        guard case .done(let outcome) = model.phase else {
+            Issue.record("a conversion should have finished in the result view")
+            return
+        }
+        #expect(outcome.written != nil, "conversion failed: \(outcome.headline)")
+        #expect(outcome.headline.contains("Track 3"))
+        #expect(!outcome.headline.contains("Track 1"))
+        #expect(outcome.note == "Excluded: Track 1 (drum) slot 1")
+    }
+
+    /// The whole point of the ticks: the export runs over what is left.
     @Test func convertingAtickedProjectExportsOnlyWhatIsTickedAndSaysWhatIsNot() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
