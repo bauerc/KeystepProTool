@@ -15,8 +15,8 @@ payload, so that is about a thousand requests rather than 8,951 -- ten seconds
 against thirty-eight. ``--mcc-plan`` walks MCC's own stream instead.
 """
 
-import time
 from pathlib import Path
+from time import monotonic
 from typing import Annotated
 
 import typer
@@ -149,7 +149,7 @@ def pull_command(
     # From the top, not from the first frame: the 3.5 MB template parse and the
     # write of the same size are most of a run that is not at the device, and a
     # total that quietly left them out would be the wrong number to plan around.
-    began = time.monotonic()
+    began = monotonic()
 
     # Before the device is touched: a read costs ten seconds and the operator's
     # attention, and refusing it afterwards wastes both.
@@ -158,7 +158,7 @@ def pull_command(
 
     template_keys = load_template(template, prog=PROG).keys()
 
-    opened = time.monotonic()
+    opened = monotonic()
     try:
         with UsbMidiTransport(timeout_ms=timeout) as device:
             # The identity request is asked outside the count: what the summary
@@ -173,7 +173,7 @@ def pull_command(
         # A well-formed frame that answered the wrong question, or a slot with
         # nothing saved in it. bulk_read's messages already say which.
         fail(f"slot {slot}: {exc}", prog=PROG, code=1)
-    reading = time.monotonic() - opened
+    reading = monotonic() - opened
 
     # What was read has to parse as a project before it is worth writing: the
     # point of the dump is that the rest of this tool can take it from here.
@@ -191,7 +191,7 @@ def pull_command(
     print_report(project.diagnostics, prog=PROG, verbose=verbose)
     if not quiet:
         notes = sum(len(pattern.notes) for track in project.tracks for pattern in track.patterns)
-        total = time.monotonic() - began
+        total = monotonic() - began
         print(f"read slot {slot} in {reading:.1f} s, {transport.requests} requests")
         print(f"wrote {output}")
         print(f"  {notes} note(s), {project.tempo_bpm:g} BPM")
