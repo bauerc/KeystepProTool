@@ -82,6 +82,13 @@ which is worth having against a 3.5 MB project — and **Show every finding**, w
 finding rather than one line per kind. A dry run leaves the file where it is, so switching the
 toggle off and pressing Convert writes it for real.
 
+Beneath those, under **Export**, sits **Step Skip**. The device runs a pattern over a cycle of four
+sequences — 16, 32, 48 and 64 — and each note carries a mask saying which of them it plays on. On
+*Auto* the export renders four passes whenever a pattern holds a note that skips part of that cycle,
+so every note lands where its mask says; on *1* it renders a single pass and includes every note
+whatever its mask, which flattens the cycle. Either way the result's findings say which happened.
+This is the device's own cycle, not copies of the export.
+
 Install it with `make install` (see [Installation](#installation)), then:
 
 ```sh

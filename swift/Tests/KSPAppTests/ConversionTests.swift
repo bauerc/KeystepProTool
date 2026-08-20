@@ -223,6 +223,42 @@ import Testing
         #expect(!outcome.headline.isEmpty)
     }
 
+    /// What the step-skip choice did has to reach the window, or the picker changes the file with
+    /// nothing on screen saying so. `project_5.KeyStepPro` holds notes on part of the cycle, so the
+    /// two choices report different things about the same project.
+    ///
+    /// The fragments are deliberately partial: the wording lives in `KSPKit`'s diagnostics and is a
+    /// parity contract, so this asserts that the finding arrived, not how it is phrased.
+    @Test(
+        arguments: [
+            (Settings.StepSkip.auto, "were rendered as repeats", "rendered as 4 repeats"),
+            (Settings.StepSkip.one, "renders one and includes them all", "one pass was rendered"),
+        ])
+    func theStepSkipChoiceIsReportedInTheResult(
+        choice: Settings.StepSkip, collapsed: String, each: String
+    ) async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+        let plan = Conversion.plan(
+            .toMIDI(source), named: "fixture",
+            into: Destination(directory: directory, note: nil))
+        var settings = Settings(dryRun: true)
+        settings.stepSkip = choice
+
+        let outcome = await Conversion.run(plan, settings: settings)
+
+        #expect(!outcome.failed)
+        // One summary line collapsed, and one line per site when every finding is shown.
+        let summary = outcome.findings(verbose: false).filter { $0.contains("16/32/48/64") }
+        #expect(summary.count == 1)
+        #expect(summary.first?.contains(collapsed) == true)
+
+        let sites = outcome.findings(verbose: true).filter { $0.contains("16/32/48/64") }
+        #expect(!sites.isEmpty)
+        #expect(sites.allSatisfy { $0.contains(each) })
+    }
+
     /// Fabricated rather than run: nothing writes more than one file until split lands (#130), and
     /// this is the plumbing that will carry it when it does.
     @Test func everyDestinationOfARunIsKeptInTheOrderItWasWritten() {
