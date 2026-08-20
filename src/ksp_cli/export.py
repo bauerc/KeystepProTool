@@ -20,6 +20,7 @@ import typer
 from ksp.constants import DEFAULT_GATE_LENGTH, PATTERNS_PER_TRACK, TRACK_ITEM_IDS
 from ksp.diagnostics import Report
 from ksp.midi_export import (
+    DEFAULT_FLAT_VELOCITY,
     DEFAULT_TICKS_PER_BEAT,
     DRUM_CHANNEL,
     MAX_REPEAT,
@@ -30,6 +31,7 @@ from ksp.midi_export import (
 )
 from ksp.model import Project
 from ksp_cli.drum_map_option import CONFIG_PATH, DRUM_MAP_HELP, resolve_drum_map_or_fail
+from ksp_cli.flat_velocity import parse_flat_velocity
 from ksp_cli.loading import load_project
 from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
 from ksp_cli.runner import standalone
@@ -170,6 +172,18 @@ def export(
             ),
         ),
     ] = 1,
+    flat_velocity: Annotated[
+        str | None,
+        typer.Option(
+            "--flat-velocity",
+            metavar="VALUE",
+            rich_help_panel=_SELECTION_PANEL,
+            help=(
+                "render every note at this velocity instead of the one it stores: 'fresh' for "
+                f"the measured fresh-note velocity ({DEFAULT_FLAT_VELOCITY}), or 1-127"
+            ),
+        ),
+    ] = None,
     ticks_per_beat: Annotated[
         int, typer.Option(rich_help_panel=_TIMING_PANEL, help="MIDI resolution")
     ] = DEFAULT_TICKS_PER_BEAT,
@@ -273,6 +287,7 @@ def export(
     try:
         selected_tracks = parse_selection(tracks, option="--tracks", limit=len(TRACK_ITEM_IDS))
         selected_patterns = parse_selection(patterns, option="--patterns", limit=PATTERNS_PER_TRACK)
+        parsed_flat_velocity = parse_flat_velocity(flat_velocity)
     except ValueError as exc:
         fail(str(exc), prog=PROG, code=2)
 
@@ -295,6 +310,7 @@ def export(
             drum_map=drum_map,
             drum_channel=drum_channel - 1,
             default_gate=default_gate,
+            flat_velocity=parsed_flat_velocity,
             apply_swing=not no_swing,
             apply_time_shift=not no_time_shift,
             include_stale=include_stale,

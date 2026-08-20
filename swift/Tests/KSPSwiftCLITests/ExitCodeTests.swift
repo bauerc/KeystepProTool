@@ -46,6 +46,34 @@ import Testing
         #expect(result.stderr == "ksp-swift-cli export: repeat must be 1-10\n")
     }
 
+    @Test func flatVelocityFreshSucceeds() throws {
+        // --dry-run: this runs against the real project_files/ fixture, not a scratch copy, so
+        // nothing here may actually write a .mid beside it.
+        #expect(
+            try Self.run(["export", Self.project, "--flat-velocity", "fresh", "--dry-run"]).code
+                == 0)
+    }
+
+    /// Parsed in the command body, same as `--tracks`, so a word that is neither `fresh` nor a
+    /// number is refused before the export options are even built.
+    @Test func flatVelocityNeitherFreshNorANumberIsTwo() throws {
+        let result = try Self.run(["export", Self.project, "--flat-velocity", "loud"])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli export: --flat-velocity: 'loud' is not 'fresh' or a velocity\n")
+    }
+
+    /// The range is checked where the export options are built, so both CLIs name the same limit.
+    @Test(arguments: ["0", "128"]) func flatVelocityOutsideItsRangeIsTwo(_ value: String) throws {
+        let result = try Self.run(["export", Self.project, "--flat-velocity", value])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli export: flat_velocity must be 1-127; "
+                + "0 is a MIDI note-off, not a silent note\n")
+    }
+
     @Test func anUnknownOptionIsTwo() throws {
         // Not 64, which is what ArgumentParser exits with if the entry point stops mapping.
         let result = try Self.run(["dump", Self.project, "--nope"])

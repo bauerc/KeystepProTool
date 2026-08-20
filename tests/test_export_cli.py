@@ -5,6 +5,7 @@ from pathlib import Path
 import mido
 import pytest
 
+from ksp.midi_export import DEFAULT_FLAT_VELOCITY
 from ksp_cli.export import main
 
 
@@ -588,6 +589,69 @@ def test_a_fallback_gate_of_zero_is_rejected(
     argv = [str(project_files_dir / "project_5.KeyStepPro"), "--default-gate", "0"]
     assert main(argv) == 2
     assert "greater than 0" in capsys.readouterr().err
+
+
+def _velocities(path: Path) -> set[int]:
+    return {
+        message.velocity
+        for track in mido.MidiFile(path).tracks
+        for message in track
+        if message.type == "note_on"
+    }
+
+
+def test_flat_velocity_fresh_renders_the_measured_default(
+    project_files_dir: Path, tmp_path: Path
+) -> None:
+    destination = tmp_path / "out.mid"
+    argv = [
+        str(project_files_dir / "project_5.KeyStepPro"),
+        "-o",
+        str(destination),
+        "--flat-velocity",
+        "fresh",
+    ]
+    assert main(argv) == 0
+    assert _velocities(destination) == {DEFAULT_FLAT_VELOCITY}
+
+
+def test_flat_velocity_accepts_an_explicit_value(project_files_dir: Path, tmp_path: Path) -> None:
+    destination = tmp_path / "out.mid"
+    argv = [
+        str(project_files_dir / "project_5.KeyStepPro"),
+        "-o",
+        str(destination),
+        "--flat-velocity",
+        "64",
+    ]
+    assert main(argv) == 0
+    assert _velocities(destination) == {64}
+
+
+def test_flat_velocity_zero_is_rejected(
+    project_files_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = [str(project_files_dir / "project_5.KeyStepPro"), "--flat-velocity", "0"]
+    assert main(argv) == 2
+    err = capsys.readouterr().err
+    assert "flat_velocity must be 1-127" in err
+    assert "0 is a MIDI note-off, not a silent note" in err
+
+
+def test_flat_velocity_past_the_limit_is_rejected(
+    project_files_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = [str(project_files_dir / "project_5.KeyStepPro"), "--flat-velocity", "128"]
+    assert main(argv) == 2
+    assert "flat_velocity must be 1-127" in capsys.readouterr().err
+
+
+def test_flat_velocity_neither_fresh_nor_a_number_is_rejected(
+    project_files_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = [str(project_files_dir / "project_5.KeyStepPro"), "--flat-velocity", "loud"]
+    assert main(argv) == 2
+    assert "is not 'fresh' or a velocity" in capsys.readouterr().err
 
 
 def test_missing_file_reports_an_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
