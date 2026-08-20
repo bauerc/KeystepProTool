@@ -4,7 +4,8 @@ Guidance for Claude Code working in this repository.
 
 ## Conventions
 
-- Comment concisely. Large docstrings on methods should NOT be used.
+- Use Serena MCP and its tool
+- Comment concisely. Large docstrings on methods should NOT be used. At max TWO lines.
 - Claude plan files committed to this repository are deleted as part of the implementing task.
 - Use subagents
 - DO NOT reply to PR comments
@@ -23,7 +24,7 @@ its acceptance gate (H3.2's byte-diff on hardware) is still open. `swift/` build
 alongside the Python and is now a complete port of both directions — constants, keys, the JSON
 reader and writer, diagnostics, the drum map, the
 model, the reader, `mutate`, `midi_export`, `midi_import` and `ksp-swift-cli dump` / `export` /
-`convert` (M8–M12), plus the drag-and-drop app *Key Step Pro Plus* — SwiftPM product `ksp-app`,
+`convert` (M8–M12), plus the drag-and-drop app _Key Step Pro Plus_ — SwiftPM product `ksp-app`,
 target `KSPApp` (M13). What is left is the full application (M15) and distribution.
 
 M13's app is a deliberate v1 — one window, one file, no options. **M15 is the app
@@ -98,8 +99,8 @@ plus the same run structurally as `diagnostics` and `destinations`, which is wha
 instead of re-parsing the text. **`SummaryRunner` is the exception, and deliberately so**: it
 returns a `ProjectSummary` and renders no text at all, which is what keeps a preview off the parity
 contract — no CLI output to compare means no Python mirror. Giving it a subcommand would forfeit
-that and pay full parity, so a preview issue must not add a flag (#115). Its counts say *enabled*,
-never *audible*: they answer the two reasons a note is switched off, not the spec's six reasons one
+that and pay full parity, so a preview issue must not add a flag (#115). Its counts say _enabled_,
+never _audible_: they answer the two reasons a note is switched off, not the spec's six reasons one
 might not play.
 
 **`KSPApp` owns no format logic** — only where a file goes, what it is called and which options the
@@ -118,7 +119,7 @@ CLI text, which is the whole reason a preview costs no Python mirror and no pari
 The preview itself is a track × pattern grid, and **what it decides lives in `PatternGrid.swift`,
 not in `DropView`**: what a cell prints, which chained cells are joined, and — in `AppLayout` — every
 dimension the window and the grid are both built from. That one enum is why the pattern axis fits:
-the staged pane scrolls vertically only, so a grid too wide for it is *silently clipped*, and a test
+the staged pane scrolls vertically only, so a grid too wide for it is _silently clipped_, and a test
 holds the grid under a budget subtracted from the window. Change the sidebar and the test says so.
 `scripts/bundle_app.sh` wraps the built binary in a `.app`; it is deliberately **not** in
 `validate.sh`, which compiles the target through `KSPAppTests` instead.
@@ -198,8 +199,8 @@ The five canonical triage roles, each label string equal to its name. See
 Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
 **The device's vocabulary is canonical** — Arturia's wording beats MCC's, which beats the code's
-([ADR 0001](docs/adr/0001-device-vocabulary-is-canonical.md)). So the docs say *trigger* and *drum
-track* where the code still says *note* and *lane*, deliberately: the glossary binds prose, UI text,
+([ADR 0001](docs/adr/0001-device-vocabulary-is-canonical.md)). So the docs say _trigger_ and _drum
+track_ where the code still says _note_ and _lane_, deliberately: the glossary binds prose, UI text,
 diagnostics and new code, while existing identifiers are recorded as alternatives and renamed only
 when their file is already open. A rename reaching a diagnostic or CLI option is a two-core commit
 plus a parity re-fingerprint, so **there is no standalone rename PR** (#163, #164).
