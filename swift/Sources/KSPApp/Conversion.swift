@@ -110,7 +110,11 @@ enum Conversion {
     /// A 3.5 MB parse, a placement pass and a 3.5 MB write take long enough to freeze a window.
     /// The runners are synchronous and their `Options`/`RunResult` are `Sendable`, so the whole
     /// job crosses to a detached task and only the `Outcome` comes back.
-    static func run(_ plan: Plan, settings: Settings) async -> Outcome {
+    ///
+    /// `excluded` is what the grid left out, worded by ``GridSelection/exclusionNote``. It joins the
+    /// placement notes rather than the findings: a track the user switched off is the app's own
+    /// annotation, not something either runner has anything to say about.
+    static func run(_ plan: Plan, settings: Settings, excluded: String? = nil) async -> Outcome {
         let target = plan.target
         let result = await Task.detached(priority: .userInitiated) {
             switch plan.job {
@@ -121,7 +125,10 @@ enum Conversion {
             }
         }.value
 
-        return outcome(from: result, note: plan.note, dryRun: settings.dryRun)
+        let note = [plan.note, excluded].compactMap { $0 }.joined(separator: " ")
+        return outcome(
+            from: result, note: note.isEmpty ? nil : note, excluded: excluded,
+            dryRun: settings.dryRun)
     }
 
     /// Read a staged project off the main actor, for the staged view to show what is in it.
@@ -138,11 +145,15 @@ enum Conversion {
         return .failed(result.message ?? "That project could not be read.")
     }
 
-    private static func outcome(from result: RunResult, note: String?, dryRun: Bool) -> Outcome {
+    private static func outcome(
+        from result: RunResult, note: String?, excluded: String?, dryRun: Bool
+    ) -> Outcome {
         guard result.code == 0, let written = result.destinations.first else {
+            // The placement notes describe a file that was not written, so they go; what the grid
+            // left out stays, because "no selected pattern holds notes" is a failure it explains.
             return Outcome(
                 written: nil, headline: result.message ?? "Conversion failed.",
-                report: result.diagnostics, note: nil, dryRun: dryRun)
+                report: result.diagnostics, note: excluded, dryRun: dryRun)
         }
         return Outcome(
             written: written, headline: summary(result), report: result.diagnostics, note: note,

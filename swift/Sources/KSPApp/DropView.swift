@@ -160,7 +160,13 @@ struct DropView: View {
 
                     if staged.summary != .absent {
                         Divider()
-                        summary(staged.summary)
+                        summary(staged.summary, selection: staged.selection)
+                    }
+
+                    // Said as it is ticked rather than only after a run, and said once: the dry run
+                    // below carries the same sentence and would otherwise repeat it on one screen.
+                    if let excluded = staged.selection.exclusionNote {
+                        Text(excluded).font(.caption).foregroundStyle(.secondary)
                     }
 
                     if let preview = staged.preview {
@@ -171,12 +177,20 @@ struct DropView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            HStack {
+            HStack(alignment: .firstTextBaseline) {
                 Button("Cancel") { model.cancel() }
                 Spacer()
+                // The button is never dead without the window saying why, which is why the reason
+                // and the `.disabled` are read from the one place.
+                if let reason = model.blockReason {
+                    Label(reason, systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Button(model.settings.dryRun ? "Dry run" : "Convert") {
                     Task { await model.convert() }
                 }
+                .disabled(model.blockReason != nil)
                 .keyboardShortcut(.defaultAction)
             }
         }
@@ -191,7 +205,7 @@ struct DropView: View {
     /// Nothing is drawn for a MIDI file: there is no project to read. A project that will not read
     /// says so here, which is the alternative to an empty list.
     @ViewBuilder
-    private func summary(_ state: SummaryState) -> some View {
+    private func summary(_ state: SummaryState, selection: GridSelection) -> some View {
         switch state {
         case .absent:
             EmptyView()
@@ -201,7 +215,7 @@ struct DropView: View {
             Label(message, systemImage: "exclamationmark.triangle")
                 .font(.caption).foregroundStyle(.orange).textSelection(.enabled)
         case .ready(let summary):
-            grid(PatternGrid(summary))
+            grid(PatternGrid(summary), selection: selection)
         }
     }
 
@@ -213,7 +227,7 @@ struct DropView: View {
     ///
     /// Not scrolled: the staged view already scrolls as a whole, and a second scroller inside the
     /// first is a trap for a mouse wheel.
-    private func grid(_ grid: PatternGrid) -> some View {
+    private func grid(_ grid: PatternGrid, selection: GridSelection) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(grid.header).font(.caption).foregroundStyle(.secondary)
 
@@ -222,33 +236,66 @@ struct DropView: View {
                     Color.clear.frame(width: AppLayout.gridOrigin, height: 1)
                     HStack(spacing: AppLayout.cellSpacing) {
                         ForEach(grid.columns, id: \.self) { column in
-                            Text("\(column)")
-                                .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
-                                .frame(width: AppLayout.cellWidth)
+                            columnHeader(column, state: selection.state(ofPattern: column))
                         }
                     }
                 }
-                ForEach(grid.rows, id: \.track, content: trackRow)
+                ForEach(grid.rows, id: \.track) { trackRow($0, selection: selection) }
             }
 
             Text(PatternGrid.legend).font(.caption2).foregroundStyle(.secondary)
+            Text(GridSelection.legend).font(.caption2).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A whole pattern slot, on all four tracks at once.
+    private func columnHeader(_ column: Int, state: GridSelection.Tick) -> some View {
+        Button {
+            model.toggle(pattern: column)
+        } label: {
+            Text("\(column)")
+                .font(.caption2).monospacedDigit()
+                .foregroundStyle(state == .on ? HierarchicalShapeStyle.secondary : .tertiary)
+                .strikethrough(state == .off)
+                .frame(width: AppLayout.cellWidth)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(
+            state == .on
+                ? "Pattern slot \(column) — click to untick it on every track."
+                : "Pattern slot \(column) — click to tick it on every track.")
     }
 
     /// One track: its name, its sixteen cells, the rails joining whatever it chains, and the chain
     /// spelled out underneath. The per-track counts are the label's tooltip -- sixteen columns leave
     /// no room to show them outright.
-    private func trackRow(_ row: PatternGrid.Row) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+    private func trackRow(_ row: PatternGrid.Row, selection: GridSelection) -> some View {
+        let state = selection.state(ofTrack: row.track)
+        return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 0) {
-                Text(row.name)
-                    .font(.caption).fontWeight(.medium).lineLimit(1).minimumScaleFactor(0.8)
-                    .frame(width: AppLayout.labelWidth, alignment: .leading)
-                    .help(row.detail)
+                Button {
+                    model.toggle(track: row.track)
+                } label: {
+                    Text(row.name)
+                        .font(.caption).fontWeight(.medium).lineLimit(1).minimumScaleFactor(0.8)
+                        .foregroundStyle(state == .on ? HierarchicalShapeStyle.primary : .secondary)
+                        .strikethrough(state == .off)
+                        .frame(width: AppLayout.labelWidth, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(
+                    row.detail
+                        + (state == .on
+                            ? " · Click to untick this whole track."
+                            : " · Click to tick this whole track."))
                 Color.clear.frame(width: AppLayout.labelGap, height: 1)
                 HStack(spacing: AppLayout.cellSpacing) {
-                    ForEach(row.cells, id: \.pattern, content: slot)
+                    ForEach(row.cells, id: \.pattern) {
+                        slot($0, track: row.track, selection: selection)
+                    }
                 }
             }
             .padding(.bottom, 4)
@@ -280,18 +327,40 @@ struct DropView: View {
     /// count: an em dash when it holds nothing at all, and otherwise how many of its events are
     /// switched on -- so a Pattern whose every step is off reads `0` on a filled cell rather than
     /// passing as empty.
-    private func slot(_ cell: PatternGrid.Cell) -> some View {
-        Text(cell.label)
-            .font(.caption).monospacedDigit()
-            // Shrunk rather than truncated: a count reading "1…" would be the one thing a cell is
-            // for. Three digits fit outright; the scale factor is what a fourth would use.
-            .lineLimit(1).minimumScaleFactor(0.7)
-            .foregroundStyle(cell.isEmpty ? Color.secondary : Color.primary)
-            .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
-            .background(
-                RoundedRectangle(cornerRadius: 3).fill(fill(cell))
-            )
-            .help(cell.detail)
+    /// Clicking one ticks or unticks it. The frame is the one it always had -- a tick changes what
+    /// is drawn inside it, never how wide it is, so the fit ``AppLayout`` works out still holds:
+    /// measured through `NSHostingView`, a row of sixteen `.plain` buttons and a row of sixteen
+    /// bare `Text`s both come out at 461 points, and the track label at 96 either way.
+    private func slot(_ cell: PatternGrid.Cell, track: Int, selection: GridSelection) -> some View {
+        let ticked = selection.isTicked(track: track, pattern: cell.pattern)
+        return Button {
+            model.toggle(track: track, pattern: cell.pattern)
+        } label: {
+            Text(cell.label)
+                .font(.caption).monospacedDigit()
+                // Shrunk rather than truncated: a count reading "1…" would be the one thing a cell
+                // is for. Three digits fit outright; the scale factor is what a fourth would use.
+                .lineLimit(1).minimumScaleFactor(0.7)
+                .foregroundStyle(cell.isEmpty || !ticked ? Color.secondary : Color.primary)
+                .opacity(ticked ? 1 : 0.5)
+                .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
+                .background(
+                    RoundedRectangle(cornerRadius: 3).fill(ticked ? fill(cell) : .clear)
+                )
+                // Dashed rather than merely dimmer: an empty cell is already faint, and the two
+                // must not read alike -- one holds nothing, the other was switched off.
+                .overlay {
+                    if !ticked {
+                        RoundedRectangle(cornerRadius: 3)
+                            .strokeBorder(
+                                Color.secondary.opacity(0.7),
+                                style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                    }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(cell.detail + (ticked ? "" : " · unticked, so it will not be exported"))
     }
 
     /// Chained first, because a Chain can name a slot that holds nothing and the device still plays

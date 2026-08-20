@@ -426,4 +426,121 @@ import Testing
 
         #expect(try #require(model.staged).summary == first)
     }
+
+    /// A drop converts the whole project until the user says otherwise, and the grid it is ticked
+    /// on is the one the summary just described.
+    @Test func asummarisedProjectStartsFullyTicked() async throws {
+        let model = model()
+        model.accept(projectFixture)
+
+        await model.summarise()
+
+        let selection = try #require(model.staged).selection
+        #expect(selection.selectedTracks.isEmpty)
+        #expect(selection.selectedPatterns.isEmpty)
+        #expect(selection.isTicked(track: 4, pattern: 16))
+        #expect(model.blockReason == nil)
+    }
+
+    /// A second drop is a second project, so what was unticked on the first must not carry over.
+    @Test func anewDropStartsItsTicksAgain() async throws {
+        let model = model()
+        model.accept(projectFixture)
+        await model.summarise()
+        model.toggle(track: 2)
+        #expect(try #require(model.staged).selection.selectedTracks == [1, 3, 4])
+
+        model.accept(projectFixture)
+        await model.summarise()
+
+        #expect(try #require(model.staged).selection.selectedTracks.isEmpty)
+    }
+
+    /// A dry run describes one selection, so changing the selection drops it -- the same rule the
+    /// name field follows.
+    @Test func untickingSomethingDiscardsAdryRunPreview() async throws {
+        let model = model()
+        model.settings.dryRun = true
+        model.accept(projectFixture)
+        await model.summarise()
+        await model.convert()
+        #expect(try #require(model.staged).preview != nil)
+
+        model.toggle(pattern: 5)
+
+        #expect(try #require(model.staged).preview == nil)
+        #expect(
+            try #require(model.staged).selection.selectedPatterns == Set(1...16).subtracting([5]))
+    }
+
+    /// One cell alone is not a rectangle, so Convert goes off and the window is told why.
+    @Test func aselectionTheCoreCannotExpressBlocksConvert() async throws {
+        let model = model()
+        model.accept(projectFixture)
+        await model.summarise()
+
+        model.toggle(track: 1, pattern: 3)
+
+        #expect(model.blockReason?.contains("Pattern slot 3") == true)
+
+        model.toggle(track: 1, pattern: 3)
+
+        #expect(model.blockReason == nil)
+    }
+
+    /// The button is disabled, but the rule is the model's: a blocked selection converts nothing
+    /// rather than quietly exporting the whole project.
+    @Test func ablockedSelectionConvertsNothing() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = AppModel(
+            store: FolderStore(defaults: volatileDefaults()),
+            destination: { _, _ in Destination(directory: directory, note: nil) },
+            reveal: { _ in }, chooseFolder: { _ in nil })
+        model.accept(projectFixture)
+        await model.summarise()
+        model.toggle(track: 1, pattern: 3)
+
+        await model.convert()
+
+        #expect(model.staged != nil, "a blocked drop stays staged")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
+    }
+
+    /// A MIDI drop has no grid at all, and an unread project has none yet: neither is blocked.
+    @Test func adropWithoutAgridIsNeverBlocked() async throws {
+        let model = model()
+
+        model.accept(RepoData.projectFiles.appending(path: "m6-test-file.mid"))
+        await model.summarise()
+        #expect(model.blockReason == nil)
+
+        model.accept(projectFixture)
+        #expect(model.blockReason == nil)
+    }
+
+    /// The whole point of the ticks: the export runs over what is left, and the result says what
+    /// was not.
+    @Test func convertingAtickedProjectExportsOnlyWhatIsTickedAndSaysWhatIsNot() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = AppModel(
+            store: FolderStore(defaults: volatileDefaults()),
+            destination: { _, _ in Destination(directory: directory, note: nil) },
+            reveal: { _ in }, chooseFolder: { _ in nil })
+        model.accept(projectFixture)
+        await model.summarise()
+
+        model.toggle(track: 2)
+        await model.convert()
+
+        guard case .done(let outcome) = model.phase else {
+            Issue.record("a conversion should have finished in the result view")
+            return
+        }
+        #expect(try #require(outcome.written).lastPathComponent == "project_5.mid")
+        #expect(outcome.note?.contains("Excluded: Track 2") == true)
+        // The runner names the tracks it wrote, and the unticked one is not among them.
+        #expect(!outcome.headline.contains("Track 2"))
+    }
 }

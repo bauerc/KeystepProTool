@@ -10,6 +10,23 @@ struct Settings: Sendable, Equatable {
     var dryRun = false
     /// List every finding rather than one line per kind.
     var verbose = false
+    /// Which tracks the export runs over, empty meaning all -- as on the CLI. Set from the staged
+    /// grid's ticks through ``selecting(_:)``, never by hand.
+    var tracks: Set<Int> = []
+    /// Which pattern slots the export runs over, empty meaning all.
+    var patterns: Set<Int> = []
+
+    /// This, carrying what the grid has ticked.
+    ///
+    /// ``convertOptions(source:output:)`` is deliberately untouched: `ConvertRunner`'s `track` and
+    /// `pattern` are import routing -- where a MIDI track lands -- which is a different question
+    /// from which of a project's tracks are exported.
+    func selecting(_ selection: GridSelection) -> Settings {
+        var copy = self
+        copy.tracks = selection.selectedTracks
+        copy.patterns = selection.selectedPatterns
+        return copy
+    }
 
     /// A `.mid` in, a `.KeyStepPro` out.
     func convertOptions(source: URL, output: URL) -> ConvertRunner.Options {
@@ -23,7 +40,7 @@ struct Settings: Sendable, Equatable {
     /// A `.KeyStepPro` in, a `.mid` out.
     func exportOptions(source: URL, output: URL) -> ExportRunner.Options {
         ExportRunner.Options(
-            path: source, output: output, dryRun: dryRun, verbose: verbose,
-            configPath: drumMapConfigPath)
+            path: source, output: output, tracks: tracks, patterns: patterns, dryRun: dryRun,
+            verbose: verbose, configPath: drumMapConfigPath)
     }
 }
