@@ -46,9 +46,7 @@ import Testing
             into: Destination(directory: directory, note: nil))
 
         #expect(plan.target == directory.appending(path: "fixture.KeyStepPro"))
-        // One target today, and the name field the staged view offers depends on it staying one.
-        #expect(plan.targets == [directory.appending(path: "fixture.KeyStepPro")])
-        #expect(plan.writesOneFile)
+        #expect(!plan.intoFolder)
         #expect(plan.note == nil)
     }
 
@@ -81,6 +79,115 @@ import Testing
 
         #expect(plan.note?.contains("Templates was not writable.") == true)
         #expect(plan.note?.contains("fixture 2.KeyStepPro") == true)
+    }
+
+    /// A split run's filenames come from the slots the export finds, which is format logic the app
+    /// does not own -- so it claims the folder and lets the runner name what goes in it.
+    @Test func asplitPlanClaimsAFolderRatherThanAFile() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+
+        let plan = Conversion.plan(
+            .toMIDI(source), named: "fixture",
+            into: Destination(directory: directory, note: nil), splitting: true)
+
+        #expect(plan.intoFolder)
+        #expect(plan.target == directory.appending(path: "fixture"))
+        #expect(plan.target.pathExtension.isEmpty)
+        #expect(plan.note == nil)
+    }
+
+    /// The same ladder a file climbs, so a second split run cannot land in the first one's folder --
+    /// which is what keeps the runner's overwrite guard from ever firing.
+    @Test func asplitPlanStepsAsideFromAnExistingFolderAndSaysSo() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+        try FileManager.default.createDirectory(
+            at: directory.appending(path: "fixture"), withIntermediateDirectories: true)
+
+        let plan = Conversion.plan(
+            .toMIDI(source), named: "fixture",
+            into: Destination(directory: directory, note: nil), splitting: true)
+
+        #expect(plan.target.lastPathComponent == "fixture 2")
+        #expect(plan.note?.contains("fixture 2") == true)
+    }
+
+    /// A `.mid` in becomes one project however the control is set, so the import ignores it.
+    @Test func animportIgnoresSplitting() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "m6-test-file.mid")
+
+        let plan = Conversion.plan(
+            .toProject(source), named: "fixture",
+            into: Destination(directory: directory, note: nil), splitting: true)
+
+        #expect(!plan.intoFolder)
+        #expect(plan.target == directory.appending(path: "fixture.KeyStepPro"))
+    }
+
+    /// The end-to-end proof: the folder is the app's, the filenames are the runner's, and every one
+    /// of them comes back to be listed.
+    @Test func asplitExportFillsItsFolderAndReportsEveryFile() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+        let plan = Conversion.plan(
+            .toMIDI(source), named: "fixture",
+            into: Destination(directory: directory, note: nil), splitting: true)
+
+        let outcome = await Conversion.run(plan, settings: Settings(splitPerPattern: true))
+
+        #expect(!outcome.failed, "export failed: \(outcome.headline)")
+        #expect(outcome.written.count > 1)
+        // Named after the source and its slot, not after the folder the user chose.
+        // By path: `deletingLastPathComponent()` leaves a trailing slash the folder URL has not.
+        #expect(
+            outcome.written.allSatisfy {
+                $0.deletingLastPathComponent().path == plan.target.path
+            })
+        #expect(
+            outcome.written.map(\.lastPathComponent)
+                .contains("project_5_track1_pattern1.mid"))
+        #expect(outcome.written.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+        // Named so the result can say where they went even when only one file is written.
+        #expect(outcome.folder == plan.target)
+    }
+
+    /// One file is the case the result view would otherwise report as a bare filename, leaving the
+    /// folder the user named nowhere on screen.
+    @Test func asplitExportOfOneSlotStillNamesItsFolder() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+        let plan = Conversion.plan(
+            .toMIDI(source), named: "fixture",
+            into: Destination(directory: directory, note: nil), splitting: true)
+
+        let outcome = await Conversion.run(
+            plan, settings: Settings(cells: [3: [1]], splitPerPattern: true))
+
+        #expect(!outcome.failed, "export failed: \(outcome.headline)")
+        #expect(outcome.written.count == 1)
+        #expect(outcome.folder == plan.target)
+    }
+
+    /// A run that wrote one named file has no folder to report -- the file's own name is the answer.
+    @Test func aplainExportReportsNoFolder() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+        let plan = Conversion.plan(
+            .toMIDI(source), named: "fixture",
+            into: Destination(directory: directory, note: nil))
+
+        let outcome = await Conversion.run(plan, settings: Settings())
+
+        #expect(!outcome.failed)
+        #expect(outcome.folder == nil)
     }
 
     /// The one end-to-end run, and the point of it is that the app reaches the *shipped* runner and

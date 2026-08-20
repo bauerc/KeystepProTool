@@ -27,6 +27,9 @@ struct Outcome: Sendable, Equatable {
     var written: [URL]
     var headline: String
     var note: String?
+    /// The folder a split run filled, whose name is the app's even though the filenames are not.
+    /// `nil` when the run wrote a single named file.
+    let folder: URL?
     /// True when nothing was written because the user asked for a report instead.
     let dryRun: Bool
 
@@ -35,10 +38,14 @@ struct Outcome: Sendable, Equatable {
     let collapsed: [String]
     let all: [String]
 
-    init(written: [URL], headline: String, report: Report, note: String?, dryRun: Bool = false) {
+    init(
+        written: [URL], headline: String, report: Report, note: String?, folder: URL? = nil,
+        dryRun: Bool = false
+    ) {
         self.written = written
         self.headline = headline
         self.note = note
+        self.folder = folder
         self.dryRun = dryRun
         // `Report.note(verbose:)` is deliberately not used: it ends in "--verbose for detail",
         // which names a flag rather than the sidebar's toggle.
@@ -84,15 +91,14 @@ enum Conversion {
     /// anything the user should know about that placement before pressing Convert.
     struct Plan: Sendable, Hashable {
         let job: Job
-        /// Where the result lands. Never empty; one entry until split lands (#130).
-        let targets: [URL]
+        /// Where the result lands: the file it writes, or the folder it fills.
+        let target: URL
         /// A fallback directory, a name already taken, or both. `nil` when the obvious thing
         /// happened.
         let note: String?
-
-        var target: URL { targets[0] }
-        /// A name applies to one file. Several would rename an arbitrary one, so none is offered.
-        var writesOneFile: Bool { targets.count == 1 }
+        /// Whether ``target`` is the folder the run fills rather than the file it writes. A split
+        /// export names its own files, so the app can only claim the folder they go in.
+        let intoFolder: Bool
 
         var source: URL { job.source }
     }
@@ -112,16 +118,28 @@ enum Conversion {
     /// Separated from ``run(_:settings:)`` so the staged view can show the destination and its notes
     /// while the user is still deciding, and so pressing Convert re-asks the same question against
     /// the filesystem as it is at that moment.
-    static func plan(_ job: Job, named stem: String, into destination: Destination) -> Plan {
+    static func plan(
+        _ job: Job, named stem: String, into destination: Destination, splitting: Bool = false
+    ) -> Plan {
         let base = Naming.sanitised(stem)
-        let target = Naming.vacant(
-            in: destination.directory, stem: base, extension: job.extensionOfResult)
+        // Only an export splits: a `.mid` in becomes one project however the control is set.
+        let intoFolder = splitting && job.writesMIDI
+        let target =
+            intoFolder
+            ? Naming.vacantFolder(in: destination.directory, stem: base)
+            : Naming.vacant(
+                in: destination.directory, stem: base, extension: job.extensionOfResult)
         // Both notes can apply at once -- a fallback directory that already holds that name -- so
         // they are collected rather than chosen between.
-        let clashed = target.deletingPathExtension().lastPathComponent != base
-        let note = [destination.note, clashed ? collisionNote(target) : nil]
+        let claimed =
+            intoFolder
+            ? target.lastPathComponent
+            : target.deletingPathExtension()
+                .lastPathComponent
+        let note = [destination.note, claimed != base ? collisionNote(target) : nil]
             .compactMap { $0 }.joined(separator: " ")
-        return Plan(job: job, targets: [target], note: note.isEmpty ? nil : note)
+        return Plan(
+            job: job, target: target, note: note.isEmpty ? nil : note, intoFolder: intoFolder)
     }
 
     /// Run one conversion off the main actor.
@@ -145,7 +163,7 @@ enum Conversion {
         let note = [plan.note, excluded].compactMap { $0 }.joined(separator: " ")
         return outcome(
             from: result, note: note.isEmpty ? nil : note, excluded: excluded,
-            dryRun: settings.dryRun)
+            dryRun: settings.dryRun, folder: plan.intoFolder ? target : nil)
     }
 
     /// Read a staged project off the main actor, for the staged view to show what is in it.
@@ -162,10 +180,11 @@ enum Conversion {
         return .failed(result.message ?? "That project could not be read.")
     }
 
-    /// Internal rather than private so a test can put a multi-destination ``RunResult`` through it:
-    /// no option produces one until split lands (#130).
+    /// Internal rather than private so a test can put a multi-destination ``RunResult`` through it
+    /// without running a split export first.
     static func outcome(
-        from result: RunResult, note: String?, excluded: String?, dryRun: Bool
+        from result: RunResult, note: String?, excluded: String?, dryRun: Bool,
+        folder: URL? = nil
     ) -> Outcome {
         guard result.code == 0, !result.destinations.isEmpty else {
             // Nothing was written, so only the exclusion still explains anything.
@@ -175,7 +194,7 @@ enum Conversion {
         }
         return Outcome(
             written: result.destinations, headline: summary(result), report: result.diagnostics,
-            note: note, dryRun: dryRun)
+            note: note, folder: folder, dryRun: dryRun)
     }
 
     /// The runner's own summary, minus its first line -- which names the path this window is
@@ -195,6 +214,12 @@ enum Conversion {
 }
 
 extension Job {
+    /// True for the export direction, the only one that can write more than one file.
+    var writesMIDI: Bool {
+        if case .toMIDI = self { return true }
+        return false
+    }
+
     /// What the conversion produces, which is the opposite of what was dropped.
     var extensionOfResult: String {
         switch self {

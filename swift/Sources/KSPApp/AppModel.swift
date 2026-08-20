@@ -138,7 +138,9 @@ final class AppModel {
     /// Where the staged file would land under the name currently typed. Recomputed as the name is
     /// edited, so the window never promises a path it would not use.
     func plan(for job: Job) -> Conversion.Plan {
-        Conversion.plan(job, named: name, into: destination(job, folders))
+        Conversion.plan(
+            job, named: name, into: destination(job, folders),
+            splitting: settings.splitPerPattern)
     }
 
     func toggle(track: Int, pattern: Int) {

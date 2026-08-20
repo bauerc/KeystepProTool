@@ -45,6 +45,46 @@ struct DropView: View {
 
                 Divider()
 
+                Text("MIDI export").font(.headline)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Picker("", selection: $model.settings.splitPerPattern) {
+                        Text("One file for everything").tag(false)
+                        Text("One file per pattern slot").tag(true)
+                    }
+                    .pickerStyle(.radioGroup)
+                    .labelsHidden()
+                    // The choice moves the destination and the file list both, so a preview taken
+                    // before it was made no longer describes this run.
+                    .onChange(of: model.settings.splitPerPattern) { model.discardPreview() }
+                    Text("Each file holds one pattern slot and starts at its own bar 1.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Step Skip").font(.subheadline)
+
+                    Picker("Step Skip", selection: $model.settings.stepSkip) {
+                        ForEach(Settings.StepSkip.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .controlSize(.small)
+                    // The choice changes the notes written and the findings reported, so a preview
+                    // taken before it was made no longer describes this run.
+                    .onChange(of: model.settings.stepSkip) { model.discardPreview() }
+
+                    Text(
+                        "Auto expands the device's 16/32/48/64 cycle to four passes when a note "
+                            + "skips part of it; 1 flattens the cycle to a single pass that plays "
+                            + "every note whatever its mask. This is the device's own cycle, not "
+                            + "copies of the export."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
+                }
+
+                Divider()
+
                 Text("Options").font(.headline)
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -59,29 +99,6 @@ struct DropView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
-                Divider()
-
-                // Named as a direction so an export-only option is not read as a global one.
-                Text("Export").font(.headline)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Step Skip").font(.subheadline)
-
-                    Picker("Step Skip", selection: $model.settings.stepSkip) {
-                        ForEach(Settings.StepSkip.allCases) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .controlSize(.small)
-
-                    Text(
-                        "Auto expands the device's 16/32/48/64 cycle to four passes when a note "
-                            + "skips part of it; 1 flattens the cycle to a single pass that plays "
-                            + "every note whatever its mask. This is the device's own cycle, not "
-                            + "copies of the export."
-                    )
-                    .font(.caption).foregroundStyle(.secondary)
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
@@ -165,25 +182,18 @@ struct DropView: View {
                         .font(.headline)
                     Text(staged.job.direction).font(.callout).foregroundStyle(.secondary)
 
-                    // A name renames one file. A run writing several has no one file to apply it
-                    // to, so the field is not offered at all.
-                    if plan.writesOneFile {
-                        VStack(alignment: .leading, spacing: 4) {
-                            TextField("Name", text: $model.name)
-                                .textFieldStyle(.roundedBorder)
-                                .onChange(of: model.name) { model.discardPreview() }
-                            Text(
-                                "This is the name MIDI Control Center's Project Browser will show."
-                            )
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField("Name", text: $model.name)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: model.name) { model.discardPreview() }
+                        Text(nameNote(plan))
                             .font(.caption).foregroundStyle(.secondary)
-                        }
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Will be written to").font(.caption).foregroundStyle(.secondary)
-                        ForEach(plan.targets, id: \.self) { target in
-                            Text(target.path).font(.callout).textSelection(.enabled)
-                        }
+                        Text(plan.intoFolder ? "Will be written into" : "Will be written to")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text(plan.target.path).font(.callout).textSelection(.enabled)
                     }
 
                     if let note = plan.note {
@@ -407,7 +417,10 @@ struct DropView: View {
             .font(.subheadline)
             .foregroundStyle(preview.failed ? Color.orange : Color.secondary)
 
-            if preview.written.count > 1 { writtenFiles(preview.written) }
+            if let folder = preview.folder { landedIn(folder) }
+            if preview.written.count > 1 || preview.folder != nil {
+                writtenFiles(preview.written)
+            }
 
             Text(preview.headline).font(.caption).textSelection(.enabled)
             findings(preview)
@@ -430,7 +443,10 @@ struct DropView: View {
                     .font(.headline)
                     .foregroundStyle(outcome.failed ? Color.orange : Color.green)
 
-                    if outcome.written.count > 1 { writtenFiles(outcome.written) }
+                    if let folder = outcome.folder { landedIn(folder) }
+                    if outcome.written.count > 1 || outcome.folder != nil {
+                        writtenFiles(outcome.written)
+                    }
 
                     Text(outcome.headline).font(.callout).textSelection(.enabled)
 
@@ -446,6 +462,20 @@ struct DropView: View {
             Button("Convert another") { model.reset() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// What the name field renames. A split run names its own files, so the name reaches the folder
+    /// they land in instead.
+    private func nameNote(_ plan: Conversion.Plan) -> String {
+        plan.intoFolder
+            ? "This names the folder the files land in. Each file is named after the project and "
+                + "the slot it holds."
+            : "This is the name MIDI Control Center's Project Browser will show."
+    }
+
+    /// The folder a split run filled. The headline counts its files; only this says where they are.
+    private func landedIn(_ folder: URL) -> some View {
+        Text(folder.path).font(.callout).textSelection(.enabled)
     }
 
     /// The files by name, under a headline that could only give their count.
