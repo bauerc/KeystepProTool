@@ -28,6 +28,9 @@ name: swift
 # readable only by that branch, so `swift-macos-seed` below is the one writer, on main.
 
 on:
+  # Seeds the macOS cache on demand. Without it the first seed waits for whenever Package.resolved
+  # next moves, and every PR until then pays the cold build this workflow exists to avoid.
+  workflow_dispatch:
   push:
     branches: [main]
     paths: ["swift/**", ".github/workflows/swift.yml"]
@@ -109,7 +112,9 @@ jobs:
   # cache to the branch that wrote it, plus the default branch. Gated on the Linux job's answer so
   # a macOS runner starts only when the dependencies actually moved -- rare, and the whole point.
   swift-macos-seed:
-    if: github.event_name == 'push' && needs.swift.outputs.deps-changed == 'true'
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'push' && needs.swift.outputs.deps-changed == 'true')
     needs: swift
     runs-on: macos-latest
     defaults:
