@@ -46,8 +46,9 @@ public struct ImportOptions: Sendable, Hashable {
     /// out of `99`, this is a real choice: it decides what grid the incoming clip is snapped to.
     public let stepsPerBeat: Int
 
-    /// Read only this track of the source file, counting from 1.
-    public let midiTrack: Int?
+    /// Read only these tracks of the source file, counting from 1. An empty set reads every track,
+    /// which is what a type 0 file needs.
+    public let midiTracks: Set<Int>
 
     /// Which source track to write as drums, counting from 1.
     public let drumTrack: Int?
@@ -66,7 +67,7 @@ public struct ImportOptions: Sendable, Hashable {
 
     public init(
         stepsPerBeat: Int = Constants.defaultStepsPerBeat,
-        midiTrack: Int? = nil,
+        midiTracks: Set<Int> = [],
         drumTrack: Int? = nil,
         drumMap: DrumMap? = nil,
         carryTempo: Bool = true,
@@ -75,14 +76,16 @@ public struct ImportOptions: Sendable, Hashable {
         routes: [TrackRoute] = []
     ) throws {
         try Constants.checkStepsPerBeat(stepsPerBeat)
-        for (name, value) in [("midi_track", midiTrack), ("drum_track", drumTrack)] {
-            if let value, value < 1 {
-                throw KSPError.value("\(name) counts from 1")
-            }
+        // Both messages name the CLI option rather than the field they check.
+        if midiTracks.contains(where: { $0 < 1 }) {
+            throw KSPError.value("midi_track counts from 1")
         }
-        try ImportOptions.checkRoutes(routes, drumTrack: drumTrack, midiTrack: midiTrack)
+        if let drumTrack, drumTrack < 1 {
+            throw KSPError.value("drum_track counts from 1")
+        }
+        try ImportOptions.checkRoutes(routes, drumTrack: drumTrack, midiTracks: midiTracks)
         self.stepsPerBeat = stepsPerBeat
-        self.midiTrack = midiTrack
+        self.midiTracks = midiTracks
         self.drumTrack = drumTrack
         self.drumMap = drumMap
         self.carryTempo = carryTempo
@@ -93,11 +96,11 @@ public struct ImportOptions: Sendable, Hashable {
 
     /// The faults a route has without knowing the song: range and clashes.
     private static func checkRoutes(
-        _ routes: [TrackRoute], drumTrack: Int?, midiTrack: Int?
+        _ routes: [TrackRoute], drumTrack: Int?, midiTracks: Set<Int>
     ) throws {
-        if !routes.isEmpty && midiTrack != nil {
-            // Reading one track goes straight to quantise and never reaches assign, so a route
-            // here would be silently ignored.
+        if !routes.isEmpty && !midiTracks.isEmpty {
+            // Reading a named selection goes straight to quantise and never reaches assign, so a
+            // route here would be silently ignored.
             throw KSPError.value(
                 "routes and midi_track contradict each other; midi_track converts a single "
                     + "source track into the one pattern the target names, leaving a route "
@@ -456,7 +459,7 @@ extension MIDIImport {
         var sources: [Int] = []
         for (index, track) in midi.tracks.enumerated() {
             let number = index + 1
-            if let only = options.midiTrack, number != only { continue }
+            if !options.midiTracks.isEmpty && !options.midiTracks.contains(number) { continue }
             let found = trackNotes(track, timebase: midi.timebase).notes
             if !found.isEmpty {
                 sources.append(number)
@@ -477,6 +480,9 @@ extension MIDIImport {
     /// everything on one track and tells its instruments apart by channel alone, so a track
     /// carrying several is split into one clip each: merged, its percussion would arrive as melodic
     /// pitches on whichever device track the rest of it landed on.
+    ///
+    /// Under `midiTracks` the file's own order survives, since a set has none, and the split
+    /// happens after the selection: it selects tracks, not channels.
     public static func readSong(_ midi: MusicalMIDI1File, options: ImportOptions? = nil) throws
         -> Song
     {
@@ -489,7 +495,7 @@ extension MIDIImport {
         var dropped = 0
         for (index, track) in midi.tracks.enumerated() {
             let number = index + 1
-            if let only = options.midiTrack, number != only { continue }
+            if !options.midiTracks.isEmpty && !options.midiTracks.contains(number) { continue }
             let read = trackNotes(track, timebase: midi.timebase)
             dropped += read.dropped
             var byChannel: [Int: [RenderedNote]] = [:]

@@ -19,7 +19,7 @@ public enum ConvertRunner {
         public var fitSwing: Bool
         public var fitTimeShift: Bool
         public var template: URL?
-        public var midiTrack: Int?
+        public var midiTracks: Set<Int>
         public var stepsPerBeat: Int
         public var dryRun: Bool
         public var force: Bool
@@ -34,7 +34,7 @@ public enum ConvertRunner {
             path: URL, output: URL? = nil, track: Int = 1, pattern: Int = 1, drumTrack: Int? = nil,
             routeSpec: String? = nil,
             drumMapSpec: String? = nil, carryTempo: Bool = true, fitSwing: Bool = true,
-            fitTimeShift: Bool = true, template: URL? = nil, midiTrack: Int? = nil,
+            fitTimeShift: Bool = true, template: URL? = nil, midiTracks: Set<Int> = [],
             stepsPerBeat: Int = Constants.defaultStepsPerBeat, dryRun: Bool = false,
             force: Bool = false, quiet: Bool = false, verbose: Bool = false, configPath: URL
         ) {
@@ -49,7 +49,7 @@ public enum ConvertRunner {
             self.fitSwing = fitSwing
             self.fitTimeShift = fitTimeShift
             self.template = template
-            self.midiTrack = midiTrack
+            self.midiTracks = midiTracks
             self.stepsPerBeat = stepsPerBeat
             self.dryRun = dryRun
             self.force = force
@@ -77,7 +77,7 @@ public enum ConvertRunner {
         let importOptions: ImportOptions
         do {
             importOptions = try ImportOptions(
-                stepsPerBeat: options.stepsPerBeat, midiTrack: options.midiTrack,
+                stepsPerBeat: options.stepsPerBeat, midiTracks: options.midiTracks,
                 drumTrack: options.drumTrack,
                 drumMap: try resolveImportDrumMap(
                     options.drumMapSpec, configPath: options.configPath),
@@ -120,12 +120,12 @@ public enum ConvertRunner {
             return fail("template: \(error.localizedDescription)", code: 1)
         }
 
-        // --midi-track narrows the source to one track, which is the whole of the single-target
-        // path: that one track, into the one pattern --track and --pattern name, at the length
-        // that pattern already declares.
+        // One selected track is the whole of the single-target path: that track, into the one
+        // pattern --track and --pattern name, at the length that pattern already declares. Any
+        // other selection needs the song path, the only one that can place several tracks.
         let result: ImportResult
         do {
-            if options.midiTrack != nil {
+            if options.midiTracks.count == 1 {
                 result = try MIDIImport.convert(
                     midi, loadedTemplate, track: options.track, pattern: options.pattern,
                     options: importOptions)

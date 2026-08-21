@@ -239,7 +239,7 @@ def convert_command(
     try:
         options = ImportOptions(
             steps_per_beat=steps_per_beat,
-            midi_track=midi_track,
+            midi_tracks=frozenset() if midi_track is None else frozenset({midi_track}),
             drum_track=drum_track,
             drum_map=resolve_import_drum_map(drum_map_spec),
             carry_tempo=not no_tempo,
@@ -268,11 +268,12 @@ def convert_command(
 
     loaded_template = load_template(template, prog=PROG)
 
-    # --midi-track narrows the source to one track, which is the whole of the
-    # single-target path: that one track, into the one pattern --track and
-    # --pattern name, at the length that pattern already declares.
+    # One selected track is the whole of the single-target path: that track,
+    # into the one pattern --track and --pattern name, at the length that
+    # pattern already declares. Any other selection needs the song path, which
+    # is the only one that can place several tracks.
     try:
-        if midi_track is not None:
+        if len(options.midi_tracks) == 1:
             result = convert(midi, loaded_template, track=track, pattern=pattern, options=options)
         else:
             result = convert_song(

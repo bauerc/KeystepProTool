@@ -305,14 +305,29 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(abs(try MIDIImport.readClip(midi).tempoBPM - 140) < 0.01)
     }
 
-    @Test func midiTrackSelectsOneTrack() throws {
+    @Test func midiTracksSelectsOneTrack() throws {
         let midi = songOf([[(0, 60, 100)], [(0, 72, 100)]], length: 120)
-        let both = try MIDIImport.readClip(midi)
-        let second = try MIDIImport.readClip(midi, options: ImportOptions(midiTrack: 2))
+        let second = try MIDIImport.readClip(midi, options: ImportOptions(midiTracks: [2]))
 
-        #expect(both.notes.map(\.pitch) == [60, 72])
         #expect(second.notes.map(\.pitch) == [72])
         #expect(second.sourceTracks == [2])
+    }
+
+    @Test func anEmptySelectionReadsEveryTrack() throws {
+        let midi = songOf([[(0, 60, 100)], [(0, 72, 100)]], length: 120)
+        let both = try MIDIImport.readClip(midi, options: ImportOptions(midiTracks: []))
+
+        #expect(both.notes.map(\.pitch) == [60, 72])
+        #expect(both.sourceTracks == [1, 2])
+    }
+
+    /// A set has no order, so the order the clips arrive in is the file's.
+    @Test func aNonContiguousSelectionArrivesInFileOrder() throws {
+        let midi = songOf([60, 62, 64, 65, 67].map { [(0, $0, 100)] }, length: 120)
+        let song = try MIDIImport.readSong(midi, options: ImportOptions(midiTracks: [5, 1, 2]))
+
+        #expect(song.clips.map(\.sourceTracks) == [[1], [2], [5]])
+        #expect(song.clips.map { $0.notes[0].pitch } == [60, 62, 67])
     }
 }
 
@@ -413,13 +428,13 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(thrown?.description.contains("out of range") == true)
     }
 
-    @Test(arguments: [("stepsPerBeat", 0), ("midiTrack", 0), ("drumTrack", 0)])
+    @Test(arguments: [("stepsPerBeat", 0), ("midiTracks", 0), ("drumTrack", 0)])
     func optionsRefuseImpossibleValues(_ testCase: (String, Int)) {
         let (name, value) = testCase
         #expect(throws: KSPError.self) {
             switch name {
             case "stepsPerBeat": _ = try ImportOptions(stepsPerBeat: value)
-            case "midiTrack": _ = try ImportOptions(midiTrack: value)
+            case "midiTracks": _ = try ImportOptions(midiTracks: [value])
             default: _ = try ImportOptions(drumTrack: value)
             }
         }
@@ -435,6 +450,14 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         ])
     func optionsRefuseImpossibleRoutes(_ routes: [TrackRoute]) {
         #expect(throws: KSPError.self) { _ = try ImportOptions(routes: routes) }
+    }
+
+    /// The message names the CLI flag, not the field, so it does not move.
+    @Test func aSelectedTrackBelowOneIsNamedByTheOption() {
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try ImportOptions(midiTracks: [1, 0])
+        }
+        #expect(thrown?.description == "midi_track counts from 1")
     }
 }
 
@@ -534,6 +557,17 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
     @Test func aFifthSourceTrackIsReportedRatherThanWritten() throws {
         let midi = songOf((0..<5).map { [(0, 60 + $0, 100)] })
         let result = try MIDIImport.convertSong(midi, template())
+        #expect(result.plan.tracks.count == 4)
+        let dropped = result.diagnostics.entries.filter { $0.code == .tracksDropped }
+        #expect(dropped.map(\.subjects) == [1])
+    }
+
+    /// Five selected tracks are still four device tracks and one report.
+    @Test func aSelectionWiderThanTheDeviceIsReported() throws {
+        let midi = songOf((0..<6).map { [(0, 60 + $0, 100)] })
+        let options = try ImportOptions(midiTracks: [1, 2, 3, 4, 5])
+        let result = try MIDIImport.convertSong(midi, template(), options: options)
+
         #expect(result.plan.tracks.count == 4)
         let dropped = result.diagnostics.entries.filter { $0.code == .tracksDropped }
         #expect(dropped.map(\.subjects) == [1])
@@ -893,6 +927,20 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(split.map(\.subjects) == [2])
     }
 
+    /// The subset selects tracks, never channels: the split happens after it.
+    @Test func aSelectionStillSplitsAMixedTrackByChannel() throws {
+        let midi = mixedOf([(0, 60, 0), (0, 72, 1)])
+        let options = try ImportOptions(midiTracks: [1])
+        let result = try MIDIImport.convertSong(midi, template(), options: options)
+
+        #expect(result.plan.tracks.map { $0.notes.map(\.pitch) } == [[60], [72]])
+        let split = result.diagnostics.entries.filter { $0.code == .trackSplitByChannel }
+        #expect(split.map(\.subjects) == [2])
+
+        let beyond = try MIDIImport.readSong(midi, options: ImportOptions(midiTracks: [2]))
+        #expect(beyond.clips.isEmpty)
+    }
+
     @Test func thePercussionChannelOfAMixedTrackIsStillFound() throws {
         let midi = mixedOf([(0, 60, 0), (0, 36, 9)])
         let result = try MIDIImport.convertSong(midi, template())
@@ -1073,7 +1121,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
     /// Reading one track goes straight to quantise, so a route never places it.
     @Test func aRouteWithMidiTrackIsRefused() {
         let thrown = #expect(throws: KSPError.self) {
-            _ = try ImportOptions(midiTrack: 1, routes: [TrackRoute(source: 1, device: 2)])
+            _ = try ImportOptions(midiTracks: [1], routes: [TrackRoute(source: 1, device: 2)])
         }
         #expect(
             thrown?.description.contains("routes and midi_track contradict each other") == true)
