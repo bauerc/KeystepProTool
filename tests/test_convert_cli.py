@@ -264,3 +264,85 @@ def test_a_bad_template_is_a_runtime_error(
 
     assert main(argv) == 1
     assert "template" in capsys.readouterr().err
+
+
+def two_tracks() -> mido.MidiFile:
+    """A type 1 file whose note-bearing tracks are 1 and 2."""
+    midi = mido.MidiFile(type=1)
+    for pitch in (60, 64):
+        track = mido.MidiTrack()
+        track.append(mido.Message("note_on", note=pitch, velocity=100, time=0))
+        track.append(mido.Message("note_off", note=pitch, velocity=0, time=480))
+        midi.tracks.append(track)
+    return midi
+
+
+def routed(tmp_path: Path, *args: str) -> tuple[Path, list[str]]:
+    source = tmp_path / "two.mid"
+    two_tracks().save(source)
+    output = tmp_path / "out.KeyStepPro"
+    return output, [str(source), "-o", str(output), *args]
+
+
+def test_a_route_puts_a_source_track_where_it_says(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output, argv = routed(tmp_path, "--route", "2:1,1:2")
+
+    assert main(argv) == 0
+
+    project = reader.load(output)
+    # Source track 2 is the E, source track 1 the C, and the route swaps them.
+    assert [n.pitch for n in project.track(1).pattern(1).notes_of(NoteKind.SEQ)] == [64]
+    assert [n.pitch for n in project.track(2).pattern(1).notes_of(NoteKind.SEQ)] == [60]
+
+
+def test_a_route_names_its_sources_in_the_summary(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, argv = routed(tmp_path, "--route", "2:1,1:2")
+
+    assert main(argv) == 0
+
+    out = capsys.readouterr().out
+    assert "track 1 [source 2]" in out
+    assert "track 2 [source 1]" in out
+
+
+def test_without_a_route_the_summary_names_no_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The default output is unchanged, which is what keeps the parity corpus still."""
+    _, argv = routed(tmp_path)
+
+    assert main(argv) == 0
+    assert "source" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("spec", "expected"),
+    [
+        ("bad", "'bad' is not a source:device pair"),
+        ("1:2:3", "'1:2:3' is not a source:device pair"),
+        ("1:2,3:2", "both name device track 2"),
+        ("1:9", "the device has 4 tracks"),
+        ("1:2,1:3", "names source track 1 twice"),
+    ],
+)
+def test_a_bad_route_is_an_argument_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], spec: str, expected: str
+) -> None:
+    _, argv = routed(tmp_path, "--route", spec)
+
+    assert main(argv) == 2
+    assert expected in capsys.readouterr().err
+
+
+def test_a_route_with_midi_track_is_an_argument_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--midi-track already decides the destination, so a route has nothing to place."""
+    _, argv = routed(tmp_path, "--midi-track", "1", "--route", "1:2")
+
+    assert main(argv) == 2
+    assert "contradict each other" in capsys.readouterr().err

@@ -50,6 +50,9 @@ struct Convert: ParsableCommand {
             """, valueName: "N"))
     var drumTrack: Int?
 
+    @Option(name: .customLong("route"), help: ArgumentHelp(routeHelp, valueName: "SPEC"))
+    var route: String?
+
     @Option(name: .customLong("drum-map"), help: ArgumentHelp(drumMapHelp, valueName: "SPEC"))
     var drumMapSpec: String?
 
@@ -120,7 +123,8 @@ struct Convert: ParsableCommand {
             ConvertRunner.Options(
                 path: URL(filePath: path),
                 output: output.map { URL(filePath: $0) },
-                track: track, pattern: pattern, drumTrack: drumTrack, drumMapSpec: drumMapSpec,
+                track: track, pattern: pattern, drumTrack: drumTrack, routeSpec: route,
+                drumMapSpec: drumMapSpec,
                 carryTempo: !noTempo, fitSwing: !noSwingFit, fitTimeShift: !noTimeShift,
                 template: template.map { URL(filePath: $0) }, midiTrack: midiTrack,
                 stepsPerBeat: stepsPerBeat, dryRun: dryRun, force: force, quiet: quiet,

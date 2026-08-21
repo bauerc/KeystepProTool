@@ -22,10 +22,18 @@ import typer
 from ksp import constants
 from ksp.constants import DEFAULT_STEPS_PER_BEAT
 from ksp.lenient_json import dump_path
-from ksp.midi_import import ImportOptions, ImportResult, convert, convert_song, saveable
+from ksp.midi_import import (
+    ImportOptions,
+    ImportResult,
+    TrackPlan,
+    convert,
+    convert_song,
+    saveable,
+)
 from ksp_cli.drum_map_option import DRUM_MAP_HELP, resolve_import_drum_map
 from ksp_cli.loading import load_template
 from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
+from ksp_cli.route_option import ROUTE_HELP, parse_routes
 from ksp_cli.runner import standalone
 
 PROG = "midi2ksp"
@@ -44,15 +52,40 @@ _DESTINATION_PANEL = "Destination"
 _TIMING_PANEL = "Timing"
 
 
-def _summary(result: ImportResult, destination: Path, dry_run: bool) -> str:
+def _source(plan: TrackPlan, show_sources: bool) -> str:
+    """Where a track came from, named only when a route was given.
+
+    An unrouted run says what it has always said. A clip merged from several
+    source tracks has no one source, so it gets no mark rather than a wrong one.
+    """
+    if not show_sources or plan.source_track is None:
+        return ""
+    return f"source {plan.source_track}"
+
+
+def _marks(plan: TrackPlan, show_sources: bool) -> str:
+    """The bracket after a track number in the per-track shape: kind, then source."""
+    marks = ["drum"] if plan.is_drum else []
+    source = _source(plan, show_sources)
+    if source:
+        marks.append(source)
+    return f" [{', '.join(marks)}]" if marks else ""
+
+
+def _summary(
+    result: ImportResult, destination: Path, dry_run: bool, show_sources: bool = False
+) -> str:
     verb = "would write" if dry_run else "wrote"
     lines = [f"{verb} {destination}"]
 
     tracks = result.plan.tracks
     if len(tracks) == 1 and len(tracks[0].placements) == 1:
-        # The single-target shape, said the way it has always been said.
+        # The single-target shape, said the way it has always been said. It has
+        # never carried a [drum] mark, so only a route adds anything here.
+        source = _source(tracks[0], show_sources)
         lines.append(
-            f"  {result.note_count} note(s) onto track {result.track}, "
+            f"  {result.note_count} note(s) onto track {result.track}"
+            f"{f' [{source}]' if source else ''}, "
             f"pattern {result.pattern} ({result.step_count} steps)"
         )
         return "\n".join(lines)
@@ -65,9 +98,9 @@ def _summary(result: ImportResult, destination: Path, dry_run: bool) -> str:
             else f"patterns {patterns[0]}-{patterns[-1]}"
         )
         steps = ", ".join(str(p.step_count) for p in plan.placements)
-        kind = " [drum]" if plan.is_drum else ""
         lines.append(
-            f"  track {plan.track}{kind}: {len(plan.notes)} note(s), {where} ({steps} steps)"
+            f"  track {plan.track}{_marks(plan, show_sources)}: "
+            f"{len(plan.notes)} note(s), {where} ({steps} steps)"
         )
     return "\n".join(lines)
 
@@ -115,6 +148,10 @@ def convert_command(
                 "a track on the GM percussion channel is used, and many files have none"
             ),
         ),
+    ] = None,
+    route: Annotated[
+        str | None,
+        typer.Option("--route", metavar="SPEC", rich_help_panel=_SOURCE_PANEL, help=ROUTE_HELP),
     ] = None,
     drum_map_spec: Annotated[
         str | None,
@@ -208,6 +245,7 @@ def convert_command(
             carry_tempo=not no_tempo,
             fit_swing=not no_swing_fit,
             fit_time_shift=not no_time_shift,
+            routes=parse_routes(route),
         )
     except ValueError as exc:
         fail(str(exc), prog=PROG, code=2)
@@ -260,7 +298,7 @@ def convert_command(
 
     print_report(result.diagnostics, prog=PROG, verbose=verbose)
     if not quiet:
-        print(_summary(result, destination, dry_run))
+        print(_summary(result, destination, dry_run, show_sources=route is not None))
 
 
 def register(app: typer.Typer) -> None:
