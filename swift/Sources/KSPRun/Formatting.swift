@@ -1,19 +1,11 @@
 import Foundation
 import KSPKit
 
-/// Rendering a project as an indented tree. A port of the formatting half of `src/ksp_cli/dump.py`.
-///
-/// Everything printed here is decoded by ``KSPKit/Reader``; this only formats.
-
-/// Widest gate the ladder prints, `0.0625`. Fixed so the columns after gate stay aligned across a
-/// pattern.
+/// Widest gate the ladder prints, `0.0625`, so the columns after gate stay aligned.
 private let gateWidth = 6
 
 /// Show the gate length in steps, or the raw value when it does not decode.
-///
-/// The ladder covers every legal value, so `?` now means the file holds a gate outside 0-127.
-/// Printing the raw number beats printing the nearest rung, which would look authoritative and be
-/// wrong.
+/// The ladder covers every legal value, so `?` means the file holds a gate outside 0-127.
 private func formatGate(_ gate: Double?, raw: Int) -> String {
     guard let gate else { return "?(\(raw))" }
     return Arithmetic.general(gate).rightAligned(to: gateWidth)
@@ -34,7 +26,6 @@ private func disabledMarker(_ note: Note, lastStep: Int?) -> String {
     }
 }
 
-/// Root note and scale, both decoded by protocol T5.6.
 private func scaleLine(_ pattern: Pattern) -> String {
     let scale = pattern.scaleName ?? "scale \(pattern.scale) (off the device's list)"
     return "      root \(Constants.rootNoteName(pattern.rootNote))   scale \(scale)"
@@ -43,14 +34,11 @@ private func scaleLine(_ pattern: Pattern) -> String {
 private func patternLines(_ pattern: Pattern, _ drumMap: DrumMap?, verbose: Bool) -> [String] {
     var lines = ["    Pattern \(String(pattern.number).padded(to: 2)) [\(pattern.mode.rawValue)]"]
     if pattern.rootNote != 0 || pattern.scale != 0 {
-        // Only when set: every sample project reads C chromatic, and a line printed on all 16
-        // patterns of all 4 tracks would be noise.
+        // Only when set: every sample project reads C chromatic, so the line is usually noise.
         lines.append(scaleLine(pattern))
     }
 
-    // A pattern's melodic and drum sets each have their own step count and swing, so each is
-    // printed against the notes it governs rather than as a single pair of numbers whose owner
-    // would be ambiguous.
+    // Each of a pattern's two sets has its own step count and swing, so each prints separately.
     for kind in NoteKind.allCases {
         let notes = pattern.notes(of: kind)
         if notes.isEmpty { continue }
@@ -60,9 +48,7 @@ private func patternLines(_ pattern: Pattern, _ drumMap: DrumMap?, verbose: Bool
         if kind == .drum {
             (steps, swing) = (pattern.drumStepCount, pattern.drumSwingPercent)
             if let drumMap {
-                // Said next to the notes it governs, and said every time, because a resolved drum
-                // note is an assumption about the user's device rather than anything read from
-                // their file.
+                // Said every time: a resolved drum note is an assumption about the user's device.
                 lines.append("      drum map: \(drumMap.describe())")
             }
         } else {
@@ -87,15 +73,12 @@ private func patternLines(_ pattern: Pattern, _ drumMap: DrumMap?, verbose: Bool
                         + "gate \(formatGate(note.gate, raw: note.gateRaw))  "
                         + "shift \(shift)  rand \(String(note.randomness).rightAligned(to: 3))  "
                         + "seq \(formatSkip(note.skip))"
-                        // Only ever marked when the note will not play: that is the surprise, an
-                        // audible note is the norm.
                         + disabledMarker(note, lastStep: steps))
             }
         }
     }
     if verbose {
-        // Inline, next to the notes they are about. Collapsed they would lose the one thing a tree
-        // dump is for: where the problem is.
+        // Inline, next to the notes they are about: collapsed they would lose where the problem is.
         lines += pattern.warnings.map { "      ! \($0)" }
     }
     return lines
@@ -133,8 +116,7 @@ func formatProject(
         "  tempo \(Arithmetic.general(project.tempoBPM)) BPM   "
             + "swing \(project.globalSwingPercent)%   scene \(project.currentScene)",
     ]
-    // Only scenes that chain something: a project nobody has chained holds the sentinel in all 16
-    // slots of all 5 tracks of all 16 scenes.
+    // Only scenes that chain something: an unchained project holds the sentinel in every slot.
     for scene in project.chainedScenes {
         for chain in scene.chains {
             let patterns = chain.patterns.map(String.init).joined(separator: " -> ")
@@ -152,8 +134,7 @@ func formatProject(
     lines += body.isEmpty ? ["  (no patterns hold notes)"] : body
 
     if !verbose {
-        // One block at the end rather than a line beside every pattern: the notes are what the
-        // dump is for, and the same finding recurs in a dozen patterns.
+        // One block at the end: the same finding recurs in a dozen patterns.
         let report = projectReport(project)
         if !report.isEmpty {
             lines.append("")
@@ -167,20 +148,17 @@ func formatProject(
 }
 
 extension String {
-    /// Python's `str.ljust`, which pads on the right and never truncates.
+    /// Pads on the right and never truncates.
     fileprivate func padded(to width: Int) -> String {
         count >= width ? self : self + String(repeating: " ", count: width - count)
     }
 
-    /// Python's `str.rjust`.
     fileprivate func rightAligned(to width: Int) -> String {
         count >= width ? self : String(repeating: " ", count: width - count) + self
     }
 }
 
-/// A report as the CLI prints it: one line per kind unless `verbose`, then the "there is more"
-/// note. A port of `ksp_cli.reporting.print_report`, shared by both converting commands -- so
-/// `prog` is required rather than defaulting to either one's name.
+/// A report as the CLI prints it: one line per kind unless `verbose`, then the "more" note.
 func reported(_ report: Report, verbose: Bool, prog: String) -> String {
     var lines = report.render(verbose: verbose).map { "\(prog): warning: \($0)\n" }
     if let note = report.note(verbose: verbose) {

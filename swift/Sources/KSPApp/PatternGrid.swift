@@ -2,11 +2,8 @@ import Foundation
 import KSPKit
 import KSPRun
 
-/// Every dimension the staged view is laid out from -- the window's as well as the grid's, because
-/// the fit is a subtraction between them and the two must not drift apart.
-///
-/// The pane the grid draws in scrolls vertically only, so a grid wider than ``contentWidth`` is
-/// silently clipped rather than scrolled. A test holds ``gridWidth`` under it.
+/// Every dimension the staged view is laid out from. Its pane scrolls vertically only, so a grid
+/// wider than ``contentWidth`` is silently clipped; a test holds ``gridWidth`` under it.
 enum AppLayout {
     static let windowWidth: CGFloat = 860
     static let windowHeight: CGFloat = 440
@@ -41,25 +38,15 @@ enum AppLayout {
 }
 
 /// The preview grid: four tracks down, sixteen pattern slots across.
-///
-/// Every decision the grid makes is taken here rather than in `DropView`, so it can be asserted
-/// instead of looked at -- which matters most for the Chain rails, since no sample project in the
-/// repository has a Chain to eyeball.
 struct PatternGrid: Equatable {
-    /// Says which count the cells carry, because "enabled" and "held" can differ by a lot and the
-    /// grid has room for only one of them. "Events" because the rows below it are a mix: a
-    /// sequencer track counts Notes and a drum track counts Triggers, and one legend covers both.
     static let legend = "Counts are events switched on. Hover a slot for what it holds."
 
-    /// One pattern slot on one track.
     struct Cell: Equatable {
         /// 1-16.
         let pattern: Int
-        /// What the cell prints: the enabled count, or an em dash when the slot holds nothing.
         let label: String
         let isEmpty: Bool
-        /// Where this Pattern plays in its track's Chain, 1-based, in play order. More than one
-        /// place when the Chain plays it twice; empty when it is in no Chain.
+        /// Where this Pattern plays in its Chain, 1-based, in play order; empty when in none.
         let positions: [Int]
         let detail: String
 
@@ -71,8 +58,6 @@ struct PatternGrid: Equatable {
             self.detail = Self.detail(pattern, mode: mode, positions: positions)
         }
 
-        /// Held and switched on side by side rather than as a fraction: a Pattern can hold the other
-        /// set's notes too, and what closed the gap is the diagnostics' to say, not a tooltip's.
         private static func detail(
             _ pattern: PatternSummary, mode: TrackMode, positions: [Int]
         ) -> String {
@@ -84,8 +69,7 @@ struct PatternGrid: Equatable {
                     + "\(pattern.enabledNoteCount) switched on, \(pattern.stepCount) steps"
             }
             guard !positions.isEmpty else { return detail }
-            // Where a rail cannot be drawn -- a Chain that jumps -- this is what says the cell is
-            // in one, and a Pattern the Chain plays twice says so here rather than nowhere.
+            // Where a rail cannot be drawn -- a Chain that jumps -- this says the cell is in one.
             let places = positions.map(String.init).joined(separator: " and ")
             return detail + " · Chain place\(positions.count == 1 ? "" : "s") \(places)"
         }
@@ -97,15 +81,13 @@ struct PatternGrid: Equatable {
         let width: CGFloat
     }
 
-    /// One track's row: its sixteen cells, and the rails drawn behind them.
     struct Row: Equatable {
         /// 1-4.
         let track: Int
         let name: String
-        /// The row label's tooltip. A sixteen-column grid leaves no room to show it outright.
+        /// The row label's tooltip.
         let detail: String
-        /// The Chain in play order, or nil when the track is in none. Drawn under this row rather
-        /// than collected with the others, so it never has to be matched back to a track.
+        /// The Chain in play order, or nil when the track is in none.
         let chainDetail: String?
         let cells: [Cell]
         let runs: [ChainRun]
@@ -124,8 +106,6 @@ struct PatternGrid: Equatable {
             self.runs = Self.runs(in: chain)
         }
 
-        /// Says "switched on" because that is what the number is -- the same count the cells carry,
-        /// not everything the track holds.
         private static func detail(_ track: TrackSummary) -> String {
             guard !track.isEmpty else { return "empty" }
             let held = track.patterns.count(where: { !$0.isEmpty })
@@ -135,8 +115,7 @@ struct PatternGrid: Equatable {
                 + "\(noun)\(notes == 1 ? "" : "s") switched on"
         }
 
-        /// Every place each Pattern plays. A Pattern number the grid has no column for is dropped
-        /// rather than indexed: the reader can hand one over and the geometry must not trap on it.
+        /// A Pattern number the grid has no column for is dropped rather than indexed.
         private static func places(in chain: [Int]) -> [Int: [Int]] {
             var places: [Int: [Int]] = [:]
             for (index, pattern) in chain.enumerated() where drawable(pattern) {
@@ -145,9 +124,8 @@ struct PatternGrid: Equatable {
             return places
         }
 
-        /// The rails. A Chain is a play order, not a range, so two cells are joined only where the
-        /// Chain plays one straight after the other *and* they are neighbouring columns; anything
-        /// else stays marked but unjoined rather than claiming an adjacency the device lacks.
+        /// A Chain is a play order, not a range: two cells join only where it plays one straight
+        /// after the other *and* they are neighbouring columns.
         private static func runs(in chain: [Int]) -> [ChainRun] {
             var links: Set<Int> = []
             for (from, to) in zip(chain, chain.dropFirst())
@@ -193,37 +171,27 @@ struct PatternGrid: Equatable {
     }
 }
 
-/// How long the export runs, in the two things that set it: the pattern slots the grid has ticked,
-/// and the repeat count. No SwiftUI, so the arithmetic and the wording both unit-test.
-///
-/// The count is exact, not an estimate: ``MIDIExport/arrange`` gives each pattern *number* one
-/// stretch of timeline, and ``MIDIExport/renderProject`` plans nothing for a slot holding no notes.
-/// ``ConversionTests`` pins it against both.
+/// How long the export runs: the pattern slots the grid has ticked, and the repeat count.
 struct ExportLength: Equatable {
     /// Ticked slots that hold something, counted once however many tracks play them.
     let patterns: Int
     let repeatCount: Int
-    /// Splitting measures the length per file: `exportSplit` groups by (track, pattern) and
-    /// repeats each group, so every file is one pattern long however many slots were ticked.
+    /// Splitting measures the length per file: every file is one pattern long.
     let isSplit: Bool
-    /// Convert already refuses an empty selection in its own words; this keeps the line from
-    /// repeating it.
+    /// Convert already refuses an empty selection in its own words.
     let isBlocked: Bool
 
     /// What comes out end to end -- of the one file, or of each file when the export splits.
     var total: Int { (isSplit ? 1 : patterns) * repeatCount }
 
-    /// `nil` only when Convert is already blocked with its own reason: a length as well would be a
-    /// second, quieter answer to the same question.
+    /// `nil` only when Convert is already blocked with its own reason.
     var line: String? {
         if isBlocked { return nil }
-        // Ticks on nothing but empty slots leave Convert enabled, so this is the only thing that
-        // would say the run writes no notes. Staying silent here is what the block reason covers.
+        // Ticks on nothing but empty slots leave Convert enabled, so only this says so.
         guard patterns > 0 else {
             return "No ticked slot holds anything, so nothing would be written."
         }
-        // No count of files here: a split drops any that came out empty, and a number this cannot
-        // be sure of is worse than the per-file length, which is exactly one pattern either way.
+        // No count of files: a split drops any that came out empty, so the number is not known.
         if isSplit {
             guard repeatCount > 1 else { return "One pattern per file." }
             return "One pattern × \(repeatCount) repeats per file. "

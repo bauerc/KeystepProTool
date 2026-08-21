@@ -1,8 +1,6 @@
 import Foundation
 import KSPKit
 
-/// The `dump` command's body, split out from its argument parsing so the exit codes and the text
-/// are testable without spawning a process -- the same split `main(argv) -> int` gives the Python.
 public enum DumpRunner {
     public struct Options: Sendable {
         public var path: URL
@@ -14,8 +12,7 @@ public enum DumpRunner {
         public var verbose: Bool
         public var configPath: URL
 
-        // Spelled out because a public struct's memberwise initialiser is internal, and every
-        // caller is in another module. The defaults live here only, not on the properties too.
+        // Spelled out because a public struct's memberwise initialiser is internal.
         public init(
             path: URL, showAll: Bool = false, tracks: Set<Int> = [], patterns: Set<Int> = [],
             asJSON: Bool = false, drumMapSpec: String? = nil, verbose: Bool = false, configPath: URL
@@ -31,7 +28,6 @@ public enum DumpRunner {
         }
     }
 
-    /// What the user sees this command called, for the message prefix on a failure.
     public static let prog = "ksp-swift-cli dump"
 
     static func fail(_ message: String, code: Int32) -> RunResult {

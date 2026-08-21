@@ -3,9 +3,6 @@ import KSPKit
 import KSPMIDI
 import SwiftMIDIFile
 
-/// The `convert` command's body, split out from its argument parsing so the exit codes and the text
-/// are testable without spawning a process -- and so M13's app can call it, which a target inside
-/// the `ksp-swift-cli` executable could not be.
 public enum ConvertRunner {
     public struct Options: Sendable {
         public var path: URL
@@ -27,9 +24,8 @@ public enum ConvertRunner {
         public var verbose: Bool
         public var configPath: URL
 
-        // Spelled out because a public struct's memberwise initialiser is internal, and both
-        // callers -- the CLI command and M13's app -- are in other modules. The defaults live here
-        // only: repeating them on the properties would leave a second copy that never runs.
+        // Spelled out because a public struct's memberwise initialiser is internal. The defaults
+        // live here only: repeating them on the properties would leave a copy that never runs.
         public init(
             path: URL, output: URL? = nil, track: Int = 1, pattern: Int = 1, drumTrack: Int? = nil,
             routeSpec: String? = nil,
@@ -59,7 +55,6 @@ public enum ConvertRunner {
         }
     }
 
-    /// What the user sees this command called, for the message prefix on a failure.
     public static let prog = "ksp-swift-cli convert"
 
     static func fail(_ message: String, code: Int32) -> RunResult {
@@ -67,8 +62,6 @@ public enum ConvertRunner {
     }
 
     /// MCC's factory default, as shipped in this target's resource bundle.
-    ///
-    /// Path resolution stays out of `KSPKit`, which must not decide where files are.
     public static func defaultTemplate() -> URL? {
         Bundle.module.url(forResource: "Default", withExtension: "KeyStepPro")
     }
@@ -87,9 +80,7 @@ public enum ConvertRunner {
             return fail("\(error)", code: 2)
         }
 
-        // Cheapest checks first: the destination depends only on the arguments, and a bad clip is
-        // the likelier mistake. Reading the 3.5 MB template before either would spend a file read
-        // and a parse to reject the command anyway.
+        // Cheapest checks first: reading the 3.5 MB template would be spent rejecting the command.
         let destination =
             options.output
             ?? options.path.deletingPathExtension().appendingPathExtension("KeyStepPro")
@@ -120,9 +111,8 @@ public enum ConvertRunner {
             return fail("template: \(error.localizedDescription)", code: 1)
         }
 
-        // One selected track is the whole of the single-target path: that track, into the one
-        // pattern --track and --pattern name, at the length that pattern already declares. Any
-        // other selection needs the song path, the only one that can place several tracks.
+        // One selected track is the single-target path; any other selection needs the song path,
+        // the only one that can place several tracks.
         let result: ImportResult
         do {
             if options.midiTracks.count == 1 {
@@ -164,16 +154,12 @@ public enum ConvertRunner {
         return output
     }
 
-    /// Where a track came from, named only when a route was given.
-    ///
-    /// An unrouted run says what it has always said. A clip merged from several source tracks has
-    /// no one source, so it gets no mark rather than a wrong one.
+    /// A clip merged from several source tracks has no one source, so it gets no mark.
     static func source(_ plan: TrackPlan, _ showSources: Bool) -> String {
         guard showSources, let source = plan.sourceTrack else { return "" }
         return "source \(source)"
     }
 
-    /// The bracket after a track number in the per-track shape: kind, then source.
     static func marks(_ plan: TrackPlan, _ showSources: Bool) -> String {
         var marks = plan.isDrum ? ["drum"] : []
         let source = source(plan, showSources)
@@ -189,8 +175,7 @@ public enum ConvertRunner {
 
         let tracks = result.plan.tracks
         if tracks.count == 1 && tracks[0].placements.count == 1 {
-            // The single-target shape, said the way it has always been said. It has never carried
-            // a [drum] mark, so only a route adds anything here.
+            // The single-target shape has never carried a [drum] mark, so only a route adds here.
             let source = source(tracks[0], showSources)
             let bracket = source.isEmpty ? "" : " [\(source)]"
             lines.append(

@@ -4,9 +4,7 @@ import KSPRun
 
 /// Which direction a dropped file goes.
 enum Job: Sendable, Hashable {
-    /// A `.mid` in, a `.KeyStepPro` into MCC's Templates folder.
     case toProject(URL)
-    /// A `.KeyStepPro` in, a `.mid` beside it -- the direction MCC does not have at all.
     case toMIDI(URL)
 
     var source: URL {
@@ -16,25 +14,16 @@ enum Job: Sendable, Hashable {
     }
 }
 
-/// What the window shows after a run.
-///
-/// The findings, the destination and a failure's message come from ``RunResult``'s structured half.
-/// The one thing read out of the terminal text is the success summary, and only to drop its first
-/// line -- see ``summary(_:)``.
 struct Outcome: Sendable, Equatable {
-    /// What the run wrote, in the order written -- or, under a dry run, what it would have
-    /// written. Empty is the failure.
+    /// What the run wrote, or would have written under a dry run. Empty is the failure.
     var written: [URL]
     var headline: String
     var note: String?
-    /// The folder a split run filled, whose name is the app's even though the filenames are not.
-    /// `nil` when the run wrote a single named file.
+    /// The folder a split run filled; `nil` when the run wrote a single named file.
     let folder: URL?
-    /// True when nothing was written because the user asked for a report instead.
     let dryRun: Bool
 
-    /// The findings rendered both ways, once. SwiftUI re-evaluates a body far more often than a
-    /// conversion happens, and `Report.grouped()` allocates on every call.
+    /// Rendered once: SwiftUI re-evaluates a body far more often than a conversion happens.
     let collapsed: [String]
     let all: [String]
 
@@ -47,38 +36,30 @@ struct Outcome: Sendable, Equatable {
         self.note = note
         self.folder = folder
         self.dryRun = dryRun
-        // `Report.note(verbose:)` is deliberately not used: it ends in "--verbose for detail",
-        // which names a flag rather than the sidebar's toggle.
+        // Not `Report.note(verbose:)`: its text names a CLI flag, not the sidebar's toggle.
         self.collapsed = report.render(verbose: false)
         self.all = report.render(verbose: true)
     }
 
     var failed: Bool { written.isEmpty }
 
-    /// One file reads as its own name; several read as a count, with the names listed beneath.
     var resultLine: String {
         if failed { return "Nothing was written" }
         return written.count == 1 ? written[0].lastPathComponent : "\(written.count) files written"
     }
 
-    /// The same question asked before the write, which is a different sentence.
     var previewLine: String {
         if failed { return "Nothing would be written" }
         return written.count == 1
             ? "Would write \(written[0].lastPathComponent)" : "Would write \(written.count) files"
     }
 
-    /// Whether there is a file on disk to reveal. A dry run names one without creating it, so the
-    /// two are not the same question.
     var wroteFile: Bool { !failed && !dryRun }
 
     func findings(verbose: Bool) -> [String] { verbose ? all : collapsed }
 }
 
-/// What the staged view knows about the project that was dropped.
-///
-/// ``absent`` is a MIDI drop: there is no project to read, so the section does not appear at all --
-/// which is not the same as a project that read as empty.
+/// ``absent`` is a MIDI drop -- no project to read, which is not a project that read as empty.
 enum SummaryState: Equatable {
     case absent
     case loading
@@ -87,24 +68,16 @@ enum SummaryState: Equatable {
 }
 
 enum Conversion {
-    /// A conversion decided but not yet run: what was dropped, where its result would go, and
-    /// anything the user should know about that placement before pressing Convert.
     struct Plan: Sendable, Hashable {
         let job: Job
         /// Where the result lands: the file it writes, or the folder it fills.
         let target: URL
-        /// A fallback directory, a name already taken, or both. `nil` when the obvious thing
-        /// happened.
         let note: String?
-        /// Whether ``target`` is the folder the run fills rather than the file it writes. A split
-        /// export names its own files, so the app can only claim the folder they go in.
         let intoFolder: Bool
 
         var source: URL { job.source }
     }
 
-    /// The two extensions each direction answers to. A drop of anything else is refused before a
-    /// runner is ever called, so an unreadable file is a message rather than an exit code.
     static func job(for url: URL) -> Job? {
         switch url.pathExtension.lowercased() {
         case "mid", "midi": return .toProject(url)
@@ -113,24 +86,16 @@ enum Conversion {
         }
     }
 
-    /// Where a drop would go, decided before anything runs.
-    ///
-    /// Separated from ``run(_:settings:)`` so the staged view can show the destination and its notes
-    /// while the user is still deciding, and so pressing Convert re-asks the same question against
-    /// the filesystem as it is at that moment.
     static func plan(
         _ job: Job, named stem: String, into destination: Destination, splitting: Bool = false
     ) -> Plan {
         let base = Naming.sanitised(stem)
-        // Only an export splits: a `.mid` in becomes one project however the control is set.
         let intoFolder = splitting && job.writesMIDI
         let target =
             intoFolder
             ? Naming.vacantFolder(in: destination.directory, stem: base)
             : Naming.vacant(
                 in: destination.directory, stem: base, extension: job.extensionOfResult)
-        // Both notes can apply at once -- a fallback directory that already holds that name -- so
-        // they are collected rather than chosen between.
         let claimed =
             intoFolder
             ? target.lastPathComponent
@@ -142,13 +107,6 @@ enum Conversion {
             job: job, target: target, note: note.isEmpty ? nil : note, intoFolder: intoFolder)
     }
 
-    /// Run one conversion off the main actor.
-    ///
-    /// A 3.5 MB parse, a placement pass and a 3.5 MB write take long enough to freeze a window.
-    /// The runners are synchronous and their `Options`/`RunResult` are `Sendable`, so the whole
-    /// job crosses to a detached task and only the `Outcome` comes back.
-    ///
-    /// `excluded` is what the grid left out: the app's own annotation, not a runner's finding.
     static func run(_ plan: Plan, settings: Settings, excluded: String? = nil) async -> Outcome {
         let target = plan.target
         let result = await Task.detached(priority: .userInitiated) {
@@ -166,11 +124,6 @@ enum Conversion {
             dryRun: settings.dryRun, folder: plan.intoFolder ? target : nil)
     }
 
-    /// Read a staged project off the main actor, for the staged view to show what is in it.
-    ///
-    /// Detached for the same reason ``run(_:settings:)`` is: the parse is the same 3.5 MB. Nothing
-    /// here renders text -- ``SummaryRunner`` returns a structure and no `RunResult`, which is what
-    /// keeps a preview off the two CLIs' output contract.
     static func summarise(_ source: URL) async -> SummaryState {
         let result = await Task.detached(priority: .userInitiated) {
             SummaryRunner.run(SummaryRunner.Options(path: source))
@@ -180,8 +133,6 @@ enum Conversion {
         return .failed(result.message ?? "That project could not be read.")
     }
 
-    /// Internal rather than private so a test can put a multi-destination ``RunResult`` through it
-    /// without running a split export first.
     static func outcome(
         from result: RunResult, note: String?, excluded: String?, dryRun: Bool,
         folder: URL? = nil
@@ -197,8 +148,7 @@ enum Conversion {
             note: note, folder: folder, dryRun: dryRun)
     }
 
-    /// The runner's own summary, minus its first line -- which names the path this window is
-    /// already showing.
+    /// The runner's own summary, minus its first line -- the path this window already shows.
     private static func summary(_ result: RunResult) -> String {
         let lines = result.stdout.split(separator: "\n", omittingEmptySubsequences: false)
         let detail = lines.dropFirst().map { $0.trimmingCharacters(in: .whitespaces) }
@@ -206,21 +156,17 @@ enum Conversion {
         return detail.isEmpty ? "Converted." : detail.joined(separator: "\n")
     }
 
-    /// Worded to read the same before the write and after it, because the staged view and the
-    /// result view both show it.
     private static func collisionNote(_ target: URL) -> String {
         "That name is taken, so this one is \(target.lastPathComponent)."
     }
 }
 
 extension Job {
-    /// True for the export direction, the only one that can write more than one file.
     var writesMIDI: Bool {
         if case .toMIDI = self { return true }
         return false
     }
 
-    /// What the conversion produces, which is the opposite of what was dropped.
     var extensionOfResult: String {
         switch self {
         case .toProject: return "KeyStepPro"
@@ -228,13 +174,12 @@ extension Job {
         }
     }
 
-    /// Whether what was dropped is a project, and so has a summary to read.
+    /// A project was dropped, which is the ``toMIDI`` direction.
     var isProject: Bool {
         if case .toMIDI = self { return true }
         return false
     }
 
-    /// Which way this is about to go, for the staged view to state before anything is written.
     var direction: String {
         switch self {
         case .toProject: return "MIDI file → KeyStep Pro project"

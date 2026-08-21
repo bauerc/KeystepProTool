@@ -19,9 +19,6 @@ struct DropView: View {
             Divider()
             options
         }
-        // Taller than v1's 380, and wider than its 680: the staged view now carries a sixteen-slot
-        // grid above the buttons, and the pattern axis must not be squeezed to make room. Every
-        // dimension comes from ``AppLayout``, which is where the fit is worked out and tested.
         .frame(width: AppLayout.windowWidth, height: AppLayout.windowHeight)
         .dropDestination(for: URL.self) { urls, _ in
             // One file at a time in v1: a second would need its own name field and its own result.
@@ -34,9 +31,7 @@ struct DropView: View {
         .background(targeted ? Color.accentColor.opacity(0.12) : Color.clear)
     }
 
-    /// The sidebar is on screen in every phase, including idle, so an option can be set before
-    /// anything is dropped. Later options land here beside these. Scrolls because the window is
-    /// fixed-size: a control added below must push, not clip.
+    /// Scrolls because the window is fixed-size: a control added below must push, not clip.
     private var options: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -55,8 +50,6 @@ struct DropView: View {
                     }
                     .pickerStyle(.radioGroup)
                     .labelsHidden()
-                    // The choice moves the destination and the file list both, so a preview taken
-                    // before it was made no longer describes this run.
                     .onChange(of: model.settings.splitPerPattern) { model.discardPreview() }
                     Text("Each file holds one pattern slot and starts at its own bar 1.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -71,8 +64,6 @@ struct DropView: View {
                     .labelsHidden()
                     .pickerStyle(.menu)
                     .controlSize(.small)
-                    // The choice changes the notes written and the findings reported, so a preview
-                    // taken before it was made no longer describes this run.
                     .onChange(of: model.settings.stepSkip) { model.discardPreview() }
 
                     Text(
@@ -89,8 +80,6 @@ struct DropView: View {
                         Text("Repeat ×\(model.settings.repeatCount)").font(.subheadline)
                     }
                     .controlSize(.small)
-                    // The choice changes how long the file runs, so a preview taken before it was
-                    // made no longer describes this run.
                     .onChange(of: model.settings.repeatCount) { model.discardPreview() }
 
                     Text(
@@ -127,8 +116,7 @@ struct DropView: View {
         .frame(width: AppLayout.sidebarWidth)
     }
 
-    /// The export-only substitutions, each naming the value it puts in place. Swing here is the
-    /// export's sense of the word: flattening the grid, not declining to fit one to a source.
+    /// Swing here is the export's sense: flattening the grid, not declining to fit one to a source.
     private var replacements: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Replace with defaults").font(.subheadline)
@@ -147,8 +135,6 @@ struct DropView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// One substitution: the choice, and the value it substitutes. Each changes the notes written,
-    /// so each discards a preview taken before it was made.
     private func replacement(_ title: String, isOn: Binding<Bool>, note: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Toggle(title, isOn: isOn)
@@ -157,8 +143,6 @@ struct DropView: View {
         }
     }
 
-    /// One kind of file: where it lands today, the way to change that, and the way back. The two
-    /// rows are independent -- a project and a MIDI file need not go to the same place.
     private func folderRow(_ kind: FolderKind) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(kind.title).font(.subheadline)
@@ -178,7 +162,6 @@ struct DropView: View {
             }
             .controlSize(.small)
 
-            // What a chosen project folder costs, said where the choice was made.
             if kind == .project, let warning = model.mccWarning {
                 Label(warning, systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
@@ -207,7 +190,6 @@ struct DropView: View {
                 .font(.system(size: 44))
                 .foregroundStyle(.secondary)
             Text("Drop a MIDI file here").font(.title3)
-            // Where each one lands is the sidebar's to state, now that it can be changed there.
             Text(
                 "Drop a .KeyStepPro instead to get a MIDI file back. "
                     + "Where each one lands is on the right."
@@ -218,13 +200,9 @@ struct DropView: View {
         }
     }
 
-    /// What was dropped, what it will be called and where it will land -- all before anything is
-    /// written, which is the whole point of the phase.
     private func staged(_ staged: AppModel.Staged) -> some View {
         let plan = model.plan(for: staged.job)
-        // The window cannot be resized, and a summary, a note and an expanded findings list can
-        // together outgrow it. So everything above the buttons scrolls and the buttons stay put --
-        // Cancel and Convert must never be the part that goes over the edge.
+        // The window cannot be resized, so everything above the buttons scrolls and they stay put.
         return VStack(alignment: .leading, spacing: 12) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -255,13 +233,11 @@ struct DropView: View {
                         summary(staged.summary, selection: staged.selection)
                     }
 
-                    // Said as it is ticked, and said once -- the dry run below carries it too.
                     if let excluded = staged.selection.exclusionNote {
                         Text(excluded).font(.caption).foregroundStyle(.secondary)
                     }
 
-                    // Only on the way out: these three mean something else on an import, so a
-                    // dropped `.mid` must not be told the export's version of them.
+                    // Only on the way out: these three mean something else on an import.
                     if staged.job.writesMIDI, let replaced = model.settings.replacementNote {
                         Text(replaced).font(.caption).foregroundStyle(.secondary)
                     }
@@ -277,7 +253,6 @@ struct DropView: View {
             HStack(alignment: .firstTextBaseline) {
                 Button("Cancel") { model.cancel() }
                 Spacer()
-                // Never dead without saying why, so both come from the one place.
                 if let reason = model.blockReason {
                     Label(reason, systemImage: "exclamationmark.triangle")
                         .font(.caption).foregroundStyle(.orange)
@@ -291,15 +266,9 @@ struct DropView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Reading a 3.5 MB project is the model's to do off the main actor; this only asks for it.
-        // Keyed on the drop rather than its path, so dropping the same file again reads it again.
         .task(id: staged.id) { await model.summarise() }
     }
 
-    /// What was dropped, before anything is converted.
-    ///
-    /// Nothing is drawn for a MIDI file: there is no project to read. A project that will not read
-    /// says so here, which is the alternative to an empty list.
     @ViewBuilder
     private func summary(_ state: SummaryState, selection: GridSelection) -> some View {
         switch state {
@@ -319,14 +288,7 @@ struct DropView: View {
         }
     }
 
-    /// The project as a grid: four tracks down, sixteen pattern slots across, so how the tracks line
-    /// up against each other can be seen rather than counted.
-    ///
-    /// Every decision here was taken in ``PatternGrid`` -- what a cell says, which cells are joined,
-    /// how wide the whole thing comes out. This only draws it.
-    ///
-    /// Not scrolled: the staged view already scrolls as a whole, and a second scroller inside the
-    /// first is a trap for a mouse wheel.
+    /// Not scrolled: the staged view already scrolls, and a scroller inside one traps the wheel.
     private func grid(_ grid: PatternGrid, selection: GridSelection, length: ExportLength)
         -> some View
     {
@@ -355,7 +317,6 @@ struct DropView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// A whole pattern slot, on every track at once.
     private func columnHeader(_ column: Int, state: GridSelection.Tick) -> some View {
         Button {
             model.toggle(pattern: column)
@@ -374,9 +335,7 @@ struct DropView: View {
                 : "Pattern slot \(column) — click to tick it on every track.")
     }
 
-    /// One track: its name, its sixteen cells, the rails joining whatever it chains, and the chain
-    /// spelled out underneath. The per-track counts are the label's tooltip -- sixteen columns leave
-    /// no room to show them outright.
+    /// One track: its name, its cells, the rails joining whatever it chains, and the chain beneath.
     private func trackRow(_ row: PatternGrid.Row, selection: GridSelection) -> some View {
         let state = selection.state(ofTrack: row.track)
         return VStack(alignment: .leading, spacing: 1) {
@@ -405,8 +364,7 @@ struct DropView: View {
                 }
             }
             .padding(.bottom, 4)
-            // Drawn under the cells rather than behind them, so a rail and a chained cell's own
-            // tint cannot double up into banding across the gaps they are meant to close.
+            // Under the cells, not behind them: a rail and a cell's tint would otherwise band.
             .overlay(alignment: .bottomLeading) { rails(row.runs) }
 
             if let chain = row.chainDetail {
@@ -417,9 +375,7 @@ struct DropView: View {
         }
     }
 
-    /// One continuous bar per run of chained slots that are neighbours in both play order and grid
-    /// order. A chain that jumps gets no bar -- its cells are still tinted, and the caption under
-    /// the row says the order.
+    /// A chain that jumps gets no bar; its cells are still tinted, and the caption says the order.
     private func rails(_ runs: [PatternGrid.ChainRun]) -> some View {
         ForEach(runs.indices, id: \.self) { index in
             Capsule()
@@ -429,11 +385,7 @@ struct DropView: View {
         }
     }
 
-    /// One pattern slot. The column header carries its number now, so the cell is free to print the
-    /// count: an em dash when it holds nothing at all, and otherwise how many of its events are
-    /// switched on -- so a Pattern whose every step is off reads `0` on a filled cell rather than
-    /// passing as empty.
-    /// Clicking one ticks it. Measured: a `.plain` button is exactly as wide as the bare `Text`.
+    /// An em dash means the slot holds nothing; `0` means it holds notes with every step off.
     private func slot(_ cell: PatternGrid.Cell, track: Int, selection: GridSelection) -> some View {
         let ticked = selection.isTicked(track: track, pattern: cell.pattern)
         return Button {
@@ -441,8 +393,7 @@ struct DropView: View {
         } label: {
             Text(cell.label)
                 .font(.caption).monospacedDigit()
-                // Shrunk rather than truncated: a count reading "1…" would be the one thing a cell
-                // is for. Three digits fit outright; the scale factor is what a fourth would use.
+                // Shrunk rather than truncated: a count reading "1…" would be worse than small.
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(cell.isEmpty || !ticked ? Color.secondary : Color.primary)
                 .opacity(ticked ? 1 : 0.5)
@@ -465,8 +416,7 @@ struct DropView: View {
         .help(cell.detail + (ticked ? "" : " · unticked, so it will not be exported"))
     }
 
-    /// Chained first, because a Chain can name a slot that holds nothing and the device still plays
-    /// it -- so that slot has to read as part of the run rather than as absent.
+    /// Chained first: a Chain can name a slot that holds nothing and the device still plays it.
     private func fill(_ cell: PatternGrid.Cell) -> Color {
         if !cell.positions.isEmpty { return Color.accentColor.opacity(0.22) }
         if cell.isEmpty { return .clear }
@@ -494,8 +444,6 @@ struct DropView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// What was written, all of it. Shaped like ``staged(_:)`` and for the same reason: the window
-    /// is fixed-size, so a list of files scrolls and "Convert another" stays put.
     @ViewBuilder
     private func done(_ outcome: Outcome) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -530,8 +478,7 @@ struct DropView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// What the name field renames. A split run names its own files, so the name reaches the folder
-    /// they land in instead.
+    /// A split run names its own files, so the name reaches the folder they land in instead.
     private func nameNote(_ plan: Conversion.Plan) -> String {
         plan.intoFolder
             ? "This names the folder the files land in. Each file is named after the project and "
@@ -539,12 +486,10 @@ struct DropView: View {
             : "This is the name MIDI Control Center's Project Browser will show."
     }
 
-    /// The folder a split run filled. The headline counts its files; only this says where they are.
     private func landedIn(_ folder: URL) -> some View {
         Text(folder.path).font(.callout).textSelection(.enabled)
     }
 
-    /// The files by name, under a headline that could only give their count.
     private func writtenFiles(_ written: [URL]) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(written, id: \.self) { url in
@@ -554,8 +499,7 @@ struct DropView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The sidebar's toggle decides whether the list inside is one line per kind or one per
-    /// occurrence. "Finding", not "note": a note is a melodic event (ADR 0001).
+    /// "Finding", not "note": a note is a melodic event (ADR 0001).
     @ViewBuilder
     private func findings(_ outcome: Outcome) -> some View {
         if !outcome.all.isEmpty {

@@ -3,10 +3,6 @@ import Foundation
 import KSPKit
 import KSPRun
 
-/// `ksp-swift-cli dump` -- print the contents of a `.KeyStepPro` project. A port of
-/// `src/ksp_cli/dump.py`.
-///
-/// Inspect a project file without opening MIDI Control Center.
 struct Dump: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "dump",
