@@ -177,20 +177,43 @@ def test_read_clip_takes_the_files_tempo() -> None:
     assert midi_import.read_clip(midi).tempo_bpm == pytest.approx(140, abs=0.01)
 
 
-def test_midi_track_selects_one_track() -> None:
+def tracks_of(pitches: list[int]) -> mido.MidiFile:
+    """A type 1 file, one single-note track per pitch."""
     midi = mido.MidiFile(type=1, ticks_per_beat=TICKS_PER_BEAT)
-    for pitch in (60, 72):
+    for pitch in pitches:
         track = mido.MidiTrack()
         midi.tracks.append(track)
         track.append(mido.Message("note_on", note=pitch, velocity=100, time=0))
         track.append(mido.Message("note_off", note=pitch, velocity=64, time=120))
+    return midi
 
-    both = midi_import.read_clip(midi)
-    second = midi_import.read_clip(midi, ImportOptions(midi_track=2))
 
-    assert [n.pitch for n in both.notes] == [60, 72]
+def test_midi_tracks_selects_one_track() -> None:
+    midi = tracks_of([60, 72])
+
+    second = midi_import.read_clip(midi, ImportOptions(midi_tracks=frozenset({2})))
+
     assert [n.pitch for n in second.notes] == [72]
     assert second.source_tracks == (2,)
+
+
+def test_an_empty_selection_reads_every_track() -> None:
+    midi = tracks_of([60, 72])
+
+    both = midi_import.read_clip(midi, ImportOptions(midi_tracks=frozenset()))
+
+    assert [n.pitch for n in both.notes] == [60, 72]
+    assert both.source_tracks == (1, 2)
+
+
+def test_a_non_contiguous_selection_arrives_in_file_order() -> None:
+    """A set has no order, so the order the clips arrive in is the file's."""
+    midi = tracks_of([60, 62, 64, 65, 67])
+
+    song = midi_import.read_song(midi, ImportOptions(midi_tracks=frozenset({5, 1, 2})))
+
+    assert [clip.source_tracks for clip in song.clips] == [(1,), (2,), (5,)]
+    assert [clip.notes[0].pitch for clip in song.clips] == [60, 62, 67]
 
 
 # --- Quantising ------------------------------------------------------------
@@ -313,7 +336,7 @@ def test_quantise_refuses_a_step_count_the_device_cannot_hold() -> None:
     "options",
     [
         {"steps_per_beat": 0},
-        {"midi_track": 0},
+        {"midi_tracks": frozenset({0})},
         {"drum_track": 0},
         {"routes": (TrackRoute(0, 1),)},
         {"routes": (TrackRoute(1, 0),)},
@@ -325,6 +348,23 @@ def test_quantise_refuses_a_step_count_the_device_cannot_hold() -> None:
 def test_options_refuse_impossible_values(options: dict[str, Any]) -> None:
     with pytest.raises(ValueError):
         ImportOptions(**options)
+
+
+def test_a_mutable_selection_is_copied_rather_than_aliased() -> None:
+    """Swift's ``Set`` is a value type, so the frozen options must be too:
+    aliased, a later mutation would slip past the check that already ran."""
+    given = {1}
+    options = ImportOptions(midi_tracks=given)
+    given.add(0)
+
+    assert options.midi_tracks == frozenset({1})
+    assert hash(options) == hash(ImportOptions(midi_tracks=frozenset({1})))
+
+
+def test_a_selected_track_below_one_is_named_by_the_option() -> None:
+    """The message names the CLI flag, not the field, so it does not move."""
+    with pytest.raises(ValueError, match=r"^midi_track counts from 1$"):
+        ImportOptions(midi_tracks=frozenset({1, 0}))
 
 
 # --- Writing into a project ------------------------------------------------
@@ -465,6 +505,17 @@ def test_each_source_track_gets_its_own_device_track(load_sample: Loader) -> Non
 def test_a_fifth_source_track_is_reported_rather_than_written(load_sample: Loader) -> None:
     midi = song_of([[(0, 60 + n, 100)] for n in range(5)])
     result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
+
+    assert len(result.plan.tracks) == 4
+    dropped = [d for d in result.diagnostics if d.code is Code.TRACKS_DROPPED]
+    assert [d.subjects for d in dropped] == [1]
+
+
+def test_a_selection_wider_than_the_device_is_reported(load_sample: Loader) -> None:
+    """Five selected tracks are still four device tracks and one report."""
+    midi = song_of([[(0, 60 + n, 100)] for n in range(6)])
+    options = ImportOptions(midi_tracks=frozenset({1, 2, 3, 4, 5}))
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
 
     assert len(result.plan.tracks) == 4
     dropped = [d for d in result.diagnostics if d.code is Code.TRACKS_DROPPED]
@@ -908,6 +959,21 @@ def test_a_track_holding_several_channels_becomes_one_device_track_each(
     assert [d.subjects for d in split] == [2]
 
 
+def test_a_selection_still_splits_a_mixed_track_by_channel(load_sample: Loader) -> None:
+    """The subset selects tracks, never channels: the split happens after it."""
+    midi = mixed_of([(0, 60, 0), (0, 72, 1)])
+    options = ImportOptions(midi_tracks=frozenset({1}))
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    assert [[n.pitch for n in plan.notes] for plan in result.plan.tracks] == [[60], [72]]
+    split = [d for d in result.diagnostics if d.code is Code.TRACK_SPLIT_BY_CHANNEL]
+    assert [d.subjects for d in split] == [2]
+
+    beyond = midi_import.read_song(midi, ImportOptions(midi_tracks=frozenset({2})))
+    assert beyond.clips == ()
+
+
 def test_the_percussion_channel_of_a_mixed_track_is_still_found(load_sample: Loader) -> None:
     midi = mixed_of([(0, 60, 0), (0, 36, 9)])
 
@@ -1078,7 +1144,7 @@ def test_a_route_is_honoured_below_the_starting_track(load_sample: Loader) -> No
 def test_a_route_with_midi_track_is_refused() -> None:
     """Reading one track goes straight to quantise, so a route never places it."""
     with pytest.raises(ValueError, match=r"routes and midi_track contradict each other"):
-        ImportOptions(midi_track=1, routes=(TrackRoute(1, 2),))
+        ImportOptions(midi_tracks=frozenset({1}), routes=(TrackRoute(1, 2),))
 
 
 def test_two_sources_on_one_device_track_are_refused() -> None:

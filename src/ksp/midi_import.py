@@ -18,6 +18,7 @@ reported on every run.
 import math
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from typing import Final, NamedTuple
 
@@ -80,9 +81,9 @@ class ImportOptions:
     what grid the incoming clip is snapped to. ``apply`` writes it into the
     pattern's ``99`` so the device plays back at the size it was written for."""
 
-    midi_track: int | None = None
-    """Read only this track of the source file, counting from 1. ``None`` reads
-    every track, which is what a type 0 file needs."""
+    midi_tracks: AbstractSet[int] = frozenset()
+    """Read only these tracks of the source file, counting from 1. An empty set
+    reads every track, which is what a type 0 file needs."""
 
     drum_track: int | None = None
     """Which source track to write as drums, counting from 1. ``None`` looks
@@ -104,17 +105,21 @@ class ImportOptions:
 
     def __post_init__(self) -> None:
         check_steps_per_beat(self.steps_per_beat)
-        for name in ("midi_track", "drum_track"):
-            value = getattr(self, name)
-            if value is not None and value < 1:
-                raise ValueError(f"{name} counts from 1")
+        # A plain set would stay aliased to the caller's, so a later mutation
+        # could bypass the check below. Swift's Set is a value type already.
+        object.__setattr__(self, "midi_tracks", frozenset(self.midi_tracks))
+        # Both messages name the CLI option rather than the field they check.
+        if any(number < 1 for number in self.midi_tracks):
+            raise ValueError("midi_track counts from 1")
+        if self.drum_track is not None and self.drum_track < 1:
+            raise ValueError("drum_track counts from 1")
         self._check_routes()
 
     def _check_routes(self) -> None:
         """The faults a route has without knowing the song: range and clashes."""
-        if self.routes and self.midi_track is not None:
-            # Reading one track goes straight to quantise and never reaches
-            # _assign, so a route here would be silently ignored.
+        if self.routes and self.midi_tracks:
+            # Reading a named selection goes straight to quantise and never
+            # reaches _assign, so a route here would be silently ignored.
             raise ValueError(
                 "routes and midi_track contradict each other; midi_track converts a single "
                 "source track into the one pattern the target names, leaving a route nothing "
@@ -404,7 +409,7 @@ def read_clip(midi: mido.MidiFile, options: ImportOptions | None = None) -> Clip
     notes: list[RenderedNote] = []
     sources: list[int] = []
     for number, track in enumerate(midi.tracks, start=1):
-        if options.midi_track is not None and number != options.midi_track:
+        if options.midi_tracks and number not in options.midi_tracks:
             continue
         found = _track_notes(track).notes
         if found:
@@ -428,6 +433,9 @@ def read_song(midi: mido.MidiFile, options: ImportOptions | None = None) -> Song
     tells its instruments apart by channel alone, so a track carrying several
     is split into one clip each: merged, its percussion would arrive as melodic
     pitches on whichever device track the rest of it landed on.
+
+    Under ``midi_tracks`` the file's own order survives, since a set has none,
+    and the split happens after the selection: it selects tracks, not channels.
     """
     options = options or ImportOptions()
     _check_readable(midi)
@@ -437,7 +445,7 @@ def read_song(midi: mido.MidiFile, options: ImportOptions | None = None) -> Song
     clips = []
     dropped = 0
     for number, track in enumerate(midi.tracks, start=1):
-        if options.midi_track is not None and number != options.midi_track:
+        if options.midi_tracks and number not in options.midi_tracks:
             continue
         read = _track_notes(track)
         dropped += read.dropped

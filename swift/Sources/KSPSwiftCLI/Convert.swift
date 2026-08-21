@@ -126,7 +126,8 @@ struct Convert: ParsableCommand {
                 track: track, pattern: pattern, drumTrack: drumTrack, routeSpec: route,
                 drumMapSpec: drumMapSpec,
                 carryTempo: !noTempo, fitSwing: !noSwingFit, fitTimeShift: !noTimeShift,
-                template: template.map { URL(filePath: $0) }, midiTrack: midiTrack,
+                template: template.map { URL(filePath: $0) },
+                midiTracks: midiTrack.map { [$0] } ?? [],
                 stepsPerBeat: stepsPerBeat, dryRun: dryRun, force: force, quiet: quiet,
                 verbose: verbose, configPath: drumMapConfigPath))
         try emit(result)
