@@ -29,6 +29,17 @@ public enum MIDIImport {
     static let minSwungNotes = 3
 }
 
+/// One source track of the file onto one device track, both counting from 1.
+public struct TrackRoute: Sendable, Hashable {
+    public var source: Int
+    public var device: Int
+
+    public init(source: Int, device: Int) {
+        self.source = source
+        self.device = device
+    }
+}
+
 /// Everything the MIDI file cannot tell us about the target project.
 public struct ImportOptions: Sendable, Hashable {
     /// Step size to quantise to. Unlike the export direction, which reads the pattern's own setting
@@ -49,6 +60,10 @@ public struct ImportOptions: Sendable, Hashable {
     public let fitSwing: Bool
     public let fitTimeShift: Bool
 
+    /// Where named source tracks go, overriding the fill-upwards rule. Empty assigns exactly as
+    /// before. A drum track still lands on device track 1.
+    public let routes: [TrackRoute]
+
     public init(
         stepsPerBeat: Int = Constants.defaultStepsPerBeat,
         midiTrack: Int? = nil,
@@ -56,7 +71,8 @@ public struct ImportOptions: Sendable, Hashable {
         drumMap: DrumMap? = nil,
         carryTempo: Bool = true,
         fitSwing: Bool = true,
-        fitTimeShift: Bool = true
+        fitTimeShift: Bool = true,
+        routes: [TrackRoute] = []
     ) throws {
         try Constants.checkStepsPerBeat(stepsPerBeat)
         for (name, value) in [("midi_track", midiTrack), ("drum_track", drumTrack)] {
@@ -64,6 +80,7 @@ public struct ImportOptions: Sendable, Hashable {
                 throw KSPError.value("\(name) counts from 1")
             }
         }
+        try ImportOptions.checkRoutes(routes, drumTrack: drumTrack)
         self.stepsPerBeat = stepsPerBeat
         self.midiTrack = midiTrack
         self.drumTrack = drumTrack
@@ -71,6 +88,47 @@ public struct ImportOptions: Sendable, Hashable {
         self.carryTempo = carryTempo
         self.fitSwing = fitSwing
         self.fitTimeShift = fitTimeShift
+        self.routes = routes
+    }
+
+    /// The faults a route has without knowing the song: range and clashes.
+    private static func checkRoutes(_ routes: [TrackRoute], drumTrack: Int?) throws {
+        let tracks = Constants.trackItemIDs.count
+        var sources: Set<Int> = []
+        var devices: [Int: TrackRoute] = [:]
+        for route in routes {
+            if route.source < 1 {
+                throw KSPError.value(
+                    "route counts source tracks from 1, so \(route.source):\(route.device) "
+                        + "is not one")
+            }
+            if route.device < 1 || route.device > tracks {
+                throw KSPError.value(
+                    "route \(route.source):\(route.device) names device track \(route.device); "
+                        + "the device has \(tracks) tracks")
+            }
+            if sources.contains(route.source) {
+                throw KSPError.value("route names source track \(route.source) twice")
+            }
+            if let first = devices[route.device] {
+                throw KSPError.value(
+                    "routes \(first.source):\(first.device) and "
+                        + "\(route.source):\(route.device) both name device track "
+                        + "\(route.device); one device track holds one source track")
+            }
+            if drumTrack == route.source && route.device != 1 {
+                throw KSPError.value(
+                    "route \(route.source):\(route.device) sends the drum track to device "
+                        + "track \(route.device); only device track 1 carries a drum set")
+            }
+            if let drumTrack, drumTrack != route.source && route.device == 1 {
+                throw KSPError.value(
+                    "route \(route.source):1 collides with the drum track; only device track 1 "
+                        + "carries a drum set")
+            }
+            sources.insert(route.source)
+            devices[route.device] = route
+        }
     }
 }
 
@@ -856,8 +914,9 @@ extension MIDIImport {
 
     /// Which device track each source clip goes to, and which one is drums.
     ///
-    /// Melodic clips fill the tracks from `firstTrack` upwards in source order. A drum clip goes to
-    /// Track 1 whatever that is, because item 123 is the only one carrying a drum parameter set.
+    /// A route puts a named source track where it says. Whatever is left fills the tracks a route
+    /// did not claim, from `firstTrack` upwards in source order. A drum clip goes to Track 1
+    /// whatever that is, because item 123 is the only one carrying a drum parameter set.
     static func assign(
         _ song: Song, _ options: ImportOptions, _ collector: Collector, _ firstTrack: Int = 1
     ) throws -> [(clip: Clip, track: Int, isDrum: Bool)] {
@@ -880,14 +939,47 @@ extension MIDIImport {
             melodic = song.clips.enumerated().filter { $0.offset != found }.map(\.element)
         }
 
+        let drumSource = drum?.sourceTracks.first
+        var routed: [(clip: Clip, track: Int)] = []
+        var claimed: Set<Int> = []
+        for route in options.routes {
+            let matching = song.clips.filter { $0.sourceTracks == [route.source] }
+            if matching.isEmpty {
+                throw KSPError.value(
+                    "track \(route.source) of the source holds no notes; route counts every track "
+                        + "of the file from 1, including ones that carry only tempo or a name")
+            }
+            if route.source == drumSource {
+                if route.device != 1 {
+                    throw KSPError.value(
+                        "route \(route.source):\(route.device) sends the drum track to device "
+                            + "track \(route.device); only device track 1 carries a drum set")
+                }
+                // The map agrees with the drum designation; the drum clip is already on 1, and
+                // whatever else the track holds still fills.
+                continue
+            }
+            if route.device == 1 && drum != nil {
+                throw KSPError.value(
+                    "route \(route.source):1 collides with the drum track; only device track 1 "
+                        + "carries a drum set")
+            }
+            // A route names a track of the file, so it is put back together the way --drum-track
+            // is rather than routing only one of its channels.
+            routed.append((merged(matching), route.device))
+            claimed.insert(route.device)
+            melodic = melodic.filter { $0.sourceTracks != [route.source] }
+        }
+
         var assigned: [(clip: Clip, track: Int, isDrum: Bool)] = []
         if let drum {
             assigned.append((drum, 1, true))
         }
+        assigned.append(contentsOf: routed.map { ($0.clip, $0.track, false) })
 
         // Only Track 1 carries a drum set, so it is spoken for when there is one.
         let free = (firstTrack...max(firstTrack, Constants.trackItemIDs.count)).filter {
-            $0 <= Constants.trackItemIDs.count && (drum == nil || $0 != 1)
+            $0 <= Constants.trackItemIDs.count && (drum == nil || $0 != 1) && !claimed.contains($0)
         }
         for (clip, track) in zip(melodic, free) {
             assigned.append((clip, track, false))
@@ -901,7 +993,7 @@ extension MIDIImport {
                     + "\(Constants.trackItemIDs.count) tracks",
                 subjects: dropped)
         }
-        return assigned
+        return assigned.stableSorted { $0.track < $1.track }
     }
 
     /// Decide everything the conversion will write, without writing any of it.

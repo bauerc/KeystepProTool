@@ -18,7 +18,7 @@ from ksp import constants, midi_export, midi_import, mutate, reader
 from ksp.diagnostics import Code
 from ksp.drum_map import DrumMap
 from ksp.keys import key
-from ksp.midi_import import ImportOptions
+from ksp.midi_import import ImportOptions, TrackRoute
 from ksp.model import NoteKind
 from test_mutate import PLACEMENT_RECIPE, TRACK_2_ITEM, changed
 
@@ -309,7 +309,19 @@ def test_quantise_refuses_a_step_count_the_device_cannot_hold() -> None:
         midi_import.quantise(clip, step_count=constants.MAX_STEPS + 1)
 
 
-@pytest.mark.parametrize("options", [{"steps_per_beat": 0}, {"midi_track": 0}, {"drum_track": 0}])
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"steps_per_beat": 0},
+        {"midi_track": 0},
+        {"drum_track": 0},
+        {"routes": (TrackRoute(0, 1),)},
+        {"routes": (TrackRoute(1, 0),)},
+        {"routes": (TrackRoute(1, 5),)},
+        {"routes": (TrackRoute(1, 2), TrackRoute(1, 3))},
+        {"routes": (TrackRoute(1, 2), TrackRoute(2, 2))},
+    ],
+)
 def test_options_refuse_impossible_values(options: dict[str, Any]) -> None:
     with pytest.raises(ValueError):
         ImportOptions(**options)
@@ -979,3 +991,124 @@ def test_events_the_device_cannot_store_are_reported(load_sample: Loader) -> Non
 
     dropped = [d for d in result.diagnostics if d.code is Code.CONTROLLERS_DROPPED]
     assert [d.subjects for d in dropped] == [2]
+
+
+# --- #136: routing source tracks onto device tracks ------------------------
+
+
+def routed(result: midi_import.ImportResult) -> list[tuple[int, int | None]]:
+    """Each plan's device track beside the source track it came from."""
+    return [(plan.track, plan.source_track) for plan in result.plan.tracks]
+
+
+def test_a_route_puts_a_source_track_where_it_says(load_sample: Loader) -> None:
+    midi = song_of([[(0, 60, 100)], [(0, 64, 100)], [(0, 67, 100)]])
+    options = ImportOptions(routes=(TrackRoute(3, 1), TrackRoute(1, 2)))
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    assert routed(result) == [(1, 3), (2, 1), (3, 2)]
+    assert [plan.notes[0].pitch for plan in result.plan.tracks] == [67, 60, 64]
+
+
+def test_unrouted_tracks_fill_the_device_tracks_a_route_left(load_sample: Loader) -> None:
+    midi = song_of([[(0, 60, 100)], [(0, 64, 100)], [(0, 67, 100)]])
+    options = ImportOptions(routes=(TrackRoute(1, 3),))
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    assert routed(result) == [(1, 2), (2, 3), (3, 1)]
+
+
+def test_without_routes_assignment_is_unchanged(load_sample: Loader) -> None:
+    """The fill-upwards rule, drum clip included, with the layer switched off."""
+    midi = song_of([[(0, 60, 100)], [(0, 36, 100)], [(0, 67, 100)]], channels=[0, 9, 0])
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
+
+    assert routed(result) == [(1, 2), (2, 1), (3, 3)]
+    assert [plan.is_drum for plan in result.plan.tracks] == [True, False, False]
+
+
+def test_a_route_may_not_send_the_drum_track_off_device_track_one() -> None:
+    with pytest.raises(ValueError, match=r"route 2:3 sends the drum track to device track 3"):
+        ImportOptions(drum_track=2, routes=(TrackRoute(2, 3),))
+
+
+def test_a_route_may_not_take_device_track_one_from_the_drums(load_sample: Loader) -> None:
+    midi = song_of([[(0, 36, 100)], [(0, 60, 100)]], channels=[9, 0])
+    options = ImportOptions(routes=(TrackRoute(2, 1),))
+
+    with pytest.raises(ValueError, match=r"route 2:1 collides with the drum track"):
+        midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+
+def test_a_route_may_not_send_an_auto_detected_drum_track_elsewhere(load_sample: Loader) -> None:
+    """The clash is only visible once the percussion channel has been found."""
+    midi = song_of([[(0, 36, 100)], [(0, 60, 100)]], channels=[9, 0])
+    options = ImportOptions(routes=(TrackRoute(1, 2),))
+
+    with pytest.raises(ValueError, match=r"route 1:2 sends the drum track to device track 2"):
+        midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+
+def test_routing_the_drum_track_to_device_track_one_is_allowed(load_sample: Loader) -> None:
+    midi = song_of([[(0, 60, 100)], [(0, 36, 100)]])
+    options = ImportOptions(
+        drum_track=2, drum_map=DrumMap.chromatic(36), routes=(TrackRoute(2, 1),)
+    )
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    assert routed(result) == [(1, 2), (2, 1)]
+    assert [plan.is_drum for plan in result.plan.tracks] == [True, False]
+
+
+def test_a_route_onto_device_track_one_is_refused_beside_a_named_drum_track() -> None:
+    """--drum-track spoke for device track 1 before the file was opened."""
+    with pytest.raises(ValueError, match=r"route 3:1 collides with the drum track"):
+        ImportOptions(drum_track=2, routes=(TrackRoute(3, 1),))
+
+
+def test_a_route_is_honoured_below_the_starting_track(load_sample: Loader) -> None:
+    """--track parameterises the fill-upwards rule, which a route replaces."""
+    midi = song_of([[(0, 60, 100)], [(0, 64, 100)]])
+    options = ImportOptions(routes=(TrackRoute(1, 1),))
+    plan = midi_import.plan_song(midi_import.read_song(midi, options), options, first_track=3)
+
+    assert [(track.track, track.source_track) for track in plan.tracks] == [(1, 1), (3, 2)]
+
+
+def test_two_sources_on_one_device_track_are_refused() -> None:
+    with pytest.raises(ValueError, match=r"routes 1:2 and 3:2 both name device track 2"):
+        ImportOptions(routes=(TrackRoute(1, 2), TrackRoute(3, 2)))
+
+
+@pytest.mark.parametrize("device", [0, 5])
+def test_a_route_outside_the_devices_four_tracks_is_refused(device: int) -> None:
+    with pytest.raises(ValueError, match=rf"names device track {device}; the device has 4 tracks"):
+        ImportOptions(routes=(TrackRoute(1, device),))
+
+
+def test_a_route_naming_a_track_with_no_notes_is_refused(load_sample: Loader) -> None:
+    midi = song_of([[(0, 60, 100)], [(0, 64, 100)]])
+    options = ImportOptions(routes=(TrackRoute(3, 1),))
+
+    with pytest.raises(ValueError, match=r"track 3 of the source holds no notes"):
+        midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+
+def test_a_routed_track_split_across_channels_is_merged(load_sample: Loader) -> None:
+    """Naming a track and getting one of its channels would be the surprise."""
+    midi = mixed_of([(0, 60, 0), (0, 72, 1), (TICKS_PER_STEP, 62, 0)])
+    options = ImportOptions(routes=(TrackRoute(1, 2),))
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    assert routed(result) == [(2, 1)]
+    assert [note.pitch for note in result.notes] == [60, 72, 62]
+
+
+def test_routes_do_not_change_the_dropped_track_report(load_sample: Loader) -> None:
+    midi = song_of([[(0, 60 + n, 100)] for n in range(5)])
+    options = ImportOptions(routes=(TrackRoute(5, 1),))
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    assert routed(result) == [(1, 5), (2, 1), (3, 2), (4, 3)]
+    dropped = [d for d in result.diagnostics if d.code is Code.TRACKS_DROPPED]
+    assert [d.subjects for d in dropped] == [1]

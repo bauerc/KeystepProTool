@@ -19,7 +19,7 @@ import math
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, NamedTuple
 
 import mido
 
@@ -63,6 +63,13 @@ _STRAIGHT: Final = constants.SWING_RANGE_PERCENT[0]
 _MIN_SWUNG_NOTES: Final = 3
 
 
+class TrackRoute(NamedTuple):
+    """One source track of the file onto one device track, both counting from 1."""
+
+    source: int
+    device: int
+
+
 @dataclass(frozen=True)
 class ImportOptions:
     """Everything the MIDI file cannot tell us about the target project."""
@@ -91,12 +98,59 @@ class ImportOptions:
     fit_swing: bool = True
     fit_time_shift: bool = True
 
+    routes: tuple[TrackRoute, ...] = ()
+    """Where named source tracks go, overriding the fill-upwards rule. Empty
+    assigns exactly as before. A drum track still lands on device track 1."""
+
     def __post_init__(self) -> None:
         check_steps_per_beat(self.steps_per_beat)
         for name in ("midi_track", "drum_track"):
             value = getattr(self, name)
             if value is not None and value < 1:
                 raise ValueError(f"{name} counts from 1")
+        self._check_routes()
+
+    def _check_routes(self) -> None:
+        """The faults a route has without knowing the song: range and clashes."""
+        tracks = len(constants.TRACK_ITEM_IDS)
+        sources: set[int] = set()
+        devices: dict[int, TrackRoute] = {}
+        for route in self.routes:
+            if route.source < 1:
+                raise ValueError(
+                    f"route counts source tracks from 1, so {route.source}:{route.device} "
+                    "is not one"
+                )
+            if not 1 <= route.device <= tracks:
+                raise ValueError(
+                    f"route {route.source}:{route.device} names device track {route.device}; "
+                    f"the device has {tracks} tracks"
+                )
+            if route.source in sources:
+                raise ValueError(f"route names source track {route.source} twice")
+            if route.device in devices:
+                first = devices[route.device]
+                raise ValueError(
+                    f"routes {first.source}:{first.device} and {route.source}:{route.device} "
+                    f"both name device track {route.device}; one device track holds one "
+                    "source track"
+                )
+            if self.drum_track == route.source and route.device != 1:
+                raise ValueError(
+                    f"route {route.source}:{route.device} sends the drum track to device "
+                    f"track {route.device}; only device track 1 carries a drum set"
+                )
+            if (
+                self.drum_track is not None
+                and self.drum_track != route.source
+                and route.device == 1
+            ):
+                raise ValueError(
+                    f"route {route.source}:1 collides with the drum track; only device track 1 "
+                    "carries a drum set"
+                )
+            sources.add(route.source)
+            devices[route.device] = route
 
 
 @dataclass(frozen=True)
@@ -855,7 +909,8 @@ def _assign(
 ) -> list[tuple[Clip, int, bool]]:
     """Which device track each source clip goes to, and which one is drums.
 
-    Melodic clips fill the tracks from *first_track* upwards in source order. A
+    A route puts a named source track where it says. Whatever is left fills the
+    tracks a route did not claim, from *first_track* upwards in source order. A
     drum clip goes to Track 1 whatever that is, because item 123 is the only
     one carrying a drum parameter set.
     """
@@ -875,13 +930,46 @@ def _assign(
         drum = next((clip for clip in song.clips if clip.is_percussion), None)
         melodic = [clip for clip in song.clips if clip is not drum]
 
+    drum_source = drum.source_tracks[0] if drum is not None and drum.source_tracks else None
+    routed: list[tuple[Clip, int]] = []
+    claimed: set[int] = set()
+    for route in options.routes:
+        named = [clip for clip in song.clips if clip.source_tracks == (route.source,)]
+        if not named:
+            raise ValueError(
+                f"track {route.source} of the source holds no notes; route counts every track "
+                "of the file from 1, including ones that carry only tempo or a name"
+            )
+        if route.source == drum_source:
+            if route.device != 1:
+                raise ValueError(
+                    f"route {route.source}:{route.device} sends the drum track to device "
+                    f"track {route.device}; only device track 1 carries a drum set"
+                )
+            # The map agrees with the drum designation; the drum clip is
+            # already on 1, and whatever else the track holds still fills.
+            continue
+        if route.device == 1 and drum is not None:
+            raise ValueError(
+                f"route {route.source}:1 collides with the drum track; only device track 1 "
+                "carries a drum set"
+            )
+        # A route names a track of the file, so it is put back together the way
+        # --drum-track is rather than routing only one of its channels.
+        routed.append((_merged(named), route.device))
+        claimed.add(route.device)
+        melodic = [clip for clip in melodic if clip.source_tracks != (route.source,)]
+
     assigned: list[tuple[Clip, int, bool]] = []
     if drum is not None:
         assigned.append((drum, 1, True))
+    assigned.extend((clip, device, False) for clip, device in routed)
 
     # Only Track 1 carries a drum set, so it is spoken for when there is one.
     free = [
-        n for n in range(first_track, len(constants.TRACK_ITEM_IDS) + 1) if drum is None or n != 1
+        n
+        for n in range(first_track, len(constants.TRACK_ITEM_IDS) + 1)
+        if (drum is None or n != 1) and n not in claimed
     ]
     for clip, track in zip(melodic, free, strict=False):
         assigned.append((clip, track, False))
@@ -894,6 +982,7 @@ def _assign(
             f"{len(constants.TRACK_ITEM_IDS)} tracks",
             subjects=dropped,
         )
+    assigned.sort(key=lambda placed: placed[1])
     return assigned
 
 
