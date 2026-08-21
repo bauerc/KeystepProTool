@@ -1,14 +1,4 @@
-"""Mapping the KeyStep Pro's 24 drum lanes to MIDI note numbers.
-
-A drum note stores a **lane index** in parameter 117, not a pitch, and which
-note a lane transmits is a global device setting absent from the project file
-(spec section 3.2.1). This module therefore holds an *assumption about the
-user's device*, never a decoded fact, and every consumer is expected to say
-which map it used.
-
-The 24 lanes and the chromatic-from-36 default both come from that section,
-where the parameter table and capture D5 are recorded.
-"""
+"""Mapping the KeyStep Pro's 24 drum lanes to MIDI note numbers."""
 
 from __future__ import annotations
 
@@ -19,24 +9,20 @@ from typing import Any, Final
 from ksp.constants import DRUM_LANE_COUNT, note_name
 from ksp.diagnostics import EMPTY_REPORT, Code, Collector, Report
 
-#: What the device's Drum Map menu actually reads, confirmed by its own MIDI
-#: output (capture D5). The manual and the Custom defaults of 36..59 agree.
+#: The Low note the device's Drum Map menu defaults to.
 DEFAULT_CHROMATIC_LOW: Final = 36
 
-#: ``globalParamId 79`` (Drum output) defaults to 10, separately from tracks
-#: 1-4 which default to 0-3.
+#: ``globalParamId 79`` (Drum output), which defaults apart from tracks 1-4.
 DEFAULT_DRUM_CHANNEL: Final = 10
 
-#: Highest Low note the device's encoder reaches in chromatic mode (D5), the
-#: same cap MCC applies.
+#: Highest Low note the device's encoder reaches in chromatic mode.
 MAX_CHROMATIC_LOW: Final = 103
 
 MIN_NOTE: Final = 0
 MAX_NOTE: Final = 127
 
-#: General MIDI percussion names, keyed by **MIDI note rather than by lane**,
-#: so they stay correct under any drum map -- including a custom one where
-#: lane order says nothing about which instrument is where.
+#: General MIDI percussion names, keyed by **MIDI note, never by lane**, so
+#: they stay correct under a custom map whose lane order means nothing.
 GM_DRUM_NAMES: Final[dict[int, str]] = {
     35: "Acoustic Bass Drum",
     36: "Bass Drum 1",
@@ -90,19 +76,13 @@ GM_DRUM_NAMES: Final[dict[int, str]] = {
 
 @dataclass(frozen=True)
 class DrumMap:
-    """Lane index -> MIDI note, for all 24 lanes.
-
-    Construct through :meth:`chromatic` or :meth:`custom` rather than directly;
-    both produce a descriptive ``name`` that callers are expected to print
-    alongside any resolved note, because the mapping is an assumption about the
-    user's hardware and not something read from their file.
-    """
+    """Lane index -> MIDI note, for all 24 lanes. Construct through :meth:`chromatic`
+    or :meth:`custom`: the ``name`` they set is what callers print beside a resolved note."""
 
     notes: tuple[int, ...]
     name: str = "chromatic-36"
     diagnostics: Report = EMPTY_REPORT
-    """Non-fatal oddities, e.g. a custom map that sends two lanes to the same
-    note. Reported, never silently repaired."""
+    """Non-fatal oddities, e.g. two lanes on one note. Reported, never repaired."""
 
     @property
     def warnings(self) -> tuple[str, ...]:
@@ -119,9 +99,8 @@ class DrumMap:
 
         duplicates = sorted({n for n in self.notes if self.notes.count(n) > 1})
         if duplicates and not self.diagnostics:
-            # The hardware permits this, so it is not an error -- but it makes
-            # note -> lane lossy, and a converter silently picking one lane is
-            # exactly the kind of quiet wrong answer this project avoids.
+            # The hardware permits this, so it is not an error, but it makes
+            # note -> lane lossy.
             collector = Collector()
             for note in duplicates:
                 collector.add(
@@ -135,9 +114,7 @@ class DrumMap:
     @classmethod
     def chromatic(cls, low: int = DEFAULT_CHROMATIC_LOW) -> DrumMap:
         """Lane *i* plays ``low + i``, the device's Chromatic mode."""
-        # The device stops at Low note 103 too, which leaves the top lane on
-        # 126 -- Arturia's range is one short of 127 rather than this being an
-        # off-by-one here, since D5 saw lane 0 fire 36 at a low note of 36. No
+        # The 103 cap is Arturia's, not an off-by-one, and it is also why no
         # separate overflow check is needed: 103 + 23 cannot exceed 127.
         if not MIN_NOTE <= low <= MAX_CHROMATIC_LOW:
             raise ValueError(f"chromatic low note {low} is outside {MIN_NOTE}-{MAX_CHROMATIC_LOW}")
@@ -153,11 +130,7 @@ class DrumMap:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DrumMap:
-        """Build from an already-parsed config mapping.
-
-        Deliberately takes a dict, not a path: this module must not decide
-        where files live. The CLI loads the file and passes the result in.
-        """
+        """Build from an already-parsed config mapping."""
         mode = data.get("mode", "chromatic")
         if mode == "chromatic":
             low = data.get("low", DEFAULT_CHROMATIC_LOW)
@@ -183,12 +156,7 @@ class DrumMap:
 
     def lane_for_note(self, note: int) -> int | None:
         """The lane that plays *note*, or ``None`` if the map does not reach it.
-
-        ``None`` is a real answer and must not be smoothed over. Snapping an
-        unmapped drum hit to the nearest lane produces a file that loads
-        cleanly and plays the wrong instrument, with nothing to signal the
-        error -- the same failure mode as a guessed gate table.
-        """
+        ``None`` is a real answer: snapping to the nearest lane plays the wrong drum."""
         for lane, mapped in enumerate(self.notes):
             if mapped == note:
                 return lane
@@ -202,11 +170,7 @@ class DrumMap:
 
     def label_for_lane(self, lane: int) -> str:
         """Render a lane as ``lane 0 -> C1 (36) Bass Drum 1``.
-
-        A lane the device does not have is shown as-is rather than resolved.
-        The reader warns about those separately; inventing a note for one here
-        would hide it.
-        """
+        A lane the device does not have is shown as-is rather than resolved."""
         if not self.has_lane(lane):
             return f"lane {lane} (out of range)"
         note = self.note_for_lane(lane)

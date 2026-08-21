@@ -1,9 +1,4 @@
-"""Reading a project file on behalf of a command.
-
-``ksp.reader`` decides what a project is; this decides what a user is told when
-the file is not one. Both reading commands stop the same way on the same two
-failures, so the mapping lives here rather than once each.
-"""
+"""What a user is told when the file they named is not a project."""
 
 from pathlib import Path
 from typing import Any
@@ -13,8 +8,7 @@ from ksp.model import Project
 from ksp.reader import load
 from ksp_cli.reporting import fail
 
-#: Shipped inside the package so the installed command is self-contained. Path
-#: resolution stays in the CLI: ``ksp`` must not decide where files are.
+#: Shipped inside the package so the installed command is self-contained.
 TEMPLATE_NAME = "Default.KeyStepPro"
 
 

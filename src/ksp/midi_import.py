@@ -1,19 +1,4 @@
-"""Building a project from a Standard MIDI file.
-
-The inverse of :mod:`ksp.midi_export`, and a much narrower operation than it
-looks. The key set of a ``.KeyStepPro`` file is fixed (spec section 2), so
-nothing here *creates* a project: a template is loaded and values are
-overwritten in it. Placement itself is :func:`ksp.mutate.place_note` and
-:func:`ksp.mutate.place_drum_note`.
-
-Three layers, mirroring the export direction inverted: :func:`read_song` (the
-only part that knows what ``mido`` is) -> :func:`plan_song` (plain arithmetic)
--> :func:`apply` (a raw project dict).
-
-What the conversion decides for the user -- anchoring, track length, the
-channel split and the fitted drum map -- is documented in ``README.md`` and
-reported on every run.
-"""
+"""Building a project from a Standard MIDI file."""
 
 import math
 from collections import Counter
@@ -33,8 +18,7 @@ from ksp.keys import get_int, item_for_track
 from ksp.lenient_json import canonical
 from ksp.midi_export import RenderedNote, swing_delay
 
-#: MIDI's own default when a file carries no ``set_tempo``: 500,000
-#: microseconds per beat, i.e. 120 BPM.
+#: MIDI's default when a file carries no ``set_tempo``: 120 BPM in microseconds per beat.
 DEFAULT_TEMPO: Final = 500_000
 
 #: MIDI's default when a file carries no ``time_signature``.
@@ -43,8 +27,7 @@ DEFAULT_TIME_SIGNATURE: Final = (4, 4)
 #: The MIDI channel GM reserves for percussion, counting from 0.
 DRUM_CHANNEL: Final = 9
 
-#: Message types a pattern has nowhere to put. Counted rather than ignored, so
-#: a source whose expression lives in its controllers is not silently flattened.
+#: Message types a pattern has nowhere to put. Counted rather than ignored.
 UNSTORABLE_TYPES: Final = frozenset(
     {
         "control_change",
@@ -59,8 +42,7 @@ UNSTORABLE_TYPES: Final = frozenset(
 #: No swing. Both the bottom of the device's range and its default.
 _STRAIGHT: Final = constants.SWING_RANGE_PERCENT[0]
 
-#: Notes that must land on delayed steps before a groove is believed rather
-#: than left to per-note time shift.
+#: Notes on delayed steps before a groove is believed rather than left to time shift.
 _MIN_SWUNG_NOTES: Final = 3
 
 
@@ -76,39 +58,33 @@ class ImportOptions:
     """Everything the MIDI file cannot tell us about the target project."""
 
     steps_per_beat: int = DEFAULT_STEPS_PER_BEAT
-    """Step size to quantise to. Unlike the export direction, which now reads
-    the pattern's own setting out of ``99``, this is a real choice: it decides
-    what grid the incoming clip is snapped to. ``apply`` writes it into the
+    """The grid the incoming clip is snapped to. ``apply`` writes it into the
     pattern's ``99`` so the device plays back at the size it was written for."""
 
     midi_tracks: AbstractSet[int] = frozenset()
-    """Read only these tracks of the source file, counting from 1. An empty set
-    reads every track, which is what a type 0 file needs."""
+    """Read only these tracks of the source file, counting from 1; empty reads all."""
 
     drum_track: int | None = None
-    """Which source track to write as drums, counting from 1. ``None`` looks
-    for a track on the GM percussion channel instead, and finds nothing in the
-    many files that put drums on an ordinary channel."""
+    """Which source track to write as drums, counting from 1. ``None`` looks for
+    a track on the GM percussion channel instead."""
 
     drum_map: DrumMap | None = None
-    """The lane-to-note map to invert. ``None`` fits a chromatic one to the
-    source's own pitches, because the real map is device state the file does
-    not carry (spec 3.2.1)."""
+    """The lane-to-note map to invert. ``None`` fits a chromatic one to the source's
+    own pitches; the real map is device state the file does not carry (spec 3.2.1)."""
 
     carry_tempo: bool = True
     fit_swing: bool = True
     fit_time_shift: bool = True
 
     routes: tuple[TrackRoute, ...] = ()
-    """Where named source tracks go, overriding the fill-upwards rule. Empty
-    assigns exactly as before. A drum track still lands on device track 1."""
+    """Where named source tracks go, overriding the fill-upwards rule.
+    A drum track still lands on device track 1."""
 
     def __post_init__(self) -> None:
         check_steps_per_beat(self.steps_per_beat)
-        # A plain set would stay aliased to the caller's, so a later mutation
-        # could bypass the check below. Swift's Set is a value type already.
+        # A plain set would stay aliased to the caller's, letting a later
+        # mutation bypass the check below.
         object.__setattr__(self, "midi_tracks", frozenset(self.midi_tracks))
-        # Both messages name the CLI option rather than the field they check.
         if any(number < 1 for number in self.midi_tracks):
             raise ValueError("midi_track counts from 1")
         if self.drum_track is not None and self.drum_track < 1:
@@ -118,8 +94,8 @@ class ImportOptions:
     def _check_routes(self) -> None:
         """The faults a route has without knowing the song: range and clashes."""
         if self.routes and self.midi_tracks:
-            # Reading a named selection goes straight to quantise and never
-            # reaches _assign, so a route here would be silently ignored.
+            # A named selection goes straight to quantise and never reaches
+            # _assign, so a route here would be silently ignored.
             raise ValueError(
                 "routes and midi_track contradict each other; midi_track converts a single "
                 "source track into the one pattern the target names, leaving a route nothing "
@@ -223,9 +199,8 @@ class Placement:
     notes: tuple[PlacedNote, ...]
     step_count: int
     steps_per_beat: int = DEFAULT_STEPS_PER_BEAT
-    """The grid the notes were snapped to. Carried so ``apply`` can write it
-    into the pattern's own step size rather than leaving the device to play a
-    1/32 clip at 1/16."""
+    """The grid the notes were snapped to, carried so ``apply`` can write it into
+    the pattern's own step size rather than play a 1/32 clip at 1/16."""
 
     pattern: int = 1
     swing_percent: int = constants.SWING_RANGE_PERCENT[0]
@@ -299,9 +274,6 @@ class ImportResult:
         return self.plan.tracks[0].placements[0].step_count if self.plan.tracks else 0
 
 
-# --- Layer 1: reading MIDI -------------------------------------------------
-
-
 @dataclass(frozen=True)
 class _TrackRead:
     """One source track's notes, and what else went past while pairing them."""
@@ -362,11 +334,7 @@ def _track_notes(track: Iterable[mido.Message]) -> _TrackRead:
 
 def _check_readable(midi: mido.MidiFile) -> None:
     """Refuse the two file shapes whose ticks mean something else entirely.
-
-    Both convert to nonsense rather than to nothing, which is the reason to
-    stop here: mido reads the division field signed, so a timecode file arrives
-    with a negative ``ticks_per_beat`` and every step calculation inverts.
-    """
+    mido reads the division signed, so a timecode file arrives negative."""
     if midi.ticks_per_beat < 1:
         raise ValueError(
             "the file is timed in SMPTE timecode rather than ticks per beat, which has no "
@@ -427,16 +395,7 @@ def read_clip(midi: mido.MidiFile, options: ImportOptions | None = None) -> Clip
 
 def read_song(midi: mido.MidiFile, options: ImportOptions | None = None) -> Song:
     """One clip per note-bearing source track and channel, in file order.
-
-    Type 1 files -- what a DAW exports -- give one track per instrument, which
-    is the shape M6 is for. A type 0 file puts everything on one track and
-    tells its instruments apart by channel alone, so a track carrying several
-    is split into one clip each: merged, its percussion would arrive as melodic
-    pitches on whichever device track the rest of it landed on.
-
-    Under ``midi_tracks`` the file's own order survives, since a set has none,
-    and the split happens after the selection: it selects tracks, not channels.
-    """
+    A type 0 track carrying several channels is split into one clip each."""
     options = options or ImportOptions()
     _check_readable(midi)
     tempo, (numerator, denominator), changes = _timing(midi)
@@ -474,9 +433,6 @@ def read_song(midi: mido.MidiFile, options: ImportOptions | None = None) -> Song
     )
 
 
-# --- Layer 2: planning -----------------------------------------------------
-
-
 @dataclass(frozen=True)
 class _Snapped:
     """One source note against the grid, before it belongs to a pattern."""
@@ -492,24 +448,14 @@ class _Snapped:
 
 def _anchor(clips: Sequence[Clip], ticks_per_step: float) -> float:
     """The tick the first note of *clips* is snapped back from.
-
-    Taken across every clip at once on the whole-file path. Anchoring each
-    track on its own first note would slide a part that enters at bar 3 back
-    onto bar 1, which is not a lead-in the pattern cannot hold -- it is the
-    arrangement.
-    """
+    Taken across every clip at once, so a part entering at bar 3 stays there."""
     first = min((note.tick for clip in clips for note in clip.notes), default=0)
     return round(first / ticks_per_step) * ticks_per_step
 
 
 def _assign_step(offset: float, ticks_per_step: float, percent: int) -> tuple[int, float]:
     """The step *offset* belongs to under *percent* swing, and what is left.
-
-    Nearest-step arithmetic alone cannot do this. At 75% -- the device's
-    maximum -- a delayed step sits exactly half a step late, so snapping to the
-    nearest lands it on the *next* step and collapses each pair onto one. So
-    the neighbours are tried against the swung grid and the closest wins.
-    """
+    At 75% nearest-step arithmetic collapses each pair, so neighbours are tried."""
     base = round(offset / ticks_per_step)
     best: tuple[int, float] | None = None
     for step in (base - 1, base, base + 1):
@@ -531,13 +477,7 @@ def _snap(clip: Clip, ticks_per_step: float, origin: float, percent: int) -> lis
 
 def _fit_swing(clip: Clip, ticks_per_step: float, origin: float) -> int:
     """The swing percentage that best explains a clip's timing.
-
-    Fitted before any time shift is spent, because one pattern-level value
-    expresses a systematic groove for free and the per-note field is scarce
-    (Timing_Calibration 3.2). A search over the 26 storable percentages, not an
-    inverted median -- see ROADMAP M6 for why the median breaks at 75 %. Ties
-    keep the lowest, so a straight clip stays straight.
-    """
+    A search over the 26 storable percentages; ties keep the lowest, so straight stays straight."""
     low, high = constants.SWING_RANGE_PERCENT
     if not clip.notes:
         return low
@@ -552,21 +492,15 @@ def _fit_swing(clip: Clip, ticks_per_step: float, origin: float) -> int:
     if best_percent == low:
         return low
 
-    # A groove is a thing a pattern does repeatedly. Without that guard the
-    # search will gladly explain one late note as swing, which would displace
-    # every other note on a delayed step to explain a single one.
+    # Without this guard the search explains one late note as swing, which
+    # would displace every other note on a delayed step.
     swung = sum(1 for o in offsets if _assign_step(o, ticks_per_step, best_percent)[0] % 2)
     return best_percent if swung >= _MIN_SWUNG_NOTES else low
 
 
 def _fit_shift(residual: float, ticks_per_beat: int) -> tuple[int, float]:
     """A residual as a stored time shift, and what it could not express.
-
-    The unit is a fixed 1/400 of a beat (spec 6.4), so the reachable range is
-    60 ticks either way at 480 PPQN whatever the step size. At a 1/4 grid that
-    is an eighth of a step and most residuals will not fit; at 1/32 it is a
-    whole one.
-    """
+    The unit is a fixed 1/400 of a beat (spec 6.4), so reach is independent of step size."""
     unit = ticks_per_beat / constants.TIME_SHIFT_UNITS_PER_BEAT
     low, high = constants.TIME_SHIFT_RANGE
     wanted = residual / unit
@@ -596,12 +530,7 @@ def _place(
     offset: int = 0,
 ) -> Placement:
     """Turn snapped notes into one pattern's worth of placed ones.
-
-    *offset* is the 0-based step this pattern starts at within the track, so a
-    split track's later patterns count their steps from 1 again. *swing* is
-    already fitted and already removed from each residual, so what is left here
-    is only what time shift has to carry.
-    """
+    *offset* is the 0-based step this pattern starts at within the track."""
     notes: list[PlacedNote] = []
     approximated = 0
     held_past_end = 0
@@ -718,14 +647,7 @@ def _place(
 
 def quantise(clip: Clip, *, step_count: int, options: ImportOptions | None = None) -> Placement:
     """Snap *clip* to a *step_count*-step grid, as one pattern.
-
-    The single-target path: notes past the last step are dropped, because the
-    device disables them rather than playing them. :func:`plan_track` is the
-    one that splits instead.
-
-    Raises:
-        ValueError: if *step_count* is outside the device's 1-64.
-    """
+    Notes past the last step are dropped; :func:`plan_track` splits instead."""
     options = options or ImportOptions()
     if not 1 <= step_count <= constants.MAX_STEPS:
         raise ValueError(f"step count {step_count} out of range 1-{constants.MAX_STEPS}")
@@ -805,28 +727,17 @@ def plan_track(
     origin: float,
 ) -> TrackPlan:
     """Lay one source track out across as many patterns as it needs.
-
-    The track's length is its content rounded up to a whole bar, then cut into
-    64-step patterns -- the device's ceiling. Nothing is truncated: a sequence
-    too long for one pattern becomes several, chained. Lengths are per track,
-    not padded to a common one: the device loops each track's chain on its own,
-    so a one-bar part under an eight-bar one repeats against it.
-
-    *origin* is the tick the grid is counted from, taken by :func:`plan_song`
-    across the whole file so a part that enters at bar 3 stays there.
-    """
+    Lengths are per track, never padded to a common one: each chain loops on its own."""
     options = options or ImportOptions()
     ticks_per_step = clip.ticks_per_beat / options.steps_per_beat
     site = Site(track=track, kind="drum" if is_drum else "seq")
 
-    # Fitted once for the track rather than once per pattern: a groove belongs
-    # to the performance, not to which 64-step window of it a pattern holds,
-    # and the steps a pattern is cut on cannot be known until it is fitted.
+    # Fitted once for the track, not per pattern: the cut points are not known
+    # until the groove is.
     swing = _fit_swing(clip, ticks_per_step, origin) if options.fit_swing else _STRAIGHT
     snapped = _snap(clip, ticks_per_step, origin, swing)
 
-    # The last step any note reaches, rounded up to the bar so a loop stays
-    # musical: a track that stops mid-bar drifts against every other one.
+    # Rounded up to the bar: a track that stops mid-bar drifts against the rest.
     ends = [entry.step + entry.note.duration_ticks / ticks_per_step for entry in snapped]
     total = max(1, -(-round(max(ends, default=1)) // steps_per_bar) * steps_per_bar)
 
@@ -891,13 +802,7 @@ def plan_track(
 
 def fit_drum_map(clip: Clip) -> DrumMap:
     """A chromatic map covering *clip*'s pitches, low note first.
-
-    The device's real map is a global setting the project file does not carry
-    (spec 3.2.1), so importing drums means assuming one. Assuming the factory
-    default would silently drop every source that does not start at MIDI 36,
-    which is most of them; fitting to what is actually there converts the file
-    and says which map it used.
-    """
+    The device's real map is a global the project file does not carry (spec 3.2.1)."""
     pitches = [note.pitch for note in clip.notes]
     low = min(pitches, default=drum_map_module.DEFAULT_CHROMATIC_LOW)
     return DrumMap.chromatic(
@@ -924,12 +829,7 @@ def _assign(
     song: Song, options: ImportOptions, collector: Collector, first_track: int = 1
 ) -> list[tuple[Clip, int, bool]]:
     """Which device track each source clip goes to, and which one is drums.
-
-    A route puts a named source track where it says. Whatever is left fills the
-    tracks a route did not claim, from *first_track* upwards in source order. A
-    drum clip goes to Track 1 whatever that is, because item 123 is the only
-    one carrying a drum parameter set.
-    """
+    A drum clip goes to Track 1: item 123 is the only one with a drum parameter set."""
     drum: Clip | None = None
     if options.drum_track is not None:
         # --drum-track names a track of the file, so a track split across
@@ -962,16 +862,14 @@ def _assign(
                     f"route {route.source}:{route.device} sends the drum track to device "
                     f"track {route.device}; only device track 1 carries a drum set"
                 )
-            # The map agrees with the drum designation; the drum clip is
-            # already on 1, and whatever else the track holds still fills.
+            # The route agrees with the drum designation, which already put
+            # the clip on track 1.
             continue
         if route.device == 1 and drum is not None:
             raise ValueError(
                 f"route {route.source}:1 collides with the drum track; only device track 1 "
                 "carries a drum set"
             )
-        # A route names a track of the file, so it is put back together the way
-        # --drum-track is rather than routing only one of its channels.
         routed.append((_merged(named), route.device))
         claimed.add(route.device)
         melodic = [clip for clip in melodic if clip.source_tracks != (route.source,)]
@@ -1101,16 +999,9 @@ def plan_song(
     )
 
 
-# --- Layer 3: writing ------------------------------------------------------
-
-
 def apply(raw: Mapping[str, int | str], plan: SongPlan) -> dict[str, int | str]:
     """Write *plan* into a copy of *raw*.
-
-    One copy for the whole conversion rather than one per note: the scalars go
-    through the ordinary ``mutate`` functions, and the notes -- of which there
-    may be hundreds -- through the delta form onto this dict.
-    """
+    One copy for the whole conversion: the notes go through ``mutate``'s delta form."""
     result = dict(raw)
 
     for track_plan in plan.tracks:
@@ -1160,11 +1051,8 @@ def apply(raw: Mapping[str, int | str], plan: SongPlan) -> dict[str, int | str]:
                     )
                 mutate.merge_updates(result, updates)
 
-        # Only a split track needs a chain. Every sample project leaves all 16
-        # slots at the sentinel and still plays, so a chain is what makes
-        # several patterns one sequence -- not what makes one pattern play.
-        # Writing one anyway would rewrite the scene of a project that was
-        # only ever asked to take a clip.
+        # Only a split track needs a chain: a chain makes several patterns one
+        # sequence, it is not what makes one pattern play.
         if len(track_plan.placements) > 1:
             result = mutate.set_chain(
                 result, scene=plan.scene, track=track, patterns=track_plan.patterns
@@ -1177,12 +1065,7 @@ def apply(raw: Mapping[str, int | str], plan: SongPlan) -> dict[str, int | str]:
 
 def saveable(raw: Mapping[str, int | str]) -> dict[str, int | str]:
     """Put a converted project in MCC's key order, with a ``version`` key.
-
-    The factory template has no ``version`` and every saved project does, so
-    starting from it means injecting one. Assigning it to a loaded dict appends
-    it at the end, which is a key order no file MCC wrote has ever had, so
-    ``canonical`` places it (spec section 2).
-    """
+    Assigning ``version`` would append it; ``canonical`` puts it where MCC does (spec 2)."""
     if "version" not in raw:
         raw = dict(raw) | {"version": constants.PROJECT_VERSION}
     return canonical(raw)
@@ -1190,9 +1073,7 @@ def saveable(raw: Mapping[str, int | str]) -> dict[str, int | str]:
 
 def pattern_step_count(raw: Mapping[str, int | str], *, track: int, pattern: int) -> int:
     """The declared length of one melodic pattern, in steps.
-
-    ``98`` is 0-based, so a stored 15 is a 16-step pattern.
-    """
+    ``98`` is 0-based, so a stored 15 is a 16-step pattern."""
     item = item_for_track(track)
     stored = get_int(raw, item, constants.P_SEQ_STEP_COUNT, pattern)
     if stored is None:
@@ -1204,10 +1085,7 @@ def pattern_is_empty(
     raw: Mapping[str, int | str], *, track: int, pattern: int, drum: bool = False
 ) -> bool:
     """Whether a pattern's note pool holds nothing.
-
-    Existence is ``50 != 127`` -- ``54`` on the drum side -- and nothing else,
-    never velocity (spec 4).
-    """
+    Existence is ``50``/``54`` against the sentinel and nothing else, never velocity (spec 4)."""
     item = item_for_track(track)
     param = constants.P_DRUM_NOTE_STEP if drum else constants.P_SEQ_NOTE_STEP
     return all(
@@ -1219,10 +1097,7 @@ def pattern_is_empty(
 
 def track_is_melodic(raw: Mapping[str, int | str], *, track: int) -> bool:
     """Whether a track's mode flag says the melodic parameter set is live.
-
-    ``86`` bit 6 is DRUM on Track 1 and ARP on Tracks 2-4 (spec 5). Either way
-    the melodic pool is not what the device is playing from.
-    """
+    ``86`` bit 6 is DRUM on Track 1 and ARP on Tracks 2-4 (spec 5)."""
     item = item_for_track(track)
     bits = get_int(raw, item, constants.P_TRACK_MODE_BITS)
     return not (bits or 0) & (1 << constants.DRUM_MODE_BIT)
@@ -1230,11 +1105,7 @@ def track_is_melodic(raw: Mapping[str, int | str], *, track: int) -> bool:
 
 def _check_targets(raw: Mapping[str, int | str], plan: SongPlan) -> None:
     """Refuse the whole conversion if any target pattern already holds notes.
-
-    Checked before anything is written, so a file is never left half converted.
-    Appending to an occupied pool would interleave two takes, and emptying one
-    means writing sentinels, which no hardware capture covers.
-    """
+    Checked before anything is written, so a file is never left half converted."""
     for track_plan in plan.tracks:
         for placement in track_plan.placements:
             if not pattern_is_empty(
@@ -1259,15 +1130,7 @@ def convert(
     options: ImportOptions | None = None,
 ) -> ImportResult:
     """Convert one clip of *midi* into one pattern of the template *raw*.
-
-    The single-target path: everything lands on *track* and *pattern*, at the
-    length that pattern already declares. :func:`convert_song` is the one that
-    reads a whole file.
-
-    Raises:
-        ValueError: if the target track is not in a melodic mode, or its
-            pattern already holds notes.
-    """
+    Everything lands on *track* and *pattern*, at the length that pattern declares."""
     options = options or ImportOptions()
     if not track_is_melodic(raw, track=track):
         raise ValueError(
@@ -1304,12 +1167,7 @@ def convert_song(
     first_pattern: int = 1,
     first_track: int = 1,
 ) -> ImportResult:
-    """Convert every note-bearing track of *midi* into the template *raw*.
-
-    Raises:
-        ValueError: if any target pattern already holds notes, or the source
-            names a drum track that carries none.
-    """
+    """Convert every note-bearing track of *midi* into the template *raw*."""
     options = options or ImportOptions()
     song = read_song(midi, options)
     scene = get_int(raw, constants.ITEM_PROJECT, constants.P_CURRENT_SCENE) or 0

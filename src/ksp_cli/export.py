@@ -1,13 +1,4 @@
-"""``ksp2midi`` -- write a ``.KeyStepPro`` project out as MIDI.
-
-All the rendering lives in :mod:`ksp.midi_export`; this module handles
-arguments, paths and what gets printed.
-
-Warnings go to stderr and the summary to stdout, so a pipeline can take the
-summary while a human still sees what the export was unsure about. The file is
-written either way -- an undecodable gate length is a caveat, not a failure.
-Option behaviour is documented in ``README.md``.
-"""
+"""``ksp2midi`` -- write a ``.KeyStepPro`` project out as MIDI."""
 
 import enum
 from collections.abc import Sequence
@@ -65,8 +56,6 @@ def _summary(result: ExportResult, destination: Path, dry_run: bool, repeat: int
     patterns = ", ".join(str(n) for n in result.pattern_numbers)
     tracks = ", ".join(result.track_names)
     verb = "would write" if dry_run else "wrote"
-    # A count of one is what every export has always done, so saying it would
-    # be noise on the line every run prints.
     looped = f"\n  repeated {repeat} times end to end" if repeat != 1 else ""
     return (
         f"{verb} {destination}\n"
@@ -281,9 +270,8 @@ def export(
     ] = False,
     verbose: VerboseInPanel = False,
 ) -> None:
-    # Before the drum map, which is resolved against a file and the device's own settings: what
-    # the user typed is checked for shape first, and the Swift reads its arguments in this order
-    # too. Two commands cannot disagree about which of two bad flags to name.
+    # Before the drum map, and in this order in both cores: two commands cannot
+    # disagree about which of two bad flags to name.
     try:
         selected_tracks = parse_selection(tracks, option="--tracks", limit=len(TRACK_ITEM_IDS))
         selected_patterns = parse_selection(patterns, option="--patterns", limit=PATTERNS_PER_TRACK)
@@ -293,8 +281,7 @@ def export(
 
     drum_map = resolve_drum_map_or_fail(drum_map_spec, CONFIG_PATH, prog=PROG)
     if drum_map is None:
-        # ksp-dump can print "lane 0" and leave it unresolved; a MIDI file has
-        # no way to say that, so there is nothing sensible to write.
+        # ksp-dump can leave a lane unresolved; a MIDI file cannot say that.
         fail(
             "--drum-map none cannot be exported: a MIDI file has to name a note "
             "for every drum lane",

@@ -1,8 +1,4 @@
-"""``ksp-dump`` -- print the contents of a ``.KeyStepPro`` project.
-
-Inspect a project file without opening MIDI Control Center. Everything
-printed here is decoded by :mod:`ksp.reader`; this module only formats.
-"""
+"""``ksp-dump`` -- print the contents of a ``.KeyStepPro`` project."""
 
 import json
 from collections.abc import Iterator, Sequence
@@ -16,9 +12,7 @@ from ksp.diagnostics import Collector, Report
 from ksp.drum_map import DrumMap
 from ksp.model import Disablement, Note, NoteKind, Pattern, Project, Track, disablement
 
-# The --drum-map grammar is shared with ksp2midi so both commands accept the
-# same syntax and the same config file. CONFIG_PATH stays a name in this
-# module so tests can point it somewhere harmless.
+# CONFIG_PATH is re-exported so tests can point it somewhere harmless.
 from ksp_cli.drum_map_option import (
     CONFIG_PATH,
     DRUM_MAP_HELP,
@@ -35,18 +29,13 @@ PROG = "ksp-dump"
 __all__ = ["CONFIG_PATH", "format_project", "main", "parse_drum_map", "resolve_drum_map"]
 
 
-#: Widest gate the ladder prints, ``0.0625``. Fixed so the columns after gate
-#: stay aligned across a pattern.
+#: Widest gate the ladder prints, so the columns after it stay aligned.
 _GATE_WIDTH = 6
 
 
 def _format_gate(gate: float | None, raw: int) -> str:
     """Show the gate length in steps, or the raw value when it does not decode.
-
-    The ladder covers every legal value, so ``?`` now means the file holds a
-    gate outside 0-127. Printing the raw number beats printing the nearest
-    rung, which would look authoritative and be wrong.
-    """
+    ``?`` means the file holds a gate outside 0-127; the nearest rung would be a lie."""
     if gate is None:
         return f"?({raw})"
     return f"{gate:g}".rjust(_GATE_WIDTH)
@@ -72,7 +61,7 @@ def _disabled_marker(note: Note, last_step: int | None) -> str:
 
 
 def _scale_line(pattern: Pattern) -> str:
-    """Root note and scale, both decoded by protocol T5.6."""
+    """Root note and scale, from parameters 107 and 108."""
     scale = pattern.scale_name or f"scale {pattern.scale} (off the device's list)"
     return f"      root {root_note_name(pattern.root_note)}   scale {scale}"
 
@@ -80,13 +69,10 @@ def _scale_line(pattern: Pattern) -> str:
 def _pattern_lines(pattern: Pattern, drum_map: DrumMap | None, *, verbose: bool) -> Iterator[str]:
     yield f"    Pattern {pattern.number:<2} [{pattern.mode.value}]"
     if pattern.root_note or pattern.scale:
-        # Only when set: every sample project reads C chromatic, and a line
-        # printed on all 16 patterns of all 4 tracks would be noise.
         yield _scale_line(pattern)
 
-    # A pattern's melodic and drum sets each have their own step count and
-    # swing, so each is printed against the notes it governs rather than as a
-    # single pair of numbers whose owner would be ambiguous.
+    # Each parameter set has its own step count and swing, so each is printed
+    # against the notes it governs.
     for kind in (NoteKind.SEQ, NoteKind.DRUM):
         notes = pattern.notes_of(kind)
         if not notes:
@@ -94,9 +80,8 @@ def _pattern_lines(pattern: Pattern, drum_map: DrumMap | None, *, verbose: bool)
         if kind is NoteKind.DRUM:
             steps, swing = pattern.drum_step_count, pattern.drum_swing_percent
             if drum_map is not None:
-                # Said next to the notes it governs, and said every time,
-                # because a resolved drum note is an assumption about the
-                # user's device rather than anything read from their file.
+                # Said every time: a resolved drum note is an assumption about
+                # the user's device, not something read from their file.
                 yield f"      drum map: {drum_map.describe()}"
         else:
             steps, swing = pattern.seq_step_count, pattern.seq_swing_percent
@@ -117,13 +102,9 @@ def _pattern_lines(pattern: Pattern, drum_map: DrumMap | None, *, verbose: bool)
                     f"vel {note.velocity:>3}  gate {_format_gate(note.gate, note.gate_raw)}  "
                     f"shift {shift}  rand {note.randomness:>3}  "
                     f"seq {_format_skip(note.skip)}"
-                    # Only ever marked when the note will not play: that is
-                    # the surprise, an audible note is the norm.
                     f"{_disabled_marker(note, steps)}"
                 )
     if verbose:
-        # Inline, next to the notes they are about. Collapsed they would lose
-        # the one thing a tree dump is for: where the problem is.
         for warning in pattern.warnings:
             yield f"      ! {warning}"
 
@@ -164,8 +145,6 @@ def format_project(
         f"  tempo {project.tempo_bpm:g} BPM   swing {project.global_swing_percent}%   "
         f"scene {project.current_scene}",
     ]
-    # Only scenes that chain something: a project nobody has chained holds the
-    # sentinel in all 16 slots of all 5 tracks of all 16 scenes.
     for scene in project.chained_scenes:
         for chain in scene.chains:
             patterns = " -> ".join(str(p) for p in chain.patterns)
@@ -184,9 +163,8 @@ def format_project(
     lines.extend(body)
 
     if not verbose:
-        # One block at the end rather than a line beside every pattern: the
-        # notes are what the dump is for, and the same finding recurs in a
-        # dozen patterns.
+        # One block at the end rather than a line beside every pattern: the same
+        # finding recurs in a dozen of them.
         report = project_report(project)
         if report:
             lines.append("")

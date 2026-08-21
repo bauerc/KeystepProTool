@@ -1,16 +1,4 @@
-"""Decoding a flat ``.KeyStepPro`` dict into the object model.
-
-The difficulty is in one place: within a single ``(track, pattern, slot)`` the
-trailing index is a physical step for 48/49 but a note ordinal for 50/54 and
-109-113 / 117-121. The device stores an event list plus a separate per-step
-activity array, not a step grid, and reading it with a single index space
-produces values that look almost right (spec section 4).
-
-The two parameter sets are scanned by **different rules**, which is not a typo:
-melodic stops at the first ``127``, drum skips past it, because the drum array
-is a pool whose sentinel marks an empty *entry* rather than the end of the list
-(spec section 4).
-"""
+"""Decoding a flat ``.KeyStepPro`` dict into the object model."""
 
 from collections.abc import Sequence
 from dataclasses import replace
@@ -51,9 +39,6 @@ def read_project(raw: dict[str, Any], source_name: str = "") -> Project:
 
     version = raw.get("version")
     if version is None:
-        # The factory Default.KeyStepPro omits it; user saves carry it. Worth
-        # surfacing because M5 has to inject it when using the factory file as
-        # a template.
         collector.add(
             Code.NO_VERSION_KEY,
             "no 'version' key (factory template rather than a saved project)",
@@ -88,11 +73,7 @@ def _scalar(raw: dict[str, Any], item: int, param: int, *indices: int, default: 
 
 
 def _read_tempo(raw: dict[str, Any]) -> float:
-    """Reassemble the project tempo from its three 7-bit chunks.
-
-    Little-endian, holding BPM x 100. Verified against both saved projects:
-    96 + 93*128 = 12000 -> 120.00, and 16 + 103*128 = 13200 -> 132.00.
-    """
+    """Reassemble the project tempo from its three 7-bit chunks."""
     lsb = _scalar(raw, constants.ITEM_PROJECT, constants.P_TEMPO_LSB, default=0)
     midsb = _scalar(raw, constants.ITEM_PROJECT, constants.P_TEMPO_MIDSB, default=0)
     msb = _scalar(raw, constants.ITEM_PROJECT, constants.P_TEMPO_MSB, default=0)
@@ -102,12 +83,7 @@ def _read_tempo(raw: dict[str, Any]) -> float:
 
 def _read_scenes(raw: dict[str, Any], collector: Collector) -> tuple[Scene, ...]:
     """Decode each scene's pattern chains from parameter 84.
-
-    Chains are contiguous and sentinel-terminated: capture T5-chain-3 stores
-    0, 1, 2 and leaves the remaining 13 slots at 127. A value *after* a
-    sentinel is not something the device produces, so it is reported rather
-    than absorbed into the chain.
-    """
+    Chains are contiguous and sentinel-terminated; a value after a sentinel is reported."""
     scenes = []
     for scene in range(1, constants.SCENE_COUNT + 1):
         chains = []
@@ -146,12 +122,7 @@ def _read_track(raw: dict[str, Any], number: int, item_id: int) -> Track:
 
 def _read_drum_mode(raw: dict[str, Any], item_id: int) -> bool:
     """Whether this track is in DRUM mode, from parameter 86 bit 6.
-
-    Only Track 1 has a drum parameter set, so the bit is only meaningful
-    there; MCC names the field "Arp/Drum mode state : bit 6", which on tracks
-    2-4 presumably means ARP. Reported as False for those rather than
-    pretending it says something about drums.
-    """
+    Only Track 1 has a drum parameter set, so tracks 2-4 always report False."""
     if item_id != constants.DRUM_TRACK_ITEM_ID:
         return False
     bits = _scalar(raw, item_id, constants.P_TRACK_MODE_BITS, default=0)
@@ -162,13 +133,7 @@ def _read_pattern(
     raw: dict[str, Any], item_id: int, pattern: int, *, drum_mode: bool = False
 ) -> Pattern:
     """Decode one pattern from whichever parameter set(s) hold notes.
-
-    Track 1 carries a melodic and a drum set side by side and plays one or the
-    other; *drum_mode* is parameter 86 bit 6, not the 100 bitfield documented
-    for it (spec section 5). Content alone is not decisive -- a pattern can
-    hold real notes in both sets -- so the mode picks which the device plays
-    while every note is still reported and the leftover set warned about.
-    """
+    *drum_mode* is parameter 86 bit 6, not the 100 bitfield documented for it (spec 5)."""
     collector = Collector()
     site = Site(pattern=pattern)
 
@@ -183,8 +148,6 @@ def _read_pattern(
     collector.extend(drum_diagnostics)
 
     if seq_notes and drum_notes:
-        # Both sets hold notes, so the mode flag decides. The other set is
-        # leftovers from before the track was switched over.
         mode = PatternMode.DRUM if drum_mode else PatternMode.SEQ
         stale, live = (
             (f"melodic ({len(seq_notes)})", f"drum ({len(drum_notes)})")
@@ -277,10 +240,7 @@ def _pattern_bits(
     kind: str = "seq",
 ) -> PatternBits:
     """Decode 99 or 116 -- step size, triplet, polyrhythm and direction.
-
-    Both fields share a layout (spec 3.3, protocol tier 5), so the only thing
-    the caller varies is which parameter to read.
-    """
+    Both fields share a layout (spec 3.3), so the caller varies only the parameter."""
     bits = PatternBits.decode(_scalar(raw, item_id, param, pattern, default=0))
     if bits.unallocated:
         collector.add(
@@ -298,11 +258,7 @@ def _step_count(raw: dict[str, Any], item_id: int, param: int, pattern: int) -> 
 
 
 def _swing(raw: dict[str, Any], item_id: int, param: int, pattern: int) -> int:
-    """Swing is stored with a +25 offset: 25 means 50%, i.e. no swing.
-
-    MCC labels 97/114 a signed -25%..+25% offset; the device displays an
-    absolute 50-75%, so the label is wrong and this reading is right.
-    """
+    """Swing is stored with a +25 offset: 25 means 50%, i.e. no swing."""
     return (
         _scalar(raw, item_id, param, pattern, default=constants.SWING_OFFSET)
         + constants.SWING_OFFSET
@@ -312,11 +268,7 @@ def _swing(raw: dict[str, Any], item_id: int, param: int, pattern: int) -> int:
 def _read_note_lists(
     raw: dict[str, Any], item_id: int, pattern: int, *, kind: NoteKind
 ) -> tuple[tuple[Note, ...], list[Diagnostic]]:
-    """Decode every pool chunk of one pattern for one parameter set.
-
-    The step-active flags are pattern-wide, so they are decoded once here and
-    handed to each chunk rather than re-read per chunk or per note.
-    """
+    """Decode every pool chunk of one pattern for one parameter set."""
     active = _read_step_active(raw, item_id, pattern, kind=kind)
 
     notes: list[Note] = []
@@ -336,24 +288,15 @@ def _read_step_active(
     raw: dict[str, Any], item_id: int, pattern: int, *, kind: NoteKind
 ) -> frozenset[Any]:
     """Decode which steps the device will actually play, 0-based.
-
-    Melodic (``48``) is one entry per step and lives wholly in chunk 1, so the
-    result is a set of steps. Drum (``52``) is per lane, so the result is a set
-    of ``(lane, step)`` pairs -- see ``constants.drum_step_active_indices`` for
-    the packing.
-    """
+    Melodic (``48``) yields steps; drum (``52``) yields ``(lane, step)`` pairs."""
     if kind is NoteKind.SEQ:
-        # Chunk 1 is the whole array, not just where the flags happen to be:
-        # one entry per step and at most 64 steps fills it exactly, so a pool
-        # spilling into chunks 2-3 leaves these behind (capture T4.6).
+        # Chunk 1 is the whole array: one entry per step fills it exactly, so a
+        # pool spilling into chunks 2-3 leaves these flags behind.
         flags = read_array(
             raw, item_id, constants.P_SEQ_STEP_ACTIVE, pattern, 1, length=constants.MAX_STEPS
         )
         return frozenset(step for step, value in enumerate(flags) if value == 1)
 
-    # Read the flat array once and unpack, rather than locating each bit
-    # individually -- the same 256 entries back every one of the 24 x 64
-    # lane/step questions.
     flat: list[int | None] = []
     for chunk in range(1, constants.SLOTS_BY_ITEM[item_id] + 1):
         flat.extend(
@@ -416,12 +359,8 @@ def _read_slot(
     gate = column(p_gate)
     shift = column(p_shift)
     random = column(p_random)
-    # Melodic step skip is step-indexed; the drum equivalent is note-indexed.
-    # This asymmetry is not a typo -- it is what the files consistently show.
-    # Being step-indexed, the melodic array is one entry per step and so fills
-    # chunk 1 exactly, like 48: every sample file holds 15 across chunk 1 and 0
-    # across chunks 2-3. Reading it from the note's own chunk would report a
-    # pattern's 65th note as playing on no pass at all.
+    # Melodic step skip is step-indexed and lives wholly in chunk 1; the drum
+    # equivalent is note-indexed and per chunk. The asymmetry is not a typo.
     skip = (
         column(constants.P_DRUM_STEP_SKIP)
         if drum
@@ -437,13 +376,9 @@ def _read_slot(
             break
         if step == constants.SENTINEL:
             if drum:
-                # The drum array is a pool with holes, not a compacted list:
-                # deleting a note empties its entry and leaves the ones after
-                # it where they are. Skip the hole and keep scanning, or the
-                # rest of the pattern is silently discarded.
+                # The drum array is a pool with holes, so a sentinel is an empty
+                # entry, not the end of the list. Melodic lists are compacted.
                 continue
-            # Melodic lists really are compacted, so the first sentinel ends
-            # the list and anything past it is stale from an earlier edit.
             trailing = [v for v in note_step[i + 1 :] if v is not None and v != constants.SENTINEL]
             if trailing:
                 diagnostics.append(
@@ -459,8 +394,6 @@ def _read_slot(
         skip_index = i if drum else step
         skip_mask = skip[skip_index]
         value = _required(pitch[i])
-        # For drums the flags are per lane, so the note's own value selects
-        # the row; melodic flags are a single per-step array.
         notes.append(
             Note(
                 kind=kind,
@@ -479,10 +412,6 @@ def _read_slot(
         )
 
     if drum:
-        # The device has 24 lanes (MCC's Drum Map defines Note 1..Note 24), so
-        # a lane outside 0-23 would mean parameter 117 is not the 0-based lane
-        # index we think it is. Worth saying loudly rather than mapping it to
-        # some note anyway.
         out_of_range = sorted({n.pitch for n in notes if n.pitch >= constants.DRUM_LANE_COUNT})
         if out_of_range:
             diagnostics.append(
@@ -500,12 +429,7 @@ def slot_is_initialised(
     note_step: Sequence[int | None], pitch: Sequence[int | None], velocity: Sequence[int | None]
 ) -> bool:
     """Distinguish a genuinely empty slot from an uninitialised one.
-
-    Track 1's slot 4 is zero-filled rather than sentinel-filled, so the ``!=
-    127`` existence rule alone decodes it as phantom notes (spec section 4).
-    The test is deliberately narrow -- note->step, pitch and velocity all
-    uniformly zero -- because a real note list cannot look like that.
-    """
+    Track 1's slot 4 is zero-filled, so the ``!= 127`` rule alone sees phantom notes (spec 4)."""
     return not (
         all(v == 0 for v in note_step)
         and all(v == 0 for v in pitch)
@@ -517,20 +441,12 @@ def _check_step_active(
     pattern: int, notes: list[Note], active: frozenset[Any], *, kind: NoteKind
 ) -> list[Diagnostic]:
     """Cross-check the note list against the step-active flags.
-
-    The device plays the flags, so a pooled note whose flag is clear is silent
-    (spec section 4). Every flagged step having a pooled note is an invariant
-    across all five samples, so a violation means the decode is wrong rather
-    than the file being damaged.
-    """
+    The device plays the flags, so a pooled note whose flag is clear is silent (spec 4)."""
     diagnostics: list[Diagnostic] = []
     site = Site(pattern=pattern, kind=kind.value)
 
-    # Drum flags are per lane, so compare (lane, step) pairs -- a union over
-    # lanes would hide a flag whose lane holds nothing.
+    # Drum flags are per lane, so compare (lane, step) pairs, never a union.
     if kind is NoteKind.SEQ:
-        # Hoisted, as in the drum branch: inside the condition it would be
-        # rebuilt for every flagged step.
         held_steps = {n.step for n in notes}
         orphaned = sorted(step + 1 for step in active if step + 1 not in held_steps)
     else:
@@ -563,13 +479,7 @@ def _check_step_active(
 
 
 def _required(value: int | None) -> int:
-    """Assert a note field is present.
-
-    A note exists only because its note->step entry was populated, so every
-    sibling parameter must be too. If one is missing the file is structurally
-    unlike anything we have seen and guessing a value would be worse than
-    stopping.
-    """
+    """Assert a note field is present; a populated note->step entry implies every sibling."""
     if value is None:
         raise ValueError("note parameter missing where the note list says a note exists")
     return value

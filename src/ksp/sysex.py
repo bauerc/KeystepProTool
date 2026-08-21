@@ -1,11 +1,4 @@
-"""The KeyStep Pro's SysEx read protocol, as frames.
-
-Pure encode and decode: no I/O, no transport, no pyusb. The layout was decoded
-from a 26,856-frame capture of MIDI Control Center performing Recall To -- see
-docs/superpowers/specs/2026-08-05-usb-sysex-project-read-design.md and spec
-section 7. Keeping this free of I/O is what lets the Swift port reuse it
-against CoreMIDI.
-"""
+"""The KeyStep Pro's SysEx read protocol as frames: pure encode and decode, no I/O (spec 7)."""
 
 from dataclasses import dataclass
 from typing import Final
@@ -20,40 +13,31 @@ CMD_READ_REPLY: Final = 0x0C
 CMD_ACK: Final = 0x1C
 
 #: Byte 7, following every command byte: the project slot the transfer names
-#: (spec 7.4). The ack is the only frame without one. Slot 1 is what every
-#: capture but the project 2 recall and the project 3 import carries.
+#: (spec 7.4). The ack is the only frame without one.
 DEFAULT_SLOT: Final = 1
 
-#: A SysEx data byte, so 0-127. Deliberately wider than the device's sixteen
-#: slots: H4.1 asks what it does with 0 and with 17, and the codec is not the
-#: place to refuse that question.
+#: A SysEx data byte, so 0-127 -- deliberately wider than the device's sixteen
+#: slots, because the codec is not the place to refuse an out-of-range one.
 MAX_SLOT: Final = 0x7F
 
-#: H1.6 measured the ceiling on a long read's count. Above it the device clamps
-#: and echoes the count it honoured rather than the one asked for, so an
-#: over-long request comes back looking like a reply to a different question --
-#: refuse it here instead. MCC never sends above 16. See spec section 7.7.
+#: The ceiling on a long read's count. Above it the device clamps and echoes the
+#: count it honoured, so the reply reads as an answer to a different question (spec 7.7).
 MAX_READ_COUNT: Final = 100
 
 #: The one frame with no slot in byte 7; its 0x00 is a constant (spec 7.4).
 ACK: Final = HEADER + bytes((CMD_ACK, 0x00, END))
 
-#: MCC sends this once before the first read and the device never answers it.
-#: H1.4 read a cold device without it and got the same value, so it is MCC's
-#: habit and not a handshake: a reader need not send it. Kept because it is
-#: part of the recorded exchange and H1.4 is re-run against it.
+#: Sent once before the first read and never answered. It selects the project
+#: slot the transfer returns; it is not a handshake.
 CMD_PROLOGUE: Final = 0x05
 
-#: Universal (non-Arturia) identity envelope. Not a handshake either -- H1.4
-#: read fine without it -- but nothing in the read protocol carries the
-#: firmware version, so a byte-identical file still needs this request.
+#: Universal (non-Arturia) identity envelope. Not a handshake, but the only
+#: place the firmware version comes from.
 IDENTITY_REQUEST: Final = bytes((0xF0, 0x7E, 0x7F, 0x06, 0x01, END))
 _IDENTITY_PREFIX: Final = bytes((0xF0, 0x7E, 0x7F, 0x06, 0x02, 0x00, 0x20, 0x6B))
 
-#: The device's "pattern default pitch unset" sentinel. It is a MIDI System
-#: Reset byte, so no conformant host parser passes it through inside a SysEx:
-#: MCC loses it and stores the terminator sitting at that offset instead, which
-#: is why 247 is the only value above 127 in any project file.
+#: The device's "pattern default pitch unset" sentinel. It is a MIDI System Reset
+#: byte, which is why MCC stores 247 instead -- the only value above 127 in a file.
 UNSET: Final = 0xFF
 UNSET_IN_FILE: Final = 247
 
@@ -104,13 +88,8 @@ def long_write(
 
 
 def build_read_request(request: ReadRequest, slot: int = DEFAULT_SLOT) -> bytes:
-    """One request frame, addressed at ``slot``.
-
-    The slot rides beside the request rather than inside it: ``bulk_plan`` is
-    generated from Arturia's descriptor, which names addresses and not projects,
-    and keeping the two apart is what lets ``parse_reply`` compare what came back
-    against what was asked for without the slot getting in the way.
-    """
+    """One request frame, addressed at ``slot``. The slot rides beside the request
+    so ``parse_reply`` can compare reply against request without it in the way."""
     _check_slot(slot)
     body: tuple[int, ...]
     if request.count is None:
@@ -176,10 +155,7 @@ def parse_reply(frame: bytes) -> tuple[ReadRequest, tuple[int, ...]]:
 
 def parse_identity(frame: bytes) -> str:
     """The firmware version out of a universal identity reply.
-
-    Arturia's version field is four bytes and runs backwards: the observed
-    ``25 14 05 02`` is build 0x25 then 20.5.2 reversed, i.e. 2.5.20.
-    """
+    Arturia's four-byte field runs backwards: ``25 14 05 02`` is build 0x25 then 2.5.20."""
     if not frame.startswith(_IDENTITY_PREFIX) or frame[-1:] != bytes((END,)):
         raise ValueError("not a KeyStep Pro identity reply")
     if len(frame) != 17:
