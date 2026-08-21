@@ -343,6 +343,7 @@ it appears in the Project Browser ready to send to the device.
 | `--pattern N` | First pattern 1–16 to write to (default 1). Every target must be empty |
 | `--template PATH` | Project to write into (default: MCC's factory default) |
 | `--midi-track N` | Convert only track N of the source, into the one `--track`/`--pattern` names |
+| `--route SPEC` | Send named source tracks to named device tracks: `source:device` pairs, comma-separated (`3:1,1:2`). Tracks no pair names fill whatever is left |
 | `--drum-track N` | Write source track N as drums, onto KeyStep Pro track 1 |
 | `--drum-map SPEC` | `chromatic:N` or `custom:a,b,c,…` (default: fitted to the source) |
 | `--steps-per-beat N` | Step size to quantise to (default 4, i.e. 1/16 steps). Written into the pattern |
@@ -369,7 +370,19 @@ interleave two takes.
   at bar 3, in a later pattern of its track if that is where bar 3 falls.
 - **Tracks map in file order.** The drum track takes KeyStep Pro track 1, because item 123 is the
   only one carrying a drum parameter set; the rest fill the tracks after it. A fifth is reported
-  and dropped.
+  and dropped. `--route` replaces that rule for the tracks it names — `--route 3:1,1:2` puts source
+  track 3 on device track 1 and source track 1 on device track 2, and whatever is left still fills
+  the tracks no pair claimed. Both sides count from 1 over **every** track of the file, including
+  ones carrying only tempo or a name. Only device track 1 carries a drum set, so a `--drum-track`
+  may only be routed there and nothing else may be routed onto it; contradictions are refused
+  rather than resolved. When a route is given the summary names each track's source, so what was
+  applied is visible:
+
+  ```
+  wrote my_song.KeyStepPro
+    track 1 [drum, source 4]: 64 note(s), pattern 1 (64 steps)
+    track 2 [source 3]: 160 note(s), pattern 1 (48 steps)
+  ```
 - **A source track holding several channels becomes one device track each.** A type 0 file — one
   track, everything on it — tells its instruments apart by channel and nothing else, so merging
   them would put a whole arrangement on one track with the percussion in it as melodic pitches.

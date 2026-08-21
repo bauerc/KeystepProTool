@@ -80,7 +80,7 @@ public struct ImportOptions: Sendable, Hashable {
                 throw KSPError.value("\(name) counts from 1")
             }
         }
-        try ImportOptions.checkRoutes(routes, drumTrack: drumTrack)
+        try ImportOptions.checkRoutes(routes, drumTrack: drumTrack, midiTrack: midiTrack)
         self.stepsPerBeat = stepsPerBeat
         self.midiTrack = midiTrack
         self.drumTrack = drumTrack
@@ -92,7 +92,17 @@ public struct ImportOptions: Sendable, Hashable {
     }
 
     /// The faults a route has without knowing the song: range and clashes.
-    private static func checkRoutes(_ routes: [TrackRoute], drumTrack: Int?) throws {
+    private static func checkRoutes(
+        _ routes: [TrackRoute], drumTrack: Int?, midiTrack: Int?
+    ) throws {
+        if !routes.isEmpty && midiTrack != nil {
+            // Reading one track goes straight to quantise and never reaches assign, so a route
+            // here would be silently ignored.
+            throw KSPError.value(
+                "routes and midi_track contradict each other; midi_track converts a single "
+                    + "source track into the one pattern the target names, leaving a route "
+                    + "nothing to place")
+        }
         let tracks = Constants.trackItemIDs.count
         var sources: Set<Int> = []
         var devices: [Int: TrackRoute] = [:]
@@ -1014,8 +1024,8 @@ extension MIDIImport {
             collector.add(
                 .trackSplitByChannel,
                 "source track(s) \(listed(multi.keys.sorted())) carry more than one channel; each "
-                    + "channel became a device track of its own rather than being merged into one "
-                    + "part",
+                    + "channel became a device track of its own, unless --drum-track or --route "
+                    + "named the track, which puts it back together as one part",
                 subjects: multi.values.reduce(0, +))
         }
         if song.controllersDropped > 0 {

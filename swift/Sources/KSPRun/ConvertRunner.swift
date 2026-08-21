@@ -13,6 +13,7 @@ public enum ConvertRunner {
         public var track: Int
         public var pattern: Int
         public var drumTrack: Int?
+        public var routeSpec: String?
         public var drumMapSpec: String?
         public var carryTempo: Bool
         public var fitSwing: Bool
@@ -31,6 +32,7 @@ public enum ConvertRunner {
         // only: repeating them on the properties would leave a second copy that never runs.
         public init(
             path: URL, output: URL? = nil, track: Int = 1, pattern: Int = 1, drumTrack: Int? = nil,
+            routeSpec: String? = nil,
             drumMapSpec: String? = nil, carryTempo: Bool = true, fitSwing: Bool = true,
             fitTimeShift: Bool = true, template: URL? = nil, midiTrack: Int? = nil,
             stepsPerBeat: Int = Constants.defaultStepsPerBeat, dryRun: Bool = false,
@@ -41,6 +43,7 @@ public enum ConvertRunner {
             self.track = track
             self.pattern = pattern
             self.drumTrack = drumTrack
+            self.routeSpec = routeSpec
             self.drumMapSpec = drumMapSpec
             self.carryTempo = carryTempo
             self.fitSwing = fitSwing
@@ -79,7 +82,7 @@ public enum ConvertRunner {
                 drumMap: try resolveImportDrumMap(
                     options.drumMapSpec, configPath: options.configPath),
                 carryTempo: options.carryTempo, fitSwing: options.fitSwing,
-                fitTimeShift: options.fitTimeShift)
+                fitTimeShift: options.fitTimeShift, routes: try parseRoutes(options.routeSpec))
         } catch {
             return fail("\(error)", code: 2)
         }
@@ -154,20 +157,44 @@ public enum ConvertRunner {
             stderr: reported(result.diagnostics, verbose: options.verbose, prog: prog),
             diagnostics: result.diagnostics, destinations: [destination])
         if !options.quiet {
-            output.stdout = summary(result, destination: destination, dryRun: options.dryRun)
+            output.stdout = summary(
+                result, destination: destination, dryRun: options.dryRun,
+                showSources: options.routeSpec != nil)
         }
         return output
     }
 
-    static func summary(_ result: ImportResult, destination: URL, dryRun: Bool) -> String {
+    /// Where a track came from, named only when a route was given.
+    ///
+    /// An unrouted run says what it has always said. A clip merged from several source tracks has
+    /// no one source, so it gets no mark rather than a wrong one.
+    static func source(_ plan: TrackPlan, _ showSources: Bool) -> String {
+        guard showSources, let source = plan.sourceTrack else { return "" }
+        return "source \(source)"
+    }
+
+    /// The bracket after a track number in the per-track shape: kind, then source.
+    static func marks(_ plan: TrackPlan, _ showSources: Bool) -> String {
+        var marks = plan.isDrum ? ["drum"] : []
+        let source = source(plan, showSources)
+        if !source.isEmpty { marks.append(source) }
+        return marks.isEmpty ? "" : " [\(marks.joined(separator: ", "))]"
+    }
+
+    static func summary(
+        _ result: ImportResult, destination: URL, dryRun: Bool, showSources: Bool = false
+    ) -> String {
         let verb = dryRun ? "would write" : "wrote"
         var lines = ["\(verb) \(destination.relativePath)"]
 
         let tracks = result.plan.tracks
         if tracks.count == 1 && tracks[0].placements.count == 1 {
-            // The single-target shape, said the way it has always been said.
+            // The single-target shape, said the way it has always been said. It has never carried
+            // a [drum] mark, so only a route adds anything here.
+            let source = source(tracks[0], showSources)
+            let bracket = source.isEmpty ? "" : " [\(source)]"
             lines.append(
-                "  \(result.noteCount) note(s) onto track \(result.track), "
+                "  \(result.noteCount) note(s) onto track \(result.track)\(bracket), "
                     + "pattern \(result.pattern) (\(result.stepCount) steps)")
             return lines.joined(separator: "\n")
         }
@@ -179,10 +206,9 @@ public enum ConvertRunner {
                 ? "pattern \(patterns[0])"
                 : "patterns \(patterns[0])-\(patterns[patterns.count - 1])"
             let steps = plan.placements.map { String($0.stepCount) }.joined(separator: ", ")
-            let kind = plan.isDrum ? " [drum]" : ""
             lines.append(
-                "  track \(plan.track)\(kind): \(plan.notes.count) note(s), \(location) "
-                    + "(\(steps) steps)")
+                "  track \(plan.track)\(marks(plan, showSources)): \(plan.notes.count) note(s), "
+                    + "\(location) (\(steps) steps)")
         }
         return lines.joined(separator: "\n")
     }

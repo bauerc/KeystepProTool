@@ -112,6 +112,14 @@ class ImportOptions:
 
     def _check_routes(self) -> None:
         """The faults a route has without knowing the song: range and clashes."""
+        if self.routes and self.midi_track is not None:
+            # Reading one track goes straight to quantise and never reaches
+            # _assign, so a route here would be silently ignored.
+            raise ValueError(
+                "routes and midi_track contradict each other; midi_track converts a single "
+                "source track into the one pattern the target names, leaving a route nothing "
+                "to place"
+            )
         tracks = len(constants.TRACK_ITEM_IDS)
         sources: set[int] = set()
         devices: dict[int, TrackRoute] = {}
@@ -1004,7 +1012,8 @@ def plan_song(
         collector.add(
             Code.TRACK_SPLIT_BY_CHANNEL,
             f"source track(s) {_listed(sorted(multi))} carry more than one channel; each channel "
-            "became a device track of its own rather than being merged into one part",
+            "became a device track of its own, unless --drum-track or --route named the track, "
+            "which puts it back together as one part",
             subjects=sum(multi.values()),
         )
     if song.controllers_dropped:

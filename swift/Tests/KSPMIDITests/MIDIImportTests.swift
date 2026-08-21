@@ -1070,6 +1070,15 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(plan.tracks.map { [$0.track, $0.sourceTrack] } == [[1, 1], [3, 2]])
     }
 
+    /// Reading one track goes straight to quantise, so a route never places it.
+    @Test func aRouteWithMidiTrackIsRefused() {
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try ImportOptions(midiTrack: 1, routes: [TrackRoute(source: 1, device: 2)])
+        }
+        #expect(
+            thrown?.description.contains("routes and midi_track contradict each other") == true)
+    }
+
     @Test func twoSourcesOnOneDeviceTrackAreRefused() {
         let thrown = #expect(throws: KSPError.self) {
             _ = try ImportOptions(

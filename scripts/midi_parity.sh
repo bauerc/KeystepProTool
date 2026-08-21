@@ -233,6 +233,16 @@ if has convert; then
         add import "$(basename "$clip") --steps-per-beat 8" "$clip" --steps-per-beat 8
         add import "$(basename "$clip") --drum-track 1" "$clip" --drum-track 1
         add import "$(basename "$clip") --midi-track 1" "$clip" --midi-track 1
+        # An explicit route, and the refusals around it. A shared refusal worded the same way is
+        # agreement, so the exit-2 paths are as much of a case as the conversions. A clip with
+        # too few tracks refuses some of these rather than converting, which is coverage too.
+        add import "$(basename "$clip") --route 1:2" "$clip" --route 1:2
+        add import "$(basename "$clip") --route 3:1,4:2" "$clip" --route 3:1,4:2
+        add import "$(basename "$clip") --route bad" "$clip" --route bad
+        add import "$(basename "$clip") --route 1:9" "$clip" --route 1:9
+        add import "$(basename "$clip") --route 1:2,3:2" "$clip" --route 1:2,3:2
+        add import "$(basename "$clip") --route=-1:2" "$clip" --route=-1:2
+        add import "$(basename "$clip") --midi-track 1 --route 1:2" "$clip" --midi-track 1 --route 1:2
     done
 else
     echo "midi_parity: ksp-swift-cli has no 'convert' yet -- skipping the midi2ksp direction"

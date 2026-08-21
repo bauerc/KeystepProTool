@@ -1075,6 +1075,12 @@ def test_a_route_is_honoured_below_the_starting_track(load_sample: Loader) -> No
     assert [(track.track, track.source_track) for track in plan.tracks] == [(1, 1), (3, 2)]
 
 
+def test_a_route_with_midi_track_is_refused() -> None:
+    """Reading one track goes straight to quantise, so a route never places it."""
+    with pytest.raises(ValueError, match=r"routes and midi_track contradict each other"):
+        ImportOptions(midi_track=1, routes=(TrackRoute(1, 2),))
+
+
 def test_two_sources_on_one_device_track_are_refused() -> None:
     with pytest.raises(ValueError, match=r"routes 1:2 and 3:2 both name device track 2"):
         ImportOptions(routes=(TrackRoute(1, 2), TrackRoute(3, 2)))

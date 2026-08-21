@@ -257,8 +257,8 @@ SUMMARIES: Mapping[Code, Summary] = {
         "{subjects} fall outside the 24 lanes the drum map covers and were dropped",
     ),
     Code.TRACK_SPLIT_BY_CHANNEL: Summary(
-        "{subjects} shared one source track and each became a device track of its own; a type 0 "
-        "file tells its instruments apart by channel and nothing else",
+        "{subjects} shared one source track; a type 0 file tells its instruments apart by "
+        "channel and nothing else",
         subject="channel",
     ),
     Code.CONTROLLERS_DROPPED: Summary(
