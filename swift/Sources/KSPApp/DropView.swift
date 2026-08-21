@@ -1,5 +1,6 @@
 import AppKit
 import KSPKit
+import KSPMIDI
 import KSPRun
 import SwiftUI
 
@@ -100,6 +101,8 @@ struct DropView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 }
 
+                replacements
+
                 Divider()
 
                 Text("Options").font(.headline)
@@ -122,6 +125,36 @@ struct DropView: View {
         }
         .toggleStyle(.checkbox)
         .frame(width: AppLayout.sidebarWidth)
+    }
+
+    /// The export-only substitutions, each naming the value it puts in place. Swing here is the
+    /// export's sense of the word: flattening the grid, not declining to fit one to a source.
+    private var replacements: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Replace with defaults").font(.subheadline)
+
+            replacement(
+                "Velocity", isOn: $model.settings.replaceVelocity,
+                note: "Every note and trigger at the fresh-note velocity, "
+                    + "\(MIDIExport.defaultFlatVelocity), not the one it stores.")
+            replacement(
+                "Swing", isOn: $model.settings.replaceSwing,
+                note: "Every step on a flat grid, not the delay the pattern's swing applies.")
+            replacement(
+                "Time Shift", isOn: $model.settings.replaceTimeShift,
+                note: "Every step on the grid, not the offset the note stores.")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// One substitution: the choice, and the value it substitutes. Each changes the notes written,
+    /// so each discards a preview taken before it was made.
+    private func replacement(_ title: String, isOn: Binding<Bool>, note: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(title, isOn: isOn)
+                .onChange(of: isOn.wrappedValue) { model.discardPreview() }
+            Text(note).font(.caption).foregroundStyle(.secondary)
+        }
     }
 
     /// One kind of file: where it lands today, the way to change that, and the way back. The two
@@ -225,6 +258,12 @@ struct DropView: View {
                     // Said as it is ticked, and said once -- the dry run below carries it too.
                     if let excluded = staged.selection.exclusionNote {
                         Text(excluded).font(.caption).foregroundStyle(.secondary)
+                    }
+
+                    // Only on the way out: these three mean something else on an import, so a
+                    // dropped `.mid` must not be told the export's version of them.
+                    if staged.job.writesMIDI, let replaced = model.settings.replacementNote {
+                        Text(replaced).font(.caption).foregroundStyle(.secondary)
                     }
 
                     if let preview = staged.preview {

@@ -1,4 +1,5 @@
 import Foundation
+import KSPMIDI
 import KSPRun
 
 /// What the options sidebar holds, and how it reaches the runners. No SwiftUI, so it unit-tests.
@@ -43,6 +44,24 @@ struct Settings: Sendable, Equatable {
     /// what the app has always done, and what the CLI does without `--split`.
     var splitPerPattern = false
 
+    /// Export every event at the measured fresh-note velocity instead of the one it stores.
+    var replaceVelocity = false
+    /// Place every step on a flat grid instead of applying the Pattern's swing. Export-only, and in
+    /// the export's sense: on an import, swing means fitting the source's groove instead.
+    var replaceSwing = false
+    /// Place every step on the grid instead of applying the offset each Note stores.
+    var replaceTimeShift = false
+
+    /// What the staged view says is being replaced, shaped like ``GridSelection/exclusionNote``
+    /// beside it. Nil when nothing is, so the line is drawn only once there is something to say.
+    var replacementNote: String? {
+        var parts: [String] = []
+        if replaceVelocity { parts.append("velocity with \(MIDIExport.defaultFlatVelocity)") }
+        if replaceSwing { parts.append("swing with a flat grid") }
+        if replaceTimeShift { parts.append("time shift with a flat grid") }
+        return parts.isEmpty ? nil : "Replacing: " + parts.joined(separator: " · ")
+    }
+
     /// This, carrying what the grid ticked. `ConvertRunner`'s `track`/`pattern` are routing, not
     /// selection, so the import mapping is untouched.
     func selecting(_ selection: GridSelection) -> Settings {
@@ -64,9 +83,13 @@ struct Settings: Sendable, Equatable {
     func exportOptions(source: URL, output: URL) -> ExportRunner.Options {
         // Splitting makes `output` the folder the runner fills, which is what `Conversion.plan`
         // hands over: the runner names the files itself, after the source and each slot it found.
+        // The three replacements are the runner's own defaults inverted, so all three off asks for
+        // what an unset `Options` already carries.
         ExportRunner.Options(
             path: source, output: output, split: splitPerPattern, cells: cells,
-            passes: stepSkip.passes, repeatCount: repeatCount, dryRun: dryRun, verbose: verbose,
-            configPath: drumMapConfigPath)
+            passes: stepSkip.passes, repeatCount: repeatCount,
+            flatVelocity: replaceVelocity ? MIDIExport.defaultFlatVelocity : nil,
+            applySwing: !replaceSwing, applyTimeShift: !replaceTimeShift, dryRun: dryRun,
+            verbose: verbose, configPath: drumMapConfigPath)
     }
 }

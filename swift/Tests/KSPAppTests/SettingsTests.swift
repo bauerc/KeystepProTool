@@ -108,8 +108,6 @@ import Testing
         #expect(mapped.defaultGate == defaults.defaultGate)
         #expect(mapped.includeStale == defaults.includeStale)
         #expect(mapped.includeDisabled == defaults.includeDisabled)
-        #expect(mapped.applySwing == defaults.applySwing)
-        #expect(mapped.applyTimeShift == defaults.applyTimeShift)
     }
 
     /// A fresh window sits on auto, so the app on defaults exports what the CLI on defaults exports.
@@ -193,5 +191,98 @@ import Testing
 
         #expect(mapped.track == defaults.track)
         #expect(mapped.pattern == defaults.pattern)
+    }
+
+    /// Nothing is replaced until it is asked for, so the app on defaults exports what the CLI on
+    /// defaults exports.
+    @Test func freshSettingsReplaceNothing() {
+        let settings = Settings()
+        #expect(!settings.replaceVelocity)
+        #expect(!settings.replaceSwing)
+        #expect(!settings.replaceTimeShift)
+
+        let mapped = settings.exportOptions(source: output, output: source)
+        let defaults = ExportRunner.Options(
+            path: output, output: source, configPath: mapped.configPath)
+
+        #expect(mapped.flatVelocity == defaults.flatVelocity)
+        #expect(mapped.applySwing == defaults.applySwing)
+        #expect(mapped.applyTimeShift == defaults.applyTimeShift)
+    }
+
+    /// The measured fresh-note velocity, not a number the window invented -- and it moves nothing
+    /// else, which is what replacing one of the three independently means.
+    @Test func replacingVelocityRendersAtTheFreshNoteValue() {
+        var settings = Settings()
+        settings.replaceVelocity = true
+        let mapped = settings.exportOptions(source: output, output: source)
+
+        #expect(mapped.flatVelocity == MIDIExport.defaultFlatVelocity)
+        #expect(mapped.applySwing)
+        #expect(mapped.applyTimeShift)
+    }
+
+    /// On an export, swing is the delay the Pattern applies, so replacing it flattens the grid.
+    @Test func replacingSwingFlattensTheGridAlone() {
+        var settings = Settings()
+        settings.replaceSwing = true
+        let mapped = settings.exportOptions(source: output, output: source)
+
+        #expect(!mapped.applySwing)
+        #expect(mapped.applyTimeShift)
+        #expect(mapped.flatVelocity == nil)
+    }
+
+    @Test func replacingTimeShiftFlattensTheGridAlone() {
+        var settings = Settings()
+        settings.replaceTimeShift = true
+        let mapped = settings.exportOptions(source: output, output: source)
+
+        #expect(!mapped.applyTimeShift)
+        #expect(mapped.applySwing)
+        #expect(mapped.flatVelocity == nil)
+    }
+
+    /// The three mean something else on an import -- swing there is fitting the source's groove,
+    /// not flattening a grid -- so they must not reach `ConvertRunner` at all.
+    @Test func replacingOnAnExportLeavesTheImportAlone() {
+        let mapped = Settings(replaceVelocity: true, replaceSwing: true, replaceTimeShift: true)
+            .convertOptions(source: source, output: output)
+        let defaults = ConvertRunner.Options(
+            path: source, output: output, configPath: mapped.configPath)
+
+        #expect(mapped.fitSwing == defaults.fitSwing)
+        #expect(mapped.fitTimeShift == defaults.fitTimeShift)
+    }
+
+    /// Nothing replaced, nothing said: the staged view has no line to draw.
+    @Test func replacingNothingSaysNothing() {
+        #expect(Settings().replacementNote == nil)
+    }
+
+    /// Each choice names the value it substitutes rather than only saying it is off.
+    @Test func eachReplacementNamesItsSubstitute() {
+        var velocity = Settings()
+        velocity.replaceVelocity = true
+        #expect(
+            velocity.replacementNote == "Replacing: velocity with \(MIDIExport.defaultFlatVelocity)"
+        )
+
+        var swing = Settings()
+        swing.replaceSwing = true
+        #expect(swing.replacementNote == "Replacing: swing with a flat grid")
+
+        var timeShift = Settings()
+        timeShift.replaceTimeShift = true
+        #expect(timeShift.replacementNote == "Replacing: time shift with a flat grid")
+    }
+
+    /// All three read as one line, in the shape ``GridSelection/exclusionNote`` uses beside it.
+    @Test func allThreeReplacementsReadAsOneLine() {
+        let settings = Settings(replaceVelocity: true, replaceSwing: true, replaceTimeShift: true)
+        #expect(
+            settings.replacementNote
+                == "Replacing: velocity with \(MIDIExport.defaultFlatVelocity) · swing with a "
+                + "flat grid · time shift with a flat grid")
     }
 }
