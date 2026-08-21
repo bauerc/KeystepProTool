@@ -1,5 +1,6 @@
 import Foundation
 import KSPKit
+import KSPMIDI
 import KSPRun
 import Testing
 
@@ -132,6 +133,28 @@ import Testing
         #expect(
             Settings.StepSkip.allCases.compactMap(\.passes) == Array(1...Constants.skipCyclePasses))
         #expect(Settings.StepSkip.allCases.filter { $0.passes == nil } == [.auto])
+    }
+
+    /// A fresh window lays the export down once, so the app on defaults exports what the CLI on
+    /// defaults exports.
+    @Test func freshSettingsLayTheExportDownOnce() {
+        let settings = Settings()
+        #expect(settings.repeatCount == 1)
+        #expect(settings.exportOptions(source: output, output: source).repeatCount == 1)
+    }
+
+    /// Every count the stepper can reach has to reach the export.
+    @Test(arguments: Settings.repeatRange)
+    func everyRepeatCountReachesTheExport(count: Int) {
+        var settings = Settings()
+        settings.repeatCount = count
+        #expect(settings.exportOptions(source: output, output: source).repeatCount == count)
+    }
+
+    /// The stepper's cap is the export's own, not a number picked for the control: offering an
+    /// eleventh would put the window one click away from a value the runner rejects outright.
+    @Test func theStepperCannotOfferMoreThanTheExportAccepts() {
+        #expect(Settings.repeatRange == 1...MIDIExport.maxRepeat)
     }
 
     /// The ticks reach the export per track, which is what an individually chosen cell needs.

@@ -1,5 +1,6 @@
 import Foundation
 import KSPKit
+import KSPMIDI
 import KSPRun
 import Testing
 
@@ -364,6 +365,61 @@ import Testing
         let sites = outcome.findings(verbose: true).filter { $0.contains("16/32/48/64") }
         #expect(!sites.isEmpty)
         #expect(sites.allSatisfy { $0.contains(each) })
+    }
+
+    /// The count under the grid has to be the number of patterns the export really lays down, or
+    /// the window promises a length the file does not have. `renderProject` is the authority: it
+    /// plans nothing for a slot holding no notes, and `arrange` gives each pattern *number* one
+    /// stretch of timeline however many tracks play it.
+    @Test(arguments: ["project_5.KeyStepPro", "project_9.KeyStepPro", "initial_project.KeyStepPro"])
+    func thelengthCountsThePatternsTheExportLaysDown(name: String) throws {
+        let project = try Reader.load(contentsOf: RepoData.projectFiles.appending(path: name))
+        let summary = ProjectSummary(project)
+
+        let length = ExportLength(
+            summary, selection: GridSelection(summary), repeatCount: 1, isSplit: false)
+        let laid = Set(try MIDIExport.renderProject(project).map(\.patternNumber))
+
+        #expect(length.patterns == laid.count)
+    }
+
+    /// The split line claims "one pattern per file" flatly, so pin the claim against the splitter
+    /// rather than against its own wording: change the grouping key and this fails, not the prose.
+    @Test(arguments: ["project_5.KeyStepPro", "project_9.KeyStepPro"])
+    func asplitFileHoldsExactlyOnePattern(name: String) throws {
+        let project = try Reader.load(contentsOf: RepoData.projectFiles.appending(path: name))
+
+        let files = try MIDIExport.exportSplit(project)
+
+        #expect(!files.isEmpty)
+        #expect(files.allSatisfy { $0.patternNumbers.count == 1 })
+    }
+
+    /// The stepper has to reach the bytes, not just the summary line. How the rounds are laid out
+    /// is ``MIDIExportTests``' to check exactly; this only pins that the app carries the choice
+    /// down -- and that at 1 it still writes what it wrote before the stepper existed.
+    @Test func therepeatCountReachesTheFileThatIsWritten() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
+
+        func exported(_ settings: Settings, named name: String) async throws -> Data {
+            let plan = Conversion.plan(
+                .toMIDI(source), named: name, into: Destination(directory: directory, note: nil))
+            let outcome = await Conversion.run(plan, settings: settings)
+            #expect(!outcome.failed)
+            return try Data(contentsOf: try #require(outcome.written.first))
+        }
+
+        var thrice = Settings()
+        thrice.repeatCount = 3
+        var once = Settings()
+        once.repeatCount = 1
+
+        let byDefault = try await exported(Settings(), named: "default")
+
+        #expect(try await exported(once, named: "once") == byDefault)
+        #expect(try await exported(thrice, named: "thrice").count > byDefault.count)
     }
 
     /// Fabricated rather than run: nothing writes more than one file until split lands (#130), and
