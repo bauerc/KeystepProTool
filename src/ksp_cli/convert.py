@@ -66,7 +66,9 @@ def _source(plan: TrackPlan, show_sources: bool) -> str:
 def _marks(plan: TrackPlan, show_sources: bool) -> str:
     """The bracket after a track number in the per-track shape: kind, then source."""
     marks = ["drum"] if plan.is_drum else []
-    marks += [mark for mark in (_source(plan, show_sources),) if mark]
+    source = _source(plan, show_sources)
+    if source:
+        marks.append(source)
     return f" [{', '.join(marks)}]" if marks else ""
 
 

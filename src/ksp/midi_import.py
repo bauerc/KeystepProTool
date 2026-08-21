@@ -1012,8 +1012,8 @@ def plan_song(
         collector.add(
             Code.TRACK_SPLIT_BY_CHANNEL,
             f"source track(s) {_listed(sorted(multi))} carry more than one channel; each channel "
-            "became a device track of its own, unless --drum-track or --route named the track, "
-            "which puts it back together as one part",
+            "became a device track of its own, except where --drum-track or --route merged the "
+            "track back into one part",
             subjects=sum(multi.values()),
         )
     if song.controllers_dropped:

@@ -45,7 +45,19 @@ def test_a_malformed_pair_is_quoted_whole() -> None:
         parse_routes("1:2:3")
 
 
-@pytest.mark.parametrize("text", ["99999999999999999999:1", "1:99999999999999999999"])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "99999999999999999999:1",
+        "1:99999999999999999999",
+        # Int.min: Swift parses it and then traps on abs(), so it is refused by
+        # magnitude on that side rather than by absolute value.
+        "-9223372036854775808:1",
+        # Past 4300 digits ``int`` raises its own message about
+        # sys.set_int_max_str_digits, which is not what Swift's failed parse says.
+        "9" * 5000 + ":1",
+    ],
+)
 def test_a_number_too_large_to_be_a_track(text: str) -> None:
     # Python's ints are unbounded and Swift's are not, so an oversized numeral
     # is refused here rather than reaching a range message that would print it.

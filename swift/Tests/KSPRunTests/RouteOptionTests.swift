@@ -74,7 +74,15 @@ import Testing
         #expect(refusal("1_0:2") == "--route: '1_0:2' is not a source:device pair")
     }
 
-    @Test(arguments: ["99999999999999999999:1", "1:99999999999999999999"])
+    @Test(
+        arguments: [
+            "99999999999999999999:1", "1:99999999999999999999",
+            // Int.min parses, so it must be bounded by magnitude: `abs` would overflow and trap.
+            "-9223372036854775808:1",
+            // Past 4300 digits Python's `int` raises its own message about
+            // sys.set_int_max_str_digits, so it counts digits before converting.
+            String(repeating: "9", count: 5000) + ":1",
+        ])
     func aNumberTooLargeToBeATrack(text: String) {
         // Python's ints are unbounded and Swift's are not, so an oversized numeral is refused
         // here rather than reaching a range message that would print it.

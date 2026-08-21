@@ -57,7 +57,9 @@ private func number(_ text: some StringProtocol, item: String) throws -> Int {
     guard !digits.isEmpty, digits.allSatisfy({ $0.isASCII && $0.isNumber }) else {
         throw KSPError.value("--route: '\(item)' is not a source:device pair")
     }
-    guard let value = Int(body), abs(value) <= maxTrack else {
+    // `magnitude`, not `abs`: `abs(Int.min)` overflows and traps, so a pasted `Int.min` would
+    // crash the CLI on input Python refuses politely.
+    guard let value = Int(body), value.magnitude <= UInt(maxTrack) else {
         throw KSPError.value("--route: '\(item)' names a track number too large to be one")
     }
     return value

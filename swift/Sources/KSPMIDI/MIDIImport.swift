@@ -1024,8 +1024,8 @@ extension MIDIImport {
             collector.add(
                 .trackSplitByChannel,
                 "source track(s) \(listed(multi.keys.sorted())) carry more than one channel; each "
-                    + "channel became a device track of its own, unless --drum-track or --route "
-                    + "named the track, which puts it back together as one part",
+                    + "channel became a device track of its own, except where --drum-track or "
+                    + "--route merged the track back into one part",
                 subjects: multi.values.reduce(0, +))
         }
         if song.controllersDropped > 0 {

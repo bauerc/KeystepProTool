@@ -52,7 +52,10 @@ def _int(text: str, item: str) -> int:
     digits = body[1:] if body[:1] in ("+", "-") else body
     if not (digits.isascii() and digits.isdigit()):
         raise ValueError(f"--route: '{item}' is not a source:device pair")
-    value = int(body)
-    if abs(value) > _MAX_TRACK:
+    # Counted before converting: past 4300 digits ``int`` raises its own message about
+    # sys.set_int_max_str_digits, which is not something to show a user, and is not what
+    # Swift's failed parse says.
+    too_long = len(digits.lstrip("0")) > len(str(_MAX_TRACK))
+    if too_long or abs(int(body)) > _MAX_TRACK:
         raise ValueError(f"--route: '{item}' names a track number too large to be one")
-    return value
+    return int(body)

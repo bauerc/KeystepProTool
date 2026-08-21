@@ -372,10 +372,10 @@ interleave two takes.
   only one carrying a drum parameter set; the rest fill the tracks after it. A fifth is reported
   and dropped. `--route` replaces that rule for the tracks it names — `--route 3:1,1:2` puts source
   track 3 on device track 1 and source track 1 on device track 2, and whatever is left still fills
-  the tracks no pair claimed. Both sides count from 1 over **every** track of the file, including
-  ones carrying only tempo or a name. Only device track 1 carries a drum set, so a `--drum-track`
-  may only be routed there and nothing else may be routed onto it; contradictions are refused
-  rather than resolved. When a route is given the summary names each track's source, so what was
+  the tracks no pair claimed. The source side counts from 1 over **every** track of the file,
+  including ones carrying only tempo or a name; the device side is one of the KeyStep Pro's four.
+  Only device track 1 carries a drum set, so a `--drum-track` may only be routed there and nothing
+  else may be routed onto it; contradictions are refused rather than resolved. When a route is given the summary names each track's source, so what was
   applied is visible:
 
   ```

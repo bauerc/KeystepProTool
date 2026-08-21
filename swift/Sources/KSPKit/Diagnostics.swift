@@ -510,7 +510,8 @@ public enum Diagnostics {
             "{subjects} fall outside the 24 lanes the drum map covers and were dropped"),
         .trackSplitByChannel: Summary(
             """
-            {subjects} shared one source track; a type 0 file tells its instruments apart by \
+            {subjects} shared one source track and each became a device track of its own, \
+            except where a flag merged them; a type 0 file tells its instruments apart by \
             channel and nothing else
             """, subject: "channel"),
         .controllersDropped: Summary(
