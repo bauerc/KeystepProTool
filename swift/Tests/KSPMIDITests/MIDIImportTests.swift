@@ -424,6 +424,18 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
             }
         }
     }
+
+    @Test(
+        arguments: [
+            [TrackRoute(source: 0, device: 1)],
+            [TrackRoute(source: 1, device: 0)],
+            [TrackRoute(source: 1, device: 5)],
+            [TrackRoute(source: 1, device: 2), TrackRoute(source: 1, device: 3)],
+            [TrackRoute(source: 1, device: 2), TrackRoute(source: 2, device: 2)],
+        ])
+    func optionsRefuseImpossibleRoutes(_ routes: [TrackRoute]) {
+        #expect(throws: KSPError.self) { _ = try ImportOptions(routes: routes) }
+    }
 }
 
 // MARK: - Writing into a project
@@ -959,5 +971,150 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         let result = try MIDIImport.convertSong(midi, template())
         let dropped = result.diagnostics.entries.filter { $0.code == .controllersDropped }
         #expect(dropped.map(\.subjects) == [2])
+    }
+}
+
+// MARK: - #136: routing source tracks onto device tracks
+
+@Suite struct TrackRouteTests {
+    /// Each plan's device track beside the source track it came from.
+    private func routed(_ result: ImportResult) -> [[Int?]] {
+        result.plan.tracks.map { [$0.track, $0.sourceTrack] }
+    }
+
+    @Test func aRoutePutsASourceTrackWhereItSays() throws {
+        let midi = songOf([[(0, 60, 100)], [(0, 64, 100)], [(0, 67, 100)]])
+        let options = try ImportOptions(
+            routes: [TrackRoute(source: 3, device: 1), TrackRoute(source: 1, device: 2)])
+        let result = try MIDIImport.convertSong(midi, template(), options: options)
+
+        #expect(routed(result) == [[1, 3], [2, 1], [3, 2]])
+        #expect(result.plan.tracks.map { $0.notes[0].pitch } == [67, 60, 64])
+    }
+
+    @Test func unroutedTracksFillTheDeviceTracksARouteLeft() throws {
+        let midi = songOf([[(0, 60, 100)], [(0, 64, 100)], [(0, 67, 100)]])
+        let options = try ImportOptions(routes: [TrackRoute(source: 1, device: 3)])
+        let result = try MIDIImport.convertSong(midi, template(), options: options)
+
+        #expect(routed(result) == [[1, 2], [2, 3], [3, 1]])
+    }
+
+    /// The fill-upwards rule, drum clip included, with the layer switched off.
+    @Test func withoutRoutesAssignmentIsUnchanged() throws {
+        let midi = songOf(
+            [[(0, 60, 100)], [(0, 36, 100)], [(0, 67, 100)]], channels: [0, 9, 0])
+        let result = try MIDIImport.convertSong(midi, template())
+
+        #expect(routed(result) == [[1, 2], [2, 1], [3, 3]])
+        #expect(result.plan.tracks.map(\.isDrum) == [true, false, false])
+    }
+
+    @Test func aRouteMayNotSendTheDrumTrackOffDeviceTrackOne() {
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try ImportOptions(drumTrack: 2, routes: [TrackRoute(source: 2, device: 3)])
+        }
+        #expect(
+            thrown?.description.contains("route 2:3 sends the drum track to device track 3")
+                == true)
+    }
+
+    @Test func aRouteMayNotTakeDeviceTrackOneFromTheDrums() throws {
+        let midi = songOf([[(0, 36, 100)], [(0, 60, 100)]], channels: [9, 0])
+        let options = try ImportOptions(routes: [TrackRoute(source: 2, device: 1)])
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try MIDIImport.convertSong(midi, template(), options: options)
+        }
+        #expect(
+            thrown?.description.contains("route 2:1 collides with the drum track") == true)
+    }
+
+    /// The clash is only visible once the percussion channel has been found.
+    @Test func aRouteMayNotSendAnAutoDetectedDrumTrackElsewhere() throws {
+        let midi = songOf([[(0, 36, 100)], [(0, 60, 100)]], channels: [9, 0])
+        let options = try ImportOptions(routes: [TrackRoute(source: 1, device: 2)])
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try MIDIImport.convertSong(midi, template(), options: options)
+        }
+        #expect(
+            thrown?.description.contains("route 1:2 sends the drum track to device track 2")
+                == true)
+    }
+
+    @Test func routingTheDrumTrackToDeviceTrackOneIsAllowed() throws {
+        let midi = songOf([[(0, 60, 100)], [(0, 36, 100)]])
+        let options = try ImportOptions(
+            drumTrack: 2, drumMap: DrumMap.chromatic(36),
+            routes: [TrackRoute(source: 2, device: 1)])
+        let result = try MIDIImport.convertSong(midi, template(), options: options)
+
+        #expect(routed(result) == [[1, 2], [2, 1]])
+        #expect(result.plan.tracks.map(\.isDrum) == [true, false])
+    }
+
+    /// --drum-track spoke for device track 1 before the file was opened.
+    @Test func aRouteOntoDeviceTrackOneIsRefusedBesideANamedDrumTrack() {
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try ImportOptions(drumTrack: 2, routes: [TrackRoute(source: 3, device: 1)])
+        }
+        #expect(thrown?.description.contains("route 3:1 collides with the drum track") == true)
+    }
+
+    /// --track parameterises the fill-upwards rule, which a route replaces.
+    @Test func aRouteIsHonouredBelowTheStartingTrack() throws {
+        let midi = songOf([[(0, 60, 100)], [(0, 64, 100)]])
+        let options = try ImportOptions(routes: [TrackRoute(source: 1, device: 1)])
+        let song = try MIDIImport.readSong(midi, options: options)
+        let plan = try MIDIImport.planSong(song, options: options, firstTrack: 3)
+
+        #expect(plan.tracks.map { [$0.track, $0.sourceTrack] } == [[1, 1], [3, 2]])
+    }
+
+    @Test func twoSourcesOnOneDeviceTrackAreRefused() {
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try ImportOptions(
+                routes: [TrackRoute(source: 1, device: 2), TrackRoute(source: 3, device: 2)])
+        }
+        #expect(
+            thrown?.description.contains("routes 1:2 and 3:2 both name device track 2") == true)
+    }
+
+    @Test(arguments: [0, 5])
+    func aRouteOutsideTheDevicesFourTracksIsRefused(_ device: Int) {
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try ImportOptions(routes: [TrackRoute(source: 1, device: device)])
+        }
+        #expect(
+            thrown?.description.contains("names device track \(device); the device has 4 tracks")
+                == true)
+    }
+
+    @Test func aRouteNamingATrackWithNoNotesIsRefused() throws {
+        let midi = songOf([[(0, 60, 100)], [(0, 64, 100)]])
+        let options = try ImportOptions(routes: [TrackRoute(source: 3, device: 1)])
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try MIDIImport.convertSong(midi, template(), options: options)
+        }
+        #expect(thrown?.description.contains("track 3 of the source holds no notes") == true)
+    }
+
+    /// Naming a track and getting one of its channels would be the surprise.
+    @Test func aRoutedTrackSplitAcrossChannelsIsMerged() throws {
+        let midi = mixedOf([(0, 60, 0), (0, 72, 1), (ticksPerStep, 62, 0)])
+        let options = try ImportOptions(routes: [TrackRoute(source: 1, device: 2)])
+        let result = try MIDIImport.convertSong(midi, template(), options: options)
+
+        #expect(routed(result) == [[2, 1]])
+        #expect(result.notes.map(\.pitch) == [60, 72, 62])
+    }
+
+    @Test func routesDoNotChangeTheDroppedTrackReport() throws {
+        let midi = songOf((0..<5).map { [(0, 60 + $0, 100)] })
+        let options = try ImportOptions(routes: [TrackRoute(source: 5, device: 1)])
+        let result = try MIDIImport.convertSong(midi, template(), options: options)
+
+        #expect(routed(result) == [[1, 5], [2, 1], [3, 2], [4, 3]])
+        let dropped = result.diagnostics.entries.filter { $0.code == .tracksDropped }
+        #expect(dropped.map(\.subjects) == [1])
     }
 }
