@@ -16,7 +16,8 @@ public enum ConvertRunner {
         public var fitSwing: Bool
         public var fitTimeShift: Bool
         public var template: URL?
-        public var midiTracks: Set<Int>
+        public var midiTrack: Int?
+        public var midiTracksSpec: String?
         public var stepsPerBeat: Int
         public var dryRun: Bool
         public var force: Bool
@@ -30,7 +31,8 @@ public enum ConvertRunner {
             path: URL, output: URL? = nil, track: Int = 1, pattern: Int = 1, drumTrack: Int? = nil,
             routeSpec: String? = nil,
             drumMapSpec: String? = nil, carryTempo: Bool = true, fitSwing: Bool = true,
-            fitTimeShift: Bool = true, template: URL? = nil, midiTracks: Set<Int> = [],
+            fitTimeShift: Bool = true, template: URL? = nil, midiTrack: Int? = nil,
+            midiTracksSpec: String? = nil,
             stepsPerBeat: Int = Constants.defaultStepsPerBeat, dryRun: Bool = false,
             force: Bool = false, quiet: Bool = false, verbose: Bool = false, configPath: URL
         ) {
@@ -45,7 +47,8 @@ public enum ConvertRunner {
             self.fitSwing = fitSwing
             self.fitTimeShift = fitTimeShift
             self.template = template
-            self.midiTracks = midiTracks
+            self.midiTrack = midiTrack
+            self.midiTracksSpec = midiTracksSpec
             self.stepsPerBeat = stepsPerBeat
             self.dryRun = dryRun
             self.force = force
@@ -70,7 +73,8 @@ public enum ConvertRunner {
         let importOptions: ImportOptions
         do {
             importOptions = try ImportOptions(
-                stepsPerBeat: options.stepsPerBeat, midiTracks: options.midiTracks,
+                stepsPerBeat: options.stepsPerBeat,
+                midiTracks: try resolveMidiTracks(options.midiTrack, options.midiTracksSpec),
                 drumTrack: options.drumTrack,
                 drumMap: try resolveImportDrumMap(
                     options.drumMapSpec, configPath: options.configPath),
@@ -99,6 +103,12 @@ public enum ConvertRunner {
                 "\(options.path.relativePath): not a readable MIDI file: \(error)", code: 1)
         }
 
+        do {
+            try MIDIImport.checkSelection(midi, importOptions)
+        } catch {
+            return fail("\(error)", code: 2)
+        }
+
         guard let templatePath = options.template ?? defaultTemplate() else {
             return fail("template: the bundled factory default is missing", code: 1)
         }
@@ -111,11 +121,11 @@ public enum ConvertRunner {
             return fail("template: \(error.localizedDescription)", code: 1)
         }
 
-        // One selected track is the single-target path; any other selection needs the song path,
-        // the only one that can place several tracks.
+        // --midi-track is the single-target path; --midi-tracks is a selection, and the song
+        // path is the only one that can place several tracks.
         let result: ImportResult
         do {
-            if options.midiTracks.count == 1 {
+            if options.midiTrack != nil {
                 result = try MIDIImport.convert(
                     midi, loadedTemplate, track: options.track, pattern: options.pattern,
                     options: importOptions)

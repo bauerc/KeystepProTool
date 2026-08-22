@@ -178,6 +178,21 @@ def test_an_empty_selection_reads_every_track() -> None:
     assert both.source_tracks == (1, 2)
 
 
+def test_a_selected_track_the_file_lacks_is_refused() -> None:
+    midi = tracks_of([60, 72, 76])
+
+    with pytest.raises(ValueError, match=r"source track 5 was selected; the file has 3 tracks"):
+        midi_import.read_song(midi, ImportOptions(midi_tracks=frozenset({5})))
+
+
+def test_the_lowest_missing_selected_track_is_named() -> None:
+    """One offender at a time, as the selection grammar itself reports."""
+    midi = tracks_of([60, 72, 76])
+
+    with pytest.raises(ValueError, match=r"source track 5 was selected"):
+        midi_import.read_clip(midi, ImportOptions(midi_tracks=frozenset({5, 9})))
+
+
 def test_a_non_contiguous_selection_arrives_in_file_order() -> None:
     """A set has no order, so the order the clips arrive in is the file's."""
     midi = tracks_of([60, 62, 64, 65, 67])
@@ -455,6 +470,9 @@ def test_a_fifth_source_track_is_reported_rather_than_written(load_sample: Loade
     assert len(result.plan.tracks) == 4
     dropped = [d for d in result.diagnostics if d.code is Code.TRACKS_DROPPED]
     assert [d.subjects for d in dropped] == [1]
+    assert dropped[0].detail == (
+        "1 source track(s) had nowhere to go; the file holds 5 and the device has 4 tracks"
+    )
 
 
 def test_a_selection_wider_than_the_device_is_reported(load_sample: Loader) -> None:
@@ -466,6 +484,9 @@ def test_a_selection_wider_than_the_device_is_reported(load_sample: Loader) -> N
     assert len(result.plan.tracks) == 4
     dropped = [d for d in result.diagnostics if d.code is Code.TRACKS_DROPPED]
     assert [d.subjects for d in dropped] == [1]
+    assert dropped[0].detail == (
+        "1 source track(s) had nowhere to go; the selection holds 5 and the device has 4 tracks"
+    )
 
 
 def test_a_track_longer_than_one_pattern_is_split_and_chained(load_sample: Loader) -> None:
@@ -882,8 +903,9 @@ def test_a_selection_still_splits_a_mixed_track_by_channel(load_sample: Loader) 
     split = [d for d in result.diagnostics if d.code is Code.TRACK_SPLIT_BY_CHANNEL]
     assert [d.subjects for d in split] == [2]
 
-    beyond = midi_import.read_song(midi, ImportOptions(midi_tracks=frozenset({2})))
-    assert beyond.clips == ()
+    # Channel 1 is not source track 2: the file has one track and the selection says so.
+    with pytest.raises(ValueError, match=r"source track 2 was selected; the file has 1 tracks"):
+        midi_import.read_song(midi, ImportOptions(midi_tracks=frozenset({2})))
 
 
 def test_the_percussion_channel_of_a_mixed_track_is_still_found(load_sample: Loader) -> None:
@@ -1049,9 +1071,10 @@ def test_a_route_is_honoured_below_the_starting_track(load_sample: Loader) -> No
     assert [(track.track, track.source_track) for track in plan.tracks] == [(1, 1), (3, 2)]
 
 
-def test_a_route_with_midi_track_is_refused() -> None:
-    """Reading one track goes straight to quantise, so a route never places it."""
-    with pytest.raises(ValueError, match=r"routes and midi_track contradict each other"):
+def test_a_route_with_a_source_track_selection_is_refused() -> None:
+    with pytest.raises(
+        ValueError, match=r"routes and a source-track selection contradict each other"
+    ):
         ImportOptions(midi_tracks=frozenset({1}), routes=(TrackRoute(1, 2),))
 
 

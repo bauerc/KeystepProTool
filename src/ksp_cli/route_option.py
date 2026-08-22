@@ -10,7 +10,8 @@ ROUTE_HELP = (
     "send named source tracks to named device tracks: source:device pairs, comma-separated "
     "(e.g. 3:1,1:2), both counting from 1. Tracks no pair names fill whatever is left, in "
     "source order as usual. Only KeyStep Pro track 1 carries a drum set, so a --drum-track may "
-    "only be routed there and nothing else may be routed onto it. Not usable with --midi-track"
+    "only be routed there and nothing else may be routed onto it. Not usable with --midi-track "
+    "or --midi-tracks"
 )
 
 

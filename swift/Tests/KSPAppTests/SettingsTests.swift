@@ -82,7 +82,8 @@ import Testing
         #expect(mapped.fitSwing == defaults.fitSwing)
         #expect(mapped.fitTimeShift == defaults.fitTimeShift)
         #expect(mapped.template == defaults.template)
-        #expect(mapped.midiTracks == defaults.midiTracks)
+        #expect(mapped.midiTrack == defaults.midiTrack)
+        #expect(mapped.midiTracksSpec == defaults.midiTracksSpec)
         #expect(mapped.stepsPerBeat == defaults.stepsPerBeat)
     }
 

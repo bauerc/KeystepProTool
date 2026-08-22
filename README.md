@@ -343,6 +343,7 @@ it appears in the Project Browser ready to send to the device.
 | `--pattern N` | First pattern 1–16 to write to (default 1). Every target must be empty |
 | `--template PATH` | Project to write into (default: MCC's factory default) |
 | `--midi-track N` | Convert only track N of the source, into the one `--track`/`--pattern` names |
+| `--midi-tracks LIST` | Convert only these tracks of the source, as a song — comma-separated numbers and `N-M` ranges (`1,2,5`, `1-3`). Not usable with `--midi-track` or `--route` |
 | `--route SPEC` | Send named source tracks to named device tracks: `source:device` pairs, comma-separated (`3:1,1:2`). Tracks no pair names fill whatever is left |
 | `--drum-track N` | Write source track N as drums, onto KeyStep Pro track 1 |
 | `--drum-map SPEC` | `chromatic:N` or `custom:a,b,c,…` (default: fitted to the source) |
@@ -370,7 +371,10 @@ interleave two takes.
   at bar 3, in a later pattern of its track if that is where bar 3 falls.
 - **Tracks map in file order.** The drum track takes KeyStep Pro track 1, because item 123 is the
   only one carrying a drum parameter set; the rest fill the tracks after it. A fifth is reported
-  and dropped. `--route` replaces that rule for the tracks it names — `--route 3:1,1:2` puts source
+  and dropped, and so is a fifth the selection itself named — the report says which of the two it
+  was. `--midi-tracks` chooses which source tracks are read at all, leaving the rest of the file
+  alone; `--midi-track` is the different, older thing, converting one track into the single pattern
+  the target names. `--route` replaces that rule for the tracks it names — `--route 3:1,1:2` puts source
   track 3 on device track 1 and source track 1 on device track 2, and whatever is left still fills
   the tracks no pair claimed. The source side counts from 1 over **every** track of the file,
   including ones carrying only tempo or a name; the device side is one of the KeyStep Pro's four.

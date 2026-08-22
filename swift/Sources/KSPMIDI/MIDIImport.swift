@@ -72,9 +72,8 @@ public struct ImportOptions: Sendable, Hashable {
     ) throws {
         if !routes.isEmpty && !midiTracks.isEmpty {
             throw KSPError.value(
-                "routes and midi_track contradict each other; midi_track converts a single "
-                    + "source track into the one pattern the target names, leaving a route "
-                    + "nothing to place")
+                "routes and a source-track selection contradict each other; name the source "
+                    + "tracks with one or the other")
         }
         let tracks = Constants.trackItemIDs.count
         var sources: Set<Int> = []
@@ -385,11 +384,21 @@ extension MIDIImport {
         60 * 1_000_000 / Double(tempo)
     }
 
+    /// Refuse a selection naming a track `midi` does not have, lowest first.
+    public static func checkSelection(_ midi: MusicalMIDI1File, _ options: ImportOptions) throws {
+        let missing = options.midiTracks.filter { $0 > midi.tracks.count }.min()
+        if let missing {
+            throw KSPError.value(
+                "source track \(missing) was selected; the file has \(midi.tracks.count) tracks")
+        }
+    }
+
     public static func readClip(_ midi: MusicalMIDI1File, options: ImportOptions? = nil) throws
         -> Clip
     {
         let options = try options ?? ImportOptions()
         try checkReadable(midi)
+        try checkSelection(midi, options)
         let (tempo, _, _) = timing(midi)
 
         var notes: [RenderedNote] = []
@@ -416,6 +425,7 @@ extension MIDIImport {
     {
         let options = try options ?? ImportOptions()
         try checkReadable(midi)
+        try checkSelection(midi, options)
         let (tempo, signature, changes) = timing(midi)
         let tempoBPM = tempoToBPM(tempo)
 
@@ -857,10 +867,12 @@ extension MIDIImport {
 
         let dropped = melodic.count - free.count
         if dropped > 0 {
+            // "holds", not "has": a type 0 track split across channels is several clips.
+            let held = options.midiTracks.isEmpty ? "the file holds" : "the selection holds"
             collector.add(
                 .tracksDropped,
-                "\(dropped) source track(s) had nowhere to go; the device has "
-                    + "\(Constants.trackItemIDs.count) tracks",
+                "\(dropped) source track(s) had nowhere to go; \(held) \(song.clips.count) "
+                    + "and the device has \(Constants.trackItemIDs.count) tracks",
                 subjects: dropped)
         }
         return assigned.stableSorted { $0.track < $1.track }

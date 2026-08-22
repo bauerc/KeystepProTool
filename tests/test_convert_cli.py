@@ -342,3 +342,74 @@ def test_a_route_with_midi_track_is_an_argument_error(
 
     assert main(argv) == 2
     assert "contradict each other" in capsys.readouterr().err
+
+
+def test_midi_tracks_converts_the_tracks_it_names(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output, argv = routed(tmp_path, "--midi-tracks", "2")
+
+    assert main(argv) == 0
+
+    project = reader.load(output)
+    # Source track 2 is the E, and a selection places from --track upwards.
+    assert [n.pitch for n in project.track(1).pattern(1).notes_of(NoteKind.SEQ)] == [64]
+    assert project.track(2).pattern(1).notes_of(NoteKind.SEQ) == ()
+
+
+def test_midi_tracks_takes_a_range(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    output, argv = routed(tmp_path, "--midi-tracks", "1-2")
+
+    assert main(argv) == 0
+
+    project = reader.load(output)
+    assert [n.pitch for n in project.track(1).pattern(1).notes_of(NoteKind.SEQ)] == [60]
+    assert [n.pitch for n in project.track(2).pattern(1).notes_of(NoteKind.SEQ)] == [64]
+
+
+def test_midi_track_still_writes_one_pattern(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The singular spelling keeps its own path, whatever the plural one does."""
+    output, argv = routed(tmp_path, "--midi-track", "2", "--track", "3")
+
+    assert main(argv) == 0
+
+    project = reader.load(output)
+    assert [n.pitch for n in project.track(3).pattern(1).notes_of(NoteKind.SEQ)] == [64]
+
+
+@pytest.mark.parametrize(
+    ("spec", "expected"),
+    [
+        ("bad", "'bad' is not a number or a range"),
+        ("3-1", "'3-1' ends before it starts"),
+        ("0", "0 is out of range 1-65535"),
+        ("99", "source track 99 was selected; the file has 2 tracks"),
+    ],
+)
+def test_a_bad_midi_tracks_is_an_argument_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], spec: str, expected: str
+) -> None:
+    _, argv = routed(tmp_path, "--midi-tracks", spec)
+
+    assert main(argv) == 2
+    assert expected in capsys.readouterr().err
+
+
+def test_both_track_spellings_are_an_argument_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, argv = routed(tmp_path, "--midi-track", "1", "--midi-tracks", "1")
+
+    assert main(argv) == 2
+    assert "--midi-track and --midi-tracks contradict each other" in capsys.readouterr().err
+
+
+def test_midi_tracks_with_a_route_is_an_argument_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, argv = routed(tmp_path, "--midi-tracks", "1,2", "--route", "1:2")
+
+    assert main(argv) == 2
+    assert "routes and a source-track selection contradict each other" in capsys.readouterr().err
