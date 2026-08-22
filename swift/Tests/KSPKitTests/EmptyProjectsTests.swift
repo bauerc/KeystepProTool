@@ -3,16 +3,7 @@ import Testing
 
 @testable import KSPKit
 
-/// The two empty baselines must decode to nothing at all. Twin of `tests/test_empty_projects.py`,
-/// reading the same `tests/fixtures/empty_projects.expected.json`.
-///
-/// An empty project is where a reader that mistakes uninitialised storage for content fails loudly
-/// instead of subtly. Track 1's fourth polyphony slot is zero-filled rather than sentinel-filled in
-/// every known file, so reading note existence naively yields 64 phantom notes per parameter set
-/// per pattern -- against a file a human can confirm holds nothing.
-///
-/// These two files also fix what "default" means: every untouched value in `project_9` is
-/// corroborated here.
+/// Track 1's fourth polyphony slot is zero-filled, so a naive read yields 64 phantom notes.
 @Suite struct EmptyProjectsTests {
     struct Baseline: Decodable {
         let projectFile: String
@@ -38,8 +29,7 @@ import Testing
 
     static let baselines: [Baseline] = {
         let url = RepoData.fixtures.appending(path: "empty_projects.expected.json")
-        // Force-unwrapped deliberately: an unreadable fixture is a broken checkout, and failing
-        // here names the file rather than failing every case with a decode error.
+        // Force-unwrapped deliberately: an unreadable fixture is a broken checkout.
         let data = try! Data(contentsOf: url)
         return try! JSONDecoder().decode(Fixture.self, from: data).projects
     }()
@@ -55,9 +45,7 @@ import Testing
     }
 
     @Test(arguments: baselines) func theScalarsMatch(baseline: Baseline) throws {
-        // Tempo is the one global the hardware readout confirms: 120 BPM. It is a genuinely
-        // independent check on the tempo decode, because it comes from the device's own display
-        // rather than from another file.
+        // Tempo is the one global the hardware readout confirms, so the check is independent.
         let project = try Self.load(baseline)
         #expect(project.tempoBPM == baseline.tempoBPM)
         #expect(project.globalSwingPercent == baseline.globalSwingPercent)

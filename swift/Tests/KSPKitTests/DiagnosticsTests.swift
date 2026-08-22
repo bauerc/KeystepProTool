@@ -14,10 +14,6 @@ private let describedSites = [
     (Site(track: 2, scene: 1), "scene 1 track 2"),
 ]
 
-/// Twin of `tests/test_diagnostics.py`.
-///
-/// The point of the module is that one problem affecting forty notes reads as one line by default
-/// and forty lines on request, without either view inventing or losing anything.
 @Suite struct DiagnosticsTests {
     /// Two occurrences of one code at different sites, and one of another.
     let report: Report
@@ -33,8 +29,6 @@ private let describedSites = [
         collector.add(.timeShiftClipped, "notes carry a non-zero time shift")
         report = collector.report()
     }
-
-    // MARK: - Sites and messages
 
     @Test(arguments: describedSites)
     func siteDescribesItself(site: Site, expected: String) {
@@ -60,8 +54,6 @@ private let describedSites = [
         #expect(entry.at(track: 3).site == Site(track: 3, pattern: 9, kind: "drum"))
     }
 
-    // MARK: - Collection
-
     @Test func exactRepeatsAreDropped() {
         let collector = Collector()
         for _ in 0..<3 {
@@ -71,7 +63,6 @@ private let describedSites = [
     }
 
     @Test func theSameCodeAtDifferentSitesSurvives() {
-        // Otherwise the counts would under-report, which is worse than noise.
         let collector = Collector()
         collector.add(.disabledStepOff, "2 notes", site: Site(pattern: 1), subjects: 2)
         collector.add(.disabledStepOff, "2 notes", site: Site(pattern: 5), subjects: 2)
@@ -84,8 +75,6 @@ private let describedSites = [
         collector.add(.timeShiftClipped, "second")
         #expect(collector.report().messages == ["first", "second"])
     }
-
-    // MARK: - Grouping and rendering
 
     @Test func groupingIsByCodeInFirstAppearanceOrder() {
         #expect(report.grouped().map(\.code) == [.disabledStepOff, .timeShiftClipped])
@@ -106,7 +95,6 @@ private let describedSites = [
     }
 
     @Test func aGroupOfOneKeepsItsOwnMessage() {
-        // Collapsing a single occurrence would lose its site for no gain.
         #expect(report.render()[1] == "notes carry a non-zero time shift")
     }
 
@@ -116,7 +104,6 @@ private let describedSites = [
     }
 
     @Test func verboseIsASupersetOfTheDefault() {
-        // The default must never say something verbose does not support.
         #expect(report.render(verbose: true).count >= report.render().count)
     }
 
@@ -143,7 +130,6 @@ private let describedSites = [
     }
 
     @Test func mergeConcatenatesAndDeduplicates() {
-        // Exporting several files must not repeat a caveat once per file.
         let first = Collector()
         first.add(.drumMapAssumed, "chromatic from 36")
         let second = Collector()
@@ -152,10 +138,7 @@ private let describedSites = [
         #expect(first.report().merge(second.report()).count == 2)
     }
 
-    // MARK: - The table
-
     @Test func everyCodeHasASummary() {
-        // A missing entry would leave a code with nothing to collapse into.
         #expect(Set(Diagnostics.summaries.keys) == Set(Code.allCases))
     }
 
@@ -187,9 +170,7 @@ private let describedSites = [
             code: .disabledStepOff, detail: "detail",
             site: Site(track: 1, pattern: 9, kind: "drum"), subjects: 2)
 
-        // Key order is the contract, not just the key set: `--json` is byte-compared against the
-        // Python CLI, whose dicts come out in insertion order. The site carries no scene, as
-        // `Site.to_dict` does not either.
+        // Key order is the contract, not just the key set: `--json` is byte-compared across CLIs.
         #expect(
             entry.toJSON().serialised() == """
                 {

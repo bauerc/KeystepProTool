@@ -4,14 +4,8 @@ import Testing
 
 @testable import KSPRun
 
-/// Twin of `tests/test_dump_cli.py`: argument handling and output shape.
-///
-/// Every case goes through ``DumpRunner/run(_:)``, which is what the `dump` subcommand's `run()`
-/// calls -- the same split the Python has between the command function and `format_project`, so
-/// the exit codes and the text are testable without spawning a process.
 @Suite struct DumpTests {
-    /// Keeps the suite independent of whoever's machine it runs on: the config file the CLI would
-    /// otherwise read is a real path under `~/.config`.
+    /// The config file the CLI would otherwise read is a real path under `~/.config`.
     static func run(
         _ name: String, showAll: Bool = false, track: Int? = nil, pattern: Int? = nil,
         asJSON: Bool = false, drumMap: String? = nil, verbose: Bool = false,
@@ -25,23 +19,18 @@ import Testing
                 configPath: configPath))
     }
 
-    // MARK: - The tree
-
     @Test func itDumpsAProjectAsATree() {
         let result = Self.run("project_5.KeyStepPro")
         #expect(result.code == 0)
         #expect(result.stdout.contains("Track 1 (item 123)"))
         #expect(result.stdout.contains("Track 3 (item 125)"))
-        // The documented drum hits and the melodic line that validates the two index spaces both
-        // have to appear.
         #expect(result.stdout.contains("lane 0"))
         #expect(result.stdout.contains("C#2 (49)"))
         #expect(result.stdout.contains("tempo 120 BPM"))
     }
 
     @Test func emptyPatternsAreHiddenUnlessAskedFor() {
-        // All 16 patterns always exist on disk; only some hold anything. Printing 64 empty
-        // patterns by default would bury the two that matter.
+        // All 16 patterns always exist on disk; only some hold anything.
         #expect(Self.run("project_5.KeyStepPro").stdout.occurrences(of: "Pattern ") == 2)
         #expect(
             Self.run("project_5.KeyStepPro", showAll: true).stdout.occurrences(of: "Pattern ") == 64
@@ -58,8 +47,7 @@ import Testing
     }
 
     @Test func aShortGatePrintsItsMeasuredLength() {
-        // initial_project's drum notes store gate 2, which used to print `?(2)`. The tier 2 sweep
-        // resolved it: stored 2 is detent 3, 0.1875 of a step.
+        // Stored gate 2 is detent 3, 0.1875 of a step.
         let result = Self.run("initial_project.KeyStepPro", track: 1, pattern: 1)
         #expect(result.stdout.contains("gate 0.1875"))
         #expect(!result.stdout.contains("?("))
@@ -71,8 +59,6 @@ import Testing
         #expect(result.stdout.contains("(no patterns hold notes)"))
     }
 
-    // MARK: - JSON
-
     @Test func theJSONOutputRoundTrips() throws {
         let result = Self.run("project_5.KeyStepPro", asJSON: true)
         #expect(result.code == 0)
@@ -83,17 +69,11 @@ import Testing
     }
 
     @Test func theJSONAndTheTreeAgreeOnTheSelection() throws {
-        // Filtering happens once, on the model, so the two outputs cannot drift.
         let payload = try Self.json(Self.run("project_5.KeyStepPro", track: 3, asJSON: true).stdout)
         let tracks = try #require(payload["tracks"] as? [[String: Any]])
         #expect(tracks.map { $0["track"] as? Int } == [3])
         #expect(!Self.run("project_5.KeyStepPro", track: 3).stdout.contains("Track 1"))
     }
-
-    // MARK: - The drum map
-
-    // The map is a device global setting that no project file contains, so the CLI's job is to be
-    // explicit about which one it used and to let the user say otherwise.
 
     @Test func lanesResolveByDefault() {
         let out = Self.run("project_5.KeyStepPro", track: 1).stdout
@@ -102,7 +82,6 @@ import Testing
     }
 
     @Test func noneReproducesTheUnresolvedOutput() {
-        // The default must not quietly rewrite what --drum-map none shows.
         let out = Self.run("project_5.KeyStepPro", drumMap: "none").stdout
         #expect(out.contains("lane 0 "))
         #expect(!out.contains("->"))
@@ -157,8 +136,6 @@ import Testing
         #expect(out.contains("lane 0 -> C3 (60) Hi Bongo"))
     }
 
-    // MARK: - Failures
-
     @Test func aMissingFileIsAFileFailure() {
         let result = DumpRunner.run(
             DumpRunner.Options(
@@ -177,10 +154,6 @@ import Testing
         #expect(result.code == 1)
         #expect(result.stderr.contains("missing 'device'"))
     }
-
-    // MARK: - The --drum-map grammar
-
-    // Twin of `TestConfig` in `tests/test_drum_map.py`, which exercises it through this layer.
 
     @Test(arguments: [("chromatic:36", 36), ("chromatic:48", 48), ("chromatic", 36)])
     func chromaticSpecsParse(spec: String, first: Int) throws {
@@ -217,8 +190,6 @@ import Testing
     @Test func itFallsBackToTheDocumentedDefault() throws {
         #expect(try resolveDrumMap(nil, configPath: noPersonalConfig)?.notes == Array(36..<60))
     }
-
-    // MARK: - Helpers
 
     static func json(_ text: String) throws -> [String: Any] {
         try #require(

@@ -2,10 +2,7 @@ import Testing
 
 @testable import KSPKit
 
-/// The dump's `--json` has to come out byte-identical to the Python's, so the serialiser is
-/// pinned against `json.dumps(..., indent=2)` rather than against what merely looks like valid
-/// JSON. `JSONEncoder` cannot do this: it sorts or synthesises key order, and it renders `120.0`
-/// as `120`.
+/// `JSONEncoder` cannot do this: it synthesises key order, and it renders `120.0` as `120`.
 @Suite struct JSONNodeTests {
     @Test func scalarsRenderAsPythonWritesThem() {
         #expect(JSONNode.null.serialised() == "null")
@@ -15,16 +12,12 @@ import Testing
     }
 
     @Test func anIntegralDoubleKeepsItsPoint() {
-        // The whole reason for a hand-written serialiser: tempo 120.0 and gate 1.0 are floats on
-        // the Python side and print as `120.0`, where `JSONEncoder` would print `120`.
         #expect(JSONNode.double(120).serialised() == "120.0")
         #expect(JSONNode.double(0.0625).serialised() == "0.0625")
         #expect(JSONNode.double(132.5).serialised() == "132.5")
     }
 
     @Test func keysKeepTheOrderTheyWereGivenIn() {
-        // Insertion order, because that is what a Python dict has, and the Python CLI's output is
-        // the thing this has to match.
         let node = JSONNode.object([("b", .int(1)), ("a", .int(2))])
         #expect(node.serialised() == "{\n  \"b\": 1,\n  \"a\": 2\n}")
     }
@@ -62,7 +55,6 @@ import Testing
     }
 
     @Test func nonASCIIIsEscapedBecausePythonDefaultsToEnsureASCII() {
-        // A project's file name is the one string here a user can put anything into.
         #expect(JSONNode.string("\u{E9}").serialised() == "\"\\u00e9\"")
     }
 

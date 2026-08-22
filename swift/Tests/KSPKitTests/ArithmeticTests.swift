@@ -2,14 +2,10 @@ import Testing
 
 @testable import KSPKit
 
-/// The four divergences M12's port has to survive, pinned against what CPython actually returns.
-///
-/// Every expectation here was produced by running the Python expression rather than reasoned
-/// about, because the whole point of the file is that reasoning about these is what goes wrong.
+/// Every expectation was produced by running the Python expression, not reasoned about.
 @Suite struct ArithmeticTests {
     @Test func floorDivFloorsWhereSwiftWouldTruncate() {
-        // `-7 / 4` is -1 in Swift and -2 in Python; the positive cases agree and are here to show
-        // the helper is not simply shifting everything by one.
+        // `-7 / 4` is -1 in Swift and -2 in Python; the positive cases agree.
         #expect(Arithmetic.floorDiv(-7, 4) == -2)
         #expect(Arithmetic.floorDiv(7, 4) == 1)
         #expect(Arithmetic.floorDiv(-8, 4) == -2)
@@ -25,8 +21,6 @@ import Testing
     }
 
     @Test func ceilDivRoundsTheQuotientUp() {
-        // The `-(-n // m)` idiom `midi_import` uses to round a step count up to the bar and to
-        // count the patterns a track splits into.
         #expect(Arithmetic.ceilDiv(7, 4) == 2)
         #expect(Arithmetic.ceilDiv(8, 4) == 2)
         #expect(Arithmetic.ceilDiv(129, 64) == 3)
@@ -47,7 +41,6 @@ import Testing
     }
 
     @Test func stableSortedKeepsTheInputOrderOfEqualElements() {
-        // Two notes can share a tick and a pitch, so the tie is real rather than hypothetical.
         let input = [
             (key: 1, tag: "a"), (key: 0, tag: "b"), (key: 1, tag: "c"), (key: 0, tag: "d"),
         ]

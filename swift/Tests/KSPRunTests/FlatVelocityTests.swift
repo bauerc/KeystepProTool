@@ -4,9 +4,7 @@ import Testing
 
 @testable import KSPRun
 
-/// The `--flat-velocity` grammar, case for case with `tests/test_flat_velocity.py`. The messages
-/// are compared exactly: they reach the user through the same byte-for-byte contract the summaries
-/// do.
+/// The messages are compared exactly: they are part of the two CLIs' byte-for-byte contract.
 @Suite struct FlatVelocityTests {
     /// The message from a refusal, or `nil` if it was accepted.
     private func refusal(_ text: String) -> String? {
@@ -27,8 +25,7 @@ import Testing
     }
 
     @Test func aNumberPassesThroughUnvalidated() throws {
-        // Range-checking is ExportOptions' job, not this function's -- 0 and 999 are both
-        // accepted here so the two cores raise the identical message for them.
+        // Range-checking is ExportOptions' job, so both cores raise the identical message.
         #expect(try parseFlatVelocity("64") == 64)
         #expect(try parseFlatVelocity("0") == 0)
         #expect(try parseFlatVelocity("999") == 999)
@@ -43,8 +40,7 @@ import Testing
         #expect(refusal("loud") == "--flat-velocity: 'loud' is not 'fresh' or a velocity")
     }
 
-    /// Python's ints are unbounded and Swift's are not, so a numeral too big for `Int` has to
-    /// still reach the range message rather than "is not 'fresh' or a velocity".
+    /// Python's ints are unbounded, so an oversized numeral must still reach the range message.
     @Test func aNumeralTooBigForIntSaturatesRatherThanRefusing() throws {
         #expect(try parseFlatVelocity("99999999999999999999") == Int.max)
     }

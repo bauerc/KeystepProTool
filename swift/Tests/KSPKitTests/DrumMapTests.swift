@@ -2,23 +2,14 @@ import Testing
 
 @testable import KSPKit
 
-/// Twin of `tests/test_drum_map.py`, minus the `--drum-map` spec parsing, which lives in the CLI
-/// on both sides.
-///
-/// The map is a *device global setting* that no project file contains, so these tests pin two
-/// separate things: that the built-in default matches what Arturia documents, and that the port
-/// never invents a mapping it does not have.
 @Suite struct DrumMapTests {
     @Test func theDeviceHasTwentyFourLanes() {
-        // Derived, not assumed: MCC's Drum Map group defines Note 1..Note 24. Nothing in the
-        // project file has this cardinality -- the lane is a value of parameter 117, never an
-        // index -- so the constant has to come from the parameter dictionary.
+        // From MCC's Drum Map group, which defines Note 1..Note 24; no project file says so.
         #expect(Constants.drumLaneCount == 24)
     }
 
     @Test func theDefaultMatchesArturiasCustomNoteDefaults() throws {
-        // KeyStepPro.json gives Note 1..Note 24 defaults of 36..59, and the manual says "the
-        // default mapping starts at MIDI note 36". The device transmits that same run (D5).
+        // KeyStepPro.json gives Note 1..Note 24 defaults of 36..59, and the device agrees.
         #expect(try DrumMap.chromatic().notes == Array(36..<60))
     }
 
@@ -40,15 +31,13 @@ import Testing
 
     @Test(arguments: 0..<Constants.drumLaneCount)
     func aScrambledCustomMapRoundTrips(lane: Int) throws {
-        // Or reverse lookup is order-dependent.
         let notes = (0..<Constants.drumLaneCount).map { (37 * $0 + 5) % 128 }
         let drumMap = try DrumMap.custom(notes)
         #expect(try drumMap.laneForNote(drumMap.noteForLane(lane)) == lane)
     }
 
     @Test func anUnmappedNoteIsNilRatherThanANearestLaneGuess() throws {
-        // Snapping an unmapped drum hit to the closest lane produces a file that loads cleanly
-        // and plays the wrong instrument, with nothing to signal the error.
+        // Snapping to the closest lane would load cleanly and play the wrong instrument.
         #expect(try DrumMap.chromatic(36).laneForNote(100) == nil)
         #expect(try DrumMap.chromatic(36).laneForNote(35) == nil)
     }
@@ -88,8 +77,7 @@ import Testing
     }
 
     @Test func theDevicesHighestLowNoteStillFits() throws {
-        // 103 + 23 = 126, one short of 127. The gap is Arturia's range being one short, not an
-        // off-by-one here: D5 heard lane 0 fire 36 with the low note at 36.
+        // 103 + 23 = 126: the gap to 127 is Arturia's range, not an off-by-one here.
         #expect(try DrumMap.chromatic(103).notes.last == 126)
     }
 
@@ -102,12 +90,10 @@ import Testing
     }
 
     @Test func aLaneTheDeviceLacksIsNotResolved() throws {
-        // Better to show the raw lane than to invent a note for it.
         #expect(try DrumMap.chromatic().labelForLane(60).contains("out of range"))
     }
 
     @Test func describeSaysItIsAnAssumption() throws {
-        // The annotation is load-bearing: this is device state we cannot read.
         #expect(try DrumMap.chromatic(36).describe() == "chromatic from 36 (assumed - not in file)")
         #expect(try DrumMap.custom(Array(36..<60)).describe().contains("assumed"))
     }

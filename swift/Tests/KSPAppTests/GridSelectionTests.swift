@@ -4,7 +4,6 @@ import Testing
 
 @testable import KSPApp
 
-/// The tick rule: what the export runs over, and why Convert is sometimes off.
 @Suite struct GridSelectionTests {
     private func fullyTicked() -> GridSelection { GridSelection(syntheticSummary()) }
 
@@ -21,7 +20,6 @@ import Testing
         #expect(selection.isTicked(track: 4, pattern: 16))
     }
 
-    /// No project read yet: nothing to tick, nothing to complain about.
     @Test func afreshSelectionWithoutAProjectBlocksNothing() {
         let selection = GridSelection()
 
@@ -53,7 +51,6 @@ import Testing
         #expect(selection.exclusionNote == "Excluded: pattern slot 5")
     }
 
-    /// The point of the feature: one cell on one track, and the export follows it.
     @Test func untickingOneCellLeavesThatSlotOnThatTrackAlone() {
         var selection = fullyTicked()
 
@@ -66,7 +63,6 @@ import Testing
         #expect(selection.exclusionNote == "Excluded: Track 1 slot 3")
     }
 
-    /// Cells chosen freely across tracks: each track keeps its own slots.
     @Test func cellsAcrossSeveralTracksAreEachKept() {
         var selection = fullyTicked()
 
@@ -84,7 +80,6 @@ import Testing
         #expect(selection.exclusionNote == "Excluded: Track 1 slot 3 · Track 2 slots 7, 9")
     }
 
-    /// A track with every slot unticked is a track left out, however it was clicked off.
     @Test func untickingEverySlotOnAtrackDropsTheTrack() {
         var selection = fullyTicked()
 
@@ -117,7 +112,7 @@ import Testing
         #expect(selection.selectedCells.isEmpty)
     }
 
-    /// Re-ticking lands back on the default exactly, or the app stops matching the CLI on defaults.
+    /// Re-ticking lands back on the default exactly, or the app stops matching the CLI.
     @Test func retickingReturnsToTheDefault() {
         var selection = fullyTicked()
         let fresh = selection
@@ -133,7 +128,6 @@ import Testing
         #expect(selection.selectedCells.isEmpty)
     }
 
-    /// A slot off everywhere must not leave every row reading as half-ticked.
     @Test func awholeRowAndColumnStillReadAsWhole() {
         var selection = fullyTicked()
 
@@ -146,7 +140,6 @@ import Testing
         #expect(selection.state(ofPattern: 6) == .on)
     }
 
-    /// Bringing a track back leaves the slot that is off everywhere off.
     @Test func retickingAtrackKeepsTheSlotsThatAreOffEverywhere() {
         var selection = fullyTicked()
         selection.toggle(track: 3)
@@ -159,7 +152,6 @@ import Testing
         #expect(selection.exclusionNote == "Excluded: pattern slot 5")
     }
 
-    /// The mirror of it: bringing a slot back leaves the track that is off off.
     @Test func retickingAslotKeepsTheTrackThatIsOff() {
         var selection = fullyTicked()
         selection.toggle(track: 3)
@@ -171,7 +163,6 @@ import Testing
         #expect(selection.exclusionNote == "Excluded: Track 3")
     }
 
-    /// Nothing ticked is a state to get out of: a header click reaches the whole row again.
     @Test func arowClickedFromNothingTickedComesBackWhole() {
         var selection = fullyTicked()
         for track in 1...4 { selection.toggle(track: track) }
@@ -206,7 +197,6 @@ import Testing
         #expect(selection.state(ofTrack: 4) == .on)
     }
 
-    /// A mixed header ticks the rest of itself, so a click never takes away more than it shows.
     @Test func amixedRowTicksTheRestOfItself() {
         var selection = fullyTicked()
         selection.toggle(track: 2, pattern: 4)
@@ -227,7 +217,6 @@ import Testing
         #expect(selection.selectedCells.isEmpty)
     }
 
-    /// The names come from the summary, so the note reads the way the grid and the `.mid` do.
     @Test func adrumTrackIsNamedTheWayTheGridNamesIt() {
         var selection = GridSelection(syntheticSummary(drumTracks: [1]))
 
@@ -236,7 +225,6 @@ import Testing
         #expect(selection.exclusionNote == "Excluded: Track 1 (drum)")
     }
 
-    /// Two tracks under one number must draw a grid rather than trap the app.
     @Test func aduplicateTrackNumberDoesNotTrap() {
         let track = TrackSummary(
             number: 1, name: "Track 1", mode: .sequencer,
