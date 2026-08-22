@@ -61,6 +61,31 @@ import Testing
                 + "0 is a MIDI note-off, not a silent note\n")
     }
 
+    @Test func aMalformedMidiTracksIsTwo() throws {
+        let result = try Self.run(["convert", Self.clip, "--midi-tracks", "bad"])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli convert: --midi-tracks: 'bad' is not a number or a range\n")
+    }
+
+    @Test func aMidiTracksTheFileLacksIsTwo() throws {
+        let result = try Self.run(["convert", Self.clip, "--midi-tracks", "99"])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli convert: source track 99 was selected; the file has "
+                + "1 tracks\n")
+    }
+
+    @Test func bothTrackSpellingsIsTwo() throws {
+        let result = try Self.run(["convert", Self.clip, "--midi-track", "1", "--midi-tracks", "1"])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr.hasPrefix(
+                "ksp-swift-cli convert: --midi-track and --midi-tracks contradict each other"))
+    }
+
     @Test func anUnknownOptionIsTwo() throws {
         // Not 64, which is what ArgumentParser exits with if the entry point stops mapping.
         let result = try Self.run(["dump", Self.project, "--nope"])
@@ -73,6 +98,7 @@ import Testing
     }
 
     static let project = RepoData.projectFiles.appending(path: "project_5.KeyStepPro").path
+    static let clip = RepoData.projectFiles.appending(path: "test_file_simple.mid").path
 
     /// From the package directory, not `Bundle`: under the CLT `Bundle.main` is the swiftpm helper.
     static let executable: URL = {

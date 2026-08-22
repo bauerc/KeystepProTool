@@ -81,6 +81,11 @@ struct Convert: ParsableCommand {
     var midiTrack: Int?
 
     @Option(
+        name: .customLong("midi-tracks"),
+        help: ArgumentHelp(midiTracksHelp, valueName: "LIST"))
+    var midiTracks: String?
+
+    @Option(
         name: .customLong("steps-per-beat"),
         help: ArgumentHelp(
             """
@@ -122,7 +127,7 @@ struct Convert: ParsableCommand {
                 drumMapSpec: drumMapSpec,
                 carryTempo: !noTempo, fitSwing: !noSwingFit, fitTimeShift: !noTimeShift,
                 template: template.map { URL(filePath: $0) },
-                midiTracks: midiTrack.map { [$0] } ?? [],
+                midiTrack: midiTrack, midiTracksSpec: midiTracks,
                 stepsPerBeat: stepsPerBeat, dryRun: dryRun, force: force, quiet: quiet,
                 verbose: verbose, configPath: drumMapConfigPath))
         try emit(result)

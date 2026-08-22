@@ -56,6 +56,11 @@ public struct ImportOptions: Sendable, Hashable {
         if let drumTrack, drumTrack < 1 {
             throw KSPError.value("drum_track counts from 1")
         }
+        if !midiTracks.isEmpty, let drumTrack, !midiTracks.contains(drumTrack) {
+            throw KSPError.value(
+                "drum_track \(drumTrack) is not in the selection; a drum track must be one of "
+                    + "the source tracks read")
+        }
         try ImportOptions.checkRoutes(routes, drumTrack: drumTrack, midiTracks: midiTracks)
         self.stepsPerBeat = stepsPerBeat
         self.midiTracks = midiTracks
@@ -72,9 +77,8 @@ public struct ImportOptions: Sendable, Hashable {
     ) throws {
         if !routes.isEmpty && !midiTracks.isEmpty {
             throw KSPError.value(
-                "routes and midi_track contradict each other; midi_track converts a single "
-                    + "source track into the one pattern the target names, leaving a route "
-                    + "nothing to place")
+                "routes and a source-track selection contradict each other; name the source "
+                    + "tracks with one or the other")
         }
         let tracks = Constants.trackItemIDs.count
         var sources: Set<Int> = []
@@ -385,11 +389,21 @@ extension MIDIImport {
         60 * 1_000_000 / Double(tempo)
     }
 
+    /// Refuse a selection naming a track `midi` does not have, lowest first.
+    public static func checkSelection(_ midi: MusicalMIDI1File, _ options: ImportOptions) throws {
+        let missing = options.midiTracks.filter { $0 > midi.tracks.count }.min()
+        if let missing {
+            throw KSPError.value(
+                "source track \(missing) was selected; the file has \(midi.tracks.count) tracks")
+        }
+    }
+
     public static func readClip(_ midi: MusicalMIDI1File, options: ImportOptions? = nil) throws
         -> Clip
     {
         let options = try options ?? ImportOptions()
         try checkReadable(midi)
+        try checkSelection(midi, options)
         let (tempo, _, _) = timing(midi)
 
         var notes: [RenderedNote] = []
@@ -416,6 +430,7 @@ extension MIDIImport {
     {
         let options = try options ?? ImportOptions()
         try checkReadable(midi)
+        try checkSelection(midi, options)
         let (tempo, signature, changes) = timing(midi)
         let tempoBPM = tempoToBPM(tempo)
 
@@ -857,9 +872,12 @@ extension MIDIImport {
 
         let dropped = melodic.count - free.count
         if dropped > 0 {
+            // No count of what was read: `dropped` is melodic against free, so a drum
+            // track, a route or a firstTrack above 1 all break the arithmetic a total invites.
+            let chosen = options.midiTracks.isEmpty ? "" : "selected "
             collector.add(
                 .tracksDropped,
-                "\(dropped) source track(s) had nowhere to go; the device has "
+                "\(dropped) \(chosen)source track(s) had nowhere to go; the device has "
                     + "\(Constants.trackItemIDs.count) tracks",
                 subjects: dropped)
         }

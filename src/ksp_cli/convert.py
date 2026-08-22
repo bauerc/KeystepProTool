@@ -13,12 +13,14 @@ from ksp.midi_import import (
     ImportOptions,
     ImportResult,
     TrackPlan,
+    check_selection,
     convert,
     convert_song,
     saveable,
 )
 from ksp_cli.drum_map_option import DRUM_MAP_HELP, resolve_import_drum_map
 from ksp_cli.loading import load_template
+from ksp_cli.midi_tracks_option import MIDI_TRACKS_HELP, resolve_midi_tracks
 from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
 from ksp_cli.route_option import ROUTE_HELP, parse_routes
 from ksp_cli.runner import standalone
@@ -184,6 +186,15 @@ def convert_command(
             help="read only track N of the source file, counting from 1 (default: all of them)",
         ),
     ] = None,
+    midi_tracks: Annotated[
+        str | None,
+        typer.Option(
+            "--midi-tracks",
+            metavar="LIST",
+            rich_help_panel=_SOURCE_PANEL,
+            help=MIDI_TRACKS_HELP,
+        ),
+    ] = None,
     steps_per_beat: Annotated[
         int,
         typer.Option(
@@ -222,7 +233,7 @@ def convert_command(
     try:
         options = ImportOptions(
             steps_per_beat=steps_per_beat,
-            midi_tracks=frozenset() if midi_track is None else frozenset({midi_track}),
+            midi_tracks=resolve_midi_tracks(midi_track, midi_tracks),
             drum_track=drum_track,
             drum_map=resolve_import_drum_map(drum_map_spec),
             carry_tempo=not no_tempo,
@@ -248,12 +259,17 @@ def convert_command(
         # same class of failure as a truncated one rather than an IO error.
         fail(f"{path}: not a readable MIDI file: {exc}", prog=PROG, code=1)
 
+    try:
+        check_selection(midi, options)
+    except ValueError as exc:
+        fail(str(exc), prog=PROG, code=2)
+
     loaded_template = load_template(template, prog=PROG)
 
-    # One selected track is the whole of the single-target path; any other
-    # selection needs the song path, the only one that can place several tracks.
+    # --midi-track is the single-target path; --midi-tracks is a selection, and
+    # the song path is the only one that can place several tracks.
     try:
-        if len(options.midi_tracks) == 1:
+        if midi_track is not None:
             result = convert(midi, loaded_template, track=track, pattern=pattern, options=options)
         else:
             result = convert_song(

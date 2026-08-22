@@ -89,17 +89,19 @@ class ImportOptions:
             raise ValueError("midi_track counts from 1")
         if self.drum_track is not None and self.drum_track < 1:
             raise ValueError("drum_track counts from 1")
+        if self.midi_tracks and self.drum_track not in (None, *self.midi_tracks):
+            raise ValueError(
+                f"drum_track {self.drum_track} is not in the selection; a drum track must "
+                "be one of the source tracks read"
+            )
         self._check_routes()
 
     def _check_routes(self) -> None:
         """The faults a route has without knowing the song: range and clashes."""
         if self.routes and self.midi_tracks:
-            # A named selection goes straight to quantise and never reaches
-            # _assign, so a route here would be silently ignored.
             raise ValueError(
-                "routes and midi_track contradict each other; midi_track converts a single "
-                "source track into the one pattern the target names, leaving a route nothing "
-                "to place"
+                "routes and a source-track selection contradict each other; name the source "
+                "tracks with one or the other"
             )
         tracks = len(constants.TRACK_ITEM_IDS)
         sources: set[int] = set()
@@ -368,10 +370,20 @@ def _timing(midi: mido.MidiFile) -> tuple[int, tuple[int, int], int]:
     return tempo, signature, changes
 
 
+def check_selection(midi: mido.MidiFile, options: ImportOptions) -> None:
+    """Refuse a selection naming a track *midi* does not have, lowest first."""
+    missing = sorted(number for number in options.midi_tracks if number > len(midi.tracks))
+    if missing:
+        raise ValueError(
+            f"source track {missing[0]} was selected; the file has {len(midi.tracks)} tracks"
+        )
+
+
 def read_clip(midi: mido.MidiFile, options: ImportOptions | None = None) -> Clip:
     """Every selected track's notes, merged into one clip in absolute ticks."""
     options = options or ImportOptions()
     _check_readable(midi)
+    check_selection(midi, options)
     tempo, _, _ = _timing(midi)
 
     notes: list[RenderedNote] = []
@@ -398,6 +410,7 @@ def read_song(midi: mido.MidiFile, options: ImportOptions | None = None) -> Song
     A type 0 track carrying several channels is split into one clip each."""
     options = options or ImportOptions()
     _check_readable(midi)
+    check_selection(midi, options)
     tempo, (numerator, denominator), changes = _timing(midi)
     tempo_bpm = float(mido.tempo2bpm(tempo))
 
@@ -890,9 +903,12 @@ def _assign(
 
     dropped = len(melodic) - len(free)
     if dropped > 0:
+        # No count of what was read: `dropped` is melodic against free, so a drum
+        # track, a route or a --track above 1 all break the arithmetic a total invites.
+        chosen = "selected " if options.midi_tracks else ""
         collector.add(
             Code.TRACKS_DROPPED,
-            f"{dropped} source track(s) had nowhere to go; the device has "
+            f"{dropped} {chosen}source track(s) had nowhere to go; the device has "
             f"{len(constants.TRACK_ITEM_IDS)} tracks",
             subjects=dropped,
         )

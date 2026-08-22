@@ -287,6 +287,25 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(both.sourceTracks == [1, 2])
     }
 
+    @Test func aSelectedTrackTheFileLacksIsRefused() throws {
+        let midi = songOf([[(0, 60, 100)], [(0, 72, 100)], [(0, 76, 100)]], length: 120)
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try MIDIImport.readSong(midi, options: ImportOptions(midiTracks: [5]))
+        }
+        #expect(
+            thrown?.description.contains("source track 5 was selected; the file has 3 tracks")
+                == true)
+    }
+
+    /// One offender at a time, as the selection grammar itself reports.
+    @Test func theLowestMissingSelectedTrackIsNamed() throws {
+        let midi = songOf([[(0, 60, 100)], [(0, 72, 100)], [(0, 76, 100)]], length: 120)
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try MIDIImport.readClip(midi, options: ImportOptions(midiTracks: [5, 9]))
+        }
+        #expect(thrown?.description.contains("source track 5 was selected") == true)
+    }
+
     @Test func aNonContiguousSelectionArrivesInFileOrder() throws {
         let midi = songOf([60, 62, 64, 65, 67].map { [(0, $0, 100)] }, length: 120)
         let song = try MIDIImport.readSong(midi, options: ImportOptions(midiTracks: [5, 1, 2]))
@@ -508,6 +527,9 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(result.plan.tracks.count == 4)
         let dropped = result.diagnostics.entries.filter { $0.code == .tracksDropped }
         #expect(dropped.map(\.subjects) == [1])
+        #expect(
+            dropped[0].detail
+                == "1 source track(s) had nowhere to go; the device has 4 tracks")
     }
 
     @Test func aSelectionWiderThanTheDeviceIsReported() throws {
@@ -518,6 +540,9 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(result.plan.tracks.count == 4)
         let dropped = result.diagnostics.entries.filter { $0.code == .tracksDropped }
         #expect(dropped.map(\.subjects) == [1])
+        #expect(
+            dropped[0].detail
+                == "1 selected source track(s) had nowhere to go; the device has 4 tracks")
     }
 
     @Test func aTrackLongerThanOnePatternIsSplitAndChained() throws {
@@ -852,8 +877,13 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         let split = result.diagnostics.entries.filter { $0.code == .trackSplitByChannel }
         #expect(split.map(\.subjects) == [2])
 
-        let beyond = try MIDIImport.readSong(midi, options: ImportOptions(midiTracks: [2]))
-        #expect(beyond.clips.isEmpty)
+        // Channel 1 is not source track 2: the file has one track and the selection says so.
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try MIDIImport.readSong(midi, options: ImportOptions(midiTracks: [2]))
+        }
+        #expect(
+            thrown?.description.contains("source track 2 was selected; the file has 1 tracks")
+                == true)
     }
 
     @Test func thePercussionChannelOfAMixedTrackIsStillFound() throws {
@@ -1016,12 +1046,25 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(plan.tracks.map { [$0.track, $0.sourceTrack] } == [[1, 1], [3, 2]])
     }
 
-    @Test func aRouteWithMidiTrackIsRefused() {
+    /// Otherwise assign reports it as holding no notes, which sends the user to fix the file.
+    @Test func aDrumTrackOutsideTheSelectionIsRefused() {
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try ImportOptions(midiTracks: [2, 3], drumTrack: 5)
+        }
+        #expect(thrown?.description.contains("drum_track 5 is not in the selection") == true)
+    }
+
+    @Test func aDrumTrackInsideTheSelectionIsAllowed() throws {
+        #expect(try ImportOptions(midiTracks: [2, 5], drumTrack: 5).drumTrack == 5)
+    }
+
+    @Test func aRouteWithASourceTrackSelectionIsRefused() {
         let thrown = #expect(throws: KSPError.self) {
             _ = try ImportOptions(midiTracks: [1], routes: [TrackRoute(source: 1, device: 2)])
         }
         #expect(
-            thrown?.description.contains("routes and midi_track contradict each other") == true)
+            thrown?.description.contains(
+                "routes and a source-track selection contradict each other") == true)
     }
 
     @Test func twoSourcesOnOneDeviceTrackAreRefused() {
