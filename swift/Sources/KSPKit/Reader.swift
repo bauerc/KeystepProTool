@@ -1,15 +1,12 @@
 import Foundation
 
-/// Decoding a flat `.KeyStepPro` dict into the object model. Within one `(track, pattern, slot)`
-/// the trailing index is a step for 48/49 but a note ordinal for 50/54 and 109-113 / 117-121, and
-/// a single index space decodes to values that look almost right (spec 4).
+/// The trailing index is a step for 48/49 but a note ordinal for 50/54 and 109-113 / 117-121;
+/// one index space for both decodes to values that look almost right (spec 4).
 public enum Reader {
-    /// Read and decode a `.KeyStepPro` file.
     public static func load(contentsOf url: URL) throws -> Project {
         try readProject(LenientJSON.load(contentsOf: url), sourceName: url.lastPathComponent)
     }
 
-    /// Decode an already-parsed project dict.
     public static func readProject(_ raw: RawProject, sourceName: String = "") throws -> Project {
         let collector = Collector()
 
@@ -20,7 +17,6 @@ public enum Reader {
         var version: String?
         switch raw["version"] {
         case nil:
-            // The factory Default.KeyStepPro omits it; a converter has to inject it.
             collector.add(
                 .noVersionKey, "no 'version' key (factory template rather than a saved project)")
         case .string(let stored):
@@ -53,8 +49,7 @@ public enum Reader {
         try Keys.getInt(raw, item, param, indices: indices) ?? fallback
     }
 
-    /// Reassemble the tempo from its three little-endian 7-bit chunks, holding BPM x 100. Both
-    /// operands cross to `Double` first: integer division would floor every fractional BPM.
+    /// Both operands cross to `Double`: integer division would floor every fractional BPM.
     private static func readTempo(_ raw: RawProject) throws -> Double {
         let lsb = try scalar(raw, Constants.itemProject, Constants.pTempoLSB, default: 0)
         let midsb = try scalar(raw, Constants.itemProject, Constants.pTempoMIDSB, default: 0)
@@ -64,8 +59,6 @@ public enum Reader {
         return Double(hundredths) / Double(Constants.tempoScale)
     }
 
-    /// Decode each scene's pattern chains from parameter 84. Chains are contiguous and
-    /// sentinel-terminated; a value after a sentinel is reported, never absorbed into the chain.
     private static func readScenes(_ raw: RawProject, _ collector: Collector) throws -> [Scene] {
         try (1...Constants.sceneCount).map { scene in
             var chains: [Chain] = []
@@ -77,7 +70,6 @@ public enum Reader {
                 var patterns: [Int] = []
                 for value in stored {
                     guard let value, value != Constants.sentinel else { break }
-                    // Stored 0-based, reported the way the device numbers patterns.
                     patterns.append(value + 1)
                 }
                 if stored[patterns.count...].contains(where: {
@@ -106,16 +98,12 @@ public enum Reader {
         return Track(number: number, itemID: itemID, patterns: patterns, drumMode: drumMode)
     }
 
-    /// Whether this track is in DRUM mode, from parameter 86 bit 6. Only track 1 has a drum set,
-    /// so tracks 2-4 read `false` rather than reporting what the bit means there.
     private static func readDrumMode(_ raw: RawProject, itemID: Int) throws -> Bool {
         guard itemID == Constants.drumTrackItemID else { return false }
         let bits = try scalar(raw, itemID, Constants.pTrackModeBits, default: 0)
         return bits & (1 << Constants.drumModeBit) != 0
     }
 
-    /// Decode one pattern from whichever parameter set(s) hold notes. Content is not decisive --
-    /// both sets can hold real notes -- so `drumMode` picks which plays and both are reported.
     private static func readPattern(
         _ raw: RawProject, itemID: Int, pattern: Int, drumMode: Bool
     ) throws -> Pattern {
@@ -138,7 +126,6 @@ public enum Reader {
 
         let mode: PatternMode
         if !seqNotes.isEmpty && !drumNotes.isEmpty {
-            // Both sets hold notes, so the mode flag decides; the other set is leftovers.
             mode = drumMode ? .drum : .seq
             let melodic = "melodic (\(seqNotes.count))"
             let drum = "drum (\(drumNotes.count))"
@@ -206,10 +193,6 @@ public enum Reader {
             diagnostics: collector.report())
     }
 
-    /// Decode 99 or 116 -- step size, triplet, polyrhythm and direction.
-    ///
-    /// Both fields share a layout (spec 3.3, protocol tier 5), so the only thing the caller varies
-    /// is which parameter to read.
     private static func patternBits(
         _ raw: RawProject, _ itemID: Int, _ param: Int, _ pattern: Int, _ collector: Collector,
         _ site: Site, kind: String = "seq"
@@ -227,15 +210,12 @@ public enum Reader {
         return bits
     }
 
-    /// Step counts are stored 0-based: 15 means a 16-step pattern.
     private static func stepCount(
         _ raw: RawProject, _ itemID: Int, _ param: Int, _ pattern: Int
     ) throws -> Int {
         try scalar(raw, itemID, param, pattern, default: 0) + Constants.stepCountOffset
     }
 
-    /// Swing is stored with a +25 offset: 25 means 50%, i.e. no swing. MCC's signed -25..+25
-    /// label for 97/114 is wrong; the device displays an absolute 50-75%.
     private static func swing(
         _ raw: RawProject, _ itemID: Int, _ param: Int, _ pattern: Int
     ) throws -> Int {
@@ -243,8 +223,6 @@ public enum Reader {
             + Constants.swingOffset
     }
 
-    /// Decode every pool chunk of one pattern for one parameter set. The step-active flags are
-    /// pattern-wide, so they are decoded once and handed to each chunk.
     private static func readNoteLists(
         _ raw: RawProject, itemID: Int, pattern: Int, kind: NoteKind
     ) throws -> ([Note], [Diagnostic]) {
@@ -264,20 +242,16 @@ public enum Reader {
         return (notes, diagnostics)
     }
 
-    /// Which steps the device will actually play, 0-based: melodic (`48`) yields steps, drum
-    /// (`52`) yields `(lane, step)` pairs.
     private static func readStepActive(
         _ raw: RawProject, itemID: Int, pattern: Int, kind: NoteKind
     ) throws -> StepActive {
         if kind == .seq {
-            // Chunk 1 is the whole array: one entry per step fills all 64, so a pool spilling
-            // into chunks 2-3 leaves these behind.
+            // Chunk 1 holds the whole array; a pool spilling into chunks 2-3 leaves these behind.
             let flags = try Keys.readArray(
                 raw, itemID, Constants.pSeqStepActive, pattern, 1, length: Constants.maxSteps)
             return .steps(Set(flags.indices.filter { flags[$0] == 1 }))
         }
 
-        // Unpack the flat array once: the same 256 entries answer all 24 x 64 lane/step questions.
         var flat: [Int?] = []
         for chunk in 1...(Constants.slotsByItem[itemID] ?? 0) {
             flat += try Keys.readArray(
@@ -287,7 +261,6 @@ public enum Reader {
         var pairs: Set<LaneStep> = []
         for (offset, stored) in flat.enumerated() {
             guard let value = stored, value != 0 else { continue }
-            // Non-negative operands, so floor and truncating division agree.
             let lane = offset / Constants.drumStepActivePartsPerLane
             let part = offset % Constants.drumStepActivePartsPerLane
             guard lane < Constants.drumLaneCount else { continue }
@@ -329,8 +302,7 @@ public enum Reader {
         let gate = try column(pGate)
         let shift = try column(pShift)
         let random = try column(pRandom)
-        // Melodic step skip (49) is step-indexed and lives in chunk 1; the drum 53 is
-        // note-indexed. The asymmetry is not a typo.
+        // 49 is step-indexed and lives in chunk 1; the drum 53 is note-indexed. Not a typo.
         let skip =
             drum
             ? try column(Constants.pDrumStepSkip)
@@ -343,11 +315,9 @@ public enum Reader {
             guard let step = stored else { break }  // ran off the end of the stored array
             if step == Constants.sentinel {
                 if drum {
-                    // The drum array is a pool with holes: a sentinel is an emptied entry, not
-                    // the end of the list, so scanning must continue past it.
+                    // A sentinel is an emptied drum entry, not the end of the list.
                     continue
                 }
-                // Melodic lists are compacted, so the first sentinel ends the list.
                 let trailing = noteStep[(i + 1)...].filter { $0 != nil && $0 != Constants.sentinel }
                 if !trailing.isEmpty {
                     diagnostics.append(
@@ -364,7 +334,6 @@ public enum Reader {
             let value = try required(pitch[i])
             let skipIndex = drum ? i : step
             guard skip.indices.contains(skipIndex) else {
-                // Only reachable from a step outside 0-63; guessing a mask would silently move it.
                 throw KSPError.value(
                     "note \(i + 1) of pattern \(pattern) slot \(slot) sits on step \(step + 1), "
                         + "past the \(Constants.maxSteps) steps the step-skip array covers")
@@ -387,7 +356,6 @@ public enum Reader {
         }
 
         if drum {
-            // A lane outside 0-23 would mean 117 is not the 0-based lane index we take it for.
             let outOfRange = Set(
                 notes.map(\.pitch).filter { $0 >= Constants.drumLaneCount }
             ).sorted()
@@ -404,8 +372,7 @@ public enum Reader {
         return (notes, diagnostics)
     }
 
-    /// Track 1's slot 4 is zero-filled rather than sentinel-filled, so the `!= 127` existence
-    /// rule alone decodes it as phantom notes (spec 4).
+    /// Track 1's slot 4 is zero-filled, not sentinel-filled, so `!= 127` alone invents notes.
     public static func slotIsInitialised(
         noteStep: [Int?], pitch: [Int?], velocity: [Int?]
     ) -> Bool {
@@ -413,16 +380,13 @@ public enum Reader {
             && velocity.allSatisfy { $0 == 0 })
     }
 
-    /// Cross-check the note list against the step-active flags: the device plays the flags, so a
-    /// pooled note whose flag is clear is silent (spec 4).
+    /// The device plays the flags, so a pooled note whose flag is clear is silent (spec 4).
     static func checkStepActive(
         pattern: Int, notes: [Note], active: StepActive, kind: NoteKind
     ) -> [Diagnostic] {
         var diagnostics: [Diagnostic] = []
         let site = Site(pattern: pattern, kind: kind.rawValue)
 
-        // Drum flags are per lane, so compare (lane, step) pairs; a union over lanes would hide a
-        // flag whose lane holds nothing. Both branches sort, since the message shows the list.
         let orphaned: [Int]
         switch active {
         case .steps(let steps):
@@ -460,7 +424,6 @@ public enum Reader {
         return diagnostics
     }
 
-    /// Assert a note field is present: a populated note->step entry implies every sibling.
     private static func required(_ value: Int?) throws -> Int {
         guard let value else {
             throw KSPError.value("note parameter missing where the note list says a note exists")
@@ -468,14 +431,12 @@ public enum Reader {
         return value
     }
 
-    /// Python's `format(value, '#0<width>b')`: a `0b` prefix, zero-padded to `width` including it.
     private static func binary(_ value: Int, width: Int = 0) -> String {
         let digits = String(value, radix: 2)
         return "0b" + String(repeating: "0", count: max(0, width - 2 - digits.count)) + digits
     }
 }
 
-/// One drum lane at one step; the drum step-active flags are per lane, not per step.
 public struct LaneStep: Sendable, Hashable {
     public let lane: Int
     public let step: Int
@@ -486,12 +447,10 @@ public struct LaneStep: Sendable, Hashable {
     }
 }
 
-/// Which steps the device will actually play, 0-based: bare steps for melodic, pairs for drum.
 enum StepActive {
     case steps(Set<Int>)
     case lanes(Set<LaneStep>)
 
-    /// Whether the flag for this note is set. `step` is 0-based, as stored.
     func contains(lane: Int, step: Int) -> Bool {
         switch self {
         case .steps(let steps): steps.contains(step)

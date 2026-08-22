@@ -2,14 +2,10 @@ import Foundation
 import KSPKit
 import SwiftMIDIFile
 
-/// Rendering a decoded project as one or more Standard MIDI files. The device stores no
-/// arrangement, so merged lays note-bearing patterns end to end with pattern N at the same tick on
-/// every track, while `--split` writes one file per pattern at tick 0 and invents no layout.
 public enum MIDIExport {
-    /// Divides by 3 and 4, so every step size stays exact: the finest is a 1/32 triplet at 20 ticks.
+    /// Divides by 3 and 4, so every step size stays exact; the finest is a 1/32 triplet.
     public static let defaultTicksPerBeat = 480
 
-    /// What `ticksPerBeat` must divide by: 1/32 needs 8, and a triplet needs 3.
     public static let ticksPerBeatDivisor = 24
 
     /// The device's Drum output default is channel 10 counting from 1; MIDI counts from 0.
@@ -18,48 +14,34 @@ public enum MIDIExport {
     /// A note stored with velocity 0 is silent on the device but reads as a note-off in MIDI.
     public static let minVelocity = 1
 
-    /// Export-only: `Constants.sentinel` is 127 too, but marks an empty slot.
     public static let maxVelocity = 127
 
-    /// A flat render substitutes what a freshly placed note carries on the device.
     public static let defaultFlatVelocity = Constants.freshVelocity
 
-    /// How many times an arrangement may be laid down end to end. Export-only, unlike `passes`.
     public static let maxRepeat = 10
 }
 
-/// Everything the project file cannot tell us about timing and mapping.
 public struct ExportOptions: Sendable, Hashable {
     public let ticksPerBeat: Int
     public let drumMap: DrumMap
     public let drumChannel: Int
 
-    /// Length in steps for a gate off the 0-127 ladder; only a corrupt file reaches it.
     public let defaultGate: Double
 
-    /// Swing percent is decoded, but how far one percent moves a step is the standard formula.
     public let applySwing: Bool
 
-    /// Displace each note by its stored time shift, a fixed 1/400 of a beat per unit.
     public let applyTimeShift: Bool
 
-    /// Export both note sets of a pattern holding both, not just the one 86 bit 6 plays.
     public let includeStale: Bool
 
-    /// Export notes the device does not play: step turned off, or past the last step.
     public let includeDisabled: Bool
 
-    /// Mark each pattern's start with a marker meta event, for a DAW's marker ruler.
     public let markers: Bool
 
-    /// How many of the four 16/32/48/64 repeats to render; `nil` is auto.
     public let passes: Int?
 
-    /// Render every note at this velocity, reading a pattern's written rather than audible
-    /// content. `nil` keeps the stored values; 0 is unavailable, being a note-off in MIDI.
     public let flatVelocity: Int?
 
-    /// How many times to lay the whole export down end to end. Export-only, unlike `passes`.
     public let repeatCount: Int
 
     public init(
@@ -119,7 +101,6 @@ public struct ExportOptions: Sendable, Hashable {
         self.repeatCount = repeatCount
     }
 
-    /// A copy with a different pass count.
     func with(passes: Int?) throws -> ExportOptions {
         try ExportOptions(
             ticksPerBeat: ticksPerBeat, drumMap: drumMap, drumChannel: drumChannel,
@@ -129,7 +110,6 @@ public struct ExportOptions: Sendable, Hashable {
     }
 }
 
-/// One note as a DAW will see it, in ticks. No MIDI library involved.
 public struct RenderedNote: Sendable, Hashable {
     public let tick: Int
     public let durationTicks: Int
@@ -158,7 +138,6 @@ public struct RenderedNote: Sendable, Hashable {
     }
 }
 
-/// One parameter set of one pattern, rendered from its own tick 0.
 public struct Rendering: Sendable, Hashable {
     public let trackNumber: Int
     public let kind: NoteKind
@@ -183,13 +162,11 @@ public struct Rendering: Sendable, Hashable {
 
     public var midiTrackName: String { Rendering.trackName(trackNumber, kind: kind) }
 
-    /// What a track is called in an exported `.mid`, shared so a preview cannot drift from it.
     public static func trackName(_ trackNumber: Int, kind: NoteKind) -> String {
         kind == .drum ? "Track \(trackNumber) (drum)" : "Track \(trackNumber)"
     }
 }
 
-/// One MIDI track's worth of notes, at absolute ticks.
 public struct ArrangedTrack: Sendable, Hashable {
     public let name: String
     public let notes: [RenderedNote]
@@ -200,7 +177,6 @@ public struct ArrangedTrack: Sendable, Hashable {
     }
 }
 
-/// Where one pattern starts on the timeline, and which pattern it is.
 public struct PatternBoundary: Sendable, Hashable {
     public let patternNumber: Int
     public let tick: Int
@@ -213,12 +189,10 @@ public struct PatternBoundary: Sendable, Hashable {
     public var markerText: String { "pattern \(patternNumber)" }
 }
 
-/// Renderings placed on a timeline, ready to become a file.
 public struct Arrangement: Sendable, Hashable {
     public let tracks: [ArrangedTrack]
     public let lengthTicks: Int
 
-    /// Ascending by tick: the build layer walks them into MIDI deltas.
     public let boundaries: [PatternBoundary]
     public let trackNumbers: [Int]
     public let diagnostics: Report
@@ -234,7 +208,6 @@ public struct Arrangement: Sendable, Hashable {
         self.diagnostics = diagnostics
     }
 
-    /// Which patterns are in this file, not how often each is played.
     public var patternNumbers: [Int] {
         var seen: Set<Int> = []
         return boundaries.map(\.patternNumber).filter { seen.insert($0).inserted }
@@ -245,17 +218,14 @@ public struct Arrangement: Sendable, Hashable {
     public var noteCount: Int { tracks.reduce(0) { $0 + $1.notes.count } }
 }
 
-/// A rendered file plus what the caller should be told about it.
 public struct ExportResult: Sendable {
     public let midi: MusicalMIDI1File
     public let noteCount: Int
     public let patternNumbers: [Int]
 
-    /// Stops matching ``trackNumbers`` once track 1's drum set becomes a track of its own.
     public let trackNames: [String]
     public let diagnostics: Report
 
-    /// KeyStep Pro track numbers in this file -- what a split export names its files after.
     public let trackNumbers: [Int]
 
     public init(
@@ -276,13 +246,11 @@ public struct ExportResult: Sendable {
 }
 
 extension MIDIExport {
-    /// The step count the pattern declares for `kind`.
     public static func declaredStepCount(_ pattern: Pattern, _ kind: NoteKind) -> Int {
         if kind == .drum, let drum = pattern.drumStepCount { return drum }
         return pattern.seqStepCount
     }
 
-    /// How long one step is, from the pattern's own `99`/`116` step size and triplet (spec 3.3).
     public static func ticksPerStep(_ pattern: Pattern, _ kind: NoteKind, ticksPerBeat: Int) -> Int
     {
         let bits = pattern.bits(kind)
@@ -290,7 +258,6 @@ extension MIDIExport {
         return bits.triplet ? Arithmetic.floorDiv(ticks * 2, 3) : ticks
     }
 
-    /// Four when any note sits out one of the four repeats, else one.
     public static func autoPasses(_ notes: [Note]) -> Int {
         let partial = notes.contains { $0.skip.count != Constants.skipCyclePasses }
         return partial ? Constants.skipCyclePasses : 1
@@ -301,24 +268,20 @@ extension MIDIExport {
         return pattern.seqSwingPercent
     }
 
-    /// Declared length, widened to hold any note past it -- reachable only with `includeDisabled`.
     public static func stepCount(_ pattern: Pattern, _ kind: NoteKind, notes: [Note]? = nil) -> Int
     {
         let subject = notes ?? pattern.notes(of: kind)
         return max(declaredStepCount(pattern, kind), subject.map(\.step).max() ?? 0)
     }
 
-    /// Ticks the device delays `step` by. **0-based**, unlike the note parameters' 1-based step.
+    /// `step` is **0-based**, unlike the 1-based step a note parameter stores.
     public static func swingDelay(_ step: Int, _ swingPercent: Int, _ ticksPerStep: Double)
         -> Double
     {
-        // At p percent the first step of a pair takes p of it, so the second starts 2*p/100 - 1
-        // steps late; 50% is no swing.
         guard Arithmetic.floorMod(step, 2) != 0 else { return 0 }
         return Double(Arithmetic.pyRound(ticksPerStep * (2 * Double(swingPercent) / 100 - 1)))
     }
 
-    /// Turn one parameter set of one pattern into plain tick data, counted from its own start.
     public static func renderPattern(
         _ pattern: Pattern, trackNumber: Int, kind: NoteKind, options: ExportOptions? = nil
     ) throws -> Rendering {
@@ -327,7 +290,6 @@ extension MIDIExport {
         let site = Site(track: trackNumber, pattern: pattern.number, kind: kind.rawValue)
         let stepTicks = ticksPerStep(pattern, kind, ticksPerBeat: options.ticksPerBeat)
 
-        // Filter before measuring: a note the device does not play must not stretch its pattern.
         let last = declaredStepCount(pattern, kind)
         var playable = pattern.notes(of: kind)
         let stepOff = playable.filter { disablement($0, lastStep: last) == .stepTurnedOff }
@@ -408,14 +370,11 @@ extension MIDIExport {
                     + "exported, but how far one percent moves them is not measured",
                 site: Site(pattern: pattern.number))
         }
-        // The reader's step-off finding is dropped where the export has just named the flag that
-        // brings those notes back.
         collector.extend(
             pattern.diagnostics
                 .filter { !(saidStepOff && $0.code == .disabledStepOff) }
                 .map { $0.at(track: trackNumber) })
 
-        // Rendered once per note, then replicated, so a note's diagnostics are raised once.
         var renderedNotes: [(note: Note, rendered: RenderedNote)] = []
         for note in playable {
             guard
@@ -438,7 +397,6 @@ extension MIDIExport {
             let sequence = Constants.skipSequences[index]
             let offset = index * passTicks
             for entry in renderedNotes {
-                // One pass renders everything: the mask means nothing without the repeats.
                 if passes > 1 && !entry.note.skip.contains(sequence) { continue }
                 notes.append(
                     offset != 0
@@ -457,7 +415,6 @@ extension MIDIExport {
     ) -> RenderedNote? {
         var pitch = note.pitch
         if kind == .drum {
-            // A lane outside the map has no note to emit, so it is dropped loudly.
             guard options.drumMap.hasLane(note.pitch),
                 let mapped = try? options.drumMap.noteForLane(note.pitch)
             else {
@@ -475,7 +432,6 @@ extension MIDIExport {
             tick += Arithmetic.pyRound(swingDelay(note.step - 1, swing, Double(stepTicks)))
         }
         if options.applyTimeShift {
-            // Independent of the step size, so taken from the beat rather than from stepTicks.
             tick += Constants.timeShiftTicks(note.timeShift, ticksPerBeat: options.ticksPerBeat)
         }
 
@@ -498,7 +454,6 @@ extension MIDIExport {
 }
 
 extension MIDIExport {
-    /// Move `note` onto the timeline, holding it at tick 0 -- and saying so -- if it lands before.
     static func placed(_ note: RenderedNote, offset: Int, collector: Collector) -> RenderedNote {
         let tick = note.tick + offset
         if tick >= 0 { return note.with(tick: tick) }
@@ -509,8 +464,6 @@ extension MIDIExport {
         return note.with(tick: 0)
     }
 
-    /// Lay renderings end to end in pattern order, each pattern occupying the longest length any
-    /// track gives it so unequal tracks stay aligned at every boundary. `repeat` is not `passes`.
     public static func arrange(_ renderings: [Rendering], repeat count: Int = 1) throws
         -> Arrangement
     {
@@ -543,7 +496,6 @@ extension MIDIExport {
             (left.trackNumber, left.kind == .drum ? 1 : 0, left.patternNumber)
                 < (right.trackNumber, right.kind == .drum ? 1 : 0, right.patternNumber)
         }
-        // A repeat is placed, not copied afterwards, so overlaps across rounds resolve normally.
         for rendering in ordered {
             let name = rendering.midiTrackName
             if groups[name] == nil {
@@ -576,8 +528,6 @@ extension MIDIExport {
             diagnostics: collector.report())
     }
 
-    /// Say so when the tracks do not add up to the same length: this export restarts them all at
-    /// each pattern boundary, where the device loops each independently.
     static func warnOnUnequalTracks(_ renderings: [Rendering], collector: Collector) {
         var totals: [Int: [Int: Int]] = [:]
         for rendering in renderings {
@@ -597,10 +547,8 @@ extension MIDIExport {
                 + "across tracks, but the device loops each track on its own, so they drift apart")
     }
 
-    /// Stop a long gate from swallowing the next note of the same pitch.
     static func resolveOverlaps(_ notes: [RenderedNote], collector: Collector) -> [RenderedNote] {
-        // Two note-ons for one pitch with one note-off between them hangs in most DAWs; the
-        // device retriggers, so the earlier note is shortened instead.
+        // The device retriggers, so an overlapping earlier note is shortened, not left hanging.
         let ordered = notes.stableSorted { ($0.tick, $0.pitch) < ($1.tick, $1.pitch) }
         var resolved: [RenderedNote] = []
         var previous: [Pair: Int] = [:]  // (channel, pitch) -> index in resolved
@@ -624,7 +572,6 @@ extension MIDIExport {
     }
 }
 
-/// Two integers as one hashable key.
 struct Pair: Hashable {
     let first: Int
     let second: Int
@@ -636,7 +583,6 @@ struct Pair: Hashable {
 }
 
 extension MIDIExport {
-    /// Turn an arrangement into a type-1 MIDI file. The only `SwiftMIDIFile` layer.
     public static func buildMIDIFile(
         _ arrangement: Arrangement, name: String, tempoBPM: Double, ticksPerBeat: Int,
         markers: Bool = true
@@ -653,13 +599,11 @@ extension MIDIExport {
             tracks: tracks)
     }
 
-    /// Microseconds per quarter note, rounded as mido does -- not `SwiftMIDIFile`'s `tempo(bpm:)`,
-    /// which truncates, and would disagree by one microsecond on a fractional BPM.
+    /// Rounded as mido does; `SwiftMIDIFile`'s `tempo(bpm:)` truncates and would disagree by one.
     static func bpmToMicroseconds(_ bpm: Double) -> UInt32 {
         UInt32(Arithmetic.pyRound(60 * 1_000_000 / bpm))
     }
 
-    /// Track 0: name, tempo, time signature and the pattern markers, no notes.
     static func conductorTrack(
         name: String, tempoBPM: Double, totalTicks: Int, boundaries: [PatternBoundary]
     )
@@ -684,12 +628,10 @@ extension MIDIExport {
                     string: boundary.markerText))
             previousTick = boundary.tick
         }
-        // End-of-track sits at the end of the last pattern, not the last note.
         track.deltaTimeBeforeEndOfTrack = .ticks(UInt32(totalTicks - previousTick))
         return track
     }
 
-    /// Turn absolute-tick notes into a delta-time MIDI track.
     static func midiTrack(_ arranged: ArrangedTrack) -> MusicalMIDI1File.Track {
         var track = MusicalMIDI1File.Track()
         track.events.append(.text(type: .trackOrSequenceName, string: arranged.name))
@@ -726,7 +668,6 @@ extension MIDIExport {
 }
 
 extension MIDIExport {
-    /// Render `project` as a single type-1 MIDI file; narrow with `Project.select` first.
     public static func exportProject(_ project: Project, options: ExportOptions? = nil) throws
         -> ExportResult
     {
@@ -736,8 +677,6 @@ extension MIDIExport {
             arrange(renderings, repeat: options.repeatCount), project: project, options: options)
     }
 
-    /// One file per non-empty (track, pattern), each starting at tick 0 with nothing laid out
-    /// across patterns.
     public static func exportSplit(_ project: Project, options: ExportOptions? = nil) throws
         -> [ExportResult]
     {
@@ -745,7 +684,6 @@ extension MIDIExport {
         var keys: [Pair] = []
         var parts: [Pair: [Rendering]] = [:]
         for rendering in try renderProject(project, options: options) {
-            // Under --include-stale track 1 contributes two renderings to the same file.
             let key = Pair(rendering.trackNumber, rendering.patternNumber)
             if parts[key] == nil {
                 keys.append(key)
@@ -765,8 +703,6 @@ extension MIDIExport {
             }
     }
 
-    /// Render every (track, pattern, parameter set) that holds notes and plays. An automatic pass
-    /// count is resolved across a pattern column, keeping pattern N aligned on every track.
     public static func renderProject(_ project: Project, options: ExportOptions? = nil) throws
         -> [Rendering]
     {
@@ -779,11 +715,8 @@ extension MIDIExport {
                 var kinds = populated
                 var staleDiagnostic: Diagnostic?
                 if populated.count > 1 && !options.includeStale {
-                    // Only when both sets hold notes does the flag have to decide; a pattern
-                    // holding one set is exported whatever the flag says.
                     kinds = [live]
                     let stale = populated.first { $0 != live } ?? live
-                    // Carries the reader's own counts, so its line can be dropped below.
                     staleDiagnostic = Diagnostic(
                         code: .staleNoteSet,
                         detail:
@@ -813,7 +746,6 @@ extension MIDIExport {
                 plan.pattern, trackNumber: plan.track.number, kind: plan.kind,
                 options: options.with(passes: passes))
             if let stale = plan.stale {
-                // This says what the reader's line says and which flag brings the other set back.
                 let kept = rendering.diagnostics.entries.filter { $0.code != .mixedNoteSets }
                 rendering = Rendering(
                     trackNumber: rendering.trackNumber, kind: rendering.kind,
@@ -829,7 +761,6 @@ extension MIDIExport {
         -> ExportResult
     {
         var diagnostics = arrangement.diagnostics
-        // The per-pattern value takes precedence on the device, so the global is reported only.
         if options.applySwing && project.globalSwingPercent != Constants.swingRangePercent.min {
             let globalSwing = Diagnostic(
                 code: .globalSwingNotApplied,

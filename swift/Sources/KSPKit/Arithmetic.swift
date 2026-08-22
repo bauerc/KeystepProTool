@@ -1,4 +1,3 @@
-/// Where Swift and Python disagree on arithmetic, in one file.
 public enum Arithmetic {
     /// Python's `//`, which floors where Swift's `/` truncates: `-7 // 4` is -2 there, -1 here.
     public static func floorDiv(_ dividend: Int, _ divisor: Int) -> Int {
@@ -12,7 +11,6 @@ public enum Arithmetic {
         return remainder != 0 && (remainder < 0) != (divisor < 0) ? remainder + divisor : remainder
     }
 
-    /// Python's `-(-n // m)` idiom: divide and round the quotient up.
     public static func ceilDiv(_ dividend: Int, _ divisor: Int) -> Int {
         -floorDiv(-dividend, divisor)
     }

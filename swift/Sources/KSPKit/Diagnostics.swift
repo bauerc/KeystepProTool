@@ -1,11 +1,9 @@
-/// Structured diagnostics, and how they collapse for display. A diagnostic is a record rather
-/// than a sentence, so a code's instances collapse into one counted line without matching English.
 public enum Severity: String, Sendable, Hashable, Codable, CaseIterable {
     case warning
     case error
 }
 
-/// What kind of problem this is. Grouping keys off these, not off text.
+/// Grouping keys off these, not off the text.
 public enum Code: String, Sendable, Hashable, Codable, CaseIterable {
     case noVersionKey = "no-version-key"
     case mixedNoteSets = "mixed-note-sets"
@@ -58,8 +56,6 @@ public enum Code: String, Sendable, Hashable, Codable, CaseIterable {
     case tempoOutOfRange = "tempo-out-of-range"
 }
 
-/// How one code's instances read once collapsed. `template` takes `{sites}` and `{subjects}`,
-/// each a counted noun phrase; a template using neither is said once however often it arises.
 public struct Summary: Sendable, Hashable {
     public let template: String
     public let subject: String
@@ -71,7 +67,6 @@ public struct Summary: Sendable, Hashable {
         self.site = site
     }
 
-    /// The template with both counts filled in.
     func rendered(sites: Int, subjects: Int) -> String {
         template
             .replacing("{sites}", with: counted(sites, site))
@@ -79,7 +74,6 @@ public struct Summary: Sendable, Hashable {
     }
 }
 
-/// Where a diagnostic came from. Every part is optional.
 public struct Site: Sendable, Hashable {
     public let track: Int?
     public let pattern: Int?
@@ -123,17 +117,14 @@ extension Site {
     }
 }
 
-/// One occurrence of one problem.
 public struct Diagnostic: Sendable, Hashable {
     public let code: Code
 
-    /// The full sentence `--verbose` shows; the site and "warning:" prefixes are added later.
     public let detail: String
 
     public let site: Site
     public let severity: Severity
 
-    /// How many notes, steps or lanes this occurrence covers; summed when the code is collapsed.
     public let subjects: Int
 
     public init(
@@ -152,7 +143,6 @@ public struct Diagnostic: Sendable, Hashable {
         return location.isEmpty ? detail : "\(location): \(detail)"
     }
 
-    /// Copy with the given site parts filled in, leaving the rest alone.
     public func at(
         track: Int? = nil, pattern: Int? = nil, kind: String? = nil, slot: Int? = nil
     ) -> Diagnostic {
@@ -175,7 +165,6 @@ public struct Diagnostic: Sendable, Hashable {
     }
 }
 
-/// Every occurrence of one code, and what they add up to.
 public struct Group: Sendable, Hashable {
     public let code: Code
     public let severity: Severity
@@ -189,9 +178,7 @@ public struct Group: Sendable, Hashable {
         entries.reduce(0) { $0 + $1.subjects }
     }
 
-    /// The collapsed line.
     public var headline: String {
-        // A group of one keeps its own message, which names its site.
         guard entries.count > 1, let summary = Diagnostics.summaries[code] else {
             return entries.first?.message ?? ""
         }
@@ -199,7 +186,6 @@ public struct Group: Sendable, Hashable {
     }
 }
 
-/// An immutable set of diagnostics, in the order they were raised.
 public struct Report: Sendable, Hashable {
     public let entries: [Diagnostic]
 
@@ -210,10 +196,8 @@ public struct Report: Sendable, Hashable {
     public var isEmpty: Bool { entries.isEmpty }
     public var count: Int { entries.count }
 
-    /// Every diagnostic in full, as plain strings.
     public var messages: [String] { entries.map(\.message) }
 
-    /// One group per code, in the order each code first appeared.
     public func grouped() -> [Group] {
         var order: [Code] = []
         var byCode: [Code: [Diagnostic]] = [:]
@@ -234,7 +218,6 @@ public struct Report: Sendable, Hashable {
         verbose ? messages : grouped().map(\.headline)
     }
 
-    /// The "there is more to see" line, or `nil` when there is not.
     public func note(verbose: Bool = false) -> String? {
         guard !verbose else { return nil }
         let kinds = grouped().count
@@ -243,12 +226,10 @@ public struct Report: Sendable, Hashable {
             + "--verbose for detail"
     }
 
-    /// Every entry in full, in order.
     public func toJSON() -> JSONNode {
         .array(entries.map { $0.toJSON() })
     }
 
-    /// Concatenate, dropping anything the result already says.
     public func merge(_ other: Report) -> Report {
         let collector = Collector()
         collector.extend(entries)
@@ -263,10 +244,7 @@ extension Report: Sequence {
     }
 }
 
-/// Builds a ``Report``, dropping exact repeats. A class: callers pass one down and raise into it.
 public final class Collector {
-    // Keyed on (code, site, detail), not the rendered string, so alike diagnostics from different
-    // patterns both survive.
     private struct Fingerprint: Hashable {
         let code: Code
         let site: Site
@@ -495,7 +473,6 @@ public enum Diagnostics {
     ]
 }
 
-/// Render a count with its noun: 3 -> "3 notes", 1 -> "1 note".
 private func counted(_ count: Int, _ noun: String) -> String {
     count == 1 ? "\(count) \(noun)" : "\(count) \(noun)s"
 }

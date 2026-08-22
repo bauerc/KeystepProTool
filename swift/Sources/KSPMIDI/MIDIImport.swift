@@ -2,26 +2,18 @@ import Foundation
 import KSPKit
 import SwiftMIDIFile
 
-/// Building a project from a Standard MIDI file. Nothing here creates a project: the key set is
-/// fixed (spec 2), so a template is loaded and values are overwritten in it.
 public enum MIDIImport {
-    /// MIDI's own default when a file carries no `set_tempo`: 500,000 microseconds per beat.
     public static let defaultTempo = 500_000
 
-    /// MIDI's default when a file carries no `time_signature`.
     public static let defaultTimeSignature = (numerator: 4, denominator: 4)
 
-    /// The MIDI channel GM reserves for percussion, counting from 0.
     public static let drumChannel = 9
 
-    /// No swing. Both the bottom of the device's range and its default.
     static let straight = Constants.swingRangePercent.min
 
-    /// Notes on delayed steps needed before a groove is believed rather than left to time shift.
     static let minSwungNotes = 3
 }
 
-/// One source track of the file onto one device track, both counting from 1.
 public struct TrackRoute: Sendable, Hashable {
     public var source: Int
     public var device: Int
@@ -32,26 +24,19 @@ public struct TrackRoute: Sendable, Hashable {
     }
 }
 
-/// Everything the MIDI file cannot tell us about the target project.
 public struct ImportOptions: Sendable, Hashable {
-    /// The grid the incoming clip is snapped to. A real choice, unlike on export.
     public let stepsPerBeat: Int
 
-    /// Read only these tracks of the source file, counting from 1; empty reads every track.
     public let midiTracks: Set<Int>
 
-    /// Which source track to write as drums, counting from 1.
     public let drumTrack: Int?
 
-    /// The lane-to-note map to invert; `nil` fits a chromatic one to the source's own pitches.
     public let drumMap: DrumMap?
 
     public let carryTempo: Bool
     public let fitSwing: Bool
     public let fitTimeShift: Bool
 
-    /// Where named source tracks go, overriding the fill-upwards rule; a drum track still lands
-    /// on device track 1.
     public let routes: [TrackRoute]
 
     public init(
@@ -65,7 +50,6 @@ public struct ImportOptions: Sendable, Hashable {
         routes: [TrackRoute] = []
     ) throws {
         try Constants.checkStepsPerBeat(stepsPerBeat)
-        // Both messages name the CLI option rather than the field they check.
         if midiTracks.contains(where: { $0 < 1 }) {
             throw KSPError.value("midi_track counts from 1")
         }
@@ -83,12 +67,10 @@ public struct ImportOptions: Sendable, Hashable {
         self.routes = routes
     }
 
-    /// The faults a route has without knowing the song: range and clashes.
     private static func checkRoutes(
         _ routes: [TrackRoute], drumTrack: Int?, midiTracks: Set<Int>
     ) throws {
         if !routes.isEmpty && !midiTracks.isEmpty {
-            // A named selection goes straight to quantise, so a route would be silently ignored.
             throw KSPError.value(
                 "routes and midi_track contradict each other; midi_track converts a single "
                     + "source track into the one pattern the target names, leaving a route "
@@ -133,13 +115,11 @@ public struct ImportOptions: Sendable, Hashable {
     }
 }
 
-/// One source track's note events, in ticks. No MIDI library involved.
 public struct Clip: Sendable, Hashable {
     public let notes: [RenderedNote]
     public let ticksPerBeat: Int
     public let tempoBPM: Double
 
-    /// Which tracks of the file the notes came from, counting from 1.
     public let sourceTracks: [Int]
 
     public init(
@@ -153,11 +133,9 @@ public struct Clip: Sendable, Hashable {
 
     public var channels: [Int] { Set(notes.map(\.channel)).sorted() }
 
-    /// Whether every note sits on the GM percussion channel.
     public var isPercussion: Bool { !notes.isEmpty && channels == [MIDIImport.drumChannel] }
 }
 
-/// A whole source file: one clip per note-bearing track, plus its timing.
 public struct Song: Sendable, Hashable {
     public let clips: [Clip]
     public let ticksPerBeat: Int
@@ -165,7 +143,6 @@ public struct Song: Sendable, Hashable {
     public let beatsPerBar: Double
     public let tempoChanges: Int
 
-    /// Events the device cannot store, counted across every track read.
     public let controllersDropped: Int
 
     public init(
@@ -185,7 +162,6 @@ public struct Song: Sendable, Hashable {
     }
 }
 
-/// One note addressed the way the device stores it: a 1-based step.
 public struct PlacedNote: Sendable, Hashable {
     public let step: Int
     public let pitch: Int
@@ -193,8 +169,7 @@ public struct PlacedNote: Sendable, Hashable {
     public let gate: Int
     public let timeShift: Int
 
-    /// The lane this hit plays, or `nil` on a melodic note: `117` holds a lane where `109` holds
-    /// a pitch.
+    /// The lane this hit plays, or `nil` on a melodic note: `117` holds a lane, `109` a pitch.
     public let lane: Int?
 
     public init(
@@ -210,13 +185,10 @@ public struct PlacedNote: Sendable, Hashable {
     }
 }
 
-/// What one pattern holds.
 public struct Placement: Sendable, Hashable {
     public let notes: [PlacedNote]
     public let stepCount: Int
 
-    /// The grid the notes were snapped to, which ``MIDIImport/apply(_:plan:)`` writes into the
-    /// pattern's own step size.
     public let stepsPerBeat: Int
     public let pattern: Int
     public let swingPercent: Int
@@ -236,9 +208,7 @@ public struct Placement: Sendable, Hashable {
     }
 }
 
-/// One source track's worth of patterns, and where they go.
 public struct TrackPlan: Sendable, Hashable {
-    /// The device track, 1-4.
     public let track: Int
     public let placements: [Placement]
     public let isDrum: Bool
@@ -257,11 +227,9 @@ public struct TrackPlan: Sendable, Hashable {
     public var patterns: [Int] { placements.map(\.pattern) }
 }
 
-/// Everything the conversion decided, before any of it is written.
 public struct SongPlan: Sendable, Hashable {
     public let tracks: [TrackPlan]
 
-    /// The tempo to write, or `nil` to keep the template's.
     public let tempoBPM: Double?
     public let drumMap: DrumMap?
     public let scene: Int
@@ -281,7 +249,6 @@ public struct SongPlan: Sendable, Hashable {
     public var notes: [PlacedNote] { tracks.flatMap(\.notes) }
 }
 
-/// A project with the source written into it, ready to serialise.
 public struct ImportResult: Sendable {
     public let raw: RawProject
     public let plan: SongPlan
@@ -296,30 +263,25 @@ public struct ImportResult: Sendable {
     public var notes: [PlacedNote] { plan.notes }
     public var noteCount: Int { plan.notes.count }
 
-    /// The first device track written; the single-target path has only one.
     public var track: Int { plan.tracks.first?.track ?? 1 }
     public var pattern: Int { plan.tracks.first?.placements.first?.pattern ?? 1 }
     public var stepCount: Int { plan.tracks.first?.placements.first?.stepCount ?? 0 }
 }
 
-/// One source track's notes, and what else went past while pairing them.
 struct TrackRead {
     var notes: [RenderedNote]
 
-    /// Events the device cannot store: controllers, bend, program, pressure.
     var dropped: Int
 }
 
 extension MIDIImport {
-    /// Pair one track's note-ons with their note-offs, in absolute ticks.
     static func trackNotes(_ track: MusicalMIDI1File.Track, timebase: MusicalMIDIFileTimebase)
         -> TrackRead
     {
         var tick = 0
         var dropped = 0
         var notes: [RenderedNote] = []
-        // A second note-on for a sounding pitch retriggers it, so the earlier one ends here.
-        // Insertion order is kept alongside, since the leftovers are closed in it.
+        // A second note-on for a sounding pitch retriggers it; leftovers close in insertion order.
         var openOrder: [Pair] = []
         var openNotes: [Pair: (onset: Int, velocity: Int)] = [:]
 
@@ -363,7 +325,6 @@ extension MIDIImport {
             }
         }
 
-        // A note-on the file never closes still sounded; end it at the track's last event.
         for held in openOrder {
             guard let open = openNotes[held] else { continue }
             notes.append(
@@ -375,7 +336,6 @@ extension MIDIImport {
         return TrackRead(notes: notes, dropped: dropped)
     }
 
-    /// Refuse the two file shapes that would convert to nonsense: SMPTE timing, and type 2.
     static func checkReadable(_ midi: MusicalMIDI1File) throws {
         if midi.timebase.ticksPerQuarterNote < 1 {
             throw KSPError.value(
@@ -389,7 +349,6 @@ extension MIDIImport {
         }
     }
 
-    /// The file's first tempo, its first time signature and how many tempi.
     static func timing(_ midi: MusicalMIDI1File) -> (
         tempo: Int, signature: (numerator: Int, denominator: Int), changes: Int
     ) {
@@ -410,8 +369,7 @@ extension MIDIImport {
                     }
                 case .timeSignature(let sig):
                     if !foundSignature {
-                        // The file stores the denominator as a power of two; callers want it
-                        // spelled out, as mido reports it.
+                        // The file stores the denominator as a power of two.
                         signature = (Int(sig.numerator), 1 << Int(sig.denominator))
                         foundSignature = true
                     }
@@ -423,12 +381,10 @@ extension MIDIImport {
         return (tempo, signature, changes)
     }
 
-    /// Microseconds per beat back to BPM, as `mido.tempo2bpm` does at 4/4.
     static func tempoToBPM(_ tempo: Int) -> Double {
         60 * 1_000_000 / Double(tempo)
     }
 
-    /// Every selected track's notes, merged into one clip in absolute ticks.
     public static func readClip(_ midi: MusicalMIDI1File, options: ImportOptions? = nil) throws
         -> Clip
     {
@@ -455,8 +411,6 @@ extension MIDIImport {
             sourceTracks: sources)
     }
 
-    /// One clip per note-bearing source track and channel, in file order. A type 0 file tells its
-    /// instruments apart by channel alone, so a track carrying several is split into one clip each.
     public static func readSong(_ midi: MusicalMIDI1File, options: ImportOptions? = nil) throws
         -> Song
     {
@@ -491,34 +445,27 @@ extension MIDIImport {
             clips: clips,
             ticksPerBeat: Int(midi.timebase.ticksPerQuarterNote),
             tempoBPM: tempoBPM,
-            // A bar in quarter notes, which is what a beat is here.
             beatsPerBar: Double(signature.numerator) * 4 / Double(signature.denominator),
             tempoChanges: changes,
             controllersDropped: dropped)
     }
 }
 
-/// One source note against the grid, before it belongs to a pattern.
 struct Snapped {
-    /// 0-based, counted from the anchored origin, and unbounded by a pattern.
     let step: Int
 
-    /// Ticks between where the note actually is and where its step is.
     let residual: Double
 
     let note: RenderedNote
 }
 
 extension MIDIImport {
-    /// The tick the first note of `clips` is snapped back from, taken across every clip at once:
-    /// anchoring per track would slide a part entering at bar 3 back onto bar 1.
     static func anchor(_ clips: [Clip], _ ticksPerStep: Double) -> Double {
         let first = clips.flatMap(\.notes).map(\.tick).min() ?? 0
         return Double(Arithmetic.pyRound(Double(first) / ticksPerStep)) * ticksPerStep
     }
 
-    /// The step `offset` belongs to under `percent` swing, and what is left. Nearest-step
-    /// arithmetic cannot do it: at 75% a delayed step would collapse onto the next one.
+    /// Nearest-step rounding cannot do this: at 75% a delayed step collapses onto the next one.
     static func assignStep(_ offset: Double, _ ticksPerStep: Double, _ percent: Int) -> (
         step: Int, residual: Double
     ) {
@@ -548,8 +495,6 @@ extension MIDIImport {
             }
     }
 
-    /// The swing percentage that best explains a clip's timing, fitted before any time shift is
-    /// spent. A search over the 26 storable percentages; ties keep the lowest.
     static func fitSwing(_ clip: Clip, _ ticksPerStep: Double, _ origin: Double) -> Int {
         let (low, high) = Constants.swingRangePercent
         if clip.notes.isEmpty { return low }
@@ -570,16 +515,12 @@ extension MIDIImport {
 
         if bestPercent == low { return low }
 
-        // A groove repeats; without this the search would explain one late note as swing and
-        // displace every other note on a delayed step.
         let swung = offsets.filter {
             Arithmetic.floorMod(assignStep($0, ticksPerStep, bestPercent).step, 2) != 0
         }.count
         return swung >= minSwungNotes ? bestPercent : low
     }
 
-    /// A residual as a stored time shift, and what it could not express. The unit is a fixed
-    /// 1/400 of a beat (spec 6.4), so the reach is 60 ticks either way at 480 PPQN.
     static func fitShift(_ residual: Double, _ ticksPerBeat: Int) -> (
         stored: Int, remainder: Double
     ) {
@@ -590,7 +531,6 @@ extension MIDIImport {
         return (Constants.timeShiftCentre + units, residual - Double(units) * unit)
     }
 
-    /// The ladder rung nearest this note's length, and whether it is exact.
     static func gateFor(_ note: RenderedNote, _ ticksPerStep: Double) -> (stored: Int, exact: Bool)
     {
         let length = Double(note.durationTicks) / ticksPerStep
@@ -598,8 +538,6 @@ extension MIDIImport {
         return (stored, Constants.gateTable[stored] == length)
     }
 
-    /// Turn snapped notes into one pattern's worth of placed ones. `offset` is the 0-based step
-    /// this pattern starts at within the track; `swing` is already out of each residual.
     static func place(
         _ snapped: [Snapped], stepCount: Int, pattern: Int, ticksPerStep: Double,
         ticksPerBeat: Int, options: ImportOptions, drumMap: DrumMap?, site: Site,
@@ -610,7 +548,6 @@ extension MIDIImport {
         var heldPastEnd = 0
         var unrepresentable = 0
         var unmapped: [Int] = []
-        // The most a residual can be off by and still round to a storable shift.
         let halfShiftUnit = Double(ticksPerBeat) / Double(Constants.timeShiftUnitsPerBeat) / 2
 
         for entry in snapped {
@@ -681,14 +618,12 @@ extension MIDIImport {
                 site: site, subjects: unmapped.count)
         }
 
-        // Refused here rather than by `Mutate`, so the message can name the step to thin.
         var crowded: [Int: Int] = [:]
         for note in notes {
             crowded[note.step, default: 0] += 1
         }
         let over = crowded.filter { $0.value > Constants.maxNotesPerStep }.map(\.key)
         if !over.isEmpty {
-            // The worst step, and the earliest of those when several tie.
             let step = over.max { left, right in
                 (crowded[left] ?? 0, -left) < (crowded[right] ?? 0, -right)
             }
@@ -716,8 +651,6 @@ extension MIDIImport {
             pattern: pattern, swingPercent: swing)
     }
 
-    /// Snap `clip` to a `stepCount`-step grid, as one pattern, dropping notes past the last step;
-    /// ``planTrack`` is the one that splits instead.
     public static func quantise(_ clip: Clip, stepCount: Int, options: ImportOptions? = nil) throws
         -> Placement
     {
@@ -776,8 +709,7 @@ extension MIDIImport {
             swingPercent: placement.swingPercent, diagnostics: collector.report())
     }
 
-    /// Lay one source track across as many chained 64-step patterns as it needs. Lengths are per
-    /// track, never padded to a common one: the device loops each track's chain on its own.
+    /// Lengths are per track, never padded: the device loops each track's chain on its own.
     public static func planTrack(
         _ clip: Clip, track: Int, collector: Collector, options: ImportOptions? = nil,
         isDrum: Bool = false, drumMap: DrumMap? = nil, firstPattern: Int = 1,
@@ -787,11 +719,9 @@ extension MIDIImport {
         let ticksPerStep = Double(clip.ticksPerBeat) / Double(options.stepsPerBeat)
         let site = Site(track: track, kind: isDrum ? "drum" : "seq")
 
-        // Fitted once per track: the steps a pattern is cut on are not known until it is fitted.
         let swing = options.fitSwing ? fitSwing(clip, ticksPerStep, origin) : straight
         let snapped = snap(clip, ticksPerStep, origin, swing)
 
-        // Rounded up to the bar: a track that stops mid-bar drifts against every other one.
         let ends = snapped.map {
             Double($0.step) + Double($0.note.durationTicks) / ticksPerStep
         }
@@ -846,14 +776,11 @@ extension MIDIImport {
             sourceTrack: clip.sourceTracks.first)
     }
 
-    /// A chromatic map covering `clip`'s pitches, low note first. The real map is device state
-    /// (spec 3.2.1), and the factory default would drop every source not starting at MIDI 36.
     public static func fitDrumMap(_ clip: Clip) throws -> DrumMap {
         let low = clip.notes.lazy.map(\.pitch).min() ?? DrumMap.defaultChromaticLow
         return try DrumMap.chromatic(max(DrumMap.minNote, min(low, DrumMap.maxChromaticLow)))
     }
 
-    /// Several clips of one source track back into the one the file wrote.
     static func merged(_ clips: [Clip]) -> Clip {
         guard let first = clips.first else {
             return Clip(notes: [], ticksPerBeat: 1, tempoBPM: 120, sourceTracks: [])
@@ -867,15 +794,12 @@ extension MIDIImport {
             sourceTracks: first.sourceTracks)
     }
 
-    /// Which device track each source clip goes to. A route puts a named source track where it
-    /// says, the rest fill upwards from `firstTrack`, and a drum clip always goes to track 1.
     static func assign(
         _ song: Song, _ options: ImportOptions, _ collector: Collector, _ firstTrack: Int = 1
     ) throws -> [(clip: Clip, track: Int, isDrum: Bool)] {
         var drum: Clip?
         var melodic: [Clip]
         if let named = options.drumTrack {
-            // Names a track of the file, so channels split out of it are put back together.
             let matching = song.clips.filter { $0.sourceTracks == [named] }
             if matching.isEmpty {
                 throw KSPError.value(
@@ -906,7 +830,6 @@ extension MIDIImport {
                         "route \(route.source):\(route.device) sends the drum track to device "
                             + "track \(route.device); only device track 1 carries a drum set")
                 }
-                // Agrees with the drum designation, and the drum clip is already on track 1.
                 continue
             }
             if route.device == 1 && drum != nil {
@@ -914,7 +837,6 @@ extension MIDIImport {
                     "route \(route.source):1 collides with the drum track; only device track 1 "
                         + "carries a drum set")
             }
-            // A route names a track, not a channel, so its channels are merged back together.
             routed.append((merged(matching), route.device))
             claimed.insert(route.device)
             melodic = melodic.filter { $0.sourceTracks != [route.source] }
@@ -926,7 +848,6 @@ extension MIDIImport {
         }
         assigned.append(contentsOf: routed.map { ($0.clip, $0.track, false) })
 
-        // Only Track 1 carries a drum set, so it is spoken for when there is one.
         let free = (firstTrack...max(firstTrack, Constants.trackItemIDs.count)).filter {
             $0 <= Constants.trackItemIDs.count && (drum == nil || $0 != 1) && !claimed.contains($0)
         }
@@ -945,7 +866,6 @@ extension MIDIImport {
         return assigned.stableSorted { $0.track < $1.track }
     }
 
-    /// Decide everything the conversion will write, without writing any of it.
     public static func planSong(
         _ song: Song, options: ImportOptions? = nil, firstPattern: Int = 1, firstTrack: Int = 1,
         scene: Int = 1
@@ -1044,7 +964,6 @@ extension MIDIImport {
 }
 
 extension MIDIImport {
-    /// Write `plan` into one copy of `raw`, the notes going through `Mutate`'s delta form.
     public static func apply(_ raw: RawProject, plan: SongPlan) throws -> RawProject {
         var result = raw
 
@@ -1081,10 +1000,7 @@ extension MIDIImport {
                 }
             }
 
-            // Only a split track needs a chain. Every sample project leaves all 16 slots at the
-            // sentinel and still plays, so a chain is what makes several patterns one sequence --
-            // not what makes one pattern play. Writing one anyway would rewrite the scene of a
-            // project that was only ever asked to take a clip.
+            // Only a split track needs a chain; one pattern plays without one.
             if trackPlan.placements.count > 1 {
                 result = try Mutate.setChain(
                     result, scene: plan.scene, track: track, patterns: trackPlan.patterns)
@@ -1097,10 +1013,6 @@ extension MIDIImport {
         return result
     }
 
-    /// Put a converted project in MCC's key order, with a `version` key.
-    ///
-    /// The factory template has no `version` and every saved project does, so starting from it
-    /// means injecting one. `canonical` places it (spec section 2).
     public static func saveable(_ raw: RawProject) -> [(key: String, value: JSONValue)] {
         var project = raw
         if project["version"] == nil {
@@ -1109,7 +1021,6 @@ extension MIDIImport {
         return LenientJSON.canonical(project)
     }
 
-    /// The declared length of one melodic pattern, in steps. `98` is 0-based.
     public static func patternStepCount(_ raw: RawProject, track: Int, pattern: Int) throws -> Int {
         let item = try Keys.itemForTrack(track)
         guard let stored = try Keys.getInt(raw, item, Constants.pSeqStepCount, pattern) else {
@@ -1118,10 +1029,6 @@ extension MIDIImport {
         return stored + Constants.stepCountOffset
     }
 
-    /// Whether a pattern's note pool holds nothing.
-    ///
-    /// Existence is `50 != 127` -- `54` on the drum side -- and nothing else, never velocity
-    /// (spec 4).
     public static func patternIsEmpty(
         _ raw: RawProject, track: Int, pattern: Int, drum: Bool = false
     ) throws -> Bool {
@@ -1136,21 +1043,12 @@ extension MIDIImport {
         return true
     }
 
-    /// Whether a track's mode flag says the melodic parameter set is live.
-    ///
-    /// `86` bit 6 is DRUM on Track 1 and ARP on Tracks 2-4 (spec 5). Either way the melodic pool is
-    /// not what the device is playing from.
     public static func trackIsMelodic(_ raw: RawProject, track: Int) throws -> Bool {
         let item = try Keys.itemForTrack(track)
         let bits = try Keys.getInt(raw, item, Constants.pTrackModeBits) ?? 0
         return bits & (1 << Constants.drumModeBit) == 0
     }
 
-    /// Refuse the whole conversion if any target pattern already holds notes.
-    ///
-    /// Checked before anything is written, so a file is never left half converted. Appending to an
-    /// occupied pool would interleave two takes, and emptying one means writing sentinels, which no
-    /// hardware capture covers.
     static func checkTargets(_ raw: RawProject, _ plan: SongPlan) throws {
         for trackPlan in plan.tracks {
             for placement in trackPlan.placements {
@@ -1167,10 +1065,6 @@ extension MIDIImport {
         }
     }
 
-    /// Convert one clip of `midi` into one pattern of the template `raw`.
-    ///
-    /// The single-target path: everything lands on `track` and `pattern`, at the length that
-    /// pattern already declares. ``convertSong`` is the one that reads a whole file.
     public static func convert(
         _ midi: MusicalMIDI1File, _ raw: RawProject, track: Int = 1, pattern: Int = 1,
         options: ImportOptions? = nil
@@ -1197,7 +1091,6 @@ extension MIDIImport {
             raw: try apply(raw, plan: plan), plan: plan, diagnostics: placement.diagnostics)
     }
 
-    /// Convert every note-bearing track of `midi` into the template `raw`.
     public static func convertSong(
         _ midi: MusicalMIDI1File, _ raw: RawProject, options: ImportOptions? = nil,
         firstPattern: Int = 1, firstTrack: Int = 1

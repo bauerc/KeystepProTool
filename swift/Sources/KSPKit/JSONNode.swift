@@ -1,5 +1,5 @@
-/// An ordered JSON value, and a serialiser that reproduces `json.dumps(..., indent=2)` exactly.
-/// `JSONEncoder` cannot: it controls neither key order nor the `120` vs `120.0` of a whole `Double`.
+/// Reproduces `json.dumps(..., indent=2)`; `JSONEncoder` controls neither key order nor the
+/// `120` vs `120.0` rendering of a whole `Double`.
 public enum JSONNode: Sendable {
     case null
     case bool(Bool)
@@ -8,10 +8,9 @@ public enum JSONNode: Sendable {
     case string(String)
     case array([JSONNode])
 
-    /// Members in the order written, not sorted, matching the Python dict's insertion order.
+    /// In the order written, not sorted, matching the Python dict's insertion order.
     indirect case object([(String, JSONNode)])
 
-    /// The rendered JSON, indented two spaces per level.
     public func serialised() -> String {
         var out = ""
         write(into: &out, depth: 0)
@@ -64,8 +63,7 @@ public enum JSONNode: Sendable {
         String(repeating: " ", count: depth * 2)
     }
 
-    /// Python's `py_encode_basestring_ascii`: short escapes, then lower-case `\uXXXX` for
-    /// everything outside printable ASCII. `LenientJSON`'s writer escapes by the same rules.
+    /// Python's `py_encode_basestring_ascii`: lower-case `\uXXXX` outside printable ASCII.
     static func quoted(_ value: String) -> String {
         var out = "\""
         for unit in value.utf16 {
@@ -94,7 +92,6 @@ public enum JSONNode: Sendable {
 }
 
 extension JSONNode: Equatable {
-    /// Hand-written: the tuple-array payload of `.object` blocks the synthesised conformance.
     public static func == (lhs: JSONNode, rhs: JSONNode) -> Bool {
         switch (lhs, rhs) {
         case (.null, .null): true

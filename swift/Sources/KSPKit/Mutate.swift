@@ -1,8 +1,5 @@
-/// Targeted edits to a parsed `.KeyStepPro` project. Placing one melodic note costs 8 keys, not
-/// one (spec 4); step skip (`49`) is deliberately not written, since a file already holds 15
-/// everywhere. Nothing here adds or removes a key: the key set is fixed (spec 2).
+/// Placing one melodic note costs 8 keys, not one (spec 4). Nothing here adds or removes a key.
 public enum Mutate {
-    /// Pool chunks a melodic note may occupy. Track 1's fourth is a phantom the firmware never uses.
     static let slots = Constants.poolSlots
 
     static let noteParams = [
@@ -10,7 +7,6 @@ public enum Mutate {
         Constants.pSeqTimeShift, Constants.pSeqRandomness,
     ]
 
-    /// The drum set in the same order, so one recipe serves both; `117` holds a lane, `109` a pitch.
     static let drumNoteParams = [
         Constants.pDrumNoteStep, Constants.pDrumPitch, Constants.pDrumGate,
         Constants.pDrumVelocity, Constants.pDrumTimeShift, Constants.pDrumRandomness,
@@ -40,7 +36,6 @@ public enum Mutate {
         }
     }
 
-    /// Narrower than the 7-bit field: the encoder cannot reach past these.
     static func checkTimeShift(_ stored: Int) throws {
         let low = Constants.timeShiftStoredMin
         let high = Constants.timeShiftStoredMax
@@ -53,12 +48,10 @@ public enum Mutate {
         }
     }
 
-    /// Python's `f"{value:+d}"`, which always writes a sign.
     private static func signed(_ value: Int) -> String {
         value < 0 ? "\(value)" : "+\(value)"
     }
 
-    /// Copy `raw` with `updates` applied; a key the file lacks means the address was miscomputed.
     static func withValues(_ raw: RawProject, _ updates: [String: Int]) throws -> RawProject {
         let missing = updates.keys.filter { raw[$0] == nil }
         if !missing.isEmpty {
@@ -71,7 +64,6 @@ public enum Mutate {
         return result
     }
 
-    /// Apply `updates` in place: a bulk writer cannot afford a copy of 153,495 keys per note.
     public static func mergeUpdates(_ raw: inout RawProject, _ updates: [String: Int]) throws {
         let missing = updates.keys.filter { raw[$0] == nil }
         if !missing.isEmpty {
@@ -82,8 +74,7 @@ public enum Mutate {
         }
     }
 
-    /// The 0-based step of each live pool entry in one slot. Throws on a hole: the melodic pool
-    /// is compacted in every sample, so appending past one is unmeasured (spec 4).
+    /// Throws on a hole: the melodic pool is compacted, so appending past one is unmeasured.
     static func slotSteps(_ raw: RawProject, _ item: Int, _ pattern: Int, _ slot: Int) throws
         -> [Int]
     {
@@ -104,8 +95,7 @@ public enum Mutate {
         return live
     }
 
-    /// One drum pool chunk's note->step column, `nil` where empty. The drum pool may hold holes,
-    /// so this is the whole chunk and a writer fills the first gap rather than appending.
+    /// The drum pool may hold holes, so a writer fills the first gap rather than appending.
     static func drumPool(_ raw: RawProject, _ pattern: Int, _ slot: Int) -> [Int?] {
         (0..<Constants.maxSteps).map { index -> Int? in
             guard
@@ -118,7 +108,6 @@ public enum Mutate {
         }
     }
 
-    /// The key holding one melodic note's pitch, by 1-based pool ordinal.
     public static func pitchKey(track: Int, pattern: Int, note: Int, slot: Int = 1) throws -> String
     {
         let item = try Keys.itemForTrack(track)
@@ -130,7 +119,6 @@ public enum Mutate {
         return Keys.key(item, Constants.pSeqPitch, pattern, slot, note)
     }
 
-    /// Change one existing note's pitch. Throws on an empty pool entry: nothing would play it.
     public static func setPitch(
         _ raw: RawProject, track: Int, pattern: Int, note: Int, pitch: Int, slot: Int = 1
     ) throws -> RawProject {
@@ -147,7 +135,6 @@ public enum Mutate {
         return try withValues(raw, [target: pitch])
     }
 
-    /// The keys one melodic note writes, without copying the project; ``placeNote`` adds the copy.
     public static func noteUpdates(
         _ raw: RawProject, track: Int, pattern: Int, step: Int, pitch: Int,
         velocity: Int = Constants.freshVelocity, gate: Int = Constants.defaultGateStored,
@@ -180,7 +167,6 @@ public enum Mutate {
                     + "per-step limit")
         }
 
-        // The pool is one flat list chunked into slots of 64, so the next free ordinal spans them.
         let chosen =
             slot
             ?? (perSlot.firstIndex { $0.count < Constants.maxSteps }.map { $0 + 1 } ?? slots)
@@ -188,7 +174,6 @@ public enum Mutate {
             throw KSPError.value("track \(track) pattern \(pattern) slot \(chosen) is full")
         }
 
-        // slotSteps established the pool is compacted, so the live count is the first free ordinal.
         let ordinal = perSlot[chosen - 1].count + 1
 
         let values = [step - 1, pitch, gate, velocity, timeShift, randomness]
@@ -203,8 +188,6 @@ public enum Mutate {
         return updates
     }
 
-    /// Add a melodic note at `step` (1-based), at the first free pool ordinal. `activate: false`
-    /// places a note the device will not sound, which no converter should want.
     public static func placeNote(
         _ raw: RawProject, track: Int, pattern: Int, step: Int, pitch: Int,
         velocity: Int = Constants.freshVelocity, gate: Int = Constants.defaultGateStored,
@@ -219,8 +202,7 @@ public enum Mutate {
                 activate: activate))
     }
 
-    /// The keys one drum hit writes, on track 1 only. `52` packs seven steps per entry by lane, so
-    /// its bit is or-ed in: assigning would clear every other lane sharing that entry.
+    /// `52` packs seven steps per entry by lane, so its bit is or-ed in, never assigned.
     public static func drumNoteUpdates(
         _ raw: RawProject, pattern: Int, lane: Int, step: Int,
         velocity: Int = Constants.freshVelocity, gate: Int = Constants.defaultGateStored,
@@ -283,7 +265,6 @@ public enum Mutate {
         return updates
     }
 
-    /// Add a drum hit on `lane` at `step` (1-based), at the first free ordinal.
     public static func placeDrumNote(
         _ raw: RawProject, pattern: Int, lane: Int, step: Int,
         velocity: Int = Constants.freshVelocity, gate: Int = Constants.defaultGateStored,
@@ -297,8 +278,6 @@ public enum Mutate {
                 timeShift: timeShift, randomness: randomness, slot: slot, activate: activate))
     }
 
-    /// Set one pattern's step size in `99`, bits 3-4 only: triplet, polyrhythm and direction are
-    /// the user's settings. `drum: true` writes `116`, which shares the layout.
     public static func setStepSize(
         _ raw: RawProject, track: Int, pattern: Int, stepsPerBeat: Int, drum: Bool = false
     ) throws -> RawProject {
@@ -313,7 +292,6 @@ public enum Mutate {
             raw, [target: Constants.stepsPerBeatBits(stored, stepsPerBeat: stepsPerBeat)])
     }
 
-    /// Set how many steps one pattern runs for. Stored 0-based (spec 3.3).
     public static func setStepCount(
         _ raw: RawProject, track: Int, pattern: Int, steps: Int, drum: Bool = false
     ) throws -> RawProject {
@@ -327,8 +305,7 @@ public enum Mutate {
             raw, [Keys.key(item, param, pattern): steps - Constants.stepCountOffset])
     }
 
-    /// Set one pattern's swing, as the percentage the device displays. Never the global `74`: the
-    /// per-pattern value takes precedence, so a groove written there would not play.
+    /// Never the global `74`, which the per-pattern value overrides on the device.
     public static func setSwing(
         _ raw: RawProject, track: Int, pattern: Int, percent: Int, drum: Bool = false
     ) throws -> RawProject {
@@ -343,8 +320,6 @@ public enum Mutate {
             raw, [Keys.key(item, param, pattern): percent - Constants.swingOffset])
     }
 
-    /// Set `86` bit 6, deciding which note set a track plays. Read-modify-write, since the rest
-    /// of `86` is the user's state; only track 1 has a drum set to select.
     public static func setDrumMode(_ raw: RawProject, track: Int, on: Bool) throws -> RawProject {
         let item = try Keys.itemForTrack(track)
         if on && item != Constants.drumTrackItemID {
@@ -359,7 +334,6 @@ public enum Mutate {
         return try withValues(raw, [target: on ? stored | bit : stored & ~bit])
     }
 
-    /// Set the project tempo, held as BPM x 100 in three 7-bit chunks.
     public static func setTempo(_ raw: RawProject, bpm: Double) throws -> RawProject {
         let hundredths = Arithmetic.pyRound(bpm * Double(Constants.tempoScale))
         let limit = Constants.tempoChunk * Constants.tempoChunk * Constants.tempoChunk
@@ -378,8 +352,6 @@ public enum Mutate {
         return try withValues(raw, updates)
     }
 
-    /// Chain `patterns` (1-based, in play order) for one track of one scene, written contiguously
-    /// from slot 1 with the remaining slots left at the sentinel.
     public static func setChain(
         _ raw: RawProject, scene: Int, track: Int, patterns: [Int]
     ) throws -> RawProject {

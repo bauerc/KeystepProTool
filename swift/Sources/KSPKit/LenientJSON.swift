@@ -1,9 +1,8 @@
 import Foundation
 
-/// Reading and writing MCC's JSON dialect: Boost.PropertyTree tolerates a trailing comma before
-/// the closing brace, so every `.KeyStepPro` file fails strict parsing (spec 2).
+/// Boost.PropertyTree tolerates a trailing comma before the closing brace; strict parsers do
+/// not, so every `.KeyStepPro` file fails strict parsing (spec 2).
 public enum LenientJSON {
-    /// Anchoring on the final brace keeps a comma inside a string, or ending an inner array, safe.
     public static func strippingTrailingComma(_ data: Data) -> Data {
         guard let brace = data.lastIndex(of: UInt8(ascii: "}")) else { return data }
         guard let comma = data[..<brace].lastIndex(of: UInt8(ascii: ",")) else { return data }
@@ -13,7 +12,6 @@ public enum LenientJSON {
         return data[..<comma] + data[data.index(after: comma)...]
     }
 
-    /// Parse MCC's dialect from raw bytes, throwing for text that is not a JSON object.
     public static func parse(_ data: Data) throws -> RawProject {
         let cleaned = strippingTrailingComma(data)
         do {
@@ -23,21 +21,16 @@ public enum LenientJSON {
         }
     }
 
-    /// The same, from text.
     public static func parse(_ text: String) throws -> RawProject {
         try parse(Data(text.utf8))
     }
 
-    /// Parse a `.KeyStepPro` file from disk.
     public static func load(contentsOf url: URL) throws -> RawProject {
         try parse(Data(contentsOf: url))
     }
 
-    /// The two string-valued keys, in the order MCC writes them, ahead of every numeric key.
     public static let leadingKeys = ["device", "version"]
 
-    /// Serialise in MCC's dialect, in the order the entries arrive in; ordering is
-    /// ``canonical(_:)``'s job. Throws for anything but an integer or a string.
     public static func serialise<Entries: Sequence>(_ entries: Entries) throws -> String
     where Entries.Element == (key: String, value: JSONValue) {
         var out = "{\n"
@@ -59,34 +52,28 @@ public enum LenientJSON {
         return out + (empty ? "}" : "\n}")
     }
 
-    /// Write to `url` as MCC would: bytes, so nothing rewrites line endings or appends a final
-    /// newline (spec 2), and atomically, since MCC parses whatever it finds in Templates.
+    /// Bytes, so nothing rewrites the line endings or appends a final newline (spec 2); atomic.
     public static func write<Entries: Sequence>(_ entries: Entries, to url: URL) throws
     where Entries.Element == (key: String, value: JSONValue) {
         try Data(serialise(entries).utf8).write(to: url, options: .atomic)
 
-        // An atomic write leaves the temp file's own mode behind, so widen it as the umask allows.
         let mask = umask(0)
         umask(mask)
         try FileManager.default.setAttributes(
             [.posixPermissions: Int(0o666 & ~mask)], ofItemAtPath: url.path)
     }
 
-    /// MCC's key order: `device`, `version`, then the numeric keys sorted **as strings** --
-    /// `126_99_16` before `126_99_2` (spec 2).
+    /// MCC's key order: `device`, `version`, then the numeric keys sorted **as strings** (spec 2).
     public static func canonical(_ project: RawProject) -> [(key: String, value: JSONValue)] {
         let leading = leadingKeys.compactMap { name in
             project[name].map { (key: name, value: $0) }
         }
         let leadingSet = Set(leadingKeys)
-        // These keys are ASCII, where Swift's `<` and Python's code-point ordering agree.
         let rest = project.keys.filter { !leadingSet.contains($0) }.sorted()
 
         return leading + rest.compactMap { name in project[name].map { (key: name, value: $0) } }
     }
 
-    /// Why a document did not parse, in Python's words: a failure at the root is the wrong kind
-    /// of file, anything deeper is malformed text.
     private static func complaint(about error: DecodingError, in data: Data) -> String {
         switch error {
         case .typeMismatch(_, let context), .valueNotFound(_, let context):
@@ -100,8 +87,6 @@ public enum LenientJSON {
         }
     }
 
-    /// The flat object a `.KeyStepPro` file is. `JSONDecoder`, not `JSONSerialization`, which
-    /// hands back `1` and `true` alike as `NSNumber`.
     private struct Document: Decodable {
         let values: RawProject
 
@@ -123,7 +108,6 @@ public enum LenientJSON {
             if let text = try? container.decode(String.self, forKey: key) {
                 return .string(text)
             }
-            // Shapes no real file holds, named as Python names them so both ports report alike.
             if (try? container.decode(Bool.self, forKey: key)) != nil {
                 return .other("bool")
             }
@@ -148,8 +132,6 @@ public enum LenientJSON {
         }
     }
 
-    /// What the document holds at the top level, read off the first byte and named as Python
-    /// names it, for the message a non-object gets.
     private static func topLevelTypeName(_ data: Data) -> String {
         switch data.first(where: { !isJSONWhitespace($0) }) {
         case UInt8(ascii: "["): "list"
