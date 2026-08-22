@@ -3,13 +3,8 @@ import Foundation
 import KSPKit
 import KSPRun
 
-/// `ksp-swift-cli convert` -- write a MIDI clip into a `.KeyStepPro` project. A port of
-/// `src/ksp_cli/convert.py`, which installs as `midi2ksp`.
-///
-/// A project file is never synthesised. Its key set is fixed at 153,495 numeric keys, so a template
-/// is loaded and values are overwritten in it -- MIDI Control Center's factory default by default,
-/// or any project `--template` points at, which is how a clip goes into a pattern of a project you
-/// already have.
+/// A project file is never synthesised: its key set is fixed at 153,495 numeric keys, so a template
+/// is loaded and values are overwritten in it.
 struct Convert: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "convert",

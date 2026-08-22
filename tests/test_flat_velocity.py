@@ -15,8 +15,7 @@ def test_fresh_is_the_measured_default() -> None:
 
 
 def test_a_number_passes_through_unvalidated() -> None:
-    # Range-checking is ExportOptions' job, not this function's -- 0 and 999 are both accepted
-    # here so the two cores raise the identical message for them.
+    # Range-checking is ExportOptions' job: 0 and 999 are both accepted here.
     assert parse_flat_velocity("64") == 64
     assert parse_flat_velocity("0") == 0
     assert parse_flat_velocity("999") == 999
@@ -24,8 +23,7 @@ def test_a_number_passes_through_unvalidated() -> None:
 
 @pytest.mark.parametrize("text", ["x", "", "loud", "1.5", "-5", "+5", "1_0"])
 def test_a_malformed_value_names_itself(text: str) -> None:
-    # ``1_0`` is refused although ``int`` takes it: Swift's ``Int`` does not, and the two cores
-    # refuse the same input.
+    # ``1_0`` is refused although ``int`` takes it: Swift's ``Int`` does not.
     with pytest.raises(ValueError, match="is not 'fresh' or a velocity"):
         parse_flat_velocity(text)
 

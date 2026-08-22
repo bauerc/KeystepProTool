@@ -1,15 +1,4 @@
-"""Structured diagnostics, and how they collapse for display.
-
-A diagnostic is a record, not a sentence: a stable ``Code``, the ``Site`` it
-came from, and how many notes or steps it covers. That lets reporting collapse
-a code's instances into one counted line and expand them again on request,
-without pattern-matching on English -- one misread encoding can otherwise
-bury the one-off findings that matter most.
-
-Adding one means a ``Code`` member, a ``SUMMARIES`` entry and the call site;
-there is no class per diagnostic. This module builds strings but never prints
-them.
-"""
+"""Structured diagnostics, and how they collapse for display."""
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
@@ -25,7 +14,6 @@ class Severity(StrEnum):
 class Code(StrEnum):
     """What kind of problem this is. Grouping keys off these, not off text."""
 
-    # --- reader ---
     NO_VERSION_KEY = "no-version-key"
     MIXED_NOTE_SETS = "mixed-note-sets"
     DRUM_MODE_FLAG_DISAGREES = "drum-mode-flag-disagrees"
@@ -38,11 +26,9 @@ class Code(StrEnum):
     SCALE_OFF_LIST = "scale-off-list"
     CHAIN_HAS_HOLE = "chain-has-hole"
 
-    # --- drum map ---
     DRUM_MAP_ASSUMED = "drum-map-assumed"
     DRUM_MAP_DUPLICATE = "drum-map-duplicate"
 
-    # --- export ---
     DISABLED_NOT_EXPORTED = "disabled-not-exported"
     DISABLED_EXPORTED = "disabled-exported"
     STALE_NOTE_SET = "stale-note-set"
@@ -59,7 +45,6 @@ class Code(StrEnum):
     TRACK_LENGTHS_DIFFER = "track-lengths-differ"
     OVERLAPS_RESOLVED = "overlaps-resolved"
 
-    # --- import ---
     CLIP_ANCHORED = "clip-anchored"
     NOTES_QUANTISED = "notes-quantised"
     PAST_PATTERN_END = "past-pattern-end"
@@ -85,16 +70,14 @@ class Summary:
     """How one code's instances read once collapsed."""
 
     # ``template`` is formatted with {sites} and {subjects}, each already a
-    # counted noun phrase -- "3 patterns", "41 notes". A template using
-    # neither is fine: some diagnostics are said once however often they arise.
+    # counted noun phrase; a template using neither is fine.
 
     template: str
     subject: str = "note"
     site: str = "pattern"
 
 
-#: One entry per Code. Kept as data so that adding a diagnostic does not mean
-#: adding a branch, and so the Swift port can carry the same table.
+#: One entry per Code, kept as data so adding one needs no new branch.
 SUMMARIES: Mapping[Code, Summary] = {
     Code.NO_VERSION_KEY: Summary("no 'version' key (factory template rather than a saved project)"),
     Code.MIXED_NOTE_SETS: Summary(
@@ -312,15 +295,13 @@ class Diagnostic:
 
     code: Code
     detail: str
-    """The specific, full sentence -- what ``--verbose`` shows. No site prefix
-    and no "warning:" prefix; both are added when rendering."""
+    """The full sentence ``--verbose`` shows. No site or "warning:" prefix;
+    both are added when rendering."""
 
     site: Site = NO_SITE
     severity: Severity = Severity.WARNING
     subjects: int = 1
-    """How many notes, steps or lanes this one occurrence covers. Summed when
-    the code is collapsed, which is why a single line can honestly say "41
-    notes across 3 patterns"."""
+    """How many notes, steps or lanes this occurrence covers; summed when collapsed."""
 
     @property
     def message(self) -> str:
@@ -336,8 +317,6 @@ class Diagnostic:
         slot: int | None = None,
     ) -> "Diagnostic":
         """Copy with the given site parts filled in, leaving the rest alone."""
-        # For diagnostics crossing a boundary that knows more than the code
-        # that raised them: the reader knows the pattern, the export the track.
         site = replace(
             self.site,
             track=self.site.track if track is None else track,
@@ -376,8 +355,7 @@ class Group:
     @property
     def headline(self) -> str:
         """The collapsed line."""
-        # A group of one keeps its own message: there is nothing to collapse,
-        # so summarising would lose its site for no gain.
+        # A group of one keeps its own message, which still carries its site.
         if len(self.entries) == 1:
             return self.entries[0].message
         summary = SUMMARIES[self.code]
@@ -404,7 +382,6 @@ class Report:
 
     @property
     def messages(self) -> tuple[str, ...]:
-        """Every diagnostic in full, as plain strings."""
         return tuple(e.message for e in self.entries)
 
     def grouped(self) -> tuple[Group, ...]:
@@ -457,9 +434,8 @@ EMPTY_REPORT: Final = Report()
 class Collector:
     """Builds a :class:`Report`, dropping exact repeats."""
 
-    # Deduplication keys on (code, site, detail) rather than the rendered
-    # string, so two diagnostics that read alike but come from different
-    # patterns both survive and the counts stay honest.
+    # Keyed on (code, site, detail), not the rendered string, so two alike
+    # diagnostics from different patterns both survive.
 
     _entries: list[Diagnostic] = field(default_factory=list)
     _seen: set[tuple[Code, Site, str]] = field(default_factory=set)

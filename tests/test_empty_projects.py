@@ -1,14 +1,4 @@
-"""The two empty baselines must decode to nothing at all.
-
-An empty project is where a reader that mistakes uninitialised storage for
-content fails loudly instead of subtly. Track 1's fourth polyphony slot is
-zero-filled rather than sentinel-filled in every known file, so reading note
-existence naively yields 64 phantom notes per parameter set per pattern --
-against a file that a human can confirm holds nothing.
-
-These two files also fix what "default" means. Every untouched value in
-``project_9`` is corroborated here.
-"""
+"""The two empty baselines must decode to nothing at all."""
 
 import json
 from pathlib import Path
@@ -48,11 +38,7 @@ def test_decodes_to_no_notes(empty_case: dict[str, Any], project_files_dir: Path
 
 
 def test_scalars_match(empty_case: dict[str, Any], project_files_dir: Path) -> None:
-    """Tempo is the one global the hardware readout confirms: 120 BPM.
-
-    It is a genuinely independent check on the tempo decode, because it comes
-    from the device's own display rather than from another file.
-    """
+    """Tempo is the one global the hardware readout confirms: 120 BPM."""
     project = load(project_files_dir / empty_case["project_file"])
     assert project.tempo_bpm == empty_case["tempo_bpm"]
     assert project.global_swing_percent == empty_case["global_swing_percent"]

@@ -1,21 +1,4 @@
-"""Rendering a decoded project as one or more Standard MIDI files.
-
-The device stores no arrangement -- 4 tracks x 16 independent pattern loops --
-so turning that into a linear file means choosing a layout. Merged (the
-default) lays note-bearing patterns end to end with pattern N at the same tick
-on every track; ``--split`` writes one file per pattern at tick 0 and invents
-no layout at all. Both are described in ``README.md``.
-
-The one quantity the file cannot supply is the **drum map**: lane -> MIDI note
-is a device global (spec section 3.2.1), so it is an :class:`ExportOptions`
-field named in the output rather than a buried literal. MIDI has no way to
-express an unresolved lane, so unlike ``ksp-dump`` this cannot fall back to
-printing the lane number.
-
-Three layers, so the Swift port translates arithmetic rather than a MIDI
-library: :func:`render_pattern` -> :func:`arrange` -> :func:`build_midi_file`,
-the only part that knows what ``mido`` is.
-"""
+"""Rendering a decoded project as one or more Standard MIDI files."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
@@ -37,37 +20,27 @@ from ksp.model import (
     disablement,
 )
 
-#: 480 divides evenly by 3 and 4, so every step size the device offers stays
-#: exact, triplets included: the finest is a 1/32 triplet at 20 ticks.
+#: Divides by 3 and 4, so every step size and its triplet lands on a whole tick.
 DEFAULT_TICKS_PER_BEAT: Final = 480
 
-#: What ``ticks_per_beat`` must divide by for every step size x triplet
-#: combination to land on a whole tick: 1/32 needs 8, and a triplet needs 3.
+#: 1/32 needs 8 and a triplet needs 3, so ``ticks_per_beat`` must divide by 24.
 TICKS_PER_BEAT_DIVISOR: Final = 24
 
 
-#: The device's Drum output default (``globalParamId 79``) is channel 10,
-#: counting from 1; MIDI messages count channels from 0.
+#: The device's channel 10 default, rebased: MIDI counts channels from 0.
 DRUM_CHANNEL: Final = DEFAULT_DRUM_CHANNEL - 1
 
-#: A note stored with velocity 0 is silent on the device and would read as a
-#: note-off in MIDI, which is a different thing. Exported at 1 instead.
+#: Velocity 0 is silent on the device but a note-off in MIDI, so it exports as 1.
 MIN_VELOCITY: Final = 1
 
-#: The loudest a MIDI note-on can be. Export-only, like ``MIN_VELOCITY``:
-#: ``constants.SENTINEL`` is 127 as well but marks an empty slot, so a velocity
-#: limit must not be spelled with it.
+#: The loudest a MIDI note-on can be. ``constants.SENTINEL`` is 127 too but
+#: marks an empty slot, so this limit must not be spelled with it.
 MAX_VELOCITY: Final = 127
 
-#: What a flat render substitutes unless the caller names another value: the
-#: measured velocity a freshly placed note carries on the device, so a flat
-#: export sounds like the pattern unedited rather than like an invented
-#: default. Named here so nothing above has to re-type the number.
+#: What a flat render substitutes: the velocity a freshly placed note carries.
 DEFAULT_FLAT_VELOCITY: Final = constants.FRESH_VELOCITY
 
-#: How many times an arrangement may be laid down end to end. Export-only: the
-#: device stores no such count, so this is not ``passes`` and no repeat of it
-#: can be written back to a project file.
+#: How many times an arrangement may be laid down end to end. Not ``passes``.
 MAX_REPEAT: Final = 10
 
 
@@ -79,61 +52,35 @@ class ExportOptions:
     drum_map: DrumMap = field(default_factory=DrumMap.chromatic)
     drum_channel: int = DRUM_CHANNEL
     default_gate: float = constants.DEFAULT_GATE_LENGTH
-    """Length in steps for a gate value off the 0-127 ladder. Every legal value
-    decodes (spec 6.1), so this only fires on a corrupt file; it defaults to the
-    length a freshly placed note has on the device."""
+    """Length in steps for a gate off the 0-127 ladder, i.e. only on a corrupt file."""
 
     apply_swing: bool = True
-    """Swing percent is decoded, but its *timing* meaning is the standard
-    one (the first of each step pair takes that share of the pair), which has
-    not been measured against the device. Turn it off to get a flat grid."""
+    """Swing is applied with the standard meaning, which is not measured against
+    the device. Off gives a flat grid."""
 
     apply_time_shift: bool = True
-    """Displace each note by its stored time shift, measured by tier 8 as a
-    fixed 1/400 of a beat per unit. Turn it off to get a flat grid -- useful
-    for reading a pattern's written positions rather than its groove."""
+    """Displace each note by its stored time shift. Off gives a flat grid."""
 
     include_stale: bool = False
-    """Export both note sets of a pattern that holds both, rather than the one
-    parameter 86 bit 6 says the device plays. Off by default: the point of a
-    MIDI export is to hear what the hardware does."""
+    """Export both note sets of a pattern holding both, not just the one 86 bit 6 plays."""
 
     include_disabled: bool = False
-    """Export disabled notes -- both kinds: step turned off, and past the
-    pattern's last step. Off by default for the same reason as *include_stale*:
-    the device plays neither, so exporting them invents audio the hardware
-    never makes. A user who turned a step off wants it gone from the MIDI too.
-    Turn it on to see everything the file holds, e.g. to recover an edit that
-    was disabled rather than deleted."""
+    """Export disabled notes, both kinds: step turned off, and past the last step."""
 
     markers: bool = True
-    """Mark the start of every pattern with a marker meta event, so a DAW's
-    marker ruler shows where one pattern ends and the next begins. On by
-    default: a merged export is otherwise an undifferentiated run of notes
-    whose seams can only be found by eye."""
+    """Mark the start of every pattern with a marker meta event."""
 
     passes: int | None = None
-    """How many of the four 16/32/48/64 repeats to render. ``None`` is auto:
-    four when a pattern holds a note that does not play on all four, one
-    otherwise. The device runs the mask as *repeats* of the pattern, whatever
-    its length (spec 5, protocol T5.8), so a single pass sounds every masked
-    note at once -- musically wrong, and the reason this defaults to auto."""
+    """How many of the four 16/32/48/64 repeats to render; ``None`` is auto.
+    A single pass sounds every masked note at once, which is why auto is default."""
 
     flat_velocity: int | None = None
-    """Render every note at this velocity instead of the one it stores.
-    ``None`` keeps the stored values, which is what an export of a performance
-    wants; a flat render reads a pattern's *written* content, or feeds
-    something that will re-velocity it anyway. ``DEFAULT_FLAT_VELOCITY`` is the
-    value to pass to hear the pattern as the device would have played it
-    unedited. A note stored at velocity 0 is silent on the device but takes the
-    fixed value like any other, so a flat render can sound a note the hardware
-    does not -- written content, not audible content. 0 itself is not
-    available: it is a note-off in MIDI, not a silent note."""
+    """Render every note at this velocity instead of its own; ``None`` keeps the
+    stored values. Written content, not audible: it sounds notes stored at 0."""
 
     repeat: int = 1
-    """How many times to lay the whole export down end to end, 1-``MAX_REPEAT``.
-    Export-only: the device stores no such count, so this is not ``passes`` and
-    no repeat of it can be written back to a project file."""
+    """How many times to lay the whole export down end to end. Not ``passes``:
+    export-only, and nothing writes it back to a project file."""
 
     def __post_init__(self) -> None:
         if self.ticks_per_beat < 1:
@@ -228,8 +175,7 @@ class Arrangement:
 
     @property
     def pattern_numbers(self) -> tuple[int, ...]:
-        # Which patterns are in this file, not how often each is played: a
-        # repeat count puts the same pattern on the timeline more than once.
+        # Which patterns are in this file, not how often each is played.
         return tuple(dict.fromkeys(b.pattern_number for b in self.boundaries))
 
     @property
@@ -251,9 +197,8 @@ class ExportResult:
     track_names: tuple[str, ...]
     diagnostics: Report
     track_numbers: tuple[int, ...] = ()
-    """KeyStep Pro track numbers in this file -- what a split export names its
-    files after. ``track_names`` holds the MIDI track names, which are not the
-    same thing once Track 1's drum set becomes a track of its own."""
+    """KeyStep Pro track numbers, which ``track_names`` is not: Track 1's drum
+    set becomes a MIDI track of its own."""
 
     @property
     def warnings(self) -> tuple[str, ...]:
@@ -272,24 +217,14 @@ def declared_step_count(pattern: Pattern, kind: NoteKind) -> int:
 
 
 def ticks_per_step(pattern: Pattern, kind: NoteKind, ticks_per_beat: int) -> int:
-    """How long one step of *pattern* is, from its own step size and triplet.
-
-    Both come out of the ``99``/``116`` bitfield (spec 3.3), so nothing here is
-    a caller's assumption: a 1/16 pattern at 480 ticks per beat is 120 ticks a
-    step, and its triplet is 80.
-    """
+    """How long one step of *pattern* is, from its own step size and triplet (spec 3.3)."""
     bits = pattern.bits(kind)
     ticks = ticks_per_beat * 4 // bits.step_denominator
     return ticks * 2 // 3 if bits.triplet else ticks
 
 
 def auto_passes(notes: Sequence[Note]) -> int:
-    """Four when any note sits out one of the four repeats, else one.
-
-    A note that plays on all four is the default the device writes, so a
-    project nobody has masked renders exactly as it did before ``--passes``
-    existed.
-    """
+    """Four when any note sits out one of the four repeats, else one."""
     partial = any(len(n.skip) != constants.SKIP_CYCLE_PASSES for n in notes)
     return constants.SKIP_CYCLE_PASSES if partial else 1
 
@@ -302,12 +237,7 @@ def swing_percent(pattern: Pattern, kind: NoteKind) -> int:
 
 def step_count(pattern: Pattern, kind: NoteKind, notes: Sequence[Note] | None = None) -> int:
     """Declared length, widened to hold any note that sits past it.
-
-    *notes* defaults to every note of *kind*; pass the subset actually being
-    exported so a note that is omitted does not stretch the pattern.
-    """
-    # Only reachable with include_disabled, which keeps notes past the last
-    # step; the pattern is widened so they still land where the file puts them.
+    Pass the subset being exported so an omitted note does not stretch the pattern."""
     if notes is None:
         notes = pattern.notes_of(kind)
     return max(declared_step_count(pattern, kind), max((n.step for n in notes), default=0))
@@ -317,20 +247,14 @@ def render_pattern(
     pattern: Pattern, *, track_number: int, kind: NoteKind, options: ExportOptions | None = None
 ) -> Rendering:
     """Turn one parameter set of one pattern into plain tick data.
-
-    Ticks count from the pattern's own start, so the caller decides where the
-    pattern sits. This is where every timing decision is made and what the
-    tests assert against.
-    """
+    Ticks count from the pattern's own start, so the caller decides where it sits."""
     options = options or ExportOptions()
     collector = Collector()
     site = Site(track=track_number, pattern=pattern.number, kind=kind.value)
     step_ticks = ticks_per_step(pattern, kind, options.ticks_per_beat)
 
-    # Filter before measuring: a note the device does not play must not
-    # stretch the pattern it sits in. Both ways of being disabled are dropped
-    # together -- the user turned these off, so the default export is what the
-    # device plays, not everything the file holds.
+    # Filter before measuring: a note the device does not play must not stretch
+    # the pattern it sits in.
     last = declared_step_count(pattern, kind)
     playable = pattern.notes_of(kind)
     step_off = [n for n in playable if disablement(n, last) is Disablement.STEP_TURNED_OFF]
@@ -415,19 +339,16 @@ def render_pattern(
             f"exported, but how far one percent moves them is not measured",
             site=Site(pattern=pattern.number),
         )
-    # A pattern the reader could not fully resolve produces MIDI that is
-    # confidently wrong in a way the file itself will not reveal. The reader's
-    # own step-off finding is dropped when the export has just said the same
-    # thing more usefully -- it names the flag that brings the notes back.
+    # The reader's own step-off finding is dropped where the export just said
+    # the same thing and named the flag that brings the notes back.
     collector.extend(
         d.at(track=track_number)
         for d in pattern.diagnostics
         if not (said_step_off and d.code is Code.DISABLED_STEP_OFF)
     )
 
-    # Rendered once per note, then replicated: a note's tick data does not
-    # change between passes, and rendering it four times would say anything it
-    # has to say -- an off-ladder gate, an unapplied time shift -- four times.
+    # Rendered once per note, then replicated, so a per-note diagnostic is
+    # collected once instead of four times.
     rendered_notes: list[tuple[Note, RenderedNote]] = []
     for note in playable:
         rendered = _render_note(note, kind, channel, swing, step_ticks, options, collector)
@@ -474,9 +395,6 @@ def _render_note(
 ) -> RenderedNote | None:
     pitch = note.pitch
     if kind is NoteKind.DRUM:
-        # A lane the device does not have means parameter 117 is not the
-        # 0-based lane index we think it is. The reader already warns; here
-        # there is simply no note to emit, so the note is dropped loudly.
         if not options.drum_map.has_lane(note.pitch):
             collector.add(
                 Code.DRUM_LANE_DROPPED,
@@ -490,8 +408,7 @@ def _render_note(
     if options.apply_swing:
         tick += round(swing_delay(note.step - 1, swing, step_ticks))
     if options.apply_time_shift:
-        # Independent of the step size, so it is taken from the beat rather
-        # than from step_ticks (tier 8, R1 against R3).
+        # Independent of step size, so taken from the beat, not step_ticks.
         tick += constants.time_shift_ticks(note.time_shift, options.ticks_per_beat)
 
     gate = note.gate
@@ -516,27 +433,15 @@ def _render_note(
 
 
 def swing_delay(step: int, swing_percent: int, ticks_per_step: float) -> float:
-    """Ticks the device delays *step* by. **0-based**: step 1 is the second of the pair.
-
-    Both directions share this, so a groove that survives one survives the other.
-    Callers holding a 1-based step index must subtract one -- the note parameter
-    numbers steps from 1, this does not.
-    """
-    # Standard swing: at p percent the first step of a pair takes p of the
-    # pair, so the second starts 2*p/100 - 1 steps late. 50% is no swing.
+    """Ticks the device delays *step* by. **0-based**: step 1 is the second of the
+    pair, so a caller holding a 1-based note step must subtract one."""
     if not step % 2:
         return 0.0
     return float(round(ticks_per_step * (2 * swing_percent / 100 - 1)))
 
 
 def _placed(note: RenderedNote, offset: int, collector: Collector) -> RenderedNote:
-    """Move *note* onto the timeline, holding it at tick 0 if it lands before it.
-
-    Only a negative time shift on the first step of the first pattern can go
-    negative, and MIDI has nowhere to put it. The note keeps its length and is
-    reported, because silently moving an onset is the failure this whole tier
-    exists to avoid.
-    """
+    """Move *note* onto the timeline, holding it at tick 0 if it lands before it."""
     tick = note.tick + offset
     if tick >= 0:
         return replace(note, tick=tick)
@@ -550,15 +455,7 @@ def _placed(note: RenderedNote, offset: int, collector: Collector) -> RenderedNo
 
 def arrange(renderings: Sequence[Rendering], *, repeat: int = 1) -> Arrangement:
     """Lay renderings end to end in pattern order, aligned across tracks.
-
-    A pattern occupies the longest length any track gives it, so tracks of
-    unequal length stay aligned at every pattern boundary instead of drifting.
-
-    *repeat* lays the whole arrangement down again that many times, every track
-    shifted by the same cycle so pattern N still starts together on all of them.
-    It is not ``passes``: that is the device's own step-skip cycle inside a
-    pattern, while this exists only in the exported file.
-    """
+    A pattern occupies the longest length any track gives it, so nothing drifts."""
     if not 1 <= repeat <= MAX_REPEAT:
         raise ValueError(f"repeat must be 1-{MAX_REPEAT}")
 
@@ -577,9 +474,8 @@ def arrange(renderings: Sequence[Rendering], *, repeat: int = 1) -> Arrangement:
         offsets[number] = cursor
         cursor += lengths[number]
 
-    # A repeat is placed, not copied afterwards: every round goes through the
-    # same offset arithmetic, so a note held past the end of one round is seen
-    # against the round that follows it rather than colliding with its own copy.
+    # A repeat is placed, not copied afterwards, so a note held past the end of
+    # one round is resolved against the round that follows it.
     groups: dict[str, list[RenderedNote]] = {}
     for rendering in sorted(
         renderings, key=lambda r: (r.track_number, r.kind is NoteKind.DRUM, r.pattern_number)
@@ -611,11 +507,7 @@ def arrange(renderings: Sequence[Rendering], *, repeat: int = 1) -> Arrangement:
 
 def _warn_on_unequal_tracks(renderings: Sequence[Rendering], collector: Collector) -> None:
     """Say so when the tracks do not add up to the same length.
-
-    This export restarts every track at each pattern boundary; the device
-    loops each track independently, so from the first mismatch onwards the
-    hardware and the file no longer agree about what plays together.
-    """
+    This export restarts every track at each boundary; the device loops each on its own."""
     totals: dict[int, dict[int, int]] = {}
     for rendering in renderings:
         by_pattern = totals.setdefault(rendering.track_number, {})
@@ -633,9 +525,8 @@ def _warn_on_unequal_tracks(renderings: Sequence[Rendering], collector: Collecto
 
 
 def _resolve_overlaps(notes: list[RenderedNote], collector: Collector) -> tuple[RenderedNote, ...]:
-    """Stop a long gate from swallowing the next note of the same pitch."""
-    # Two note-ons for one pitch with one note-off between them hangs in most
-    # DAWs. The device retriggers, so the earlier note is shortened instead.
+    """Stop a long gate from swallowing the next note of the same pitch.
+    The device retriggers; most DAWs hang, so the earlier note is shortened."""
     ordered = sorted(notes, key=lambda n: (n.tick, n.pitch))
     resolved: list[RenderedNote] = []
     previous: dict[tuple[int, int], int] = {}  # (channel, pitch) -> index in resolved
@@ -683,15 +574,13 @@ def _conductor_track(
     boundaries: Sequence[PatternBoundary],
 ) -> mido.MidiTrack:
     """Track 0: name, tempo, time signature and the pattern markers, no notes."""
-    # End-of-track sits at the end of the last pattern rather than the last
-    # note, so a DAW sees the arrangement's real length.
+    # End-of-track sits at the end of the last pattern, not the last note, so a
+    # DAW sees the arrangement's real length.
     track = mido.MidiTrack()
     track.append(mido.MetaMessage("track_name", name=name, time=0))
     track.append(mido.MetaMessage("set_tempo", tempo=mido.bpm2tempo(tempo_bpm), time=0))
     track.append(mido.MetaMessage("time_signature", numerator=4, denominator=4, time=0))
 
-    # A DAW shows these on its marker ruler, which is what makes cutting a
-    # merged export exact rather than by eye.
     previous_tick = 0
     for boundary in boundaries:
         track.append(
@@ -741,10 +630,7 @@ def _midi_track(arranged: ArrangedTrack) -> mido.MidiTrack:
 
 def export_project(project: Project, options: ExportOptions | None = None) -> ExportResult:
     """Render *project* as a single type-1 MIDI file.
-
-    Only patterns holding notes are rendered; narrow with
-    :meth:`ksp.model.Project.select` first to pick tracks or patterns.
-    """
+    Only patterns holding notes are rendered; narrow with ``Project.select`` first."""
     options = options or ExportOptions()
     renderings = render_project(project, options)
     return _result(arrange(renderings, repeat=options.repeat), project, options)
@@ -753,12 +639,7 @@ def export_project(project: Project, options: ExportOptions | None = None) -> Ex
 def export_split(
     project: Project, options: ExportOptions | None = None
 ) -> tuple[ExportResult, ...]:
-    """One file per non-empty (track, pattern), each starting at tick 0.
-
-    Nothing is laid out across patterns, so this is the layout that invents
-    least; the caller names the files from each result's ``track_numbers`` and
-    ``pattern_numbers``.
-    """
+    """One file per non-empty (track, pattern), each starting at tick 0."""
     options = options or ExportOptions()
     parts: dict[tuple[int, int], list[Rendering]] = {}
     for rendering in render_project(project, options):
@@ -776,15 +657,7 @@ def export_split(
 
 def render_project(project: Project, options: ExportOptions | None = None) -> tuple[Rendering, ...]:
     """Render every (track, pattern, parameter set) that holds notes and plays.
-
-    Only the set parameter 86 bit 6 selects is exported (spec section 5); the
-    other would be notes no hardware ever produces.
-
-    An automatic pass count is resolved across each pattern *column* rather than
-    per rendering, so a pattern expanding to four repeats on one track does not
-    leave the same pattern falling silent on another -- this is what keeps
-    pattern N starting at the same tick on every track.
-    """
+    An auto pass count resolves per pattern *column*, so pattern N stays aligned."""
     options = options or ExportOptions()
     plans: list[tuple[Track, Pattern, NoteKind, Diagnostic | None]] = []
     for track in project.tracks:
@@ -794,14 +667,10 @@ def render_project(project: Project, options: ExportOptions | None = None) -> tu
             kinds = populated
             stale_diagnostic: Diagnostic | None = None
             if len(populated) > 1 and not options.include_stale:
-                # Only when both sets hold notes does the flag have to decide.
-                # A pattern holding just one set is exported whatever the flag
-                # says -- the reader already warns about that disagreement, and
-                # dropping real user data over it would be worse.
+                # Only when both sets hold notes does the flag have to decide; a
+                # pattern holding one set is exported whatever the flag says.
                 kinds = [live]
                 stale = next(k for k in populated if k is not live)
-                # Carries the counts the reader's own line has, so that line
-                # can be dropped below without losing anything.
                 stale_diagnostic = Diagnostic(
                     Code.STALE_NOTE_SET,
                     f"holds both melodic ({len(pattern.notes_of(NoteKind.SEQ))}) and drum "
@@ -830,9 +699,8 @@ def render_project(project: Project, options: ExportOptions | None = None) -> tu
             options=replace(options, passes=passes),
         )
         if stale_diagnostic is not None:
-            # The reader says the same pattern holds both sets. This says that
-            # *and* which flag brings the other one back, so its duplicate is
-            # dropped rather than printed alongside.
+            # This names the flag that brings the other set back, so the reader's
+            # duplicate finding is dropped rather than printed alongside.
             kept = tuple(d for d in rendering.diagnostics if d.code is not Code.MIXED_NOTE_SETS)
             rendering = replace(rendering, diagnostics=Report((stale_diagnostic, *kept)))
         renderings.append(rendering)
@@ -841,9 +709,8 @@ def render_project(project: Project, options: ExportOptions | None = None) -> tu
 
 def _result(arrangement: Arrangement, project: Project, options: ExportOptions) -> ExportResult:
     diagnostics = arrangement.diagnostics
-    # The per-pattern value takes precedence on the device (T7.6), so the
-    # global is reported rather than folded in -- the export is not dropping
-    # groove here, it is doing what the hardware does.
+    # The per-pattern value takes precedence on the device, so the global is
+    # reported rather than folded in.
     if options.apply_swing and project.global_swing_percent != constants.SWING_RANGE_PERCENT[0]:
         global_swing = Diagnostic(
             Code.GLOBAL_SWING_NOT_APPLIED,

@@ -2,9 +2,6 @@ import Foundation
 import KSPKit
 
 /// Reading a project for a caller that wants to show it rather than convert it.
-///
-/// The one runner that returns no ``RunResult``: nothing on either CLI prints a summary, so there
-/// is no stdout, stderr or exit code to render. See `CLAUDE.md` for why that exemption matters.
 public enum SummaryRunner {
     public struct Options: Sendable {
         public var path: URL
@@ -14,8 +11,7 @@ public enum SummaryRunner {
         }
     }
 
-    /// The summary, or why there is none. `message` carries no `<prog>: ` prefix, the same way
-    /// ``RunResult/message`` does not -- there is no terminal here to write one for.
+    /// The summary, or why there is none. `message` carries no `<prog>: ` prefix.
     public struct Result: Sendable, Hashable {
         public var summary: ProjectSummary?
         public var message: String?
@@ -26,9 +22,7 @@ public enum SummaryRunner {
         }
     }
 
-    /// Failure comes back rather than being thrown: the app calls this from a `Task.detached` and
-    /// needs one `Sendable` value either way, and an unreadable drop is something to show in the
-    /// window rather than an exit code.
+    /// Failure comes back rather than being thrown: a caller needs one `Sendable` value either way.
     public static func run(_ options: Options) -> Result {
         do {
             return Result(summary: ProjectSummary(try Reader.load(contentsOf: options.path)))

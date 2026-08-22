@@ -50,8 +50,7 @@ P_GATE = 110
 EMPTY = bulk_fast.EMPTY
 FILLER = bulk_read.FILLER
 
-#: Rows of a table or faults to print before summarising. A pattern the probe
-#: was not pointed at can hold all 64 notes, and that is not worth 64 lines.
+#: Rows of a table or faults to print before summarising -- a pattern can hold all 64 notes.
 ROWS = 16
 
 
@@ -86,9 +85,8 @@ def device(args: argparse.Namespace, recorder: Recorder) -> Iterator[UsbMidiTran
         if not args.no_identity:
             exchange(transport, recorder, sysex.IDENTITY_REQUEST)
         if not args.no_prologue:
-            # Names args.slot, not 1. H1.4 measured "no prologue needed" while
-            # reading the loaded project, which is why it looked optional: what
-            # it does is select, and a probe reading another slot must send it.
+            # args.slot, not 1: the prologue is what selects, so a probe reading
+            # another slot must send it even though H1.4 made it look optional.
             select(transport, recorder, args.slot)
         yield transport
 
@@ -96,12 +94,7 @@ def device(args: argparse.Namespace, recorder: Recorder) -> Iterator[UsbMidiTran
 def select(transport: UsbMidiTransport, recorder: Recorder, slot: int) -> None:
     """Send ``05 <slot>``, which is how MCC names the project it is about to read.
 
-    Each capture carries exactly one: ``05 01`` before the project 1 recall,
-    ``05 02`` before the project 2 recall, ``06 03`` closing the project 3
-    import. Byte 7 on the reads then agrees with it throughout, which is why the
-    captures alone could not say which of the two selects. Hardware did: one
-    prologue with byte 7 varied answers for the prologue's project only.
-    Switching slots means sending this again.
+    This, not byte 7, is what selects; switching slots means sending it again.
     """
     frame = sysex.prologue(slot)
     recorder.note("out", frame)
@@ -300,11 +293,8 @@ def int_list(text: str) -> list[int]:
 
 
 def chunk(item: int, param: int, pattern: int, pool_slot: int = 1) -> sysex.ReadRequest:
-    """A whole 64-entry array in one request.
-
-    ``pool_slot`` is the note pool's own middle index, not the project slot: 48
-    only ever uses 1 (spec section 4) and chunk 1 is where the first 64 notes
-    live.
+    """A whole 64-entry array in one request. ``pool_slot`` is the note pool's own
+    middle index, not the project slot: 48 only ever uses 1 (spec section 4).
     """
     return sysex.ReadRequest(item=item, param=param, indices=(pattern, pool_slot, 1), count=64)
 
@@ -314,9 +304,7 @@ def live_notes(
 ) -> list[tuple[int, int, int, int]]:
     """``(ordinal, step, pitch, gate)`` per occupied entry, both counters 1-based.
 
-    50 holds the step 0-based while the panel counts from 1, so this is where
-    that is undone -- printing it raw would send the operator hunting for a note
-    on step 0.
+    50 holds the step 0-based while the panel counts from 1; this is where that is undone.
     """
     return [
         (ordinal + 1, step + 1, pitches[ordinal], gates[ordinal])
@@ -333,9 +321,7 @@ def check_pool(
 ) -> Verdict:
     """H2.2. Do the ordinals and pitches say what the panel shows?
 
-    ``steps`` is chunk 1 only, so it sees the first 64 notes of a 192-note pool.
-    A full chunk therefore means "at least this many", not "this many" -- said
-    out loud below rather than left to be misread.
+    ``steps`` is chunk 1 only, so a full chunk means "at least this many".
     """
     live = [(ordinal + 1, step + 1) for ordinal, step in enumerate(steps) if step != EMPTY]
     faults = []
@@ -484,12 +470,8 @@ def _byte_seven(
     pool: tuple[int, ...],
     pitch: tuple[int, ...],
 ) -> bool:
-    """H4.1, settled 2026-08-14 and kept as the check that it stays settled.
-
-    Selecting ``--other-slot`` and reading it must return a different project
-    from ``--slot``. If the two ever come back identical, selection has stopped
-    working -- which is the failure that would otherwise show up as a dump of
-    the wrong project that looks entirely valid.
+    """H4.1. Selecting ``--other-slot`` must return a different project from ``--slot``;
+    identical answers mean selection has stopped working and dumps the wrong project.
     """
     other = args.other_slot
     if other is None or other == args.slot:
@@ -497,9 +479,8 @@ def _byte_seven(
         return True
 
     here = read(transport, recorder, SCALAR, args.slot)[0]
-    # Select the other project before reading it. Without this the device
-    # answers for whichever slot the last prologue named, and the comparison
-    # below measures the harness rather than the device.
+    # Without this the device answers for whichever slot the last prologue named, and the
+    # comparison below measures the harness rather than the device.
     select(transport, recorder, other)
     there = read(transport, recorder, SCALAR, other)[0]
     other_pool = read(transport, recorder, chunk(item, P_NOTE_STEP, args.pattern), other)
@@ -566,13 +547,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-prologue", action="store_true", help="skip the 0x05 prologue frame (H1.4)"
     )
-    # Only throughput reads it, but keeping every option on the parent parser
-    # means they all sit before the subcommand rather than some either side.
+    # Probe-specific options stay on the parent parser so they all sit before the subcommand;
+    # split either side, they give "unrecognized arguments" with the device already on the desk.
     parser.add_argument(
         "--repeat", type=int, default=32, help="reads per count in the throughput probe"
     )
-    # Likewise phase2's. Splitting them either side of the subcommand is how you
-    # get "unrecognized arguments: --slot 2" with the device already on the desk.
     parser.add_argument("--track", type=int, default=1, help="sequencer track, 1-4 (phase2)")
     parser.add_argument("--pattern", type=int, default=1, help="pattern in that track, 1-16")
     parser.add_argument("--steps", default=DEFAULT_STEPS, help="steps the panel has notes on")

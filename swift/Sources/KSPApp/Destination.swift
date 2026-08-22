@@ -1,9 +1,5 @@
 import Foundation
 
-/// Where a converted file goes, and why.
-///
-/// Foundation only, and every dependency on the machine is a parameter, so the rules are testable
-/// without an MCC install to point at.
 struct Destination: Sendable, Hashable {
     let directory: URL
     /// Shown under the result when the file did not land where the user would expect it.
@@ -11,8 +7,7 @@ struct Destination: Sendable, Hashable {
 }
 
 enum Destinations {
-    /// MCC's own template folder -- confirmed 2026-08-07 as mode 0777, writable without elevation.
-    /// A project has to be here for the Project Browser to list it.
+    /// A project has to be here for MCC's Project Browser to list it.
     static let mccTemplates = URL(
         filePath: "/Library/Arturia/MIDI Control Center/Templates/KeyStepPro")
 
@@ -20,18 +15,12 @@ enum Destinations {
         FileManager.default.homeDirectoryForCurrentUser.appending(path: "Downloads")
     }
 
-    /// Where a converted `.KeyStepPro` belongs.
-    ///
-    /// The paths and the writability test are injected because the alternative is a test that
-    /// passes or fails on whether this machine happens to have MIDI Control Center installed.
     static func forProjects(
         chosen: URL? = nil,
         templates: URL = mccTemplates,
         downloads: URL = downloads,
         isWritable: (URL) -> Bool = { FileManager.default.isWritableFile(atPath: $0.path) }
     ) -> Destination {
-        // A folder the user picked is obeyed as it stands: the ladder below exists to find a
-        // writable folder when nobody has said which, not to second-guess one that has been named.
         if let chosen { return Destination(directory: chosen, note: nil) }
         if isWritable(templates) {
             return Destination(directory: templates, note: nil)
@@ -42,23 +31,17 @@ enum Destinations {
                 + "Downloads. Move it to \(templates.path) for MCC to list it.")
     }
 
-    /// Where a `.mid` exported from a dropped project belongs: a chosen folder, or next to the
-    /// project it came from.
     static func forMIDI(source: URL, chosen: URL?) -> Destination {
         Destination(directory: chosen ?? source.deletingLastPathComponent(), note: nil)
     }
 
-    /// What a chosen project folder costs: MCC's Project Browser lists only what is inside
-    /// `templates`. Choosing that folder by hand is the default reached another way, so it is not
-    /// warned about.
     static func mccWarning(for chosen: URL?, templates: URL = mccTemplates) -> String? {
         guard let chosen, folderPath(chosen) != folderPath(templates) else { return nil }
         return "MIDI Control Center's Project Browser lists only its own Templates folder, so it "
             + "will not show a project written here."
     }
 
-    /// Two ways of writing the same folder compare equal: symlinks are resolved, and a trailing
-    /// slash survives `deletingLastPathComponent` where an `NSOpenPanel` drops it.
+    /// Symlinks are resolved and a trailing slash dropped, so two spellings compare equal.
     private static func folderPath(_ url: URL) -> String {
         var path = url.resolvingSymlinksInPath().standardizedFileURL.path(percentEncoded: false)
         while path.count > 1 && path.hasSuffix("/") { path.removeLast() }
@@ -66,8 +49,7 @@ enum Destinations {
     }
 }
 
-/// Naming a converted file. MCC's Project Browser lists the *filename*, so this is what the user
-/// sees on the device-facing side and not a cosmetic detail.
+/// MCC's Project Browser lists the *filename*, so a name is device-facing, not cosmetic.
 enum Naming {
     static let fallbackStem = "Untitled"
 
@@ -75,10 +57,7 @@ enum Naming {
         sanitised(source.deletingPathExtension().lastPathComponent)
     }
 
-    /// A user-typed name reduced to something a filesystem will take.
-    ///
-    /// A leading dot is stripped as well as the separators: it is legal, but it would write a file
-    /// the user then cannot find in Finder.
+    /// A leading dot is stripped too: legal, but it writes a file Finder will not show.
     static func sanitised(_ raw: String) -> String {
         var name = raw.replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
@@ -89,9 +68,6 @@ enum Naming {
     }
 
     /// `directory/stem.ext`, moved along to `stem 2`, `stem 3`, ... until nothing is there.
-    ///
-    /// The app never overwrites: MCC's folder holds the user's own projects under freely chosen
-    /// names, so a clash is as likely to be someone else's work as it is a re-run of this one.
     static func vacant(
         in directory: URL, stem: String, extension ext: String,
         exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
@@ -99,8 +75,6 @@ enum Naming {
         firstFree(in: directory, stem: stem, extension: ext, exists: exists)
     }
 
-    /// The same ladder for a folder, which a split export fills with files it names itself: nothing
-    /// inside a folder this new can be in the way of a run whose filenames the app cannot know.
     static func vacantFolder(
         in directory: URL, stem: String,
         exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }

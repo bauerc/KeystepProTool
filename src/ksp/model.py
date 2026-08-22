@@ -1,12 +1,4 @@
-"""The decoded object model: project -> tracks -> patterns -> notes.
-
-What the flat key/value file becomes once both index spaces are resolved
-(spec section 4). Everything here is plain data with no reference back to the
-raw dict, so consumers never need to know the key grammar.
-
-The model is read-only: writes go through :mod:`ksp.mutate` against the raw
-dict, so they stay byte-comparable with what MCC produces.
-"""
+"""The decoded object model: project -> tracks -> patterns -> notes. Read-only."""
 
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, replace
@@ -21,12 +13,7 @@ from ksp.drum_map import DrumMap
 
 class NoteKind(StrEnum):
     """Which parameter set a note was decoded from.
-
-    Track 1 carries a melodic and a drum set side by side, and they mean
-    different things: a melodic note's value is a MIDI pitch, a drum note's is
-    a lane index. Tagging each note is what lets a pattern hold both without
-    the two becoming indistinguishable.
-    """
+    A melodic note's value is a MIDI pitch; a drum note's is a lane index."""
 
     SEQ = "seq"
     DRUM = "drum"
@@ -34,11 +21,7 @@ class NoteKind(StrEnum):
 
 class PatternMode(StrEnum):
     """Which parameter set(s) of a pattern hold notes.
-
-    ``BOTH`` is not a hardware mode -- the device plays one or the other. It
-    means the file has notes in both sets and we cannot yet tell which is
-    live, so the reader reports everything rather than guessing.
-    """
+    ``BOTH`` is not a hardware mode: the device plays one or the other."""
 
     SEQ = "seq"
     DRUM = "drum"
@@ -48,10 +31,7 @@ class PatternMode(StrEnum):
 
 class PlaybackDirection(StrEnum):
     """How a pattern walks its steps (99 / 116 bits 5-6).
-
-    ``UNKNOWN`` is the honest reading of the fourth value: two bits allow it
-    but the device never produced it during T5.5, so nothing knows its name.
-    """
+    ``UNKNOWN`` is the fourth value, which the device has never been seen to produce."""
 
     FORWARD = "forward"
     RANDOM = "random"
@@ -68,12 +48,8 @@ _DIRECTIONS = {
 
 @dataclass(frozen=True)
 class PatternBits:
-    """One decoded 99 / 116 field.
-
-    The sequencer and drum fields share this layout; only their defaults
-    differ (spec 3.3). ``raw`` is kept so a caller can see the value the
-    decode came from without going back to the file.
-    """
+    """One decoded 99 / 116 field. The sequencer and drum fields share this
+    layout and differ only in their defaults (spec 3.3)."""
 
     raw: int
     step_denominator: int
@@ -83,7 +59,7 @@ class PatternBits:
     polyrhythm: bool
     direction: PlaybackDirection
     unallocated: int
-    """Bits set that tier 5 never accounted for. Always 0 in every known file."""
+    """Bits no capture accounted for. Always 0 in every known file."""
 
     @classmethod
     def decode(cls, raw: int) -> "PatternBits":
@@ -120,28 +96,21 @@ class PatternBits:
 @dataclass(frozen=True)
 class Note:
     """One entry from a slot's note list.
-
-    ``step`` is 1-based here, matching how the hardware and the project
-    descriptions count beats, though the file stores it 0-based.
-    """
+    ``step`` is 1-based here; the file stores it 0-based."""
 
     kind: NoteKind
     slot: int
     index: int
-    """Ordinal position in the note list, 1-based. This is the file's own note
-    index -- distinct from ``step``, which is where it plays."""
+    """Ordinal position in the note list, 1-based. Distinct from ``step``."""
 
     step: int
     pitch: int
-    """MIDI pitch for a ``SEQ`` note; 0-based drum lane for a ``DRUM`` note
-    (lane 0 is the kick, confirmed against project_5)."""
+    """MIDI pitch for a ``SEQ`` note; 0-based drum lane for a ``DRUM`` note."""
 
     velocity: int
     gate_raw: int
     gate: float | None
-    """Gate length in steps. The ladder covers all of 0-127, so this is
-    ``None`` only for a ``gate_raw`` outside that range, i.e. a corrupt file.
-    See ``constants.GATE_TABLE``."""
+    """Gate length in steps. ``None`` only for a ``gate_raw`` outside 0-127."""
 
     time_shift: int
     """Signed, already offset from the stored centre of 49."""
@@ -151,15 +120,8 @@ class Note:
     """Which of the 16/32/48/64 sequences this note plays in."""
 
     active: bool = True
-    """Whether the step-active flag says the device plays this note.
-
-    Existence and audibility are different tests: a note is in the pool
-    because ``50``/``54`` is not the sentinel, but it only sounds if its bit
-    in ``48``/``52`` is set. Capture D1 toggled a drum step off without
-    deleting the note -- the pool entry survived unchanged and the step did
-    not sound. Defaults to True so a caller constructing a Note by hand gets
-    an audible one.
-    """
+    """Whether the step-active flag says the device plays this note. Existence and
+    audibility are different tests: pool entry vs its bit in ``48``/``52``."""
 
     @property
     def label(self) -> str:
@@ -168,11 +130,7 @@ class Note:
 
     def labelled(self, drum_map: DrumMap | None) -> str:
         """Like :attr:`label`, but resolving a drum lane through *drum_map*.
-
-        Without a map a drum note can only be reported as ``lane 0``, because
-        which MIDI note that lane transmits is a device setting the file does
-        not contain.
-        """
+        Without a map a drum note can only be reported as ``lane 0``."""
         if self.kind is NoteKind.DRUM:
             if drum_map is None:
                 return f"lane {self.pitch}"
@@ -202,26 +160,15 @@ class Note:
 
 
 class Disablement(Enum):
-    """The two ways a note is switched off.
-
-    Both are toggled the same way on the device, so both read as "disabled" and
-    name their reason rather than inventing separate words. These are rows 2 and
-    3 of the spec's six reasons a note might not play (4, existence versus
-    audibility); the other four are not disablement, so nothing here claims a
-    note is audible, only that the user has not switched it off.
-    """
+    """The two ways a note is switched off. Rows 2 and 3 of the spec's six reasons
+    a note might not play, so ``None`` means enabled, never audible."""
 
     STEP_TURNED_OFF = auto()
     PAST_LAST_STEP = auto()
 
 
 def disablement(note: Note, last_step: int | None) -> Disablement | None:
-    """Why *note* will not play, or ``None`` when the user has left it on.
-
-    Here rather than beside any one caller, because every layer above needs it:
-    the dump prints a marker beside it and :func:`ksp.midi_export.render_pattern`
-    filters an export on the same pair.
-    """
+    """Why *note* will not play, or ``None`` when the user has left it on."""
     if not note.active:
         return Disablement.STEP_TURNED_OFF
     if last_step is not None and note.step > last_step:
@@ -231,13 +178,8 @@ def disablement(note: Note, last_step: int | None) -> Disablement | None:
 
 @dataclass(frozen=True)
 class Pattern:
-    """One of a track's 16 patterns.
-
-    The melodic and drum parameter sets each carry their own step count and
-    swing, so both are reported rather than collapsing them into one pair of
-    numbers that would silently belong to whichever set happened to win.
-    ``drum_*`` is ``None`` on tracks 2-4, which have no drum set at all.
-    """
+    """One of a track's 16 patterns. Each parameter set carries its own step
+    count and swing; ``drum_*`` is ``None`` on tracks 2-4, which have no drum set."""
 
     number: int
     mode: PatternMode
@@ -251,22 +193,17 @@ class Pattern:
     drum_swing_percent: int | None
     drum_bits: PatternBits | None
     root_note: int
-    """Pitch class 0-11 (parameter 107). The octave the display shows is not
-    stored anywhere in the file."""
+    """Pitch class 0-11 (parameter 107); the octave the display shows is stored nowhere."""
 
     scale: int
-    """Index into ``constants.SCALE_NAMES`` (parameter 108). One list serves
-    both parameter sets -- there is no drum twin."""
+    """Index into ``constants.SCALE_NAMES`` (parameter 108). No drum twin."""
 
     notes: tuple[Note, ...]
     diagnostics: Report = EMPTY_REPORT
-    """Inconsistencies found while decoding. Reported, never silently fixed --
-    a reader that quietly repairs its input hides exactly the surprises this
-    milestone exists to find."""
+    """Inconsistencies found while decoding. Reported, never silently fixed."""
 
     @property
     def warnings(self) -> tuple[str, ...]:
-        """Every diagnostic in full, for callers that just want the text."""
         return self.diagnostics.messages
 
     @property
@@ -316,11 +253,7 @@ class Track:
     patterns: tuple[Pattern, ...]
     drum_mode: bool = False
     """Whether the track's Arp/Drum mode bit (parameter 86, bit 6) is set.
-
-    Only Track 1 has a drum parameter set, and this is what says whether it is
-    the live one. It is track-level rather than per-pattern, matching the
-    device's Drum button. Parameter 100 was expected to carry this and does
-    not -- it reads 26 everywhere."""
+    Track-level, not per-pattern, and not parameter 100 despite its documentation."""
 
     @property
     def is_empty(self) -> bool:
@@ -342,10 +275,7 @@ class Track:
 @dataclass(frozen=True)
 class Chain:
     """One track's pattern chain within a scene (parameter 84).
-
-    ``patterns`` is in chain order and 1-based, matching how the device
-    numbers patterns; the file stores them 0-based.
-    """
+    ``patterns`` is in chain order and 1-based; the file stores them 0-based."""
 
     track: int
     patterns: tuple[int, ...]
@@ -357,10 +287,7 @@ class Chain:
 @dataclass(frozen=True)
 class Scene:
     """One of the 16 scenes, holding a chain per track.
-
-    Only tracks that actually chain appear: an unused slot reads the sentinel
-    across all 16 entries, which is every scene of every sample project.
-    """
+    Only tracks that actually chain appear; an unused slot is all sentinel."""
 
     number: int
     chains: tuple[Chain, ...] = ()
@@ -404,12 +331,7 @@ class Project:
     def select(
         self, *, tracks: AbstractSet[int] = frozenset(), patterns: AbstractSet[int] = frozenset()
     ) -> "Project":
-        """Return a copy narrowed to *tracks* and *patterns*, empty meaning all.
-
-        The project's own order survives, since a set has none. Uses ``replace``
-        so fields added later (``drum_mode``) survive narrowing without every
-        caller being updated.
-        """
+        """Return a copy narrowed to *tracks* and *patterns*, empty meaning all."""
         narrowed = tuple(t for t in self.tracks if not tracks or t.number in tracks)
         if patterns:
             narrowed = tuple(
@@ -431,9 +353,6 @@ class Project:
             "diagnostics": self.diagnostics.to_list(),
         }
         if drum_map is not None:
-            # Named at the top level because every resolved drum note below
-            # depends on it, and it is an assumption about the user's device
-            # rather than anything read from the file.
             data["drum_map"] = drum_map.to_dict()
         data["tracks"] = [t.to_dict(drum_map) for t in self.tracks]
         return data

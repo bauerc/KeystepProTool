@@ -1,14 +1,4 @@
-"""The efficient read plan against the addresses MCC's plan covers.
-
-``bulk_fast`` may send whatever frames it likes; what it may not do is come back
-with a different project. So the tests here answer both walks out of the same
-device model -- a tape's own values, served at any address and any count, the
-way the hardware would -- and require the two dicts to be equal.
-
-The tapes only ever recorded ``count`` 16, so a merged request has no captured
-reply to replay. The model is what makes the comparison possible without the
-device; spec section 7.7 is where the count limits it honours come from.
-"""
+"""The efficient read plan against the addresses MCC's plan covers."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -63,8 +53,9 @@ def test_the_fast_plan_declares_its_own_length() -> None:
 
 
 def test_every_request_is_one_the_device_answers() -> None:
-    """A count above 100 comes back clamped and would read as a desync; four
-    indices draw no reply at all. Spec section 7.7."""
+    """A count above 100 comes back clamped and would read as a desync; four indices draw no reply
+    at all.
+    """
     for request in bulk_fast.iter_requests():
         sysex.build_read_request(request)
         if request.count is not None:
@@ -73,14 +64,16 @@ def test_every_request_is_one_the_device_answers() -> None:
 
 
 def test_no_run_in_the_plan_is_longer_than_a_single_request() -> None:
-    """The extent binds before the protocol does: the longest contiguous run in
-    PLAN is a 64-entry pool chunk, well inside the 100 the device honours."""
+    """The extent binds before the protocol does: the longest contiguous run in PLAN is a 64-entry
+    pool chunk, well inside the 100 the device honours.
+    """
     assert max(r.count or 0 for r in bulk_fast.iter_requests()) == 64
 
 
 def test_the_existence_array_is_read_before_the_notes_it_gates() -> None:
-    """Without this the gate has nothing to consult -- MCC's leaf order puts 50
-    after the parameters it settles."""
+    """Without this the gate has nothing to consult -- MCC's leaf order puts 50 after the parameters
+    it settles.
+    """
     seen_gate: set[tuple[int, int, int]] = set()
     for request in bulk_fast.iter_requests():
         if request.count is None or len(request.indices) != 3:
@@ -105,8 +98,9 @@ def test_the_fast_read_reconstructs_what_mcc_reads(
 def test_the_replayed_project_still_matches_its_file(
     fixtures_dir: Path, project_files_dir: Path, template_keys: list[str]
 ) -> None:
-    """Tape 1 is MCC recalling initial_project, so the fast walk owes the file
-    itself -- not merely agreement with the other walk."""
+    """Tape 1 is MCC recalling initial_project, so the fast walk owes the file itself -- not merely
+    agreement with the other walk.
+    """
     device = DeviceModel(tape_values(fixtures_dir / "recall_tape.txt"))
     replayed = bulk_read.read_raw(device, template_keys, fast=True)
 
@@ -123,9 +117,9 @@ def test_the_gate_saves_the_requests_it_claims(
 
 
 def test_the_drum_pool_is_never_skipped(device: DeviceModel, template_keys: list[str]) -> None:
-    """A dead drum entry reads 127 in some patterns and the default row in
-    others, so nothing derives it. Gating it the way 50 gates the melodic set
-    would silently replace real bytes."""
+    """A dead drum entry reads 127 in some patterns and the default row in others, so nothing
+    derives it.
+    """
     bulk_read.read_raw(device, template_keys, fast=True)
     drum_pool = {
         request
@@ -145,21 +139,16 @@ def pattern_of(name: str) -> int | None:
 
 @pytest.mark.parametrize("pattern", [1, 5, 16])
 def test_the_pattern_walk_covers_every_key_of_that_pattern(pattern: int) -> None:
-    """H2.4 reads one pattern of one track, and must not quietly drop a key the
-    full walk would have filled for it.
-
-    The expectation comes off the *key names*, not off the same predicate the
-    filter uses -- deriving it the other way makes the test agree with the filter
-    by construction and blind to it dropping whole parameters.
+    """H2.4 reads one pattern of one track, and must not quietly drop a key the full walk would have
+    filled for it.
     """
     whole = addresses(list(bulk_fast.iter_requests()))
     subset = set(addresses(list(bulk_fast.iter_pattern_requests(123, pattern))))
     owed = {name for name in whole if name.startswith("123_") and pattern_of(name) == pattern}
 
     assert owed <= subset
-    # The per-pattern scalars ride in one 16-entry range, so neighbouring
-    # patterns come along. No other track's pattern data may -- the index-less
-    # track scalars are deliberately kept, and carry no pattern index.
+    # The per-pattern scalars ride in one 16-entry range, so neighbouring patterns come
+    # along; no other track's pattern data may. The index-less track scalars are kept.
     assert not {
         name
         for name in subset
@@ -168,10 +157,9 @@ def test_the_pattern_walk_covers_every_key_of_that_pattern(pattern: int) -> None
 
 
 def test_the_pattern_walk_reads_the_scalars_that_make_a_pattern_play() -> None:
-    """Step count, swing, pattern bits and data state are per-pattern scalars
-    that bulk_fast coalesces into one range at index 1. A filter keyed on the
-    first index alone drops them for every pattern but 1 -- and a zero step count
-    is a pattern that does not play."""
+    """Step count, swing, pattern bits and data state are per-pattern scalars that bulk_fast
+    coalesces into one range at index 1.
+    """
     for pattern in (1, 5, 16):
         names = set(addresses(list(bulk_fast.iter_pattern_requests(123, pattern))))
         assert {
@@ -184,8 +172,9 @@ def test_the_pattern_walk_reads_the_scalars_that_make_a_pattern_play() -> None:
 
 
 def test_the_pattern_walk_carries_the_index_less_scalars() -> None:
-    """Tempo lives in 120_70/71/72 and has no pattern index, so a walk that kept
-    only indexed requests would export the pattern at the wrong speed."""
+    """Tempo lives in 120_70/71/72 and has no pattern index, so a walk that kept only indexed
+    requests would export the pattern at the wrong speed.
+    """
     names = set(addresses(list(bulk_fast.iter_pattern_requests(123, 1))))
 
     assert {"120_70", "120_71", "120_72"} <= names
@@ -214,8 +203,9 @@ def test_the_pattern_walk_still_reads_the_gate_before_the_notes() -> None:
 def test_a_pattern_read_agrees_with_the_whole_project(
     device: DeviceModel, tape_name: str, fixtures_dir: Path, template_keys: list[str]
 ) -> None:
-    """Same device, same keys: reading one pattern must give the values a full
-    read gives, or H2.4 proves nothing about H3.1."""
+    """Same device, same keys: reading one pattern must give the values a full read gives, or H2.4
+    proves nothing about H3.1.
+    """
     whole = bulk_read.read_raw(
         DeviceModel(tape_values(fixtures_dir / tape_name)), template_keys, fast=True
     )
@@ -229,8 +219,7 @@ def test_a_pattern_read_agrees_with_the_whole_project(
 
 
 def test_the_slot_reaches_every_frame(device: DeviceModel, template_keys: list[str]) -> None:
-    """Byte 7 is the project (spec 7.4). A walk that sent it on some frames and
-    not others would read two projects and merge them."""
+    """Byte 7 is the project (spec 7.4)."""
     bulk_read.read_raw(device, template_keys, fast=True, slot=2)
 
     assert device.slots == {2}

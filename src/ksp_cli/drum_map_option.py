@@ -1,10 +1,4 @@
-"""Shared ``--drum-map`` handling for ``ksp-dump`` and ``ksp2midi``.
-
-Both commands have to answer the same question -- which lane plays which MIDI
-note -- and the answer is a device global the project file does not carry. One
-grammar and one config file, so a user who sets it up once is understood by
-both.
-"""
+"""Shared ``--drum-map`` handling for ``ksp-dump`` and ``ksp2midi``: one grammar, one config."""
 
 import json
 from pathlib import Path
@@ -12,8 +6,7 @@ from pathlib import Path
 from ksp.drum_map import DEFAULT_CHROMATIC_LOW, DrumMap
 from ksp_cli.reporting import fail
 
-#: Where a user's own drum map lives, if they have one. Path resolution stays
-#: in the CLI: ``ksp`` must not decide where files are.
+#: Where a user's own drum map lives, if they have one.
 CONFIG_PATH = Path.home() / ".config" / "keysteppro" / "drum_map.json"
 
 DRUM_MAP_HELP = (
@@ -24,12 +17,8 @@ DRUM_MAP_HELP = (
 
 
 def parse_drum_map(spec: str) -> DrumMap | None:
-    """Parse a ``--drum-map`` argument.
-
-    ``chromatic:36`` | ``custom:36,38,42,...`` | ``none``. ``None`` means do
-    not resolve lanes at all, which is the honest output when the user's device
-    settings are unknown and they would rather see the raw lane number.
-    """
+    """Parse a ``chromatic:36`` | ``custom:36,38,...`` | ``none`` argument.
+    ``None`` means do not resolve lanes at all, leaving the raw lane number."""
     if spec == "none":
         return None
     kind, _, rest = spec.partition(":")
@@ -51,11 +40,7 @@ def _int(text: str, what: str) -> int:
 
 def resolve_drum_map(spec: str | None, config_path: Path | None = None) -> DrumMap | None:
     """Pick the drum map: the flag wins, then the config file, then the default.
-
-    *config_path* is passed in by the caller rather than read from this module,
-    so a test can point it somewhere harmless instead of depending on whether
-    the machine running the suite happens to have a personal config.
-    """
+    *config_path* is passed in so a test can point it somewhere harmless."""
     if spec is not None:
         return parse_drum_map(spec)
     path = CONFIG_PATH if config_path is None else config_path
@@ -66,10 +51,7 @@ def resolve_drum_map(spec: str | None, config_path: Path | None = None) -> DrumM
 
 def resolve_drum_map_or_fail(spec: str | None, config_path: Path, *, prog: str) -> DrumMap | None:
     """:func:`resolve_drum_map`, with a bad map reported as the usage error it is.
-
-    *config_path* is passed in for the same reason it is there, and named in the
-    message when it is the config file rather than the flag that is malformed.
-    """
+    *config_path* is named in the message when it, not the flag, is malformed."""
     try:
         return resolve_drum_map(spec, config_path)
     except json.JSONDecodeError as exc:  # a ValueError, so it must come first
@@ -80,15 +62,7 @@ def resolve_drum_map_or_fail(spec: str | None, config_path: Path, *, prog: str) 
 
 def resolve_import_drum_map(spec: str | None, config_path: Path | None = None) -> DrumMap | None:
     """The same choice for ``midi2ksp``, where unset means *fit to the source*.
-
-    Reading a lane back can fall through to the factory default and print what
-    it assumed. Writing one cannot: a source whose drums sit anywhere but
-    36-59 would have every hit dropped as unmapped. So an unconfigured import
-    fits a map to the pitches it was given, and says so.
-
-    ``none`` is refused rather than accepted, because a drum note stores a lane
-    and there is no lane without a map.
-    """
+    ``none`` is refused: a drum note stores a lane, and there is no lane without a map."""
     if spec == "none":
         raise ValueError(
             "a drum note stores a lane, not a pitch, so importing drums needs a map; "

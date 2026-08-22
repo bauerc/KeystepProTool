@@ -1,12 +1,4 @@
-"""Writing one note, and writing one value on a note that is already there.
-
-Milestone M4. Both operations are specified by a hardware capture diff rather
-than inferred, and the two replay tests below hold them to the device's own
-files byte for byte. Those captures are gitignored, so the replays skip when
-they are absent; ``test_placing_a_note_writes_exactly_the_measured_recipe``
-carries the same 8-key result against the committed ``baseline.KeyStepPro`` and
-never skips.
-"""
+"""Writing one note, and writing one value on a note that is already there."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -41,15 +33,8 @@ def changed(before: dict[str, int | str], after: dict[str, int | str]) -> dict[s
     return {k: (before.get(k), after[k]) for k in after if before.get(k) != after[k]}
 
 
-# --- The measured recipe ---------------------------------------------------
-
-
 def test_placing_a_note_writes_exactly_the_measured_recipe(load_sample: Loader) -> None:
-    """The 8 keys of B0-baseline -> T1-note-place, and nothing else.
-
-    ``baseline.KeyStepPro`` is byte-identical to that capture, so this runs
-    everywhere the repository does rather than only on the operator's machine.
-    """
+    """The 8 keys of B0-baseline -> T1-note-place, and nothing else."""
     base = load_sample("baseline.KeyStepPro")
     placed = mutate.place_note(base, track=2, pattern=1, step=1, pitch=60)
 
@@ -66,12 +51,7 @@ def test_step_skip_is_not_written(load_sample: Loader) -> None:
 
 
 def test_a_chord_sets_one_step_active_bit(load_sample: Loader) -> None:
-    """Three notes on one step: three pool entries, one flag.
-
-    48 is step-indexed while the pool is note-indexed (spec section 4), and the
-    D2 chord captures show four voices on step 1 sharing a single 48 bit. A
-    writer that indexed 48 by ordinal would light steps 1-3 instead.
-    """
+    """Three notes on one step: three pool entries, one flag."""
     project = load_sample("baseline.KeyStepPro")
     for pitch in (48, 52, 55):
         project = mutate.place_note(project, track=2, pattern=1, step=1, pitch=pitch)
@@ -116,9 +96,6 @@ def test_the_reader_sees_a_placed_note(load_sample: Loader) -> None:
     assert notes[0].active
 
 
-# --- Changing one value ----------------------------------------------------
-
-
 def test_set_pitch_changes_exactly_one_line(load_sample: Loader) -> None:
     """project_5 Track 3 note 5 is C#2, hardware-confirmed. Move it an octave."""
     base = load_sample("project_5.KeyStepPro")
@@ -152,9 +129,6 @@ def test_pitch_key_addresses_the_documented_key() -> None:
     assert mutate.pitch_key(track=3, pattern=1, note=5) == "125_109_1_1_5"
 
 
-# --- The fixed key set -----------------------------------------------------
-
-
 @pytest.mark.parametrize("operation", ["place", "pitch"])
 def test_mutation_never_adds_or_removes_a_key(load_sample: Loader, operation: str) -> None:
     """153,497 keys in, 153,497 keys out. Spec section 2."""
@@ -173,9 +147,6 @@ def test_mutation_leaves_the_source_untouched(load_sample: Loader) -> None:
 
     mutate.set_pitch(base, track=3, pattern=1, note=5, pitch=61)
     assert base[target] == 49
-
-
-# --- Refusals --------------------------------------------------------------
 
 
 def test_set_pitch_refuses_a_note_that_is_not_in_the_pool(load_sample: Loader) -> None:
@@ -238,11 +209,7 @@ def test_place_note_refuses_a_seventeenth_note_on_one_step(load_sample: Loader) 
 
 
 def test_a_full_slot_spills_into_the_next_chunk(load_sample: Loader) -> None:
-    """``idx2`` chunks one flat pool, so the 65th note is slot 2 ordinal 1.
-
-    Not a fourth voice and not an error: the pool is 3 x 64 and only the 193rd
-    event reaches a firmware ceiling (spec 4).
-    """
+    """``idx2`` chunks one flat pool, so the 65th note is slot 2 ordinal 1."""
     project = load_sample("baseline.KeyStepPro")
     for step in range(1, constants.MAX_STEPS + 1):
         project = mutate.place_note(project, track=2, pattern=1, step=step, pitch=60)
@@ -280,18 +247,10 @@ def test_a_bad_address_is_a_key_error() -> None:
         mutate.set_pitch({"125_50_1_1_1": 0}, track=3, pattern=1, note=1, pitch=61)
 
 
-# --- Replays against the device's own files --------------------------------
-
-
 def test_place_note_reproduces_the_devices_own_placement(
     load_sample: Loader, require_capture: Callable[[str], Path]
 ) -> None:
-    """B0-baseline -> T1-note-place, made by a human at the device.
-
-    Compared through the writer rather than as raw bytes: M3 already holds
-    ``dumps(loads(x)) == x`` on every sample, so this asserts the same thing
-    while staying indifferent to how the writer punctuates.
-    """
+    """B0-baseline -> T1-note-place, made by a human at the device."""
     expected = lenient_json.load_path(require_capture("T1-note-place.KeyStepPro"))
     placed = mutate.place_note(
         load_sample("baseline.KeyStepPro"), track=2, pattern=1, step=1, pitch=60
@@ -311,12 +270,8 @@ def test_set_pitch_reproduces_the_devices_own_pitch_edit(
     assert lenient_json.dumps(edited) == lenient_json.dumps(expected)
 
 
-# --- M6: the drum set and the scalars a converter writes -------------------
-
-#: The drum twin of PLACEMENT_RECIPE, against ``Default.KeyStepPro``. Only four
-#: keys move because that template already carries a fresh note's gate,
-#: velocity, shift and randomness on every empty entry -- the writer sets all
-#: six regardless, which is what makes it work against project_5 too.
+#: The drum twin of PLACEMENT_RECIPE, against ``Default.KeyStepPro``. Only four keys move
+#: because that template already carries a fresh note's four scalars on every empty entry.
 DRUM_PLACEMENT = {
     "123_40_1": (0, 3),
     "123_52_1_1_21": (0, 16),
@@ -326,11 +281,7 @@ DRUM_PLACEMENT = {
 
 
 def test_placing_a_drum_hit_writes_the_drum_set(load_sample: Loader) -> None:
-    """Lane 2 at step 5: the pool entry, the packed 52 bit and the data latch.
-
-    ``117`` holds a lane index where the melodic ``109`` holds a pitch, and
-    ``52`` is addressed by lane rather than by step (spec 3.2, 4).
-    """
+    """Lane 2 at step 5: the pool entry, the packed 52 bit and the data latch."""
     base = load_sample("Default.KeyStepPro")
     result = mutate.place_drum_note(base, pattern=1, lane=2, step=5)
 
@@ -338,8 +289,7 @@ def test_placing_a_drum_hit_writes_the_drum_set(load_sample: Loader) -> None:
 
 
 def test_the_drum_step_active_bit_is_packed_seven_to_an_entry(load_sample: Loader) -> None:
-    """Two hits on one lane share an entry, so the second must not clear the
-    first. Lane 0 steps 1 and 5 are what project_5 stores as 17."""
+    """Two hits on one lane share an entry, so the second must not clear the first."""
     project = load_sample("Default.KeyStepPro")
     project = mutate.place_drum_note(project, pattern=1, lane=0, step=1)
     project = mutate.place_drum_note(project, pattern=1, lane=0, step=5)
@@ -382,8 +332,7 @@ def test_drum_mode_moves_bit_six_and_nothing_else(load_sample: Loader) -> None:
 
 
 def test_drum_mode_is_refused_on_a_track_with_no_drum_set(load_sample: Loader) -> None:
-    """Bit 6 is ARP on tracks 2-4, so setting it there selects notes we did
-    not write (spec 5)."""
+    """Bit 6 is ARP on tracks 2-4, so setting it there selects notes we did not write (spec 5)."""
     with pytest.raises(ValueError, match="no drum parameter set"):
         mutate.set_drum_mode(load_sample("Default.KeyStepPro"), track=2, on=True)
 

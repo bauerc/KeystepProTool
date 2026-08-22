@@ -1,11 +1,4 @@
-"""The probe harness, as far as it goes without a device.
-
-These probes cannot be exercised in CI -- what they do is talk to hardware. What
-can be held here is that they are wired up, that the addresses they ask for are
-the ones the design names, and that the pass/fail rules they apply are the ones
-Phase 2 states -- so none of that is discovered with the device already out on
-the desk.
-"""
+"""The probe harness, as far as it goes without a device."""
 
 import sys
 from functools import partial
@@ -51,8 +44,9 @@ def test_the_throughput_probe_asks_for_a_pitch_chunk() -> None:
 
 
 def test_the_sentinel_probe_addresses_the_pattern_default_pitch() -> None:
-    """One index, count 1: the same shape ``bulk_plan`` uses for 123_117_<pat>,
-    which is where every 0xFF in the capture sits."""
+    """One index, count 1: the same shape ``bulk_plan`` uses for 123_117_<pat>, which is where every
+    0xFF in the capture sits.
+    """
     request = sysex.ReadRequest(
         item=usb_probe.SENTINEL_ITEM, param=usb_probe.SENTINEL_PARAM, indices=(1,), count=1
     )
@@ -61,19 +55,13 @@ def test_the_sentinel_probe_addresses_the_pattern_default_pitch() -> None:
 
 
 def test_the_slot_defaults_to_one_and_is_settable() -> None:
-    """Byte 7 is the project (spec 7.4). Every Phase 1 probe sent 1; H4.1 is why
-    it has to be nameable."""
+    """Byte 7 is the project (spec 7.4)."""
     assert usb_probe.build_parser().parse_args(["scalar"]).slot == sysex.DEFAULT_SLOT
     assert usb_probe.build_parser().parse_args(["--slot", "4", "scalar"]).slot == 4
 
 
 def test_every_option_sits_before_the_subcommand() -> None:
-    """The whole command line, as the protocol document prints it.
-
-    Options split either side of the subcommand is how you get "unrecognized
-    arguments: --slot 2" with the device already on the desk, so the exact
-    invocation the ledger tells an operator to type is pinned here.
-    """
+    """The whole command line, as the protocol document prints it."""
     args = usb_probe.build_parser().parse_args(
         [
             "--save", "frames.jsonl",
@@ -110,8 +98,7 @@ def test_phase_2_asks_for_the_addresses_the_design_names(param: int, frame: str)
 
 
 def test_phase_2_addresses_the_track_it_was_given() -> None:
-    """Track 2 is item 124. Reading track 1's item for a note programmed on
-    track 2 would fail the probe for a reason that is not the read path."""
+    """Track 2 is item 124."""
     assert usb_probe.chunk(item_for_track(2), 50, 1).item == 124
 
 
@@ -159,9 +146,9 @@ def test_the_pool_check_catches_a_wrong_pitch() -> None:
 
 
 def test_the_pool_check_says_so_when_chunk_one_is_full() -> None:
-    """64 live entries means the pattern may continue into chunk 2, which H2.2
-    does not read -- reporting that as "64 notes, panel has 4" would send the
-    operator looking for a read bug that is really a chunk boundary."""
+    """64 live entries means the pattern may continue into chunk 2, which H2.2 does not read --
+    reporting "64 notes, panel has 4" would look like a read bug rather than a chunk boundary.
+    """
     full = tuple(range(64))
     verdict = usb_probe.check_pool(full, (60,) * 64, STEPS, [60, 64, 67, 72])
     assert not verdict.passed
@@ -169,8 +156,9 @@ def test_the_pool_check_says_so_when_chunk_one_is_full() -> None:
 
 
 def test_the_pool_check_catches_a_note_too_many() -> None:
-    """A fifth live ordinal is the panel and the read disagreeing about how much
-    is there, which is exactly what H2.2 exists to catch."""
+    """A fifth live ordinal is the panel and the read disagreeing about how much is there, which is
+    exactly what H2.2 exists to catch.
+    """
     extra = (0, 4, 8, 12, 16) + (127,) * 59
     verdict = usb_probe.check_pool(extra, PITCHES, STEPS, [60, 64, 67, 72])
     assert not verdict.passed
@@ -199,13 +187,8 @@ def test_the_step_active_check_catches_a_missing_bit() -> None:
 def test_phase_2_runs_end_to_end_against_a_modelled_device(
     fixtures_dir: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """The operator gets one hardware run, so every line of the probe has to have
-    been executed before the device is on the desk -- the export and the H4.1
-    comparison included, not just the frames.
-
-    The two tapes stand in for two slots, so H4.1's "the answers differ" branch
-    is the one taken. The H2.x verdicts are FAIL here: the tape is
-    ``initial_project``, not the scratch pattern H2.1 builds.
+    """The operator gets one hardware run, so every line of the probe has to have been executed
+    before the device is on the desk -- the export and the H4.1 comparison included.
     """
     slots = {
         1: DeviceModel(tape_values(fixtures_dir / "recall_tape.txt")),
@@ -265,8 +248,9 @@ def test_the_sweep_covers_all_sixteen_slots_by_default() -> None:
 
 
 def test_the_sweep_names_pitches_the_way_the_device_does() -> None:
-    """The panel shows middle C as C3, and the whole point of the marker notes is
-    that the table can be compared against it without converting anything."""
+    """The panel shows middle C as C3, and the whole point of the marker notes is that the table can
+    be compared against it without converting anything.
+    """
     assert constants.note_name(60) == "C3"
     assert constants.note_name(62) == "D3"
     assert constants.note_name(64) == "E3"
@@ -275,8 +259,9 @@ def test_the_sweep_names_pitches_the_way_the_device_does() -> None:
 def test_the_sweep_runs_over_a_modelled_device(
     fixtures_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Slot 1 answers, slot 2 is the filler case, the rest do not reply at all --
-    every branch of the table, before the device is on the desk."""
+    """Slot 1 answers, slot 2 is the filler case, the rest do not reply at all -- every branch of
+    the table, before the device is on the desk.
+    """
     slots = {1: DeviceModel(tape_values(fixtures_dir / "recall_tape.txt"))}
     monkeypatch.setattr(usb_probe, "UsbMidiTransport", partial(FakeDevice, slots, filler={2}))
 
@@ -290,9 +275,9 @@ def test_the_sweep_runs_over_a_modelled_device(
 def test_the_sweep_selects_every_slot_before_reading_it(
     fixtures_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The bug that wasted a hardware run: one prologue was sent for the default
-    slot and byte 7 varied under it, so only that project ever answered. Each
-    slot must get its own ``05 <slot>`` first."""
+    """The bug that wasted a hardware run: one prologue was sent for the default slot and byte 7
+    varied under it, so only that project ever answered.
+    """
     device = FakeDevice(
         {n: DeviceModel(tape_values(fixtures_dir / "recall_tape.txt")) for n in range(1, 4)}
     )
@@ -307,8 +292,9 @@ def test_the_sweep_selects_every_slot_before_reading_it(
 def test_h4_1_selects_the_other_slot_before_comparing(
     fixtures_dir: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Same bug in the H4.1 section: reading --other-slot without selecting it
-    measures the harness, not the device."""
+    """Same bug in the H4.1 section: reading --other-slot without selecting it measures the harness,
+    not the device.
+    """
     slots = {
         1: DeviceModel(tape_values(fixtures_dir / "recall_tape.txt")),
         2: DeviceModel(tape_values(fixtures_dir / "recall_project_2_tape.txt")),
@@ -327,11 +313,7 @@ def test_h4_1_selects_the_other_slot_before_comparing(
 def test_the_sweep_reports_the_marker_note_it_found(
     fixtures_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A slot identifies itself by the pitch on step 1, printed as a note name.
-
-    The tape's track 1 pattern 1 holds a note at ordinal 1, so this exercises the
-    decode rather than the empty branch.
-    """
+    """A slot identifies itself by the pitch on step 1, printed as a note name."""
     values = tape_values(fixtures_dir / "recall_tape.txt")
     monkeypatch.setattr(
         usb_probe, "UsbMidiTransport", partial(FakeDevice, {1: DeviceModel(values)})
@@ -347,8 +329,9 @@ def test_the_sweep_reports_the_marker_note_it_found(
 def test_the_sweep_says_so_when_a_slot_holds_no_note(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """An answering slot with an empty pool is not the same as a filler slot, and
-    conflating them is how a missing marker reads as a protocol failure."""
+    """An answering slot with an empty pool is not the same as a filler slot, and conflating them is
+    how a missing marker reads as a protocol failure.
+    """
     empty = DeviceModel({f"123_{param}_1_1_1": EMPTY for param in (50, 109)} | {"120_37": 3})
     monkeypatch.setattr(usb_probe, "UsbMidiTransport", partial(FakeDevice, {1: empty}))
 
@@ -360,8 +343,9 @@ def test_the_sweep_says_so_when_a_slot_holds_no_note(
 
 
 def test_ordinals_are_reported_one_based_and_steps_too() -> None:
-    """50 holds the 0-based step; a probe that printed it raw would send the
-    operator hunting for a note on step 0."""
+    """50 holds the 0-based step; a probe that printed it raw would send the operator hunting for a
+    note on step 0.
+    """
     assert usb_probe.live_notes(POOL, PITCHES, (10,) * 64) == [
         (1, 1, 60, 10),
         (2, 5, 64, 10),

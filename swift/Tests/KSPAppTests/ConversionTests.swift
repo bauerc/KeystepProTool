@@ -23,8 +23,6 @@ import Testing
         }
     }
 
-    /// Refused before a runner is called, so a stray drop is a sentence in the window rather than
-    /// an exit code the app has to translate.
     @Test(arguments: ["notes.txt", "song", "song.wav"])
     func anythingElseIsRefused(name: String) {
         #expect(Conversion.job(for: URL(filePath: "/tmp/\(name)")) == nil)
@@ -35,8 +33,6 @@ import Testing
         #expect(Job.toMIDI(URL(filePath: "/a.KeyStepPro")).extensionOfResult == "mid")
     }
 
-    /// Planning is what the staged view shows before anything is written, so it has to name the
-    /// destination the run will actually use.
     @Test func aPlanNamesWhereTheResultWillLand() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -51,8 +47,6 @@ import Testing
         #expect(plan.note == nil)
     }
 
-    /// A second conversion of the same source under the same name must not destroy the first, and
-    /// the staged view says so before the user commits to it.
     @Test func aPlanStepsAsideFromAnExistingFileAndSaysSo() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -67,7 +61,6 @@ import Testing
         #expect(plan.note?.contains("fixture 2.KeyStepPro") == true)
     }
 
-    /// Both notes can apply at once -- a fallback directory that already holds that name.
     @Test func aPlanCarriesTheDestinationNoteAndTheCollisionNoteTogether() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -82,8 +75,6 @@ import Testing
         #expect(plan.note?.contains("fixture 2.KeyStepPro") == true)
     }
 
-    /// A split run's filenames come from the slots the export finds, which is format logic the app
-    /// does not own -- so it claims the folder and lets the runner name what goes in it.
     @Test func asplitPlanClaimsAFolderRatherThanAFile() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -99,8 +90,6 @@ import Testing
         #expect(plan.note == nil)
     }
 
-    /// The same ladder a file climbs, so a second split run cannot land in the first one's folder --
-    /// which is what keeps the runner's overwrite guard from ever firing.
     @Test func asplitPlanStepsAsideFromAnExistingFolderAndSaysSo() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -116,7 +105,6 @@ import Testing
         #expect(plan.note?.contains("fixture 2") == true)
     }
 
-    /// A `.mid` in becomes one project however the control is set, so the import ignores it.
     @Test func animportIgnoresSplitting() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -130,8 +118,6 @@ import Testing
         #expect(plan.target == directory.appending(path: "fixture.KeyStepPro"))
     }
 
-    /// The end-to-end proof: the folder is the app's, the filenames are the runner's, and every one
-    /// of them comes back to be listed.
     @Test func asplitExportFillsItsFolderAndReportsEveryFile() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -144,8 +130,7 @@ import Testing
 
         #expect(!outcome.failed, "export failed: \(outcome.headline)")
         #expect(outcome.written.count > 1)
-        // Named after the source and its slot, not after the folder the user chose.
-        // By path: `deletingLastPathComponent()` leaves a trailing slash the folder URL has not.
+        // Compared by path: `deletingLastPathComponent()` leaves a trailing slash the URL has not.
         #expect(
             outcome.written.allSatisfy {
                 $0.deletingLastPathComponent().path == plan.target.path
@@ -154,12 +139,9 @@ import Testing
             outcome.written.map(\.lastPathComponent)
                 .contains("project_5_track1_pattern1.mid"))
         #expect(outcome.written.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
-        // Named so the result can say where they went even when only one file is written.
         #expect(outcome.folder == plan.target)
     }
 
-    /// One file is the case the result view would otherwise report as a bare filename, leaving the
-    /// folder the user named nowhere on screen.
     @Test func asplitExportOfOneSlotStillNamesItsFolder() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -176,7 +158,6 @@ import Testing
         #expect(outcome.folder == plan.target)
     }
 
-    /// A run that wrote one named file has no folder to report -- the file's own name is the answer.
     @Test func aplainExportReportsNoFolder() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -191,9 +172,6 @@ import Testing
         #expect(outcome.folder == nil)
     }
 
-    /// The one end-to-end run, and the point of it is that the app reaches the *shipped* runner and
-    /// finds the bundled 3.5 MB template through `Bundle.module` -- neither of which a unit test of
-    /// the naming rules would catch.
     @Test func convertingAMIDIFileWritesAProjectWhereItWasAsked() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -212,8 +190,6 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: written.path))
     }
 
-    /// A dry run is a real feature against a 3.5 MB project, not scaffolding: it reports the file it
-    /// would have written and leaves the disk untouched.
     @Test func adryRunReportsItsDestinationAndWritesNothing() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -226,13 +202,11 @@ import Testing
 
         #expect(!outcome.failed)
         #expect(outcome.dryRun)
-        // Nothing was written, so nothing may be revealed in Finder or renamed.
         #expect(!outcome.wroteFile)
         #expect(outcome.written == [plan.target])
         #expect(!FileManager.default.fileExists(atPath: plan.target.path))
     }
 
-    /// The other direction takes the flag separately, so it is asserted separately.
     @Test func adryRunExportsNothingEither() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -248,7 +222,6 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: plan.target.path))
     }
 
-    /// What the grid left out rides the same channel the placement notes do.
     @Test func whatWasLeftOutIsCarriedIntoTheResult() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -264,7 +237,6 @@ import Testing
         #expect(outcome.note == "Excluded: Track 2")
     }
 
-    /// A name already taken and a track switched off can both apply.
     @Test func acollisionAndAnExclusionAreBothReported() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -281,7 +253,6 @@ import Testing
         #expect(outcome.note?.contains("Excluded: pattern slot 5") == true)
     }
 
-    /// Nothing unticked, nothing said.
     @Test func afullConversionCarriesNoExclusion() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -295,7 +266,6 @@ import Testing
         #expect(outcome.note == nil)
     }
 
-    /// The run the exclusion explains is the one that fails.
     @Test func afailedRunStillNamesWhatWasLeftOut() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -326,17 +296,11 @@ import Testing
         #expect(outcome.failed)
         #expect(outcome.written.isEmpty)
         #expect(!outcome.wroteFile)
-        // The runner spells failures "<prog>: <message>" for a terminal; the window drops the prefix.
         #expect(!outcome.headline.hasPrefix("ksp-swift-cli"))
         #expect(!outcome.headline.isEmpty)
     }
 
-    /// What the step-skip choice did has to reach the window, or the picker changes the file with
-    /// nothing on screen saying so. `project_5.KeyStepPro` holds notes on part of the cycle, so the
-    /// two choices report different things about the same project.
-    ///
-    /// The fragments are deliberately partial: the wording lives in `KSPKit`'s diagnostics and is a
-    /// parity contract, so this asserts that the finding arrived, not how it is phrased.
+    /// The fragments are partial on purpose: the wording is a parity contract owned by `KSPKit`.
     @Test(
         arguments: [
             (Settings.StepSkip.auto, "were rendered as repeats", "rendered as 4 repeats"),
@@ -357,7 +321,6 @@ import Testing
         let outcome = await Conversion.run(plan, settings: settings)
 
         #expect(!outcome.failed)
-        // One summary line collapsed, and one line per site when every finding is shown.
         let summary = outcome.findings(verbose: false).filter { $0.contains("16/32/48/64") }
         #expect(summary.count == 1)
         #expect(summary.first?.contains(collapsed) == true)
@@ -367,10 +330,6 @@ import Testing
         #expect(sites.allSatisfy { $0.contains(each) })
     }
 
-    /// The count under the grid has to be the number of patterns the export really lays down, or
-    /// the window promises a length the file does not have. `renderProject` is the authority: it
-    /// plans nothing for a slot holding no notes, and `arrange` gives each pattern *number* one
-    /// stretch of timeline however many tracks play it.
     @Test(arguments: ["project_5.KeyStepPro", "project_9.KeyStepPro", "initial_project.KeyStepPro"])
     func thelengthCountsThePatternsTheExportLaysDown(name: String) throws {
         let project = try Reader.load(contentsOf: RepoData.projectFiles.appending(path: name))
@@ -383,8 +342,6 @@ import Testing
         #expect(length.patterns == laid.count)
     }
 
-    /// The split line claims "one pattern per file" flatly, so pin the claim against the splitter
-    /// rather than against its own wording: change the grouping key and this fails, not the prose.
     @Test(arguments: ["project_5.KeyStepPro", "project_9.KeyStepPro"])
     func asplitFileHoldsExactlyOnePattern(name: String) throws {
         let project = try Reader.load(contentsOf: RepoData.projectFiles.appending(path: name))
@@ -395,9 +352,6 @@ import Testing
         #expect(files.allSatisfy { $0.patternNumbers.count == 1 })
     }
 
-    /// The stepper has to reach the bytes, not just the summary line. How the rounds are laid out
-    /// is ``MIDIExportTests``' to check exactly; this only pins that the app carries the choice
-    /// down -- and that at 1 it still writes what it wrote before the stepper existed.
     @Test func therepeatCountReachesTheFileThatIsWritten() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -422,8 +376,6 @@ import Testing
         #expect(try await exported(thrice, named: "thrice").count > byDefault.count)
     }
 
-    /// Fabricated rather than run: nothing writes more than one file until split lands (#130), and
-    /// this is the plumbing that will carry it when it does.
     @Test func everyDestinationOfARunIsKeptInTheOrderItWasWritten() {
         let first = URL(filePath: "/tmp/song-track-1.mid")
         let second = URL(filePath: "/tmp/song-track-2.mid")
@@ -437,7 +389,6 @@ import Testing
         #expect(outcome.wroteFile)
     }
 
-    /// One file still reads exactly as it did before the outcome went plural.
     @Test func oneWrittenFileReadsAsItsNameAndSeveralAsACount() {
         let one = Outcome(
             written: [URL(filePath: "/tmp/song.mid")], headline: "", report: Report(), note: nil)
@@ -456,10 +407,7 @@ import Testing
     }
 }
 
-/// Reading a dropped project so the staged view can show what is in it.
 @Suite struct ConversionSummaryTests {
-    /// The one end-to-end read: the app reaches the shipped runner, and what comes back is the
-    /// structural summary rather than any rendered text.
     @Test func summarisingAProjectReportsItsTracksAndPatterns() async throws {
         let state = await Conversion.summarise(
             RepoData.projectFiles.appending(path: "project_5.KeyStepPro"))
@@ -474,8 +422,6 @@ import Testing
         #expect(!summary.isEmpty)
     }
 
-    /// An empty project still summarises: the staged view wants four tracks of dimmed slots, not a
-    /// failure.
     @Test func anemptyProjectSummarisesAsEmptyRatherThanFailing() async throws {
         let state = await Conversion.summarise(
             RepoData.projectFiles.appending(path: "user_empty_project.KeyStepPro"))
@@ -488,7 +434,6 @@ import Testing
         #expect(summary.isEmpty)
     }
 
-    /// A file named like a project that is not one: the window shows why, not an empty list.
     @Test func anunreadableProjectComesBackAsAFailureNamingTheFile() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -502,7 +447,6 @@ import Testing
             return
         }
         #expect(message.contains("broken.KeyStepPro"))
-        // The runner spells failures "<prog>: <message>" for a terminal; the window has none.
         #expect(!message.hasPrefix("ksp-swift-cli"))
     }
 }

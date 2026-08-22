@@ -6,8 +6,6 @@ import Testing
 
 @testable import KSPApp
 
-/// The mapping from what the window offers onto what the runners take: that a control reaches the
-/// runner, and that the controls not yet built leave the runner's own defaults alone.
 @Suite struct SettingsTests {
     private let source = URL(filePath: "/tmp/song.mid")
     private let output = URL(filePath: "/tmp/song.KeyStepPro")
@@ -39,7 +37,6 @@ import Testing
         #expect(settings.exportOptions(source: output, output: source).dryRun == on)
     }
 
-    /// "Show every finding" has to reach the runner, not just the renderer.
     @Test(arguments: [false, true])
     func showingEveryFindingReachesBothRunners(on: Bool) {
         let settings = Settings(dryRun: false, verbose: on)
@@ -47,35 +44,30 @@ import Testing
         #expect(settings.exportOptions(source: output, output: source).verbose == on)
     }
 
-    /// Only the export splits: a `.mid` in becomes one project, so `ConvertRunner` has no such
-    /// option to carry it to.
+    /// Only the export splits, so `ConvertRunner` has no such option to carry it to.
     @Test(arguments: [false, true])
     func splittingPerPatternReachesTheExport(on: Bool) {
         let settings = Settings(splitPerPattern: on)
         #expect(settings.exportOptions(source: output, output: source).split == on)
     }
 
-    /// One file is what the app has always written, and what the CLI writes on defaults.
     @Test func afreshSettingsWritesOneFile() {
         #expect(!Settings().splitPerPattern)
         #expect(!Settings().exportOptions(source: output, output: source).split)
     }
 
-    /// The window never waives the runner's overwrite guard.
     @Test func neitherDirectionForcesAnOverwrite() {
         let settings = Settings(dryRun: false, verbose: true)
         #expect(!settings.convertOptions(source: source, output: output).force)
         #expect(!settings.exportOptions(source: output, output: source).force)
     }
 
-    /// The app reads the runner's summary out of `stdout`, so it must not silence it.
     @Test func neitherDirectionSilencesTheSummary() {
         let settings = Settings()
         #expect(!settings.convertOptions(source: source, output: output).quiet)
         #expect(!settings.exportOptions(source: output, output: source).quiet)
     }
 
-    /// Everything the window does not offer yet keeps the runner's own default.
     @Test func anImportLeavesEveryUnofferedOptionAtItsDefault() {
         let mapped = Settings(dryRun: true, verbose: true)
             .convertOptions(source: source, output: output)
@@ -110,14 +102,12 @@ import Testing
         #expect(mapped.includeDisabled == defaults.includeDisabled)
     }
 
-    /// A fresh window sits on auto, so the app on defaults exports what the CLI on defaults exports.
     @Test func freshSettingsLeaveTheStepSkipCycleOnAuto() {
         let settings = Settings()
         #expect(settings.stepSkip == .auto)
         #expect(settings.exportOptions(source: output, output: source).passes == nil)
     }
 
-    /// Every choice the picker offers has to reach the export, auto included.
     @Test(arguments: Settings.StepSkip.allCases)
     func everyStepSkipChoiceReachesTheExport(choice: Settings.StepSkip) {
         var settings = Settings()
@@ -125,23 +115,19 @@ import Testing
         #expect(settings.exportOptions(source: output, output: source).passes == choice.passes)
     }
 
-    /// The cap is the device's four 16/32/48/64 sequences, not a number picked for the menu: if the
-    /// constant ever moves, the picker fails here rather than drifting quietly.
+    /// The cap is the device's four 16/32/48/64 sequences, not a number picked for the menu.
     @Test func theStepSkipChoicesAreTheDevicesOwnSequences() {
         #expect(
             Settings.StepSkip.allCases.compactMap(\.passes) == Array(1...Constants.skipCyclePasses))
         #expect(Settings.StepSkip.allCases.filter { $0.passes == nil } == [.auto])
     }
 
-    /// A fresh window lays the export down once, so the app on defaults exports what the CLI on
-    /// defaults exports.
     @Test func freshSettingsLayTheExportDownOnce() {
         let settings = Settings()
         #expect(settings.repeatCount == 1)
         #expect(settings.exportOptions(source: output, output: source).repeatCount == 1)
     }
 
-    /// Every count the stepper can reach has to reach the export.
     @Test(arguments: Settings.repeatRange)
     func everyRepeatCountReachesTheExport(count: Int) {
         var settings = Settings()
@@ -149,13 +135,10 @@ import Testing
         #expect(settings.exportOptions(source: output, output: source).repeatCount == count)
     }
 
-    /// The stepper's cap is the export's own, not a number picked for the control: offering an
-    /// eleventh would put the window one click away from a value the runner rejects outright.
     @Test func theStepperCannotOfferMoreThanTheExportAccepts() {
         #expect(Settings.repeatRange == 1...MIDIExport.maxRepeat)
     }
 
-    /// The ticks reach the export per track, which is what an individually chosen cell needs.
     @Test func thegridsTicksReachTheExport() {
         var selection = GridSelection(syntheticSummary())
         selection.toggle(track: 3)
@@ -168,8 +151,6 @@ import Testing
         #expect(mapped.cells == [1: every.subtracting([5]), 2: every, 4: every])
     }
 
-    /// Everything ticked sends nothing, so the app on defaults exports what the CLI on defaults
-    /// exports.
     @Test func afullyTickedGridAsksForNothing() {
         let mapped = Settings().selecting(GridSelection(syntheticSummary()))
             .exportOptions(source: output, output: source)
@@ -180,7 +161,6 @@ import Testing
         #expect(mapped.cells.isEmpty)
     }
 
-    /// The import's `track`/`pattern` are routing, not selection.
     @Test func aselectionLeavesTheImportRoutingAlone() {
         var selection = GridSelection(syntheticSummary())
         selection.toggle(track: 3)
@@ -193,8 +173,6 @@ import Testing
         #expect(mapped.pattern == defaults.pattern)
     }
 
-    /// Nothing is replaced until it is asked for, so the app on defaults exports what the CLI on
-    /// defaults exports.
     @Test func freshSettingsReplaceNothing() {
         let settings = Settings()
         #expect(!settings.replaceVelocity)
@@ -210,8 +188,6 @@ import Testing
         #expect(mapped.applyTimeShift == defaults.applyTimeShift)
     }
 
-    /// The measured fresh-note velocity, not a number the window invented -- and it moves nothing
-    /// else, which is what replacing one of the three independently means.
     @Test func replacingVelocityRendersAtTheFreshNoteValue() {
         var settings = Settings()
         settings.replaceVelocity = true
@@ -222,7 +198,6 @@ import Testing
         #expect(mapped.applyTimeShift)
     }
 
-    /// On an export, swing is the delay the Pattern applies, so replacing it flattens the grid.
     @Test func replacingSwingFlattensTheGridAlone() {
         var settings = Settings()
         settings.replaceSwing = true
@@ -243,8 +218,7 @@ import Testing
         #expect(mapped.flatVelocity == nil)
     }
 
-    /// The three mean something else on an import -- swing there is fitting the source's groove,
-    /// not flattening a grid -- so they must not reach `ConvertRunner` at all.
+    /// On an import swing means fitting the source's groove, so these must not reach it at all.
     @Test func replacingOnAnExportLeavesTheImportAlone() {
         let mapped = Settings(replaceVelocity: true, replaceSwing: true, replaceTimeShift: true)
             .convertOptions(source: source, output: output)
@@ -255,12 +229,10 @@ import Testing
         #expect(mapped.fitTimeShift == defaults.fitTimeShift)
     }
 
-    /// Nothing replaced, nothing said: the staged view has no line to draw.
     @Test func replacingNothingSaysNothing() {
         #expect(Settings().replacementNote == nil)
     }
 
-    /// Each choice names the value it substitutes rather than only saying it is off.
     @Test func eachReplacementNamesItsSubstitute() {
         var velocity = Settings()
         velocity.replaceVelocity = true
@@ -277,7 +249,6 @@ import Testing
         #expect(timeShift.replacementNote == "Replacing: time shift with a flat grid")
     }
 
-    /// All three read as one line, in the shape ``GridSelection/exclusionNote`` uses beside it.
     @Test func allThreeReplacementsReadAsOneLine() {
         let settings = Settings(replaceVelocity: true, replaceSwing: true, replaceTimeShift: true)
         #expect(

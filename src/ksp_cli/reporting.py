@@ -1,10 +1,4 @@
-"""Printing diagnostics and failures, and the --verbose flag both tools share.
-
-``ksp`` decides what to say; this decides where it goes and how much of it.
-The default is one line per kind of problem, because a real project raises the
-same finding in a dozen patterns and the one-off warnings are the ones worth
-reading.
-"""
+"""Printing diagnostics and failures, and the --verbose flag both tools share."""
 
 import sys
 from typing import Annotated, NoReturn, TextIO
@@ -27,11 +21,7 @@ VerboseInPanel = Annotated[
 
 def fail(message: str, *, prog: str, code: int) -> NoReturn:
     """Say why the command is stopping, then stop it with *code*.
-
-    The exit codes are load-bearing -- 1 for a file or format failure, 2 for a
-    usage one -- so every command leaves through here rather than spelling the
-    prefix, the stream and the code out at each of its failure sites.
-    """
+    The codes are load-bearing: 1 for a file or format failure, 2 for a usage one."""
     print(f"{prog}: {message}", file=sys.stderr)
     raise typer.Exit(code)
 

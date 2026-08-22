@@ -5,10 +5,7 @@ import Testing
 
 @testable import KSPMIDI
 
-/// Repository data the tests read, resolved from this file's own location.
-///
-/// A twin of `KSPKitTests/TestSupport.swift`: SwiftPM does not share sources between test targets,
-/// so each needs its own copy with the `deletingLastPathComponent()` count matched to its depth.
+/// A twin per target: SwiftPM cannot share a source file between two test targets.
 enum RepoData {
     static let root = URL(filePath: #filePath)
         .deletingLastPathComponent()  // KSPMIDITests
@@ -19,13 +16,11 @@ enum RepoData {
     static let projectFiles = root.appending(path: "project_files")
 }
 
-/// The sample projects, parsed once each.
 enum Samples {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var projects: [String: Project] = [:]
     nonisolated(unsafe) private static var raws: [String: RawProject] = [:]
 
-    /// The undecoded key set, by full file name -- what `Mutate` and `MIDIImport.apply` write into.
     static func raw(_ name: String) throws -> RawProject {
         lock.lock()
         defer { lock.unlock() }
@@ -46,7 +41,6 @@ enum Samples {
     }
 }
 
-/// One note as a DAW would see it: absolute position and duration.
 struct PlayedNote: Hashable {
     let start: Int
     let duration: Int
@@ -55,11 +49,7 @@ struct PlayedNote: Hashable {
     let channel: Int
 }
 
-/// Read a named track back as absolute-time notes.
-///
-/// Deliberately re-derives note lengths from the note-on/note-off pairs instead of trusting the
-/// writer's own bookkeeping -- a wrongly paired note-off is exactly the bug that makes a file play
-/// wrong in a DAW while looking fine in memory.
+/// Re-derives lengths from the note-on/note-off pairs rather than the writer's own bookkeeping.
 func played(_ midi: MusicalMIDI1File, _ trackName: String) throws -> [PlayedNote] {
     let track = try #require(midi.tracks.first { $0.name == trackName })
     var openNotes: [Pair: (start: Int, velocity: Int)] = [:]
@@ -88,7 +78,6 @@ func played(_ midi: MusicalMIDI1File, _ trackName: String) throws -> [PlayedNote
     return notes.stableSorted { ($0.start, $0.note) < ($1.start, $1.note) }
 }
 
-/// Every marker in the file as (absolute tick, text), conductor track first.
 func markers(_ midi: MusicalMIDI1File) -> [(tick: Int, text: String)] {
     var found: [(tick: Int, text: String)] = []
     for track in midi.tracks {
@@ -103,7 +92,6 @@ func markers(_ midi: MusicalMIDI1File) -> [(tick: Int, text: String)] {
     return found
 }
 
-/// The name a track carries in its own track-name meta event.
 extension MusicalMIDI1File.Track {
     var name: String? {
         for event in events {

@@ -3,10 +3,7 @@ import Testing
 
 @testable import KSPApp
 
-/// The two chosen folders and how they survive a relaunch.
-///
-/// `nil` is the load-bearing value here: it is not "unset", it *is* the default placement, which is
-/// what keeps a user who chooses nothing on exactly the behaviour the app shipped with.
+/// `nil` is not "unset": it *is* the default placement the app shipped with.
 @Suite struct FoldersTests {
     private let desktop = URL(filePath: "/Users/someone/Desktop")
     private let music = URL(filePath: "/Users/someone/Music")
@@ -36,7 +33,6 @@ import Testing
         }
     }
 
-    /// The whole point of the ticket: an export and an import need not land in the same place.
     @Test func thetwoKindsAreSetIndependently() {
         withVolatileDefaults { defaults in
             let store = FolderStore(defaults: defaults)
@@ -62,8 +58,7 @@ import Testing
         }
     }
 
-    /// A folder can be deleted or unmounted between launches. Reverting beats failing every
-    /// conversion into a path that is no longer there.
+    /// A folder can be deleted or unmounted between launches, and reverting beats failing.
     @Test func afolderThatIsNoLongerThereRevertsToTheDefault() {
         withVolatileDefaults { defaults in
             let store = FolderStore(defaults: defaults)
@@ -88,8 +83,6 @@ import Testing
         #expect(folders == Folders(project: desktop, midi: nil))
     }
 
-    /// The sidebar row and the idle screen read this, so it has to say something true in both
-    /// states rather than an empty string.
     @Test func arowDescribesTheDefaultUntilAFolderIsChosen() {
         var folders = Folders()
 

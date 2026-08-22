@@ -1,10 +1,4 @@
-"""The 99 / 116 bitfield decode, and what the committed corpus holds.
-
-``test_hardware_tier5.py`` asserts the measurement against the captures, which
-are gitignored. This file pins the same layout through the arithmetic and
-through the project files that *are* committed, so a decode that drifts fails
-on a fresh clone and on CI too.
-"""
+"""The 99 / 116 bitfield decode, and what the committed corpus holds."""
 
 from pathlib import Path
 
@@ -81,7 +75,6 @@ def test_the_fourth_direction_is_reported_as_unknown() -> None:
 def test_the_unallocated_bit_is_surfaced_not_absorbed() -> None:
     bits = PatternBits.decode(20 | 0b10)
     assert bits.unallocated == 0b10
-    # And nothing else in the decode is disturbed by it.
     assert bits.step_denominator == 16
     assert bits.direction is PlaybackDirection.FORWARD
 
@@ -111,9 +104,6 @@ def test_the_label_is_what_the_device_writes() -> None:
     assert PatternBits.decode(21).label == "1/16T"
 
 
-# --- Against the committed corpus ------------------------------------------
-
-
 def test_no_committed_file_sets_the_unallocated_bit(project_files_dir: Path) -> None:
     """Bit 1 is set by nothing -- in the captures, and here in real material."""
     for path in sorted(project_files_dir.glob("*.KeyStepPro")):
@@ -129,11 +119,7 @@ def test_no_committed_file_sets_the_unallocated_bit(project_files_dir: Path) -> 
 
 
 def test_every_sample_project_plays_at_one_sixteenth(project_files_dir: Path) -> None:
-    """Which is why decoding the field changes no existing export.
-
-    Worth holding: if a sample file ever moved off 1/16, the export tests that
-    assume 120 ticks a step would start failing for a reason nobody expects.
-    """
+    """Which is why decoding the field changes no existing export."""
     for path in sorted(project_files_dir.glob("*.KeyStepPro")):
         raw = lenient_json.load_path(path)
         for name, value in raw.items():

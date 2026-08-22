@@ -1,7 +1,5 @@
 import Foundation
 
-/// Which of the two destinations a control refers to. They are set independently: a project and a
-/// MIDI file have no reason to land in the same place.
 enum FolderKind: String, Sendable, CaseIterable {
     case project
     case midi
@@ -13,8 +11,7 @@ enum FolderKind: String, Sendable, CaseIterable {
         }
     }
 
-    /// What the row reads before anything is chosen -- and, being the rule in words, the only place
-    /// the shipped behaviour is described to the user.
+    /// What the row reads before anything is chosen.
     var defaultDescription: String {
         switch self {
         case .project: return "MIDI Control Center's Templates folder"
@@ -23,11 +20,7 @@ enum FolderKind: String, Sendable, CaseIterable {
     }
 }
 
-/// The folders the user has chosen, if any -- the question ``Destinations`` answers, not its
-/// answer: a ``Destination`` is where a file resolved to, notes and all.
-///
-/// `nil` is not "unset, pending a default": it *is* the default, which is what keeps a user who
-/// chooses nothing on the shipped behaviour.
+/// The folders the user has chosen. `nil` is not "unset, pending a default": it *is* the default.
 struct Folders: Sendable, Equatable {
     var project: URL?
     var midi: URL?
@@ -47,8 +40,6 @@ struct Folders: Sendable, Equatable {
         }
     }
 
-    /// Where this kind lands, in words. Abbreviated against the home directory because the sidebar
-    /// is narrower than most paths.
     func description(of kind: FolderKind) -> String {
         guard let url = self[kind] else { return kind.defaultDescription }
         return (url.path as NSString).abbreviatingWithTildeInPath
@@ -63,8 +54,7 @@ struct FolderStore {
         self.defaults = defaults
     }
 
-    /// A remembered folder that has since been deleted or unmounted reverts to the default, rather
-    /// than failing every conversion into a path that is no longer there.
+    /// A remembered folder that has since gone away reverts to the default.
     func load(directoryExists: (URL) -> Bool = FolderStore.directoryExists) -> Folders {
         var folders = Folders()
         for kind in FolderKind.allCases {
@@ -77,8 +67,7 @@ struct FolderStore {
 
     func save(_ folders: Folders) {
         for kind in FolderKind.allCases {
-            // A path, not a security-scoped bookmark: the app is unsandboxed, so there is no scope
-            // to restore. `nil` removes the key, so a return to the default is remembered too.
+            // A path, not a bookmark: the app is unsandboxed. `nil` removes the key.
             defaults.set(folders[kind]?.path, forKey: Self.key(kind))
         }
     }

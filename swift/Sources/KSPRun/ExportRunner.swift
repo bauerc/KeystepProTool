@@ -3,8 +3,6 @@ import KSPKit
 import KSPMIDI
 import SwiftMIDIFile
 
-/// The `export` command's body, split out from its argument parsing so the exit codes and the text
-/// are testable without spawning a process -- the same split `main(argv) -> int` gives the Python.
 public enum ExportRunner {
     public struct Options: Sendable {
         public var path: URL
@@ -12,16 +10,14 @@ public enum ExportRunner {
         public var split: Bool
         public var tracks: Set<Int>
         public var patterns: Set<Int>
-        /// The slots to keep per track, empty meaning all. No CLI flag fills it -- the pair above
-        /// covers what a flag can say.
+        /// The slots to keep per track, empty meaning all. No CLI flag fills it.
         public var cells: [Int: Set<Int>]
         public var passes: Int?
         public var repeatCount: Int
         public var flatVelocity: Int?
         public var ticksPerBeat: Int
         public var drumMapSpec: String?
-        /// 0-based, as `KSPMIDI` counts channels -- the CLI's `--drum-channel` is 1-based and
-        /// subtracts one before it gets here.
+        /// 0-based, as `KSPMIDI` counts channels; the CLI's `--drum-channel` is 1-based.
         public var drumChannel: Int
         public var defaultGate: Double
         public var includeStale: Bool
@@ -35,8 +31,7 @@ public enum ExportRunner {
         public var verbose: Bool
         public var configPath: URL
 
-        // Spelled out for the same reason as ``ConvertRunner/Options``: a public struct's
-        // memberwise initialiser is internal, and every caller is in another module.
+        // Spelled out because a public struct's memberwise initialiser is internal.
         public init(
             path: URL, output: URL? = nil, split: Bool = false, tracks: Set<Int> = [],
             patterns: Set<Int> = [], cells: [Int: Set<Int>] = [:], passes: Int? = nil,
@@ -76,7 +71,6 @@ public enum ExportRunner {
         }
     }
 
-    /// What the user sees this command called, for the message prefix on a failure.
     public static let prog = "ksp-swift-cli export"
 
     static func fail(_ message: String, code: Int32) -> RunResult {
@@ -91,8 +85,7 @@ public enum ExportRunner {
             return fail("drum map: \(error)", code: 2)
         }
         guard let drumMap else {
-            // `dump` can print "lane 0" and leave it unresolved; a MIDI file has no way to say
-            // that, so there is nothing sensible to write.
+            // `dump` can print "lane 0" unresolved; a MIDI file has no way to say that.
             return fail(
                 "--drum-map none cannot be exported: a MIDI file has to name a note for every "
                     + "drum lane", code: 2)
@@ -211,8 +204,7 @@ public enum ExportRunner {
         let patterns = result.patternNumbers.map(String.init).joined(separator: ", ")
         let tracks = result.trackNames.joined(separator: ", ")
         let verb = dryRun ? "would write" : "wrote"
-        // A count of one is what every export has always done, so saying it would be noise on the
-        // line every run prints.
+        // A count of one is what every export has always done, so saying it would be noise.
         let looped = count == 1 ? "" : "\n  repeated \(count) times end to end"
         return """
             \(verb) \(destination.relativePath)

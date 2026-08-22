@@ -5,20 +5,13 @@ import Testing
 
 @testable import KSPMIDI
 
-/// Turning a MIDI file into patterns. A port of `tests/test_midi_import.py`.
-///
-/// Milestones M5 and M6. Assertions are on ``Placement`` and ``SongPlan`` data rather than on a
-/// re-parsed project, with the exceptions that are the point of the milestones: the changed-key
-/// diffs are held to M4's hardware-measured recipes, and the round trips go back out through the
-/// M1 reader.
-
 private let ticksPerBeat = 480
 private let ticksPerStep = ticksPerBeat / 4
 
 /// The 16 pitches of `test_file_simple.mid`, in step order.
 private let simplePitches = [60, 62, 64, 60, 60, 61, 59, 60, 60, 72, 71, 69, 60, 62, 64, 60]
 
-/// B0-baseline -> T1-note-place, as `tests/test_mutate.py` records it.
+/// B0-baseline -> T1-note-place, the hardware-measured placement diff.
 private let placementRecipe: [String: Int] = [
     "124_40_1": 3,
     "124_48_1_1_1": 1,
@@ -30,8 +23,6 @@ private let placementRecipe: [String: Int] = [
     "124_113_1_1_1": 100,
 ]
 
-/// Keys whose value moved, as `[key: after]`. The before-values are pinned in `MutateTests`; here
-/// what matters is which keys the conversion touched and what it left.
 private func changedTo(_ before: RawProject, _ after: RawProject) -> [String: Int] {
     var moved: [String: Int] = [:]
     for (name, value) in after where before[name] != value {
@@ -45,11 +36,8 @@ private func intAt(_ raw: RawProject, _ name: String) -> Int? {
     return nil
 }
 
-// MARK: - Builders
-
 private enum EventKind: Int {
-    // Python sorts `(tick, "note_off"/"note_on", ...)` as tuples, and "note_off" < "note_on"
-    // lexicographically, so an off precedes an on at the same tick. The rank keeps that.
+    // Python sorts note_off before note_on at the same tick; the rank keeps that order.
     case off = 0
     case on = 1
 }
@@ -86,7 +74,6 @@ private func track(from events: [BuiltEvent]) -> MusicalMIDI1File.Track {
     return track
 }
 
-/// A one-track file from `(tick, pitch, velocity)` triples.
 private func clipOf(
     _ events: [(tick: Int, pitch: Int, velocity: Int)], ticksPerQuarterNote: Int = ticksPerBeat,
     length: Int = ticksPerStep
@@ -108,7 +95,6 @@ private func clipOf(
         tracks: [track(from: built)])
 }
 
-/// A type 1 file, one track per list of `(tick, pitch, velocity)`.
 private func songOf(
     _ tracks: [[(tick: Int, pitch: Int, velocity: Int)]], length: Int = ticksPerStep,
     channels: [Int]? = nil
@@ -134,8 +120,6 @@ private func songOf(
         timebase: .init(ticksPerQuarterNote: UInt16(ticksPerBeat)), tracks: built)
 }
 
-/// A one-track file from `(tick, pitch, channel)` triples -- the shape of a type 0 file off the
-/// internet: every instrument on one track, told apart only by its channel.
 private func mixedOf(
     _ events: [(tick: Int, pitch: Int, channel: Int)], length: Int = ticksPerStep,
     format: MIDI1FileFormat = .singleTrack
@@ -156,7 +140,6 @@ private func mixedOf(
         tracks: [track(from: built)])
 }
 
-/// One note per step, displaced exactly as the export would displace it.
 private func swung(_ percent: Int, steps: Int = 16) -> MusicalMIDI1File {
     var events: [(tick: Int, pitch: Int, velocity: Int)] = []
     for step in 0..<steps {
@@ -168,7 +151,6 @@ private func swung(_ percent: Int, steps: Int = 16) -> MusicalMIDI1File {
     return songOf([events])
 }
 
-/// A copy of `midi` with a tempo meta event at the head of its first track.
 private func withTempo(_ midi: MusicalMIDI1File, bpm: Double) -> MusicalMIDI1File {
     var copy = midi
     var first = copy.tracks[0]
@@ -184,8 +166,6 @@ private func withTempo(_ midi: MusicalMIDI1File, bpm: Double) -> MusicalMIDI1Fil
     return copy
 }
 
-/// A placed note reduced to what these assertions care about. A struct rather than a tuple so the
-/// comparisons stay one `==` the compiler can type-check quickly.
 private struct Step: Equatable {
     let step: Int
     let pitch: Int
@@ -204,14 +184,8 @@ private func stepsOf(_ result: ImportResult) -> [Step] {
 
 private func template() throws -> RawProject { try Samples.raw("Default.KeyStepPro") }
 
-// MARK: - The measured recipe
-
 @Suite struct ImportRecipeTests {
-    /// A one-note clip produces the device's own 8-key placement diff.
-    ///
-    /// The note is half a step long because that is the gate a freshly placed one carries: M6 takes
-    /// the gate from the source, so a clip written at any other length would differ from the
-    /// capture in `110` and nowhere else.
+    /// The note is half a step long because that is the gate a freshly placed one carries.
     @Test func oneNoteWritesExactlyTheM4Recipe() throws {
         let base = try Samples.raw("baseline.KeyStepPro")
         let result = try MIDIImport.convert(
@@ -219,10 +193,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(changedTo(base, result.raw) == placementRecipe)
     }
 
-    /// One key beyond the recipe, and only when the grid is not the default.
-    ///
-    /// Without it the device would play a clip quantised at 1/32 on its 1/16 grid: the file loads,
-    /// the notes are all present, and it runs at half speed. Bits 3-4 of 99, measured by T5.1.
     @Test func aNonDefaultStepSizeWritesThePatternBitfield() throws {
         let base = try Samples.raw("baseline.KeyStepPro")
         let options = try ImportOptions(stepsPerBeat: 8)
@@ -237,7 +207,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(Constants.stepDenominator(28) == 32)
     }
 
-    /// 1/16 is what the template already holds, so writing it moves nothing.
     @Test func theDefaultStepSizeLeavesTheBitfieldAlone() throws {
         let base = try Samples.raw("baseline.KeyStepPro")
         let result = try MIDIImport.convert(
@@ -260,8 +229,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
     }
 }
 
-// MARK: - Reading a MIDI file
-
 @Suite struct ReadClipTests {
     @Test func readClipPairsNoteOffs() throws {
         let clip = try MIDIImport.readClip(clipOf([(0, 60, 100), (240, 64, 90)]))
@@ -283,7 +250,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(clip.notes.map(\.durationTicks) == [120])
     }
 
-    /// A dangling note-on sounded, so it becomes a note rather than vanishing.
     @Test func readClipClosesANoteTheFileNeverEnds() throws {
         var only = MusicalMIDI1File.Track()
         only.events.append(.noteOn(note: 60, velocity: .midi1(100)))
@@ -321,7 +287,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(both.sourceTracks == [1, 2])
     }
 
-    /// A set has no order, so the order the clips arrive in is the file's.
     @Test func aNonContiguousSelectionArrivesInFileOrder() throws {
         let midi = songOf([60, 62, 64, 65, 67].map { [(0, $0, 100)] }, length: 120)
         let song = try MIDIImport.readSong(midi, options: ImportOptions(midiTracks: [5, 1, 2]))
@@ -330,8 +295,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(song.clips.map { $0.notes[0].pitch } == [60, 62, 67])
     }
 }
-
-// MARK: - Quantising
 
 @Suite struct QuantiseTests {
     @Test func notesLandOnTheirSteps() throws {
@@ -343,7 +306,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
             ])
     }
 
-    /// At 1/8 steps a note one 1/16 in rounds onto step 1, not step 2.
     @Test func stepsPerBeatChangesTheGrid() throws {
         let eighths = try MIDIImport.convert(
             clipOf([(0, 60, 100), (240, 64, 100)]), template(),
@@ -357,7 +319,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(result.diagnostics.entries.contains { $0.code == .notesQuantised })
     }
 
-    /// DAWs export a clip with its session ticks intact; a loop has no lead-in.
     @Test func aClipThatStartsLateIsAnchoredToStepOne() throws {
         let result = try MIDIImport.convert(
             clipOf([(1920, 60, 100), (2040, 64, 100)]), template())
@@ -370,7 +331,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(!result.diagnostics.entries.contains { $0.code == .clipAnchored })
     }
 
-    /// The pool is an event list, not a step grid, so a chord is just notes.
     @Test func simultaneousNotesAreAllKept() throws {
         let result = try MIDIImport.convert(
             clipOf([(0, 60, 100), (0, 67, 90), (0, 64, 80)]), template())
@@ -380,7 +340,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(sorted == [Step(1, 60, 100), Step(1, 64, 80), Step(1, 67, 90)])
     }
 
-    /// The device disables them rather than playing them, so they are not written.
     @Test func notesPastTheLastStepAreDropped() throws {
         let events = (0..<18).map { (tick: $0 * ticksPerStep, pitch: 60, velocity: 100) }
         let result = try MIDIImport.convert(clipOf(events), template())
@@ -391,7 +350,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(dropped.map(\.subjects) == [2])
     }
 
-    /// M5 wrote every note at the fresh gate. The ladder is measured, so M6 carries the real length.
     @Test func aNotesLengthBecomesItsGate() throws {
         var only = MusicalMIDI1File.Track()
         only.events.append(.noteOn(note: 60, velocity: .midi1(100)))
@@ -407,7 +365,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(result.notes.map { Constants.gateTable[$0.gate] } == [4.0, 1.0])
     }
 
-    /// No notes means no decisions, so no caveats about what was not carried.
     @Test func anEmptyClipWarnsAboutNothing() throws {
         let result = try MIDIImport.convert(clipOf([]), template())
         #expect(result.noteCount == 0)
@@ -461,11 +418,8 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
     }
 }
 
-// MARK: - Writing into a project
-
 @Suite struct ImportWriteTests {
-    /// `48` is step-indexed and lives in slot 1, while the pool is note-indexed. Two notes two
-    /// steps apart light steps 1 and 3, never 1 and 2.
+    /// `48` is step-indexed while the pool is note-indexed: two notes two steps apart light 1 and 3.
     @Test func theStepActiveFlagIsIndexedByStep() throws {
         let result = try MIDIImport.convert(
             clipOf([(0, 60, 100), (2 * ticksPerStep, 64, 100)]), template(), track: 2)
@@ -505,8 +459,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
     }
 }
 
-// MARK: - The committed clips
-
 @Suite struct CommittedClipTests {
     private func file(_ name: String) throws -> MusicalMIDI1File {
         try MusicalMIDI1File(
@@ -521,7 +473,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
                 == simplePitches.enumerated().map { Step($0.offset + 1, $0.element, 100) })
     }
 
-    /// M5 kept only the top line of each chord; M6 writes the whole thing.
     @Test func theChordClipKeepsEveryVoice() throws {
         let result = try MIDIImport.convert(file("test_file.mid"), template())
         #expect(result.notes.count == 26)
@@ -530,7 +481,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(head.map(\.1) == [60, 64, 67, 60, 64, 67])
     }
 
-    /// M5 out, M1's reader back in: the desk check issue #7 asks for.
     @Test func theSimpleClipRoundTripsThroughTheReader() throws {
         let result = try MIDIImport.convert(
             file("test_file_simple.mid"), template(), track: 1)
@@ -543,8 +493,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(notes.allSatisfy { $0.active })
     }
 }
-
-// MARK: - M6: whole files
 
 @Suite struct SongPlanTests {
     @Test func eachSourceTrackGetsItsOwnDeviceTrack() throws {
@@ -562,7 +510,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(dropped.map(\.subjects) == [1])
     }
 
-    /// Five selected tracks are still four device tracks and one report.
     @Test func aSelectionWiderThanTheDeviceIsReported() throws {
         let midi = songOf((0..<6).map { [(0, 60 + $0, 100)] })
         let options = try ImportOptions(midiTracks: [1, 2, 3, 4, 5])
@@ -573,8 +520,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(dropped.map(\.subjects) == [1])
     }
 
-    /// 128 steps is two patterns, not a truncation. The chain is what makes them one sequence --
-    /// the device stores no other arrangement.
     @Test func aTrackLongerThanOnePatternIsSplitAndChained() throws {
         let events = (0..<128).map { (tick: $0 * ticksPerStep, pitch: 60, velocity: 100) }
         let result = try MIDIImport.convertSong(songOf([events]), template())
@@ -591,8 +536,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(project.scenes[0].chains[0].patterns == [1, 2])
     }
 
-    /// `49` is step-indexed and lives wholly in chunk 1, like `48`. Reading it from the note's own
-    /// chunk reported a pattern's 65th note as playing on no pass at all.
+    /// `49` is step-indexed and lives wholly in chunk 1, like `48`, even for a note in chunk 2.
     @Test func aNotePastTheFirstPoolChunkStillPlaysOnEveryPass() throws {
         var events: [(tick: Int, pitch: Int, velocity: Int)] = []
         for step in 0..<32 {
@@ -609,7 +553,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(notes.allSatisfy { $0.skip == Constants.skipSequences })
     }
 
-    /// A loop that stops mid-bar drifts against every other track.
     @Test func aTracksLengthRoundsUpToTheBar() throws {
         let events = [(0, 60, 100), (16 * ticksPerStep, 64, 100)]
         let result = try MIDIImport.convertSong(songOf([events]), template())
@@ -633,7 +576,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(notes.allSatisfy { $0.active })
     }
 
-    /// Channel 10 is what GM reserves, so it needs no flag when a file uses it.
+    /// Channel index 9 is GM's reserved channel 10, so it needs no flag.
     @Test func aPercussionChannelTrackIsFoundWithoutBeingNamed() throws {
         let midi = songOf([[(0, 36, 100)]], channels: [9])
         let result = try MIDIImport.convertSong(midi, template())
@@ -650,8 +593,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(unmapped.map(\.subjects) == [1])
     }
 
-    /// The real map is device state, so writing drums means assuming one. The factory default
-    /// would drop every source that does not start at 36.
     @Test func anUnsetDrumMapIsFittedToTheSource() throws {
         let midi = songOf([[(0, 31, 100), (ticksPerStep, 34, 100)]])
         let result = try MIDIImport.convertSong(
@@ -682,7 +623,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(after == before)
     }
 
-    /// 192 events per pattern, enforced by the firmware with an on-screen error.
     @Test func aPatternOverThePoolCeilingIsReported() throws {
         var events: [(tick: Int, pitch: Int, velocity: Int)] = []
         for step in 0..<16 {
@@ -696,7 +636,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(overflow.map(\.subjects) == [16 * 13 - Constants.poolCapacity])
     }
 
-    /// A half-converted file is worse than a refused one.
     @Test func everyTargetPatternIsCheckedBeforeAnythingIsWritten() throws {
         let base = try template()
         let occupied = try MIDIImport.apply(
@@ -719,19 +658,13 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
     }
 }
 
-// MARK: - M6: fitting the timing
-
 @Suite struct TimingFitTests {
-    /// The fit inverts `MIDIExport.swingDelay`, so the two agree by construction rather than by
-    /// coincidence (Timing_Calibration 3.2).
     @Test(arguments: [50, 54, 58, 62, 66, 75])
     func aSwungClipComesBackAsTheSwingItWasMadeWith(_ percent: Int) throws {
         let result = try MIDIImport.convertSong(swung(percent), template())
         #expect(result.plan.tracks[0].placements[0].swingPercent == percent)
     }
 
-    /// Out through the exporter and back in, which is the real check: the two directions are
-    /// written against the same equation, and this holds them to it end to end.
     @Test(arguments: [50, 58, 66, 75])
     func swingSurvivesARoundTripThroughTheExporter(_ percent: Int) throws {
         let base = try template()
@@ -747,8 +680,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(back.plan.tracks[0].placements[0].swingPercent == percent)
     }
 
-    /// That is the point of fitting swing first: one pattern-level value expresses the groove, so
-    /// the scarce per-note field stays unspent.
     @Test func aFittedGrooveLeavesNothingForTimeShift() throws {
         let result = try MIDIImport.convertSong(swung(66), template())
         #expect(Set(result.notes.map(\.timeShift)) == [Constants.timeShiftCentre])
@@ -773,8 +704,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(!result.diagnostics.entries.contains { $0.code == .timingResidual })
     }
 
-    /// The range is a fixed 60 ticks either way, not half a step, so at a 1/4 grid most residuals
-    /// do not fit and the report is the whole point.
+    /// The shift range is a fixed 60 ticks either way, not half a step, so at 1/4 most miss.
     @Test func aResidualPastTheShiftRangeIsReported() throws {
         let options = try ImportOptions(stepsPerBeat: 1, fitSwing: false)
         let midi = songOf(
@@ -792,8 +722,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(Set(result.notes.map(\.timeShift)) == [Constants.timeShiftCentre])
     }
 }
-
-// MARK: - M6: the committed song
 
 @Suite struct M6SongTests {
     private func m6() throws -> MusicalMIDI1File {
@@ -817,11 +745,9 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
                 == [[64], [160], [3], [32, 32]])
     }
 
-    /// Out through the writer, back in through M1, with nothing to report.
     @Test func theM6SongRoundTripsThroughTheReader() throws {
         let result = try converted()
-        // Through `saveable`, which is what a caller writes: it injects the version key the factory
-        // template lacks and every saved project has.
+        // `saveable` injects the version key the factory template lacks and every saved one has.
         var restored: RawProject = [:]
         for (name, value) in MIDIImport.saveable(result.raw) {
             restored[name] = value
@@ -837,7 +763,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(drums.drumStepCount == 64)
         #expect(Set(drums.notes(of: .drum).map(\.pitch)).sorted() == [0, 1, 2, 3])
 
-        // The chords: 160 events over 48 steps, three and four to a step.
         let chords = project.track(2).pattern(1)
         #expect(chords.seqStepCount == 48)
         #expect(chords.notes(of: .seq).count == 160)
@@ -845,19 +770,16 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
             Set(chords.notes(of: .seq).filter { $0.step == 41 }.map(\.pitch)).sorted()
                 == [60, 62, 64, 66])
 
-        // The tied notes, carried onto the gate ladder.
         let held = project.track(3).pattern(1)
         #expect(held.seqStepCount == 32)
         #expect(held.notes(of: .seq).map(\.gate) == [8.0, 8.0, 16.0])
 
-        // The split, and the chain that makes it one sequence.
         #expect([1, 2].map { project.track(4).pattern($0).notes(of: .seq).count } == [32, 32])
         let chain = try #require(project.scenes[0].chains.first { $0.track == 4 })
         #expect(chain.patterns == [1, 2])
     }
 
-    /// Existence is not audibility: a pooled note whose step-active bit is clear is silent
-    /// (spec 4). Every note this writes must sound.
+    /// Existence is not audibility: a pooled note whose step-active bit is clear is silent.
     @Test func theM6SongIsAllAudible() throws {
         let result = try converted()
         let project = try Reader.readProject(result.raw, sourceName: "m6")
@@ -874,11 +796,8 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
     }
 }
 
-// MARK: - M6: source shapes the device cannot take at face value
-
 @Suite struct SourceShapeTests {
-    /// Anchoring each track on its own first note stacked them all on step 1. The anchor belongs to
-    /// the song: one origin for the file, so a part that comes in at bar 3 still comes in at bar 3.
+    /// The anchor belongs to the song, not the track, so a part that enters at bar 3 stays there.
     @Test func aTrackThatEntersLateKeepsItsPlaceAgainstTheOthers() throws {
         let bar = 16 * ticksPerStep
         let midi = songOf([[(0, 60, 100)], [(2 * bar, 72, 100)]])
@@ -902,8 +821,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(second.placements[1].notes[0].step == 17)
     }
 
-    /// The device loops each track's chain on its own, so a one-bar part under an eight-bar one
-    /// repeats against it. That is the sequencer working, not a drift to be padded out.
+    /// A short part looping under a long one is the sequencer working, not a drift to pad out.
     @Test func aShortTrackKeepsItsOwnLengthBesideALongOne() throws {
         let events = (0..<128).map { (tick: $0 * ticksPerStep, pitch: 60, velocity: 100) }
         let result = try MIDIImport.convertSong(songOf([events, [(0, 72, 100)]]), template())
@@ -916,8 +834,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(shortPart.placements.map(\.stepCount) == [16])
     }
 
-    /// A type 0 file tells its instruments apart by channel and nothing else. Merged, they became
-    /// one track of interleaved parts -- and the percussion channel went in as melodic pitches.
     @Test func aTrackHoldingSeveralChannelsBecomesOneDeviceTrackEach() throws {
         let midi = mixedOf([(0, 60, 0), (0, 72, 1), (ticksPerStep, 62, 0)])
         let result = try MIDIImport.convertSong(midi, template())
@@ -927,7 +843,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(split.map(\.subjects) == [2])
     }
 
-    /// The subset selects tracks, never channels: the split happens after it.
     @Test func aSelectionStillSplitsAMixedTrackByChannel() throws {
         let midi = mixedOf([(0, 60, 0), (0, 72, 1)])
         let options = try ImportOptions(midiTracks: [1])
@@ -951,8 +866,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(!result.plan.tracks.contains { $0.isDrum && $0.track != 1 })
     }
 
-    /// --drum-track names a track of the file, so splitting it by channel must not leave half its
-    /// kit behind on another device track.
     @Test func aNamedDrumTrackKeepsEveryChannelItHolds() throws {
         let midi = mixedOf([(0, 36, 0), (ticksPerStep, 38, 3)])
         let options = try ImportOptions(drumTrack: 1, drumMap: DrumMap.chromatic(36))
@@ -962,8 +875,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(result.notes.map(\.lane) == [0, 2])
     }
 
-    /// The writer refused this from underneath, after every decision was made. Refusing it while
-    /// planning is what names the step the user has to thin.
     @Test func moreNotesOnAStepThanTheFirmwareHoldsIsRefusedInPlanning() throws {
         let events = (0...Constants.maxNotesPerStep).map {
             (tick: 0, pitch: 40 + $0, velocity: 100)
@@ -975,12 +886,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(thrown?.description.contains("step 1") == true)
     }
 
-    /// A file with no beat to quantise against.
-    ///
-    /// The Python builds this by setting a *negative* `ticks_per_beat`, because mido reads the
-    /// division field signed and hands a timecode file back as an ordinary one. `SwiftMIDIFile`
-    /// types the two apart -- a timecode file decodes as `SMPTEMIDI1File` and never reaches this
-    /// code -- and its `ticksPerQuarterNote` is a `UInt16`, so the only unusable value left is 0.
+    /// A timecode file decodes as `SMPTEMIDI1File`, so 0 is the only unusable timebase left.
     @Test func aFileWithNoTicksPerBeatIsRefused() throws {
         let midi = MusicalMIDI1File(
             format: .multipleTracksSynchronous, timebase: .init(ticksPerQuarterNote: 0),
@@ -989,14 +895,12 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(thrown?.description.contains("timecode") == true)
     }
 
-    /// Its tracks are independent sequences, not parts of one arrangement.
     @Test func aTypeTwoFileIsRefused() throws {
         let midi = mixedOf([(0, 60, 0)], format: .multipleTracksAsynchronous)
         let thrown = #expect(throws: KSPError.self) { try MIDIImport.readSong(midi) }
         #expect(thrown?.description.contains("type 2") == true)
     }
 
-    /// The three chunks store about 20,971 BPM, so the field is no guide to what the hardware plays.
     @Test(arguments: [(20.0, 30.0), (300.0, 240.0), (30.0, 30.0), (240.0, 240.0)])
     func aTempoTheDeviceCannotRunIsHeldToItsRange(_ testCase: (Double, Double)) throws {
         let (source, written) = testCase
@@ -1022,8 +926,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
     }
 }
 
-// MARK: - #136: routing source tracks onto device tracks
-
 @Suite struct TrackRouteTests {
     /// Each plan's device track beside the source track it came from.
     private func routed(_ result: ImportResult) -> [[Int?]] {
@@ -1048,7 +950,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(routed(result) == [[1, 2], [2, 3], [3, 1]])
     }
 
-    /// The fill-upwards rule, drum clip included, with the layer switched off.
     @Test func withoutRoutesAssignmentIsUnchanged() throws {
         let midi = songOf(
             [[(0, 60, 100)], [(0, 36, 100)], [(0, 67, 100)]], channels: [0, 9, 0])
@@ -1077,7 +978,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
             thrown?.description.contains("route 2:1 collides with the drum track") == true)
     }
 
-    /// The clash is only visible once the percussion channel has been found.
     @Test func aRouteMayNotSendAnAutoDetectedDrumTrackElsewhere() throws {
         let midi = songOf([[(0, 36, 100)], [(0, 60, 100)]], channels: [9, 0])
         let options = try ImportOptions(routes: [TrackRoute(source: 1, device: 2)])
@@ -1100,7 +1000,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(result.plan.tracks.map(\.isDrum) == [true, false])
     }
 
-    /// --drum-track spoke for device track 1 before the file was opened.
     @Test func aRouteOntoDeviceTrackOneIsRefusedBesideANamedDrumTrack() {
         let thrown = #expect(throws: KSPError.self) {
             _ = try ImportOptions(drumTrack: 2, routes: [TrackRoute(source: 3, device: 1)])
@@ -1108,7 +1007,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(thrown?.description.contains("route 3:1 collides with the drum track") == true)
     }
 
-    /// --track parameterises the fill-upwards rule, which a route replaces.
     @Test func aRouteIsHonouredBelowTheStartingTrack() throws {
         let midi = songOf([[(0, 60, 100)], [(0, 64, 100)]])
         let options = try ImportOptions(routes: [TrackRoute(source: 1, device: 1)])
@@ -1118,7 +1016,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(plan.tracks.map { [$0.track, $0.sourceTrack] } == [[1, 1], [3, 2]])
     }
 
-    /// Reading one track goes straight to quantise, so a route never places it.
     @Test func aRouteWithMidiTrackIsRefused() {
         let thrown = #expect(throws: KSPError.self) {
             _ = try ImportOptions(midiTracks: [1], routes: [TrackRoute(source: 1, device: 2)])
@@ -1155,7 +1052,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(thrown?.description.contains("track 3 of the source holds no notes") == true)
     }
 
-    /// Naming a track and getting one of its channels would be the surprise.
     @Test func aRoutedTrackSplitAcrossChannelsIsMerged() throws {
         let midi = mixedOf([(0, 60, 0), (0, 72, 1), (ticksPerStep, 62, 0)])
         let options = try ImportOptions(routes: [TrackRoute(source: 1, device: 2)])

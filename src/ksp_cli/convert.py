@@ -1,17 +1,4 @@
-"""``midi2ksp`` -- write a MIDI clip into a ``.KeyStepPro`` project.
-
-The conversion lives in :mod:`ksp.midi_import`; this module handles arguments,
-paths and what gets printed.
-
-A project file is never synthesised. Its key set is fixed at 153,495 numeric
-keys, so a template is loaded and values are overwritten in it -- MIDI Control
-Center's factory default by default, or any project you point ``--template``
-at, which is how a clip goes into a pattern of a project you already have.
-
-Warnings go to stderr and the summary to stdout, the same contract as
-``ksp2midi``: the file is still written, because a drum map we had to assume is
-a caveat rather than a failure. ``--quiet`` suppresses the stdout summary only.
-"""
+"""``midi2ksp`` -- write a MIDI clip into a ``.KeyStepPro`` project."""
 
 from pathlib import Path
 from typing import Annotated
@@ -54,10 +41,7 @@ _TIMING_PANEL = "Timing"
 
 def _source(plan: TrackPlan, show_sources: bool) -> str:
     """Where a track came from, named only when a route was given.
-
-    An unrouted run says what it has always said. A clip merged from several
-    source tracks has no one source, so it gets no mark rather than a wrong one.
-    """
+    A clip merged from several source tracks has no one source, so it gets no mark."""
     if not show_sources or plan.source_track is None:
         return ""
     return f"source {plan.source_track}"
@@ -80,8 +64,7 @@ def _summary(
 
     tracks = result.plan.tracks
     if len(tracks) == 1 and len(tracks[0].placements) == 1:
-        # The single-target shape, said the way it has always been said. It has
-        # never carried a [drum] mark, so only a route adds anything here.
+        # The single-target shape carries no [drum] mark, so only a route adds one.
         source = _source(tracks[0], show_sources)
         lines.append(
             f"  {result.note_count} note(s) onto track {result.track}"
@@ -250,9 +233,8 @@ def convert_command(
     except ValueError as exc:
         fail(str(exc), prog=PROG, code=2)
 
-    # Cheapest checks first: the destination depends only on the arguments, and
-    # a bad clip is the likelier mistake. Reading the 3.5 MB template before
-    # either would spend a file read and a parse to reject the command anyway.
+    # Cheapest checks first: reading the 3.5 MB template before either would
+    # spend a file read and a parse to reject the command anyway.
     destination = output or path.with_suffix(".KeyStepPro")
     if destination.exists() and not force:
         fail(f"{destination} already exists (use --force to overwrite)", prog=PROG, code=1)
@@ -262,16 +244,14 @@ def convert_command(
     except FileNotFoundError as exc:  # its message already names the file
         fail(str(exc), prog=PROG, code=1)
     except (OSError, EOFError, ValueError, IndexError) as exc:
-        # mido raises OSError for a file that is not MIDI at all, so this is
-        # the same class of failure as a truncated one rather than an IO error.
+        # mido raises OSError for a file that is not MIDI at all, so this is the
+        # same class of failure as a truncated one rather than an IO error.
         fail(f"{path}: not a readable MIDI file: {exc}", prog=PROG, code=1)
 
     loaded_template = load_template(template, prog=PROG)
 
-    # One selected track is the whole of the single-target path: that track,
-    # into the one pattern --track and --pattern name, at the length that
-    # pattern already declares. Any other selection needs the song path, which
-    # is the only one that can place several tracks.
+    # One selected track is the whole of the single-target path; any other
+    # selection needs the song path, the only one that can place several tracks.
     try:
         if len(options.midi_tracks) == 1:
             result = convert(midi, loaded_template, track=track, pattern=pattern, options=options)

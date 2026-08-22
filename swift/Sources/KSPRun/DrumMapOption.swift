@@ -1,22 +1,11 @@
 import Foundation
 import KSPKit
 
-/// Shared `--drum-map` handling. A port of `src/ksp_cli/drum_map_option.py`.
-///
-/// Every command that resolves a drum lane has to answer the same question -- which lane plays
-/// which MIDI note -- and the answer is a device global the project file does not carry. One
-/// grammar and one config file, so a user who sets it up once is understood by all of them.
-
-/// Where a user's own drum map lives, if they have one. Path resolution stays out of `KSPKit`,
-/// which must not decide where files are.
+/// Where a user's own drum map lives, if they have one.
 public let drumMapConfigPath = FileManager.default.homeDirectoryForCurrentUser
     .appending(path: ".config/keysteppro/drum_map.json")
 
-/// Parse a `--drum-map` argument.
-///
-/// `chromatic:36` | `custom:36,38,42,...` | `none`. `nil` means do not resolve lanes at all, which
-/// is the honest output when the user's device settings are unknown and they would rather see the
-/// raw lane number.
+/// `chromatic:36` | `custom:36,38,42,...` | `none`. `nil` means do not resolve lanes at all.
 func parseDrumMap(_ spec: String) throws -> DrumMap? {
     if spec == "none" { return nil }
     let kind = spec.prefix { $0 != ":" }
@@ -42,10 +31,6 @@ private func int(_ text: some StringProtocol, _ what: String) throws -> Int {
 }
 
 /// Pick the drum map: the flag wins, then the config file, then the default.
-///
-/// `configPath` is passed in by the caller rather than read from this file, so a test can point it
-/// somewhere harmless instead of depending on whether the machine running the suite happens to
-/// have a personal config.
 func resolveDrumMap(_ spec: String?, configPath: URL) throws -> DrumMap? {
     if let spec { return try parseDrumMap(spec) }
     guard let data = try? Data(contentsOf: configPath) else {
@@ -61,14 +46,8 @@ func resolveDrumMap(_ spec: String?, configPath: URL) throws -> DrumMap? {
     }
 }
 
-/// The same `--drum-map` choice as `export`, except that unset means *fit to the source*.
-///
-/// Reading a lane back can fall through to the factory default and print what it assumed. Writing
-/// one cannot: a source whose drums sit anywhere but 36-59 would have every hit dropped as
-/// unmapped. So an unconfigured import fits a map to the pitches it was given, and says so.
-///
-/// `none` is refused rather than accepted, because a drum note stores a lane and there is no lane
-/// without a map.
+/// The same `--drum-map` choice as `export`, except that unset means *fit to the source*: a source
+/// whose drums sit anywhere but 36-59 would otherwise have every hit dropped as unmapped.
 func resolveImportDrumMap(_ spec: String?, configPath: URL) throws -> DrumMap? {
     if spec == "none" {
         throw KSPError.value(

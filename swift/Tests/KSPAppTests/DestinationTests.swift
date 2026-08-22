@@ -3,10 +3,7 @@ import Testing
 
 @testable import KSPApp
 
-/// Where a converted file lands and what it is called.
-///
-/// MCC's Project Browser lists the *filename*, so these rules decide the name a project carries on
-/// the device -- which makes them worth pinning even though no format code is involved.
+/// MCC's Project Browser lists the *filename*, so these rules name the project on the device.
 @Suite struct DestinationTests {
     @Test func aWritableTemplatesFolderIsUsedAsIs() throws {
         let templates = try tempDirectory()
@@ -19,8 +16,6 @@ import Testing
         #expect(destination.note == nil)
     }
 
-    /// Without MIDI Control Center installed there is no Templates folder, and the conversion
-    /// still has to produce a file the user can find.
     @Test func anUnwritableTemplatesFolderFallsBackToDownloads() {
         let downloads = URL(filePath: "/Users/someone/Downloads")
 
@@ -29,24 +24,19 @@ import Testing
             isWritable: { _ in false })
 
         #expect(destination.directory == downloads)
-        // The message has to name the folder, or the file is findable and still useless.
         #expect(destination.note?.contains("/Library/nope") == true)
     }
 
-    /// Choosing nothing has to reproduce the shipped behaviour exactly.
     @Test func anExportLandsBesideTheProjectItCameFrom() {
         let source = URL(filePath: "/tmp/songs/take 3.KeyStepPro")
 
         let destination = Destinations.forMIDI(source: source, chosen: nil)
 
-        // By path: `deletingLastPathComponent` leaves a trailing slash, which URL equality counts
-        // and `appending(path:)` does not.
+        // By path: `deletingLastPathComponent` leaves a trailing slash that URL equality counts.
         #expect(destination.directory.path == "/tmp/songs")
         #expect(destination.note == nil)
     }
 
-    /// A chosen folder is obeyed as it stands. The Templates ladder above is not consulted at all,
-    /// so an unwritable Templates folder cannot divert a project the user has placed by hand.
     @Test func achosenProjectFolderSkipsTheTemplatesLadder() {
         let chosen = URL(filePath: "/Users/someone/Desktop")
         var asked = false
@@ -76,8 +66,6 @@ import Testing
 
 }
 
-/// The one thing the user gives up by choosing a project folder: MCC's Project Browser lists only
-/// its own Templates folder, so it will not show the file. Said when the folder is chosen.
 @Suite struct MCCWarningTests {
     private let templates = URL(
         filePath: "/Library/Arturia/MIDI Control Center/Templates/KeyStepPro")
@@ -86,7 +74,6 @@ import Testing
         #expect(Destinations.mccWarning(for: nil, templates: templates) == nil)
     }
 
-    /// Choosing the Templates folder by hand is the default by another route, not a mistake.
     @Test(arguments: [
         "/Library/Arturia/MIDI Control Center/Templates/KeyStepPro",
         "/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/",
@@ -96,9 +83,7 @@ import Testing
         #expect(Destinations.mccWarning(for: URL(filePath: path), templates: templates) == nil)
     }
 
-    /// `/tmp` is a symlink to `/private/tmp` on macOS, so a folder can be the Templates folder
-    /// without being spelled like it. Warning about the folder the user actually picked would be
-    /// wrong twice over -- it is the default, and MCC will list the file.
+    /// `/tmp` is a symlink to `/private/tmp`, so a folder can be Templates without being spelled so.
     @Test func afolderReachedThroughASymlinkIsStillTheTemplatesFolder() throws {
         let real = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: real) }
@@ -146,8 +131,6 @@ import Testing
         #expect(url.lastPathComponent == "song.KeyStepPro")
     }
 
-    /// The app never overwrites: MCC's folder holds the user's own projects under freely chosen
-    /// names, so a clash is as likely to be someone else's work as a re-run of this one.
     @Test func atakenNameClimbsUntilOneIsFree() {
         let taken: Set<String> = ["song.KeyStepPro", "song 2.KeyStepPro"]
 
@@ -158,8 +141,6 @@ import Testing
         #expect(url.lastPathComponent == "song 3.KeyStepPro")
     }
 
-    /// A split export names its own files, so the app claims the folder instead and lets the runner
-    /// fill it. Same ladder, so a second run of the same project cannot land on the first one.
     @Test func anUntakenFolderNameIsLeftAlone() {
         let url = Naming.vacantFolder(
             in: URL(filePath: "/tmp"), stem: "song", exists: { _ in false })

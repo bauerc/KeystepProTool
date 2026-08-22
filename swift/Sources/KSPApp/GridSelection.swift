@@ -1,7 +1,6 @@
 import Foundation
 import KSPRun
 
-/// Which of the grid's cells the export runs over. No SwiftUI, so the rule unit-tests.
 struct GridSelection: Sendable, Equatable {
     static let legend = "Click a slot, a track name or a slot number to leave it out of the export."
 
@@ -10,7 +9,6 @@ struct GridSelection: Sendable, Equatable {
         let pattern: Int
     }
 
-    /// A row or column header's state, `mixed` being the one a Bool cannot carry.
     enum Tick: Sendable, Equatable {
         case on
         case off
@@ -23,7 +21,6 @@ struct GridSelection: Sendable, Equatable {
     /// The unticked cells, so a fresh selection is empty and everything starts on.
     private var unticked: Set<Cell> = []
 
-    /// Inert: nothing has been read yet, so there is nothing to tick.
     init() {
         self.tracks = []
         self.names = [:]
@@ -90,7 +87,6 @@ struct GridSelection: Sendable, Equatable {
         return selected
     }
 
-    /// Why Convert is off, or `nil` when it is on.
     var blockReason: String? {
         guard !isInert, !unticked.isEmpty, selectedCells.isEmpty else { return nil }
         return "Nothing is ticked. Tick at least one pattern slot to convert."
@@ -121,7 +117,6 @@ struct GridSelection: Sendable, Equatable {
         return listed.isEmpty ? nil : "Excluded: " + listed.joined(separator: " · ")
     }
 
-    /// The exported track name, so the note reads the way the grid's labels and the `.mid` do.
     func name(_ track: Int) -> String { names[track] ?? "Track \(track)" }
 
     private func slots(_ numbers: [Int]) -> String {

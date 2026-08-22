@@ -1,9 +1,4 @@
-"""The decoded model's own behaviour, with no MIDI in it.
-
-Mirrors ``swift/Tests/KSPKitTests/ModelTests.swift``. Every project holds four
-tracks of sixteen patterns whether or not they hold notes (existence is not
-audibility, spec section 4), so selection can be asserted on any sample.
-"""
+"""The decoded model's own behaviour, with no MIDI in it."""
 
 from pathlib import Path
 

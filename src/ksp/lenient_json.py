@@ -1,9 +1,4 @@
-"""Reading and writing MIDI Control Center's non-standard JSON dialect.
-
-The read side tolerates MCC's trailing comma; the write side omits it, which is
-the only part of the dialect shown to be optional. The full byte-level rules are
-in spec section 2.
-"""
+"""MIDI Control Center's non-standard JSON dialect: read tolerant, written strict (spec 2)."""
 
 import os
 import re
@@ -15,15 +10,11 @@ from typing import Any
 
 import orjson
 
-# Matches a comma that is followed only by whitespace and a closing bracket.
-# Anchoring on the bracket is what keeps it from touching commas inside string
-# values -- MCC writes none, but the project files are large enough that a
-# looser pattern would be hard to audit.
+# Anchored on the closing bracket so it cannot touch a comma inside a string.
 _TRAILING_COMMA = re.compile(r",(\s*[}\]])")
 
-#: The two string-valued keys, in the order MCC writes them, ahead of every
-#: numeric key. Everything else in the file is an integer parameter -- even
-#: project names, which are stored as character codes.
+#: The two string-valued keys, in MCC's order, ahead of every numeric key.
+#: Everything else is an integer, project names included (character codes).
 LEADING_KEYS = ("device", "version")
 
 # A tuple, not ``int | str``: the union form rebuilds a UnionType per call.
@@ -37,10 +28,7 @@ def strip_trailing_commas(text: str) -> str:
 
 def strip_trailing_comma_fast(data: bytes) -> bytes:
     """Remove MCC's trailing comma, scanning back from the end.
-
-    The comma sits just before the final ``}``, so searching backwards avoids
-    walking the 3.5 MB body.
-    """
+    The comma sits just before the final ``}``, so this never walks the body."""
     closing_brace = data.rfind(b"}")
     if closing_brace == -1:
         return data
@@ -77,11 +65,7 @@ def load_path(path: Path | str) -> dict[str, Any]:
 
 def dumps(obj: Mapping[str, int | str]) -> str:
     """Serialise *obj* in MCC's dialect, in the mapping's own iteration order.
-
-    Ordering is :func:`canonical`'s job, so this stays a faithful dumper.
-    Rejects anything but ``int`` and ``str``: a float would serialise as
-    ``1.0`` and a bool as ``true``, neither of which the firmware accepts.
-    """
+    Rejects all but ``int`` and ``str``: the firmware accepts no ``1.0`` or ``true``."""
     _escape_fn = _escape
     lines: list[str] = []
     append = lines.append
@@ -98,14 +82,8 @@ def dumps(obj: Mapping[str, int | str]) -> str:
 
 
 def dump_path(obj: Mapping[str, int | str], path: Path | str) -> None:
-    """Write *obj* to *path* as MCC would.
-
-    Bytes rather than text, so no platform rewrites the line endings or appends
-    a final newline (spec section 2). Written to a temp file and renamed into
-    place: the destination is often MCC's Templates folder, where a half-written
-    3.5 MB file would be found and parsed. ``mkstemp`` creates 0600, so the mode
-    is widened to the usual 0644 as the umask allows.
-    """
+    """Write *obj* to *path* as MCC would: bytes, so nothing rewrites the line
+    endings or appends a final newline (spec 2), through a temp file and a rename."""
     path = Path(path)
     data = dumps(obj).encode("utf-8")
 
@@ -123,13 +101,8 @@ def dump_path(obj: Mapping[str, int | str], path: Path | str) -> None:
 
 
 def canonical(obj: Mapping[str, int | str]) -> dict[str, int | str]:
-    """Return a new dict in MCC's key order: ``device``, ``version``, then the
-    numeric keys sorted **as strings** -- ``126_99_16`` before ``126_99_2``
-    (spec section 2).
-
-    A converter starting from ``Default.KeyStepPro`` has to add the ``version``
-    key it lacks, and a plain assignment would leave it last.
-    """
+    """Return a new dict in MCC's key order: ``device``, ``version``, then the numeric
+    keys sorted **as strings** -- ``126_99_16`` before ``126_99_2`` (spec 2)."""
     leading_dict = {k: obj[k] for k in LEADING_KEYS if k in obj}
     leading_set = set(leading_dict)
     rest_keys = sorted(k for k in obj if k not in leading_set)

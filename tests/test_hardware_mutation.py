@@ -1,15 +1,4 @@
-"""M4 -- the first write that reaches the device.
-
-Two phases, one device session. The first generates the candidates; the
-operator then loads them in MCC, pushes them to the KeyStep Pro, reads the
-display and listens. The second asserts on what the device gives back through
-Recall From, so the loop closes in something a test can hold rather than only
-in a human's notes.
-
-The reading and the listening are the milestone and they live in
-``analysis/Hardware_Test_Protocol.md`` -- tier M4, entries M4.1 and M4.2. A
-green run here is not evidence a capture was taken; the ticked checkbox is.
-"""
+"""M4 -- the first write that reaches the device."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -29,15 +18,12 @@ PLACE_READBACK = "M4-place-readback.KeyStepPro"
 PITCH_CANDIDATE = "M4-pitch.KeyStepPro"
 PITCH_READBACK = "M4-pitch-readback.KeyStepPro"
 
-#: Candidate A. Two notes identical in every respect but one bit: step 1 is
-#: flagged and must sound, step 5 is not and must not. T4.5 established that
-#: the device honours a flag *it* cleared; this asks whether it honours one we
-#: wrote into a file it loaded, which is what M5 and M6 rely on.
+#: Candidate A. Two notes identical but for one bit: step 1 is flagged and must sound,
+#: step 5 is not and must not. Does the device honour a flag we wrote into its file?
 PLACED_NOTES = ((1, 60, True), (5, 60, False))
 
-#: Candidate B. project_5 Track 3 note 5 is C#2 on the device's own display,
-#: with ordinals 6-8 sharing that pitch as a control against off-by-one
-#: addressing. Randomness 100 and skip mask 5 mean it fires on the first pass.
+#: Candidate B. project_5 Track 3 note 5 is C#2 on the device's display, with ordinals
+#: 6-8 sharing that pitch as a control against off-by-one addressing.
 PITCH_NOTE = 5
 PITCH_FROM = 49
 PITCH_TO = 61
@@ -72,9 +58,8 @@ def test_write_the_m4_candidates(load_sample: Loader, captures_dir: Path) -> Non
     for name, data in ((PLACE_CANDIDATE, place), (PITCH_CANDIDATE, pitch)):
         path = captures_dir / name
         lenient_json.dump_path(data, path)
-        # dump_path already honours the umask, but these get copied into MCC's
-        # Templates directory, so pin the mode rather than leaving MCC's read
-        # to whatever the operator's shell was set to.
+        # These get copied into MCC's Templates directory, so pin the mode rather than
+        # leaving MCC's read to whatever the operator's umask was.
         path.chmod(0o644)
 
     print(f"\nwrote {PLACE_CANDIDATE} and {PITCH_CANDIDATE} to {captures_dir}")
@@ -130,13 +115,7 @@ def _changed(
 
 
 def _report(candidate: dict[str, int | str], readback: dict[str, int | str], name: str) -> None:
-    """Print what a device round trip cost, for the protocol's ledger.
-
-    Not asserted: a Recall From re-serialises the whole project from the
-    device's own slot, so the project name, the current scene and the latching
-    40 / 39 may all differ from what went in. Which of those move has never
-    been measured, and this is the first capture that could say.
-    """
+    """Print what a device round trip cost, for the protocol's ledger."""
     diff = _changed(candidate, readback)
     print(f"\n{name}: {len(diff)} keys differ from the candidate")
     for k, (before, after) in sorted(diff.items()):

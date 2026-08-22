@@ -3,7 +3,6 @@ import Testing
 
 @testable import KSPKit
 
-/// Twin of `tests/test_lenient_json.py`, read side.
 @Suite struct LenientJSONTests {
     @Test func parsesATrailingCommaBeforeAClosingBrace() throws {
         #expect(try LenientJSON.parse("{\n\t\"a\": 1,\n}") == ["a": .int(1)])
@@ -21,8 +20,6 @@ import Testing
     }
 
     @Test func rejectsJSONThatIsNotAnObject() {
-        // A `.KeyStepPro` file is always a flat object; anything else means the caller was handed
-        // the wrong file.
         let thrown = #expect(throws: KSPError.self) { try LenientJSON.parse("[1, 2, 3]") }
         #expect(thrown == .value("expected a JSON object, got list"))
     }
@@ -42,8 +39,7 @@ import Testing
     @Test(arguments: [
         ("{\"a\": 1,\n}", "{\"a\": 1\n}"),
         ("{\"a\": 1}", "{\"a\": 1}"),
-        // Only the comma the closing brace follows: MCC writes exactly one, and a looser rule
-        // over a 3.5 MB body would be hard to audit.
+        // Only the comma a closing brace follows: MCC writes exactly one.
         ("{\"a\": [1, 2, ], \"b\": 3}", "{\"a\": [1, 2, ], \"b\": 3}"),
         ("{\"a\": \"x,\"}", "{\"a\": \"x,\"}"),
     ])
@@ -53,8 +49,6 @@ import Testing
     }
 
     @Test func aValueTheFormatNeverHoldsKeepsItsPythonTypeName() throws {
-        // Nothing in any sample file is anything but an int or a string. One that was would reach
-        // `Keys.getInt`, whose message has to read the same from either port.
         let raw = try LenientJSON.parse("{\"a\": 1.5, \"b\": true, \"c\": null, \"d\": [1]}")
         #expect(raw["a"] == .other("float"))
         #expect(raw["b"] == .other("bool"))
@@ -70,8 +64,7 @@ import Testing
         for name in names {
             let raw = try LenientJSON.load(contentsOf: RepoData.projectFiles.appending(path: name))
             #expect(raw["device"] == .string("KeyStepPro"))
-            // Spec section 2: the numeric key set is fixed at 153,495 entries, plus "device" and,
-            // in user saves, "version".
+            // The numeric key set is fixed at 153,495, plus "device" and, in user saves, "version".
             #expect([153_496, 153_497].contains(raw.count), "\(name) has \(raw.count) keys")
         }
     }

@@ -1,29 +1,11 @@
-"""Targeted edits to a parsed ``.KeyStepPro`` project.
-
-Every operation here is specified by a hardware capture diff rather than
-inferred. Placing one melodic note costs **8 keys, not one** -- six note-indexed
-parameters, the step-indexed step-active flag in slot 1, and the pattern's
-data-state latch -- and the table with its fresh values is in spec section 4.
-Step skip (``49``) is deliberately not written: an empty project already holds
-15, "plays on all four sequences", everywhere.
-
-Every function returns a new dict and never adds or removes a key. The key set
-is fixed (spec section 2), so an address the file does not already carry is an
-error rather than something to create.
-
-:func:`note_updates` and :func:`drum_note_updates` are the delta forms, letting
-a bulk writer apply placements to one working dict instead of copying the whole
-key set per note.
-"""
+"""Targeted edits to a parsed ``.KeyStepPro`` project."""
 
 from collections.abc import Mapping, Sequence
 
 from ksp import constants
 from ksp.keys import item_for_track, key
 
-#: Pool chunks a melodic note may occupy. Track 1's fourth chunk is a
-#: zero-filled phantom the firmware never uses (capture D2-chord4-tr1), so the
-#: real ceiling is 3 everywhere.
+#: Pool chunks a note may occupy. Track 1's fourth is a zero-filled phantom.
 _SLOTS = constants.POOL_SLOTS
 
 _NOTE_PARAMS = (
@@ -35,9 +17,8 @@ _NOTE_PARAMS = (
     constants.P_SEQ_RANDOMNESS,
 )
 
-#: The drum set, in the same order, so one recipe serves both (spec 3.2).
-#: ``117`` holds a lane index where ``109`` holds a pitch -- the one field that
-#: means something different.
+#: The drum set in the same order, so one recipe serves both (spec 3.2).
+#: ``117`` holds a lane index where ``109`` holds a pitch.
 _DRUM_NOTE_PARAMS = (
     constants.P_DRUM_NOTE_STEP,
     constants.P_DRUM_PITCH,
@@ -81,10 +62,7 @@ def _check_time_shift(stored: int) -> None:
 
 def _with_values(raw: Mapping[str, int | str], updates: Mapping[str, int]) -> dict[str, int | str]:
     """Copy *raw* with *updates* applied, refusing any key it does not hold.
-
-    The refusal is the point: the key set is fixed, so a key that is not
-    already there means the address was computed wrongly.
-    """
+    The key set is fixed, so a missing key means the address was computed wrongly."""
     missing = [k for k in updates if k not in raw]
     if missing:
         raise KeyError(f"not in the file: {', '.join(sorted(missing))}")
@@ -96,13 +74,7 @@ def _with_values(raw: Mapping[str, int | str], updates: Mapping[str, int]) -> di
 
 def merge_updates(raw: dict[str, int | str], updates: Mapping[str, int]) -> None:
     """Apply *updates* to *raw* in place, refusing any key it does not hold.
-
-    The one exception to this module's copy-on-write rule, and the reason the
-    ``*_updates`` functions exist: a converter placing hundreds of notes owns
-    its working dict and cannot afford a copy of 153,495 keys per note. The
-    refusal is the same one :func:`_with_values` makes -- the key set is fixed,
-    so an address the file does not carry means it was computed wrongly.
-    """
+    The one exception to this module's copy-on-write rule, for bulk writers."""
     missing = [k for k in updates if k not in raw]
     if missing:
         raise KeyError(f"not in the file: {', '.join(sorted(missing))}")
@@ -110,14 +82,8 @@ def merge_updates(raw: dict[str, int | str], updates: Mapping[str, int]) -> None
 
 
 def _slot_steps(raw: Mapping[str, int | str], item: int, pattern: int, slot: int) -> list[int]:
-    """The 0-based step of each pool entry in one slot, ``None`` past the end.
-
-    Returns the live prefix, and raises if a sentinel is followed by a live
-    entry. The melodic pool is compacted -- verified across every sample file
-    (spec section 4) -- so a hole means this pool is not shaped the way every
-    measurement says it should be, and appending to it is not something any
-    capture covers.
-    """
+    """The live prefix of one slot's note->step column.
+    The melodic pool is compacted (spec 4), so a hole is unmeasured territory."""
     entries = [
         raw.get(key(item, constants.P_SEQ_NOTE_STEP, pattern, slot, i + 1))
         for i in range(constants.MAX_STEPS)
@@ -152,12 +118,7 @@ def set_pitch(
     slot: int = 1,
 ) -> dict[str, int | str]:
     """Change one existing note's pitch. Exactly one key moves.
-
-    Raises:
-        ValueError: if that pool entry is empty. A pitch on a note that is not
-            there is a pitch nothing plays, so it means the wrong ordinal was
-            addressed -- which is the failure this is meant to surface.
-    """
+    An empty pool entry raises: it means the wrong ordinal was addressed."""
     _check_value("pitch", pitch)
     target = pitch_key(track=track, pattern=pattern, note=note, slot=slot)
     item = item_for_track(track)
@@ -173,12 +134,7 @@ def set_pitch(
 
 def _drum_pool(raw: Mapping[str, int | str], pattern: int, slot: int) -> list[int | None]:
     """One drum pool chunk's note->step column, ``None`` where it is empty.
-
-    Unlike the melodic list this one may legitimately hold holes -- the device
-    leaves one behind when a lane is cleared and scans past it -- so this
-    returns the whole chunk rather than a live prefix, and a writer fills the
-    first gap instead of appending after it.
-    """
+    Unlike the melodic list this one holds holes, so a writer fills the first gap."""
     entries: list[int | None] = []
     for i in range(constants.MAX_STEPS):
         value = raw.get(
@@ -208,14 +164,8 @@ def drum_note_updates(
     slot: int | None = None,
     activate: bool = True,
 ) -> dict[str, int]:
-    """The keys one drum hit writes. The drum twin of :func:`note_updates`.
-
-    Track 1 only, because item 123 is the only one carrying a drum set. What
-    differs from the melodic recipe is the step-active array: ``52`` is packed
-    seven steps to an entry and addressed **by lane**, so the bit is read,
-    or-ed and written back rather than assigned -- assigning it would clear
-    every other lane sharing that entry.
-    """
+    """The keys one drum hit writes, on Track 1 only. ``52`` packs seven steps to
+    an entry, so its bit is or-ed in: assigning would clear the other lanes."""
     item = constants.DRUM_TRACK_ITEM_ID
     _check_pattern(pattern)
     if slot is not None:
@@ -286,12 +236,7 @@ def place_drum_note(
     slot: int | None = None,
     activate: bool = True,
 ) -> dict[str, int | str]:
-    """Add a drum hit on *lane* at *step* (1-based), at the first free ordinal.
-
-    Raises:
-        ValueError: if the lane, step or any value is out of range, or the
-            pattern is at a firmware ceiling.
-    """
+    """Add a drum hit on *lane* at *step* (1-based), at the first free ordinal."""
     return _with_values(
         raw,
         drum_note_updates(
@@ -318,12 +263,7 @@ def set_step_size(
     drum: bool = False,
 ) -> dict[str, int | str]:
     """Set one pattern's step size in ``99``, leaving the field's other bits.
-
-    Bits 3-4 only (spec 3.3, protocol T5.1). Triplet, polyrhythm and direction
-    are the user's settings on the device and are not ours to overwrite, which
-    is why this reads the stored value rather than composing a fresh one.
-    ``drum=True`` writes the drum field ``116``, which shares the layout.
-    """
+    Read-modify-write: triplet, polyrhythm and direction are the user's settings."""
     item = item_for_track(track)
     _check_pattern(pattern)
     param = constants.P_DRUM_PATTERN_BITS if drum else constants.P_SEQ_PATTERN_BITS
@@ -361,11 +301,7 @@ def set_swing(
     drum: bool = False,
 ) -> dict[str, int | str]:
     """Set one pattern's swing, as the percentage the device displays.
-
-    Written per pattern (``97`` / ``114``) and never to the global ``74``: the
-    per-pattern value takes precedence on the device, so a groove written to
-    the global would simply not play.
-    """
+    Never the global ``74``: the per-pattern value takes precedence on the device."""
     item = item_for_track(track)
     _check_pattern(pattern)
     low, high = constants.SWING_RANGE_PERCENT
@@ -378,11 +314,7 @@ def set_swing(
 
 def set_drum_mode(raw: Mapping[str, int | str], *, track: int, on: bool) -> dict[str, int | str]:
     """Set ``86`` bit 6, the flag deciding which note set a track plays.
-
-    Track-level, and read-modify-write: the rest of ``86`` is the user's state.
-    Only Track 1 carries a drum set, so turning the flag *on* anywhere else
-    would select an ARP mode whose notes we did not write.
-    """
+    Read-modify-write; on tracks 2-4 the bit means ARP, so turning it on raises."""
     item = item_for_track(track)
     if on and item != constants.DRUM_TRACK_ITEM_ID:
         raise ValueError(
@@ -426,12 +358,7 @@ def set_chain(
     patterns: Sequence[int],
 ) -> dict[str, int | str]:
     """Chain *patterns* (1-based, in play order) for one track of one scene.
-
-    Written contiguously from slot 1 with every remaining slot left at the
-    sentinel, which is the shape capture T5-chain-3 produced. This is how a
-    sequence longer than one pattern is played as one: the device stores no
-    arrangement beyond it.
-    """
+    Written contiguously from slot 1, every remaining slot left at the sentinel."""
     if not 1 <= scene <= constants.SCENE_COUNT:
         raise ValueError(f"scene {scene} out of range 1-{constants.SCENE_COUNT}")
     if not 1 <= track <= constants.SCENE_TRACK_COUNT:
@@ -467,15 +394,7 @@ def note_updates(
     activate: bool = True,
 ) -> dict[str, int]:
     """The keys one melodic note writes, without copying the project.
-
-    :func:`place_note` is this plus a copy. A converter placing hundreds
-    applies these to a working dict of its own instead, so the whole key set is
-    not copied per note.
-
-    Raises:
-        ValueError: if the slot is full, if the step or the pattern is already
-            at a firmware ceiling, or if any value is out of range.
-    """
+    :func:`place_note` is this plus a copy."""
     item = item_for_track(track)
     _check_pattern(pattern)
     if slot is not None:
@@ -504,8 +423,8 @@ def note_updates(
             "the firmware's per-step limit"
         )
 
-    # The pool is one flat list chunked into slots of 64, so "the next free
-    # ordinal" spans them: a chord straddling a chunk boundary is ordinary.
+    # The pool is one flat list chunked into slots of 64, so the next free
+    # ordinal spans them: a chord straddling a chunk boundary is ordinary.
     if slot is None:
         slot = next(
             (
@@ -518,8 +437,8 @@ def note_updates(
     if len(per_slot[slot - 1]) >= constants.MAX_STEPS:
         raise ValueError(f"track {track} pattern {pattern} slot {slot} is full")
 
-    # _slot_steps has already established the pool is compacted, so the live
-    # count is the first free ordinal.
+    # _slot_steps has established the pool is compacted, so the live count is
+    # the first free ordinal.
     ordinal = len(per_slot[slot - 1]) + 1
 
     values = (step - 1, pitch, gate, velocity, time_shift, randomness)
@@ -549,15 +468,7 @@ def place_note(
     activate: bool = True,
 ) -> dict[str, int | str]:
     """Add a melodic note at *step* (1-based), at the first free pool ordinal.
-
-    ``activate=False`` leaves the step-active flag clear, which places a note
-    the device will not sound. It exists to build the M4.1 control note and a
-    converter must never use it.
-
-    Raises:
-        ValueError: if the slot is full, if the step or the pattern is already
-            at a firmware ceiling, or if any value is out of range.
-    """
+    ``activate=False`` places a note the device will not sound; a converter must not."""
     return _with_values(
         raw,
         note_updates(

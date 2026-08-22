@@ -3,17 +3,7 @@ import Testing
 
 @testable import KSPKit
 
-/// M10's acceptance check: the Swift reader must reproduce the hardware-confirmed data.
-///
-/// This is the twin of `tests/test_ground_truth.py`, and it reads **the same fixture files** --
-/// not a translation of them. That is why M1 put the expected values in JSON rather than in inline
-/// assertions: `tests/fixtures/*.expected.json` was hand-transcribed from the descriptions in
-/// `analysis/`, which record settings read off the physical KeyStep Pro's display, so what it
-/// encodes is what a person saw on the device and not what either reader happens to produce.
-/// Checking the port against the identical file is the moment those fixtures were written for.
-///
-/// **Never regenerate them from either implementation.** See `tests/fixtures/README.md` for what
-/// is hardware-confirmed and what is merely transcribed from the file.
+/// The fixtures were transcribed from the device's display. **Never regenerate them from code.**
 @Suite struct GroundTruthTests {
     static let fixtureNames = ["project_5.expected.json", "project_9.expected.json"]
 
@@ -49,10 +39,7 @@ import Testing
     @Test(arguments: fixtureNames) func nothingIsDecodedOutsideTheDocumentedPatterns(
         name: String
     ) throws {
-        // The half of the comparison that catches over-reading. A reader that mistakes
-        // uninitialised storage for content -- Track 1 slot 4 is zero-filled in every known file
-        // -- still passes the note-by-note check above, because it invents notes in patterns the
-        // fixture never mentions.
+        // The half that catches over-reading: invented notes land in patterns nothing mentions.
         let (fixture, project) = try Self.load(name)
         let documented = Set(fixture.patterns.map { Pair(track: $0.track, pattern: $0.pattern) })
         for track in project.tracks {
@@ -71,9 +58,7 @@ import Testing
     @Test(arguments: fixtureNames) func knownDiscrepanciesStayVisibleUntilRecheckedOnHardware(
         name: String
     ) throws {
-        // Each entry asserts the file really does disagree with the description. If someone
-        // re-confirms the value on the hardware and corrects one of the two, this fails and forces
-        // the fixture to be updated rather than letting the conflict evaporate unnoticed.
+        // Each entry asserts the file really does disagree, so a correction cannot pass silently.
         let (fixture, _) = try Self.load(name)
         for entry in fixture.unresolved {
             #expect(
@@ -89,9 +74,7 @@ import Testing
     }
 
     @Test func project5sSecondKickIsShiftedForward() throws {
-        // The +1 the device displays for the second kick (T6.1), pinned by hand. The description
-        // first transcribed -1 here; asserting the decoded value keeps the corrected reading
-        // anchored to the file rather than to prose.
+        // The +1 the device displays for the second kick; the description first transcribed -1.
         let project = try Samples.project("project_5.KeyStepPro")
         let secondKick = project.track(1).pattern(1).notes[1]
         #expect(secondKick.step == 5)
@@ -100,15 +83,12 @@ import Testing
             "the file's value changed; re-check against project_5_description.txt")
     }
 
-    // MARK: - Reading the fixtures
-
     private struct Pair: Hashable {
         let track: Int
         let pattern: Int
     }
 
-    /// The note fields a fixture pins down. Everything else on ``Note`` -- the raw gate value, the
-    /// step-active flag -- is implementation detail the ground truth documents say nothing about.
+    /// The note fields a fixture pins down; everything else on ``Note`` is implementation detail.
     struct ComparableNote: Decodable, Equatable {
         let kind: String
         let slot: Int
@@ -142,9 +122,7 @@ import Testing
         }
     }
 
-    /// A fixture value whose type the schema does not fix. Both lists are empty today, so
-    /// committing to `String` here would break the first time someone records a numeric
-    /// disagreement.
+    /// The schema does not fix the type, so committing to `String` would break on a numeric one.
     enum Scalar: Decodable, Equatable {
         case string(String)
         case int(Int)

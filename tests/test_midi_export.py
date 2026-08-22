@@ -1,9 +1,4 @@
-"""MIDI export, checked against the hardware-confirmed project descriptions.
-
-``project_5`` is the reference case: its notes, velocities, gates and step
-positions were read off the device display, so the exported file can be
-asserted note by note rather than against another piece of our own code.
-"""
+"""MIDI export, checked against the hardware-confirmed project descriptions."""
 
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -71,13 +66,7 @@ class PlayedNote:
 
 
 def played(midi: mido.MidiFile, track_name: str) -> list[PlayedNote]:
-    """Read a named track back as absolute-time notes.
-
-    Deliberately re-derives note lengths from the note_on/note_off pairs
-    instead of trusting the writer's own bookkeeping -- a wrongly paired
-    note-off is exactly the bug that makes a file play wrong in a DAW while
-    looking fine in memory.
-    """
+    """Read a named track back as absolute-time notes."""
     track = next(t for t in midi.tracks if t.name == track_name)
     open_notes: dict[tuple[int, int], tuple[int, int]] = {}
     notes: list[PlayedNote] = []
@@ -127,22 +116,13 @@ def project_9(project_files_dir: Path) -> Project:
 
 @pytest.fixture
 def exported_5(project_5: Project) -> ExportResult:
-    """One pass, so these assertions read the pattern rather than the cycle.
-
-    project_5's notes carry real skip masks, so the default export repeats it
-    four times; the expansion has its own tests below.
-    """
+    """One pass, so these assertions read the pattern rather than the cycle."""
     return export_project(project_5, ExportOptions(passes=1))
 
 
 @pytest.fixture
 def exported_5_flat(project_5: Project) -> ExportResult:
-    """The same, with the time shift left off.
-
-    project_5 is the only sample carrying a shift, so every test whose subject
-    is something else -- gate, drum mapping, step size -- reads the grid here
-    rather than the groove.
-    """
+    """The same, with the time shift left off."""
     return export_project(project_5, ExportOptions(passes=1, apply_time_shift=False))
 
 
@@ -157,21 +137,12 @@ def test_tempo_and_resolution_come_from_the_project(exported_5: ExportResult) ->
 def test_each_track_and_parameter_set_becomes_its_own_midi_track(
     exported_5: ExportResult,
 ) -> None:
-    """Track 1's drum set and a melodic track cannot share a MIDI track.
-
-    They need different channels and their pitch values mean different things
-    -- a lane index is not a MIDI note.
-    """
+    """Track 1's drum set and a melodic track cannot share a MIDI track."""
     assert exported_5.track_names == ("Track 1 (drum)", "Track 3")
 
 
 def test_melodic_notes_match_the_documented_description(exported_5: ExportResult) -> None:
-    """project_5 Track 3 pattern 1, straight from the description file.
-
-    Beats 1-4 are C2 (48), 5-8 are C#2 (49), and two D (50) notes sit at beats
-    9 and 13 -- the second of which is the note that proves the two index
-    spaces, since it lives at note index 10 but step 13.
-    """
+    """project_5 Track 3 pattern 1, straight from the description file."""
     notes = played(exported_5.midi, "Track 3")
 
     assert [n.note for n in notes] == [48] * 4 + [49] * 4 + [50, 50]
@@ -181,11 +152,7 @@ def test_melodic_notes_match_the_documented_description(exported_5: ExportResult
 
 
 def test_gate_becomes_note_length_in_steps(exported_5: ExportResult) -> None:
-    """The tie from beat 9 to beat 12 is stored as gate 4 and lasts 4 steps.
-
-    That is the evidence the displayed gate is a count of steps, which is what
-    makes a duration derivable at all.
-    """
+    """The tie from beat 9 to beat 12 is stored as gate 4 and lasts 4 steps."""
     tied = played(exported_5.midi, "Track 3")[8]
     assert tied.start == 8 * TICKS_PER_STEP
     assert tied.duration == 4 * TICKS_PER_STEP
@@ -197,11 +164,7 @@ def test_gate_becomes_note_length_in_steps(exported_5: ExportResult) -> None:
 def test_a_gate_running_into_the_next_note_is_shortened_not_overlapped(
     exported_5_flat: ExportResult,
 ) -> None:
-    """Beat 1 has gate 2 but beat 2 repeats the same pitch.
-
-    The device retriggers; MIDI would be left holding one note-on too many.
-    Shortening the earlier note is what keeps the two equivalent.
-    """
+    """Beat 1 has gate 2 but beat 2 repeats the same pitch."""
     first, second = played(exported_5_flat.midi, "Track 3")[:2]
     assert first.note == second.note == 48
     assert first.duration == TICKS_PER_STEP
@@ -226,11 +189,7 @@ def test_drum_lanes_map_onto_the_general_midi_percussion_channel(
 def test_the_drum_map_is_named_in_the_output_not_left_implied(
     exported_5: ExportResult,
 ) -> None:
-    """The map is a device global, not project data (spec 3.2.1).
-
-    Which one was used is therefore an assumption, and one the output has to
-    own up to on every export.
-    """
+    """The map is a device global, not project data (spec 3.2.1)."""
     assert any("chromatic from 36 (assumed - not in file)" in w for w in exported_5.warnings)
 
 
@@ -245,11 +204,7 @@ def test_a_custom_drum_map_moves_the_exported_notes(project_5: Project) -> None:
 def test_time_shift_moves_notes_off_the_grid(
     exported_5: ExportResult, exported_5_flat: ExportResult
 ) -> None:
-    """project_5's melodic notes ramp +1..+4 and -1..-4, and the export says so.
-
-    Measured by tier 8 as 1/400 of a beat per unit, so at 480 the ramp is worth
-    one to five ticks either side of the step.
-    """
+    """project_5's melodic notes ramp +1..+4 and -1..-4, and the export says so."""
     shifted = [n.start for n in played(exported_5.midi, "Track 3")]
     flat = [n.start for n in played(exported_5_flat.midi, "Track 3")]
 
@@ -258,11 +213,7 @@ def test_time_shift_moves_notes_off_the_grid(
 
 
 def test_the_shift_does_not_scale_with_the_step_size(project_5: Project) -> None:
-    """The whole of tier 8: R1 at 1/4 and R3 at 1/16 gave the same tick count.
-
-    Re-clocking the pattern to 1/8 moves the steps but must leave each note's
-    displacement alone.
-    """
+    """The whole of tier 8: R1 at 1/4 and R3 at 1/16 gave the same tick count."""
     eighths = export_project(_with_bits(project_5, raw=12), ExportOptions(passes=1))
     flat = export_project(
         _with_bits(project_5, raw=12), ExportOptions(passes=1, apply_time_shift=False)
@@ -276,11 +227,7 @@ def test_the_shift_does_not_scale_with_the_step_size(project_5: Project) -> None
 
 
 def test_a_shift_before_the_start_is_held_at_it(exported_5: ExportResult) -> None:
-    """project_5's first kick carries -1, and tick -1 does not exist in MIDI.
-
-    The note keeps its length and the export reports the clip rather than
-    moving an onset quietly.
-    """
+    """project_5's first kick carries -1, and tick -1 does not exist in MIDI."""
     assert played(exported_5.midi, "Track 1 (drum)")[0].start == 0
     assert Code.TIME_SHIFT_CLIPPED in {d.code for d in exported_5.diagnostics}
 
@@ -306,12 +253,7 @@ def test_swing_and_time_shift_add(project_5: Project) -> None:
 def test_patterns_are_laid_end_to_end_and_stay_aligned_across_tracks(
     project_9: Project,
 ) -> None:
-    """project_9 uses patterns 2 and 3, and pattern 2 on two different tracks.
-
-    Both tracks' pattern 2 must start together, and pattern 3 must follow one
-    16-step pattern later -- not at its own pattern index, which would leave a
-    bar of silence for the pattern nobody used.
-    """
+    """project_9 uses patterns 2 and 3, and pattern 2 on two different tracks."""
     result = export_project(project_9, ExportOptions(passes=1))
     assert result.pattern_numbers == (2, 3)
 
@@ -330,11 +272,7 @@ def test_the_file_lasts_as_long_as_its_patterns(project_9: Project) -> None:
 
 
 def test_a_marker_names_the_start_of_every_pattern(project_9: Project) -> None:
-    """The seam between two patterns is invisible in a merged export.
-
-    project_9 holds patterns 2 and 3, so the second marker also proves the text
-    carries the pattern's own number rather than its position in the file.
-    """
+    """The seam between two patterns is invisible in a merged export."""
     result = export_project(project_9, ExportOptions(passes=1))
     assert markers(result.midi) == [(0, "pattern 2"), (16 * TICKS_PER_STEP, "pattern 3")]
 
@@ -362,13 +300,7 @@ def test_a_split_file_is_marked_with_the_pattern_it_holds(project_9: Project) ->
 
 
 def test_a_masked_note_lands_on_the_repeat_it_plays_in(project_9: Project) -> None:
-    """project_9 pattern 3's only hit is masked to 32, i.e. the second repeat.
-
-    The device runs the four sequences as repeats of the pattern (spec 5,
-    protocol T5.8), so that note is silent on the first pass and sounds on the
-    second -- which is the whole difference between the repeats reading and
-    the pages one.
-    """
+    """project_9 pattern 3's only hit is masked to 32, i.e."""
     result = export_project(project_9)
     drums = played(result.midi, "Track 1 (drum)")
 
@@ -381,12 +313,7 @@ def test_a_masked_note_lands_on_the_repeat_it_plays_in(project_9: Project) -> No
 
 
 def _drum_gates_off_the_ladder(pattern: Pattern, raw: int = 200) -> Pattern:
-    """Corrupt every drum gate in *pattern*.
-
-    The ladder covers all of 0-127 (spec 6.1), so no sample project can
-    exercise the fallback any more -- the only way in is a value the device
-    could not have written.
-    """
+    """Corrupt every drum gate in *pattern*."""
     notes = tuple(
         replace(note, gate_raw=raw, gate=None) if note.kind is NoteKind.DRUM else note
         for note in pattern.notes
@@ -397,9 +324,9 @@ def _drum_gates_off_the_ladder(pattern: Pattern, raw: int = 200) -> Pattern:
 def test_a_gate_off_the_ladder_falls_back_to_the_device_default_and_says_so(
     project_files_dir: Path,
 ) -> None:
-    """Rounding an undecodable gate to the nearest rung would produce a file
-    that loads cleanly and plays wrong, so the export uses the length a freshly
-    placed note has and warns."""
+    """Rounding an undecodable gate to the nearest rung would produce a file that loads cleanly and
+    plays wrong, so the export uses the length a freshly placed note has and warns.
+    """
     pattern = load(project_files_dir / "initial_project.KeyStepPro").track(1).pattern(1)
     rendering = render_pattern(
         _drum_gates_off_the_ladder(pattern), track_number=1, kind=NoteKind.DRUM
@@ -421,12 +348,7 @@ def test_reader_warnings_survive_into_the_export(project_files_dir: Path) -> Non
 def test_the_export_replaces_a_reader_line_rather_than_echoing_it(
     project_files_dir: Path,
 ) -> None:
-    """One finding, one line.
-
-    The export's versions of these two say what the reader's say *and* name
-    the flag that undoes them, so printing both would be pure repetition.
-    Each must still be said exactly once.
-    """
+    """One finding, one line."""
     project = load(project_files_dir / "initial_project.KeyStepPro")
     diagnostics = export_project(project).diagnostics
 
@@ -439,18 +361,12 @@ def test_the_export_replaces_a_reader_line_rather_than_echoing_it(
         clashes = {d.site.pattern for d in diagnostics if d.code is reader_code} & spoken_for
         assert not clashes, f"{reader_code} repeated at pattern(s) {sorted(clashes)}"
 
-    # And the surviving line is the one that names the flag.
     assert any("--include-stale exports both" in w for w in diagnostics.messages)
     assert any("--include-disabled exports them" in w for w in diagnostics.messages)
 
 
 def test_only_the_set_the_device_plays_is_exported(project_files_dir: Path) -> None:
-    """initial_project Track 1 pattern 1 holds a melody *and* a drum pattern.
-
-    Parameter 86 bit 6 says the track is in drum mode, so the 64-note melody is
-    leftovers from before it was switched over -- notes no hardware would play.
-    Exporting them would put phantom material in a file meant to be listened to.
-    """
+    """initial_project Track 1 pattern 1 holds a melody *and* a drum pattern."""
     project = load(project_files_dir / "initial_project.KeyStepPro").select(
         tracks={1}, patterns={1}
     )
@@ -467,12 +383,7 @@ def test_only_the_set_the_device_plays_is_exported(project_files_dir: Path) -> N
 def test_a_pattern_holding_one_set_is_exported_whatever_the_mode_flag_says(
     project_5: Project,
 ) -> None:
-    """The flag only decides when *both* sets are populated.
-
-    A track left in drum mode whose pattern holds only a melody must still
-    export that melody -- filtering on the flag alone would silently drop real
-    user data. No sample project has this combination, so it is constructed.
-    """
+    """The flag only decides when *both* sets are populated."""
     melodic = project_5.select(tracks={3})
     in_drum_mode = replace(melodic, tracks=(replace(melodic.tracks[0], drum_mode=True),))
 
@@ -494,11 +405,7 @@ def test_selection_narrows_what_is_exported(project_5: Project) -> None:
 
 
 def test_swing_delays_the_second_step_of_each_pair(project_5: Project) -> None:
-    """Swing percent is decoded; its timing meaning is the standard one.
-
-    75% gives the first step of a pair three quarters of the pair, so the
-    second starts half a step late.
-    """
+    """Swing percent is decoded; its timing meaning is the standard one."""
     swung = _with_swing(project_5, 75)
     flat = export_project(swung, ExportOptions(apply_swing=False, passes=1))
     result = export_project(swung, ONE_PASS)
@@ -513,12 +420,7 @@ def test_swing_delays_the_second_step_of_each_pair(project_5: Project) -> None:
 
 
 def test_swing_delay_is_0_based_and_both_directions_share_it() -> None:
-    """Pins the index space, because export and import count steps differently.
-
-    The note parameter numbers steps from 1 and export subtracts one before
-    calling; the import planner is already 0-based and calls it directly.
-    Aligning the parity to either caller alone silently unswings the other.
-    """
+    """Pins the index space, because export and import count steps differently."""
     assert swing_delay(0, 75, 120) == 0
     assert swing_delay(1, 75, 120) == 60
     assert swing_delay(2, 75, 120) == 0
@@ -526,11 +428,7 @@ def test_swing_delay_is_0_based_and_both_directions_share_it() -> None:
 
 
 def test_a_global_swing_is_reported_rather_than_applied(project_5: Project) -> None:
-    """The per-pattern value takes precedence on the device (T7.6).
-
-    So leaving the global out is what the hardware does, not caution -- but it
-    still gets named, because a user who set it expects to hear it.
-    """
+    """The per-pattern value takes precedence on the device (T7.6)."""
     swung = replace(project_5, global_swing_percent=63)
     result = export_project(swung, ONE_PASS)
     baseline = export_project(project_5, ONE_PASS)
@@ -546,11 +444,7 @@ def test_a_straight_global_swing_is_not_reported(project_5: Project) -> None:
 
 
 def _with_swing(project: Project, percent: int) -> Project:
-    """A copy of *project* with one pattern's melodic swing overridden.
-
-    None of the sample projects use swing, so the only way to cover it is to
-    build the case; doing it on the model keeps the sample files untouched.
-    """
+    """A copy of *project* with one pattern's melodic swing overridden."""
     track = project.track(3)
     pattern = replace(track.pattern(1), seq_swing_percent=percent)
     patterns = tuple(pattern if p.number == 1 else p for p in track.patterns)
@@ -578,11 +472,7 @@ def test_a_non_forward_direction_is_reported_not_reordered(project_5: Project) -
 
 
 def _with_bits(project: Project, *, raw: int) -> Project:
-    """A copy of *project* with track 3 pattern 1's 99 field overridden.
-
-    Every sample project holds the same 20, so a non-default step size,
-    triplet or direction can only be covered by building the case.
-    """
+    """A copy of *project* with track 3 pattern 1's 99 field overridden."""
     track = project.track(3)
     pattern = replace(track.pattern(1), seq_bits=PatternBits.decode(raw))
     patterns = tuple(pattern if p.number == 1 else p for p in track.patterns)
@@ -616,18 +506,10 @@ def test_options_that_cannot_produce_exact_timing_are_rejected(
 
 
 class TestRenderLayer:
-    """The arithmetic layer, asserted as plain data rather than parsed MIDI.
-
-    This is the half the Swift port has to reproduce; keeping it free of
-    ``mido`` is what makes the port a translation rather than a redesign.
-    """
+    """The arithmetic layer, asserted as plain data rather than parsed MIDI."""
 
     def test_a_pattern_renders_from_its_own_tick_zero(self, project_5: Project) -> None:
-        """Same description values as the merged export, minus the timeline.
-
-        project_5 track 3 pattern 1: beats 1-4 C2, 5-8 C#2, then D at beats 9
-        and 13 -- the second sitting at note index 10 but step 13.
-        """
+        """Same description values as the merged export, minus the timeline."""
         rendering = render_pattern(
             project_5.track(3).pattern(1),
             track_number=3,
@@ -679,9 +561,9 @@ class TestRenderLayer:
 
 
 def test_the_fallback_length_is_the_caller_s_to_name(project_files_dir: Path) -> None:
-    """``default_gate`` names the fallback instead of burying it in the code,
-    and it only ever applies to gates that did not decode -- a measured one is
-    never overridden."""
+    """``default_gate`` names the fallback instead of burying it in the code, and it only ever
+    applies to gates that did not decode -- a measured one is never overridden.
+    """
     real = load(project_files_dir / "initial_project.KeyStepPro").track(1).pattern(1)
     corrupt = _drum_gates_off_the_ladder(real)
     options = ExportOptions(default_gate=1.0)
@@ -734,12 +616,7 @@ class TestSplit:
 
 
 class TestRepeat:
-    """A repeat count exists only in the exported file.
-
-    It is not ``passes``: that is the device's own step-skip cycle, capped at
-    four and rendered inside a pattern. This lays the whole arrangement down
-    again, which the hardware has no way to store.
-    """
+    """A repeat count exists only in the exported file."""
 
     CYCLE = 32 * TICKS_PER_STEP
     """project_9's two 16-step patterns, which is one pass of the material."""
@@ -751,8 +628,9 @@ class TestRepeat:
     def test_repeats_lie_end_to_end_and_stay_aligned_across_tracks(
         self, project_9: Project
     ) -> None:
-        """Every track shifts by the same cycle, so pattern N still starts
-        together on all of them in the second and third rounds."""
+        """Every track shifts by the same cycle, so pattern N still starts together on all of them
+        in the second and third rounds.
+        """
         renderings = render_project(project_9, ONE_PASS)
         once = arrange(renderings)
         thrice = arrange(renderings, repeat=3)
@@ -766,8 +644,6 @@ class TestRepeat:
             ]
 
     def test_every_round_is_marked_but_the_pattern_list_is_not(self, project_9: Project) -> None:
-        """The marker ruler names every pattern start in every round; the
-        pattern list still answers which patterns are in the file."""
         arrangement = arrange(render_project(project_9, ONE_PASS), repeat=3)
 
         assert arrangement.boundaries == tuple(
@@ -792,8 +668,9 @@ class TestRepeat:
         assert twice.pattern_numbers == once.pattern_numbers
 
     def test_each_split_file_is_repeated_too(self, project_9: Project) -> None:
-        """A split piece is a clip, and a repeated clip is a looped one: the
-        count means the same thing wherever the arrangement is laid out."""
+        """A split piece is a clip, and a repeated clip is a looped one: the count means the same
+        thing wherever the arrangement is laid out.
+        """
         once = export_split(project_9, ONE_PASS)
         twice = export_split(project_9, replace(ONE_PASS, repeat=2))
 
@@ -801,16 +678,15 @@ class TestRepeat:
         assert [r.note_count for r in twice] == [2 * r.note_count for r in once]
 
     def test_the_material_s_own_diagnostics_are_not_repeated(self, project_9: Project) -> None:
-        """What a rendering says about itself -- an off-ladder gate, a stale
-        note set, tracks of unequal length -- describes the material, so a
-        second round of it is not a second finding."""
+        """What a rendering says about itself describes the material, so a second round of it is
+        not a second finding.
+        """
         renderings = render_project(project_9, ONE_PASS)
         assert arrange(renderings, repeat=3).warnings == arrange(renderings).warnings
 
     def test_a_gate_held_past_the_end_of_a_round_meets_the_next_one(self) -> None:
-        """Placing each round rather than copying the first is what makes this
-        work: the seam between rounds is resolved like any other collision,
-        instead of leaving two note-ons for one pitch with no note-off between.
+        """Placing each round rather than copying the first is what makes this work: the seam is
+        resolved like any other collision, not left as two note-ons with no note-off between.
         """
         cycle = 16 * TICKS_PER_STEP
         held = Rendering(
@@ -830,8 +706,9 @@ class TestRepeat:
         assert any("own note-off" in w for w in arrangement.warnings)
 
     def test_a_clipped_time_shift_is_clipped_only_where_there_is_no_room(self) -> None:
-        """Only the first round starts at tick 0, so only there does a negative
-        shift have nowhere to go; later rounds have the room to honour it."""
+        """Only the first round starts at tick 0, so only there does a negative shift have nowhere
+        to go; later rounds have the room to honour it.
+        """
         cycle = 16 * TICKS_PER_STEP
         early = Rendering(
             track_number=1,
@@ -847,12 +724,7 @@ class TestRepeat:
 
 
 class TestFlatVelocity:
-    """One velocity on every note, instead of the ones the pattern stores.
-
-    A flat render reads a pattern's written content rather than its
-    performance. It is a substitution, not a clamp: the fixed value wins over
-    a stored 0 or 1 as much as over a stored 120.
-    """
+    """One velocity on every note, instead of the ones the pattern stores."""
 
     STORED = (60, 70, 90, 100, 60, 70, 90, 100, 60, 120)
     """project_5 track 3 pattern 1, read off the device display."""
@@ -863,16 +735,18 @@ class TestFlatVelocity:
         )
 
     def test_the_substitute_is_the_measured_device_value(self) -> None:
-        """Not an invented default: what a freshly placed note carries on the
-        device, so the number is never re-typed above this module."""
+        """Not an invented default: what a freshly placed note carries on the device, so the number
+        is never re-typed above this module.
+        """
         assert DEFAULT_FLAT_VELOCITY == constants.FRESH_VELOCITY
 
     def test_unset_keeps_every_stored_velocity(self, project_5: Project) -> None:
         assert tuple(n.velocity for n in self._seq(project_5, ONE_PASS).notes) == self.STORED
 
     def test_set_replaces_all_of_them(self, project_5: Project) -> None:
-        """Asserted as the whole list: project_5 already stores a 100, so a
-        substitution that only reached some notes would still show one."""
+        """Asserted as the whole list: project_5 already stores a 100, so a substitution that only
+        reached some notes would still show one.
+        """
         options = replace(ONE_PASS, flat_velocity=DEFAULT_FLAT_VELOCITY)
         assert [n.velocity for n in self._seq(project_5, options).notes] == [
             DEFAULT_FLAT_VELOCITY
@@ -894,8 +768,9 @@ class TestFlatVelocity:
         assert render(options) == [DEFAULT_FLAT_VELOCITY] * 10
 
     def test_the_drum_set_flattens_too(self, project_5: Project) -> None:
-        """Every note means every note: a drum hit's velocity is stored the
-        same way and is replaced the same way."""
+        """Every note means every note: a drum hit's velocity is stored the same way and is replaced
+        the same way.
+        """
         options = replace(ONE_PASS, flat_velocity=DEFAULT_FLAT_VELOCITY)
         drums = project_5.track(1).pattern(1)
 
@@ -916,8 +791,9 @@ class TestFlatVelocity:
             ExportOptions(flat_velocity=0)
 
     def test_nothing_else_about_the_rendering_moves(self, project_files_dir: Path) -> None:
-        """Velocity is the only field substituted, so an off-ladder gate still
-        falls back to the default length and still says so."""
+        """Velocity is the only field substituted, so an off-ladder gate still falls back to the
+        default length and still says so.
+        """
         pattern = _drum_gates_off_the_ladder(
             load(project_files_dir / "initial_project.KeyStepPro").track(1).pattern(1)
         )
@@ -938,12 +814,7 @@ def _with_velocity(pattern: Pattern, velocity: int) -> Pattern:
 
 
 def test_tracks_of_different_total_lengths_are_reported(project_9: Project) -> None:
-    """Merged, every track restarts at each pattern boundary.
-
-    The device loops each track on its own, so once the totals differ the file
-    and the hardware stop agreeing about what plays together -- worth saying
-    out loud, because nothing in the .mid reveals it.
-    """
+    """Merged, every track restarts at each pattern boundary."""
     result = export_project(project_9)
     assert any("different total lengths" in w and "drift apart" in w for w in result.warnings)
 

@@ -1,8 +1,4 @@
-"""The read protocol's frame codec, against bytes the device actually sent.
-
-Every frame quoted here appears in usb_midi_investigation/recall_sysex.jsonl and
-in the tape fixture. See spec section 7.
-"""
+"""The read protocol's frame codec, against bytes the device actually sent."""
 
 import pytest
 
@@ -10,9 +6,7 @@ from ksp import sysex
 
 
 def test_a_scalar_request_is_the_short_form() -> None:
-    """Frame 13 of the capture: paramId 37, itemId 120, no indices. The earlier
-    investigation note filed it under setup calls; it is the first real read in
-    the plan."""
+    """Frame 13 of the capture: paramId 37, itemId 120, no indices."""
     request = sysex.ReadRequest(item=120, param=37, indices=(), count=None)
     assert sysex.build_read_request(request).hex() == "f000206b7f4201012578f7"
 
@@ -37,8 +31,9 @@ def test_a_long_reply_yields_exactly_count_values() -> None:
 
 
 def test_the_round_trip_is_exact() -> None:
-    """Build a request, dress it as the reply the device would send, parse it
-    back to the request we started from."""
+    """Build a request, dress it as the reply the device would send, parse it back to the request we
+    started from.
+    """
     request = sysex.ReadRequest(item=126, param=50, indices=(16, 3, 49), count=16)
     frame = sysex.build_read_request(request)
     reply = frame[:6] + bytes((sysex.CMD_READ_REPLY,)) + frame[7:-1] + bytes(16) + b"\xf7"
@@ -59,8 +54,7 @@ def test_a_frame_that_is_not_a_reply_is_refused(frame: str) -> None:
 
 
 def test_a_reply_that_underdelivers_is_refused() -> None:
-    """The count byte is a promise. Silently accepting four values where the
-    header said sixteen would shift every later key by twelve."""
+    """The count byte is a promise."""
     frame = bytes.fromhex("f000206b7f420c0130037b0101111001020304f7")
     with pytest.raises(ValueError, match="16"):
         sysex.parse_reply(frame)
@@ -91,8 +85,9 @@ def test_the_slot_defaults_to_one() -> None:
 
 @pytest.mark.parametrize("slot", [0, 17, 127])
 def test_a_slot_outside_the_sixteen_still_builds(slot: int) -> None:
-    """H4.1 asks the device what it does with 0 and with 17, so the codec must
-    not be the thing that refuses them. Only the 7-bit SysEx limit is enforced."""
+    """H4.1 asks the device what it does with 0 and with 17, so the codec must not be the thing that
+    refuses them.
+    """
     request = sysex.ReadRequest(item=120, param=37, indices=(), count=None)
     assert sysex.build_read_request(request, slot=slot)[7] == slot
 
@@ -115,16 +110,13 @@ def test_a_frame_that_is_too_short_has_no_slot() -> None:
 
 
 def test_the_prologue_names_its_slot() -> None:
-    """Spec 7.5: ``05 <slot>`` is the first frame of a read. H1.4 showed it is
-    not required for slot 1; whether switching slots needs it is untested, so it
-    has to be able to name the right one."""
+    """Spec 7.5: ``05 <slot>`` is the first frame of a read."""
     assert sysex.prologue().hex() == "f000206b7f420501f7"
     assert sysex.prologue(2).hex() == "f000206b7f420502f7"
 
 
 def test_the_identity_reply_gives_the_firmware_version(identity_reply: bytes) -> None:
-    """Frame 9 of the capture. Nothing in the read protocol carries the version,
-    so this request is what makes a byte-identical file possible."""
+    """Frame 9 of the capture."""
     assert sysex.parse_identity(identity_reply) == "2.5.20"
 
 

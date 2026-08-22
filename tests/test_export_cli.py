@@ -563,12 +563,7 @@ def _durations(path: Path) -> list[int]:
 def test_the_fallback_gate_never_overrides_a_measured_one(
     project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """initial_project's gate 2 used to be unmeasured and take the fallback.
-
-    The tier 2 ladder decodes it as 0.1875 of a step, so ``--default-gate``
-    must now move nothing here and say nothing about defaults -- the option
-    only ever covers a value the ladder cannot decode.
-    """
+    """initial_project's gate 2 used to be unmeasured and take the fallback."""
     source = str(project_files_dir / "initial_project.KeyStepPro")
     selection = [source, "--track", "1", "--pattern", "1", "-o"]
 

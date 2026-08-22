@@ -1,14 +1,4 @@
-"""The timing baseline every hardware capture is measured against.
-
-Swing has never been set in any sample project and time shift appears only in
-``project_5``'s documented ramp. That makes the corpus a known-neutral floor:
-these tests pin it, so the first capture that moves a timing parameter shows up
-unmistakably in a diff instead of blending into noise nobody characterised.
-
-They also pin the measured constants to the readings they came from, so a
-constant cannot drift from its evidence without a test failing -- the same
-discipline ``tests/test_gate_ladder.py`` applies to the gate table.
-"""
+"""The timing baseline every hardware capture is measured against."""
 
 import sys
 from collections.abc import Callable
@@ -91,12 +81,8 @@ def test_drum_shift_matches_the_confirmed_display(project_files_dir: Path) -> No
     assert shifts == [-1, 1]
 
 
-#: Displayed time shift -> the offset it produced, in ticks at 480 per beat.
-#: Read off tier 8's recordings R1 and R6 (analysis/Timing_Calibration.md
-#: 6.1), which swept these eight values across one pattern. -49 and -25 came
-#: back a tick short of the mirror, inside the jitter the reference track
-#: itself shows, so the table below is what the arithmetic gives rather than
-#: what was literally recorded at those two points.
+#: Displayed time shift -> the offset it produced, in ticks at 480 per beat. -49 and -25
+#: are what the arithmetic gives; the recording came back a tick short at those two.
 MEASURED_SHIFT_TICKS = {0: 0, 1: 1, 25: 30, 50: 60, -1: -1, -25: -30, -49: -59}
 
 
@@ -108,12 +94,7 @@ def test_the_shift_unit_matches_the_recordings() -> None:
 
 
 def test_the_shift_unit_does_not_scale_with_the_step() -> None:
-    """R1 at a 1/4 step and R3 at a 1/16 step both moved +50 by 60 ticks.
-
-    This is the whole of tier 8's finding: a step-relative unit would have
-    given 240 ticks at 1/4, and it is indistinguishable from this one at the
-    1/16 default that every sample project uses.
-    """
+    """R1 at a 1/4 step and R3 at a 1/16 step both moved +50 by 60 ticks."""
     assert constants.time_shift_ticks(50, 480) == 60
 
 
@@ -139,12 +120,7 @@ def test_timing_diff_finds_no_change_between_a_file_and_itself(
 
 
 def test_timing_diff_isolates_the_drum_shift(project_files_dir: Path) -> None:
-    """Default -> project_5 differs in exactly the two drum shift keys.
-
-    The melodic ramp is not listed because those notes do not exist in
-    Default at all, so every one of its keys moves from the 127 sentinel --
-    note-list length, not a timing change.
-    """
+    """Default -> project_5 differs in exactly the two drum shift keys."""
     lines = list(
         timing_diff.diff(
             project_files_dir / "Default.KeyStepPro",
@@ -157,12 +133,7 @@ def test_timing_diff_isolates_the_drum_shift(project_files_dir: Path) -> None:
 
 
 def test_reduce_timing_recovers_a_known_offset(tmp_path: Path) -> None:
-    """A synthetic recording with a planted offset reduces to that offset.
-
-    Trusting the reduction before it is pointed at hardware data: if this
-    cannot recover an offset it wrote itself, no measurement from it means
-    anything.
-    """
+    """A synthetic recording with a planted offset reduces to that offset."""
     mido = pytest.importorskip("mido")
 
     ppq = 480
@@ -204,11 +175,7 @@ def test_reduce_timing_recovers_a_known_offset(tmp_path: Path) -> None:
 
 
 def test_reduce_timing_refuses_a_note_exactly_between_two_references() -> None:
-    """Half a step is equidistant, and picking a side invents a measurement.
-
-    This is what turned tier 8's R3 -- a clean +60 on all 32 notes -- into a
-    reported mean of +56.25 with a spread that read as jitter.
-    """
+    """Half a step is equidistant, and picking a side invents a measurement."""
     step = 120
     onsets = [reduce_timing.Onset(tick=beat * step, pitch=60, channel=3) for beat in range(4)] + [
         reduce_timing.Onset(tick=step // 2, pitch=64, channel=1)

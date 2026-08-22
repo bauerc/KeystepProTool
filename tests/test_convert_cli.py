@@ -27,11 +27,7 @@ def test_writes_a_project_next_to_its_input(
 
 
 def test_the_bundled_template_is_the_factory_default(project_files_dir: Path) -> None:
-    """The shipped copy and the sample must not drift apart.
-
-    They are the same file for a reason: the sample is what every format test
-    is written against, and the copy is what a user's conversion starts from.
-    """
+    """The shipped copy and the sample must not drift apart."""
     assert (
         default_template().read_bytes() == (project_files_dir / "Default.KeyStepPro").read_bytes()
     )

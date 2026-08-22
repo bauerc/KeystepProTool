@@ -1,9 +1,4 @@
-"""USB-MIDI packet framing, against the frames the device actually sent.
-
-No device is needed: framing is pure arithmetic over the tape fixture. What a
-green run here does not prove is that the device answers at all -- that is
-H1.1 and H1.2, at the hardware.
-"""
+"""USB-MIDI packet framing, against the frames the device actually sent."""
 
 import pytest
 
@@ -45,9 +40,7 @@ def test_the_terminator_picks_the_code_index_number(payload: bytes, packets: str
 
 
 def test_padding_bytes_never_reach_the_message() -> None:
-    """A reply of 9 bytes pads its last packet with two zeros. Reading all three
-    regardless is what put a stray 00 between a reply and its ack in the
-    investigation log."""
+    """A reply of 9 bytes pads its last packet with two zeros."""
     reply = bytes.fromhex("f000206b7f420201257803f7")
     assert deframe(frame_sysex(reply)) == [reply]
     assert 0x00 not in deframe(frame_sysex(reply))[0][6:]
@@ -60,8 +53,7 @@ def test_a_reply_and_its_ack_come_back_as_two_frames() -> None:
 
 
 def test_packets_that_are_not_sysex_are_ignored() -> None:
-    """Interface 2 can carry live playing alongside a read. A note-on must not
-    be spliced into the middle of a reply."""
+    """Interface 2 can carry live playing alongside a read."""
     reply = bytes.fromhex("f000206b7f420201257803f7")
     note_on = bytes((0x09, 0x90, 0x3C, 0x64))
     packets = frame_sysex(reply)

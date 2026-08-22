@@ -3,9 +3,7 @@ import Testing
 
 @testable import KSPRun
 
-/// The `--tracks` / `--patterns` grammar, case for case with `tests/test_selection.py`. The
-/// messages are compared exactly: they reach the user through the same byte-for-byte contract the
-/// summaries do.
+/// The messages are compared exactly: they are part of the two CLIs' byte-for-byte contract.
 @Suite struct SelectionTests {
     private func parse(_ text: String?, limit: Int = 4) throws -> Set<Int> {
         try parseSelection(text, option: "--tracks", limit: limit)
@@ -81,14 +79,12 @@ import Testing
             performing: { try parseSelection("99", option: "--patterns", limit: 16) })
     }
 
-    /// Python's ints are unbounded and Swift's are not, so a numeral too big for `Int` has to be
-    /// reported as out of range rather than as unparseable, in the digits Python would print.
+    /// Python's ints are unbounded, so an oversized numeral is out of range, not unparseable.
     @Test func aNumeralTooBigForIntIsStillOutOfRange() {
         #expect(
             refusal("99999999999999999999") == "--tracks: 99999999999999999999 is out of range 1-4")
         #expect(refusal("+00009") == "--tracks: 9 is out of range 1-4")
-        // As the end of a range it is never the number reported: the walk stops at limit + 1
-        // first, exactly as the unbounded Python arithmetic does.
+        // As the end of a range it is never reported: the walk stops at limit + 1 first.
         #expect(refusal("3-99999999999999999999") == "--tracks: 5 is out of range 1-4")
         #expect(refusal("0-99999999999999999999") == "--tracks: 0 is out of range 1-4")
         #expect(

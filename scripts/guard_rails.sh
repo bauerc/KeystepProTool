@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse gate for Claude Code / Gemini CLI Bash calls.
-
-Reads the hook payload as JSON on stdin. Blocks with exit 2 plus a reason on
-stderr; allows with a silent exit 0. Any internal error fails open, so a broken
-guard never wedges every shell call in the session.
-"""
+"""PreToolUse gate for Bash calls: exit 2 plus a reason blocks, exit 0 allows."""
 
 from __future__ import annotations
 

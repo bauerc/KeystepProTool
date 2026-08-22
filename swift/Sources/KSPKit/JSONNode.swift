@@ -1,13 +1,5 @@
-/// An ordered JSON value, and a serialiser that reproduces `json.dumps(..., indent=2)` exactly.
-///
-/// The dump's `--json` is one of the two ports' shared contracts -- M10's check is that the Swift
-/// and the Python emit the same bytes for the same file -- and `JSONEncoder` cannot produce them.
-/// It gives no control over key order beyond "sorted or synthesised", and it renders an integral
-/// `Double` as `120` where Python writes `120.0`, which would differ on every tempo and every
-/// whole-numbered gate.
-///
-/// So the model's `toJSON()` methods build one of these instead of conforming to `Encodable`, and
-/// the key order in each of them is the Python `to_dict`'s insertion order.
+/// Reproduces `json.dumps(..., indent=2)`; `JSONEncoder` controls neither key order nor the
+/// `120` vs `120.0` rendering of a whole `Double`.
 public enum JSONNode: Sendable {
     case null
     case bool(Bool)
@@ -16,11 +8,9 @@ public enum JSONNode: Sendable {
     case string(String)
     case array([JSONNode])
 
-    /// Members in the order they were written, not sorted: a Python dict preserves insertion
-    /// order and that order is what reaches the output.
+    /// In the order written, not sorted, matching the Python dict's insertion order.
     indirect case object([(String, JSONNode)])
 
-    /// The rendered JSON, indented two spaces per level.
     public func serialised() -> String {
         var out = ""
         write(into: &out, depth: 0)
@@ -36,10 +26,7 @@ public enum JSONNode: Sendable {
         case .int(let value):
             out += String(value)
         case .double(let value):
-            // Swift's `description` is the shortest representation that round-trips and keeps the
-            // `.0` on whole numbers, which is exactly Python's `repr` for every value this format
-            // holds: tempos and gate lengths, all far from the exponent thresholds where the two
-            // spellings would part company.
+            // `description` keeps the `.0` on whole numbers, as Python's `repr` does.
             out += value.description
         case .string(let value):
             out += Self.quoted(value)
@@ -76,12 +63,7 @@ public enum JSONNode: Sendable {
         String(repeating: " ", count: depth * 2)
     }
 
-    /// Python's `json.encoder.py_encode_basestring_ascii`: the five short escapes, `\uXXXX` in
-    /// lower-case hex for everything else outside printable ASCII, and surrogate pairs above the
-    /// basic plane. `ensure_ascii` is on by default there, so this is on here too.
-    ///
-    /// Internal rather than private: `LenientJSON`'s writer escapes by the same rules, because
-    /// Python reaches for this same function from both `json.dumps` and `lenient_json.dumps`.
+    /// Python's `py_encode_basestring_ascii`: lower-case `\uXXXX` outside printable ASCII.
     static func quoted(_ value: String) -> String {
         var out = "\""
         for unit in value.utf16 {
@@ -110,9 +92,6 @@ public enum JSONNode: Sendable {
 }
 
 extension JSONNode: Equatable {
-    /// Hand-written because a `[(String, JSONNode)]` payload is a tuple array, which blocks the
-    /// synthesised conformance. Keeping the tuple is worth it: it is what makes a `toJSON()` read
-    /// as the Python dict literal it is a port of.
     public static func == (lhs: JSONNode, rhs: JSONNode) -> Bool {
         switch (lhs, rhs) {
         case (.null, .null): true

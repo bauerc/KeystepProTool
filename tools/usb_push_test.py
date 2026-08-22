@@ -139,7 +139,6 @@ def run_no_ack_test(
     frames = build_payload_frames(slot)
 
     t_write_start = time.perf_counter()
-    # Batch write all frames together for maximum USB throughput
     batch_bytes = bytearray()
     for label, frame in frames:
         if recorder is not None:
@@ -151,7 +150,6 @@ def run_no_ack_test(
         recorder.append({"direction": "out", "sysex_hex": epilogue.hex(), "label": "epilogue"})
     batch_bytes.extend(epilogue)
 
-    # Send entire batch in one single USB call
     transport.send(bytes(batch_bytes))
     t_write_total = (time.perf_counter() - t_write_start) * 1000
     print(

@@ -25,10 +25,7 @@ def test_dumps_a_project_as_a_tree(
 def test_empty_patterns_are_hidden_unless_asked_for(
     project_files_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """All 16 patterns always exist on disk; only some hold anything.
-
-    Printing 64 empty patterns by default would bury the two that matter.
-    """
+    """All 16 patterns always exist on disk; only some hold anything."""
     path = str(project_files_dir / "project_5.KeyStepPro")
 
     main([path])
@@ -79,12 +76,7 @@ def test_json_and_text_agree_on_the_selection(
 def test_a_short_gate_prints_its_measured_length(
     project_files_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """initial_project's drum notes store gate 2, which used to print ``?(2)``.
-
-    The tier 2 sweep resolved it: stored 2 is detent 3, 0.1875 of a step. This
-    is the long-standing ``?(2)`` of spec 6.1, and the one place in the corpus
-    where the new ladder changes what the user sees.
-    """
+    """initial_project's drum notes store gate 2, which used to print ``?(2)``."""
     main([str(project_files_dir / "initial_project.KeyStepPro"), "--track", "1", "--pattern", "1"])
     out = capsys.readouterr().out
     assert "gate 0.1875" in out
@@ -97,12 +89,7 @@ def test_empty_project_says_so(project_files_dir: Path, capsys: pytest.CaptureFi
 
 
 class TestDrumMapFlag:
-    """Drum lanes are resolved through an assumed map, or not at all.
-
-    The map is a device global setting that no project file contains, so the
-    CLI's job is to be explicit about which one it used and to let the user
-    say otherwise.
-    """
+    """Drum lanes are resolved through an assumed map, or not at all."""
 
     @pytest.fixture(autouse=True)
     def _no_personal_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

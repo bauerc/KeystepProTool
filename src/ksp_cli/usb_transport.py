@@ -1,12 +1,4 @@
-"""Raw USB transport for the SysEx read protocol.
-
-The device exposes two USB interfaces and CoreMIDI only surfaces one; reads
-issued through mido have never drawn a reply, so interface 2 over libusb is the
-only path that answers. This is the one place pyusb is allowed to appear -- the
-protocol itself lives in ``ksp.sysex`` and stays portable.
-
-``UsbMidiTransport`` satisfies ``ksp.bulk_read.Transport``.
-"""
+"""Raw USB transport for the SysEx read protocol: the one place pyusb may appear."""
 
 import time
 from functools import partial
@@ -27,9 +19,8 @@ LIBUSB_PATHS: Final = (
     "/usr/local/lib/libusb-1.0.dylib",
 )
 
-#: Long enough for the device to answer, short enough that a wrong interface or
-#: a busy MCC is a failure rather than a hang. ``ksp-pull`` and ``usb_probe``
-#: both default to it.
+#: Long enough for the device to answer, short enough that a wrong interface
+#: or a busy MCC is a failure rather than a hang.
 DEFAULT_TIMEOUT_MS: Final = 1000
 
 #: Payload bytes carried by each SysEx code index number.
@@ -65,11 +56,7 @@ def frame_sysex(payload: bytes, cable: int = 0) -> bytes:
 
 def deframe(packets: bytes) -> list[bytes]:
     """The complete SysEx messages carried by a run of USB-MIDI packets.
-
-    The code index number says how many of a packet's three bytes are real, so
-    the padding zeros never reach the message -- reading all three regardless is
-    what puts stray ``00`` between a reply and its ack.
-    """
+    The code index number says how many of a packet's three bytes are real."""
     frames: list[bytes] = []
     current = bytearray()
     for offset in range(0, len(packets) - _PACKET + 1, _PACKET):
@@ -86,11 +73,7 @@ def deframe(packets: bytes) -> list[bytes]:
 
 
 class UsbMidiTransport:
-    """Interface 2 of an attached KeyStep Pro, as request-in reply-out.
-
-    Reads whichever project is currently loaded: nothing in the address tuple
-    identifies a slot.
-    """
+    """Interface 2 of an attached KeyStep Pro, as request-in reply-out."""
 
     def __init__(self, timeout_ms: int = DEFAULT_TIMEOUT_MS) -> None:
         self.timeout_ms = timeout_ms
@@ -118,9 +101,8 @@ class UsbMidiTransport:
                 "-- is it plugged in over USB and powered on?"
             )
 
-        # macOS reports the class driver as active but refuses to detach it,
-        # and claiming interface 2 works anyway. Only a detach that succeeded
-        # is worth undoing on close.
+        # macOS reports the class driver as active but refuses to detach it, and
+        # claiming the interface works anyway; only a real detach is undone on close.
         try:
             if device.is_kernel_driver_active(INTERFACE):
                 device.detach_kernel_driver(INTERFACE)
@@ -172,10 +154,7 @@ class UsbMidiTransport:
 
     def _read_frames(self) -> list[bytes]:
         """Read until the device's ack arrives, or the timeout expires.
-
-        Traffic is strictly serialized -- request, reply, ack -- so the ack is
-        the end of the transaction and there is nothing to wait for after it.
-        """
+        Traffic is strictly serialized, so the ack ends the transaction."""
         core, _, _ = _import_pyusb()
         device = self._require_open()
         packets = bytearray()

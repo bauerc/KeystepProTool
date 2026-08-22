@@ -1,10 +1,4 @@
-"""``kspplus`` -- the four commands under one name.
-
-Nothing is implemented here. Each command is defined in its own module and
-mounted on this group by its own ``register``, so ``kspplus ksp2midi ...`` and
-``ksp2midi ...`` run the same function with the same options. The standalone
-names stay installed; this is a way in, not a replacement.
-"""
+"""``kspplus`` -- the four commands under one name, each mounted by its own ``register``."""
 
 from collections.abc import Sequence
 

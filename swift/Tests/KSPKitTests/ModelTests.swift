@@ -2,10 +2,6 @@ import Testing
 
 @testable import KSPKit
 
-/// The decoded object model. The bitfield arithmetic underneath ``PatternBits`` is pinned in
-/// `ConstantsTests`; what is left here is the model's own behaviour -- how a note labels itself,
-/// how a pattern picks between its two parameter sets, and the `to_dict` key order the two ports
-/// share.
 @Suite struct ModelTests {
     private func note(
         kind: NoteKind = .seq, slot: Int = 1, index: Int = 1, step: Int = 1, pitch: Int = 60,
@@ -30,7 +26,6 @@ import Testing
     }
 
     @Test func theFourthDirectionHasNoName() {
-        // Two bits allow it; the device never produced it during T5.5, so nothing knows its name.
         #expect(PatternBits.decode(20 | 3 << Constants.directionShift).direction == .unknown)
     }
 
@@ -58,8 +53,7 @@ import Testing
     }
 
     @Test func aPatternWithoutADrumSetFallsBackToTheMelodicBitfield() {
-        // Tracks 2-4 have no drum parameter set at all, so asking for the drum field there must
-        // not invent one.
+        // Tracks 2-4 have no drum parameter set at all, so the drum field must not be invented.
         let pattern = Self.pattern(notes: [])
         #expect(pattern.drumBits == nil)
         #expect(pattern.bits(.drum) == pattern.seqBits)
@@ -70,7 +64,6 @@ import Testing
         let narrowed = project.select(tracks: [1], patterns: [2])
         #expect(narrowed.tracks.count == 1)
         #expect(narrowed.tracks[0].patterns.map(\.number) == [2])
-        // And the fields that are not being narrowed survive it.
         #expect(narrowed.tracks[0].drumMode == project.tracks[0].drumMode)
         #expect(narrowed.tempoBPM == project.tempoBPM)
     }
@@ -79,11 +72,6 @@ import Testing
         let project = Self.project()
         #expect(project.select().tracks.count == project.tracks.count)
     }
-
-    // MARK: - Selecting sets
-    //
-    // Every project holds four tracks of sixteen patterns whether or not they hold notes, so a
-    // sample carries every case. `tests/test_model.py` is the mirror.
 
     private static func sample() throws -> Project { try Samples.project("project_9.KeyStepPro") }
 
@@ -139,7 +127,6 @@ import Testing
         #expect(Self.patterns(narrowed, 0) == Self.patterns(project, 0))
     }
 
-    /// A track the map does not name is left out, the way an unticked row is.
     @Test func selectCellsDropsAtrackItDoesNotName() throws {
         #expect(Self.numbers(try Self.sample().select(cells: [2: [1]])) == [2])
     }
@@ -163,8 +150,6 @@ import Testing
     }
 
     @Test func onlyScenesThatChainSomethingAreReported() {
-        // An unused slot reads the sentinel across all 16 entries, which is every scene of every
-        // sample project.
         let scenes = [
             Scene(number: 1, chains: []),
             Scene(number: 2, chains: [Chain(track: 1, patterns: [1, 2])]),
@@ -208,8 +193,7 @@ import Testing
     }
 
     @Test func aLaneTheDeviceLacksIsNotResolvedIntoJSON() throws {
-        // The reader warns about an out-of-range lane separately; inventing a note here would
-        // hide it.
+        // The reader warns about an out-of-range lane separately; a note here would hide it.
         let node = note(kind: .drum, pitch: 99).toJSON(drumMap: try DrumMap.chromatic(36))
         guard case .object(let members) = node else {
             Issue.record("a note should serialise to an object")
@@ -231,8 +215,6 @@ import Testing
     }
 
     @Test func theDrumMapIsNamedAtTheTopLevelJustBeforeTheTracks() throws {
-        // Named there because every resolved drum note below depends on it, and it is an
-        // assumption about the user's device rather than anything read from the file.
         let node = Self.project().toJSON(drumMap: try DrumMap.chromatic())
         guard case .object(let members) = node else {
             Issue.record("a project should serialise to an object")
@@ -240,8 +222,6 @@ import Testing
         }
         #expect(members.map(\.0).suffix(2) == ["drum_map", "tracks"])
     }
-
-    // MARK: - Fixtures
 
     private static func pattern(number: Int = 1, notes: [Note]) -> Pattern {
         Pattern(

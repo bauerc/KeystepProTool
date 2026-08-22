@@ -112,7 +112,6 @@ def main() -> int:
     hw_to_mcc_file: TextIO | None = None
     unified_file: TextIO | None = None
 
-    # Handle split or explicit output paths
     if args.split and args.output:
         stem = args.output.stem
         parent = args.output.parent
@@ -190,7 +189,6 @@ def main() -> int:
         sysex_info: dict[str, Any] = {}
         if is_sysex:
             sysex_info = decode_sysex(msg.data)
-            # Automatic protocol classification if physical bus mirrors incoming/outgoing traffic
             raw_hex = sysex_info.get("raw_hex", "")
             payload_hex = sysex_info.get("payload_hex", "")
 

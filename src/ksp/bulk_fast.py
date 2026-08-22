@@ -1,14 +1,4 @@
-"""The addresses ``bulk_plan`` lists, in as few requests as the device allows.
-
-``bulk_plan`` reproduces MIDI Control Center's stream byte-for-byte, and that
-parity is the evidence the captured tapes are checked against, so it does not
-change. MCC is simply not efficient (spec section 7.7). This module derives an
-efficient walk from the same ``PLAN``, changing which frames go on the wire but
-never which addresses are covered -- ``iter_requests`` here fills exactly the
-keys ``bulk_plan.iter_requests`` does. The request counts are in spec 7.8.
-
-This module is hand-written; ``bulk_plan`` is generated and would lose it.
-"""
+"""The addresses ``bulk_plan`` lists, in as few requests as the device allows (spec 7.8)."""
 
 from collections.abc import Iterable, Iterator
 from itertools import product
@@ -18,40 +8,27 @@ from ksp.bulk_plan import IDX, PLAN, Leaf
 from ksp.sysex import MAX_READ_COUNT, ReadRequest
 
 #: Marks an empty note-pool entry. Also a legal pitch and velocity, which is why
-#: only paramId 50 (or 54) may be read as existence -- see spec section 3.
+#: only paramId 50 (or 54) may be read as existence (spec 3).
 EMPTY: Final = 127
 
 #: The melodic existence array, and the per-note parameters it gates. Entry n of
-#: each is the same note ordinal, so an all-EMPTY chunk of 50 means every one of
-#: these reads EMPTY. Both device tapes agree without exception: 59,415 and
-#: 61,120 such values, all 127.
+#: each is the same note ordinal, so an all-EMPTY chunk of 50 settles all of them.
 MELODIC_GATE: Final = 50
 MELODIC_GATED: Final = frozenset({109, 110, 111, 112, 113})
 
-#: The drum pair (54 gating 117-121) is deliberately absent. Dead drum entries
-#: read 127 in some patterns and the default row 60/7/100/49/100 in others,
-#: within one project -- the drum array is a pool with holes, so a dead entry
-#: keeps whatever was there. Nothing derives them; they must be fetched.
+#: The drum pair (54 gating 117-121) is deliberately absent: the drum array is a
+#: pool with holes, so a dead entry keeps whatever was there and cannot be derived.
 
 #: Requests this plan expands to, against bulk_plan's 8,951.
 REQUEST_COUNT: Final = 2044
 
-#: What one pattern of one track costs: 75 pattern reads and the 40 index-less
-#: scalars. MCC's plan needs 250 for the same keys.
+#: What one pattern of one track costs: 75 pattern reads plus the index-less scalars.
 PATTERN_REQUEST_COUNT: Final = 115
 
 
 def iter_requests(max_count: int = MAX_READ_COUNT) -> Iterator[ReadRequest]:
     """Every address bulk_plan reads, coalesced into the fewest requests.
-
-    Runs are gathered over a whole PLAN group, not one index of it. MCC's
-    per-pattern scalars each walk the group index itself -- sixteen count-1 reads
-    of 122_90 are one 16-entry range -- and only a group-wide view sees that.
-
-    Ordering follows MCC's, with one departure: the existence array is emitted
-    before the parameters it gates, which MCC's leaf order puts it after. Reads
-    are addressed and idempotent, so order is free.
-    """
+    MCC's order, but with the existence array ahead of the parameters it gates."""
     for low, high, leaves in PLAN:
         requests = (request for index in range(low, high + 1) for request in _expand(index, leaves))
         yield from _coalesce(requests, max_count)
@@ -59,28 +36,15 @@ def iter_requests(max_count: int = MAX_READ_COUNT) -> Iterator[ReadRequest]:
 
 def iter_pattern_requests(item: int, pattern: int) -> Iterator[ReadRequest]:
     """The requests covering one pattern of one track, in ``iter_requests``' order.
-
-    The index-less scalars come too: tempo is ``120_70/71/72`` and carries no
-    pattern index, so a walk without them would export at the wrong speed.
-
-    What this leaves unread is everything else, and ``read_raw`` zero-fills it.
-    The project that comes back therefore has empty scenes -- which is fine for
-    what H2.4 wants, because ``midi_export.render_project`` walks tracks and
-    patterns rather than the scene arrangement.
-    """
+    The index-less scalars come too: tempo carries no pattern index."""
     for request in iter_requests():
         if request.count is None or (request.item == item and _covers(request, pattern)):
             yield request
 
 
 def _covers(request: ReadRequest, pattern: int) -> bool:
-    """Whether a request fills any key belonging to ``pattern``.
-
-    Not simply ``indices[0] == pattern``. A per-pattern scalar walks the pattern
-    index itself, and ``_coalesce`` joins all sixteen of those into one range at
-    index 1 -- so testing the first index alone would drop every pattern's step
-    count, swing and mode bits but pattern 1's, and zero-fill them in silence.
-    """
+    """Whether a request fills any key belonging to ``pattern``. Not simply
+    ``indices[0] == pattern``: a coalesced per-pattern scalar is one range at index 1."""
     assert request.count is not None
     if len(request.indices) == 1:
         return request.indices[0] <= pattern < request.indices[0] + request.count
@@ -102,10 +66,7 @@ def _expand(index: int, leaves: Iterable[Leaf]) -> Iterator[ReadRequest]:
 
 def _coalesce(requests: Iterable[ReadRequest], max_count: int) -> Iterator[ReadRequest]:
     """Join each run over the walking index into requests of up to max_count.
-
-    A run is one ``(item, param, fixed indices)``; only the last index walks. The
-    first request of a run holds its place in the emission order.
-    """
+    A run is one ``(item, param, fixed indices)``; only the last index walks."""
     runs: dict[tuple[int, int, tuple[int, ...]], list[ReadRequest]] = {}
     order: list[list[ReadRequest]] = []
     for request in requests:

@@ -8,21 +8,19 @@ def transform_packet(packet: dict[str, Any]) -> dict[str, Any]:
     """Flattens Wireshark packet JSON export into a structured dictionary."""
     layers = packet.get("_source", {}).get("layers", {})
 
-    # Helper function to unpack single-item lists common in Wireshark JSON
+    # Wireshark wraps most field values in a single-item list.
     def get_first(key: str, default: Any = None) -> Any:
         val = layers.get(key, default)
         if isinstance(val, list) and len(val) > 0:
             return val[0]
         return val
 
-    # Determine direction relative to host
     src = get_first("usb.src")
     dst = get_first("usb.dst")
     direction = "outbound" if src == "host" else "inbound"
 
     sysex_hex = get_first("usbaudio.sysex.reassembled.data")
 
-    # Clean object layout optimal for LLM context processing
     return {
         "frame_number": int(get_first("frame.number", 0)),
         "timestamp_sec": float(get_first("frame.time_relative", 0.0)),
@@ -57,7 +55,6 @@ def convert_json_to_jsonl(input_file: str, output_file: str) -> None:
 
 
 if __name__ == "__main__":
-    # Default file paths or command line args
     infile = sys.argv[1] if len(sys.argv) > 1 else "recall_sysex.json"
     outfile = sys.argv[2] if len(sys.argv) > 2 else "recall_sysex.jsonl"
 

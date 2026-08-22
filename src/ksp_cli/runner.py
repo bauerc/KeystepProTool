@@ -1,13 +1,4 @@
-"""Runs a Typer app and returns its exit code instead of exiting the process.
-
-Every command is reachable two ways, and both go through a ``main(argv) -> int``
-that the console entry point and the tests call directly. Typer exits the
-interpreter instead of returning, so this converts the one into the other.
-
-Catching ``SystemExit`` is what does it: Typer vendors Click privately, so there
-is no supported way to ask it not to exit, and this leaves Typer to render usage
-errors itself.
-"""
+"""Runs a Typer app and returns its exit code instead of exiting the process."""
 
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -22,10 +13,7 @@ def new_app(**kwargs: Any) -> typer.Typer:
 
 def run(app: typer.Typer, argv: Sequence[str] | None, *, prog_name: str) -> int:
     """Invoke *app* over *argv* and give back the code it exited with.
-
-    *prog_name* is what usage and help text calls the command, so a standalone
-    entry point passes its own name and the group passes ``kspplus``.
-    """
+    *prog_name* is what usage and help text calls the command."""
     try:
         typer.main.get_command(app).main(args=argv, prog_name=prog_name)
     except SystemExit as exit_:
@@ -35,11 +23,7 @@ def run(app: typer.Typer, argv: Sequence[str] | None, *, prog_name: str) -> int:
 
 
 def standalone(register: Callable[[typer.Typer], None], prog: str) -> Callable[..., int]:
-    """The ``main`` a command's own entry point calls, around an app of one.
-
-    Built here rather than in each command module so the Typer settings the two
-    ways in share are written once and cannot drift apart.
-    """
+    """The ``main`` a command's own entry point calls, around an app of one."""
     app = new_app()
     register(app)
 

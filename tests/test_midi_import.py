@@ -1,11 +1,4 @@
-"""Turning a MIDI file into patterns.
-
-Milestones M5 and M6. Assertions are on :class:`~ksp.midi_import.Placement` and
-:class:`~ksp.midi_import.SongPlan` data rather than on a re-parsed project, with
-the exceptions that are the point of the milestones: the changed-key diffs are
-held to M4's hardware-measured recipes, and the round trips go back out through
-the M2 reader.
-"""
+"""Turning a MIDI file into patterns."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -60,20 +53,8 @@ def steps_of(result: midi_import.ImportResult) -> list[tuple[int, int, int]]:
     return [(note.step, note.pitch, note.velocity) for note in result.notes]
 
 
-# --- The measured recipe ---------------------------------------------------
-
-
 def test_one_note_writes_exactly_the_m4_recipe(load_sample: Loader) -> None:
-    """A one-note clip produces the device's own 8-key placement diff.
-
-    ``PLACEMENT_RECIPE`` is what the KeyStep Pro wrote when a human placed one
-    note, so this ties the converter to a hardware measurement rather than to
-    our own idea of what a note is.
-
-    The note is half a step long because that is the gate a freshly placed one
-    carries: M6 takes the gate from the source, so a clip written at any other
-    length would differ from the capture in ``110`` and nowhere else.
-    """
+    """A one-note clip produces the device's own 8-key placement diff."""
     base = load_sample("baseline.KeyStepPro")
     result = midi_import.convert(
         clip_of([(0, 60, 100)], length=TICKS_PER_STEP // 2), base, track=2, pattern=1
@@ -83,16 +64,10 @@ def test_one_note_writes_exactly_the_m4_recipe(load_sample: Loader) -> None:
 
 
 def test_a_non_default_step_size_writes_the_pattern_bitfield(load_sample: Loader) -> None:
-    """One key beyond the recipe, and only when the grid is not the default.
-
-    Without it the device would play a clip quantised at 1/32 on its 1/16
-    grid: the file loads, the notes are all present, and it runs at half
-    speed. Bits 3-4 of 99, measured by T5.1.
-    """
+    """One key beyond the recipe, and only when the grid is not the default."""
     base = load_sample("baseline.KeyStepPro")
     options = ImportOptions(steps_per_beat=8)
-    # Half a step at this grid, so the gate is the recipe's and only the
-    # bitfield differs from it.
+    # Half a step at this grid, so only the bitfield differs from the recipe.
     result = midi_import.convert(
         clip_of([(0, 60, 100)], length=TICKS_PER_BEAT // 8 // 2),
         base,
@@ -129,9 +104,6 @@ def test_conversion_leaves_the_template_untouched(load_sample: Loader) -> None:
     midi_import.convert(clip_of([(0, 60, 100)]), template)
 
     assert template == before
-
-
-# --- Reading a MIDI file ---------------------------------------------------
 
 
 def test_read_clip_pairs_note_offs() -> None:
@@ -216,9 +188,6 @@ def test_a_non_contiguous_selection_arrives_in_file_order() -> None:
     assert [clip.notes[0].pitch for clip in song.clips] == [60, 62, 67]
 
 
-# --- Quantising ------------------------------------------------------------
-
-
 def test_notes_land_on_their_steps(load_sample: Loader) -> None:
     events = [(step * TICKS_PER_STEP, 60 + step, 100) for step in range(4)]
     result = midi_import.convert(clip_of(events), load_sample("Default.KeyStepPro"))
@@ -264,12 +233,7 @@ def test_a_clip_starting_at_zero_is_not_anchored(load_sample: Loader) -> None:
 
 
 def test_simultaneous_notes_are_all_kept(load_sample: Loader) -> None:
-    """The pool is an event list, not a step grid, so a chord is just notes.
-
-    M5 kept the highest and counted the rest as dropped. Nothing in the format
-    justified that: notes sharing a step are consecutive ordinals with the same
-    ``50``, and the ceiling is 192 events per pattern (spec 4).
-    """
+    """The pool is an event list, not a step grid, so a chord is just notes."""
     events = [(0, 60, 100), (0, 67, 90), (0, 64, 80)]
     result = midi_import.convert(clip_of(events), load_sample("Default.KeyStepPro"))
 
@@ -288,8 +252,7 @@ def test_notes_past_the_last_step_are_dropped(load_sample: Loader) -> None:
 
 
 def test_a_notes_length_becomes_its_gate(load_sample: Loader) -> None:
-    """M5 wrote every note at the fresh gate. The ladder is measured, so M6
-    carries the real length (spec 6.1)."""
+    """M5 wrote every note at the fresh gate."""
     midi = mido.MidiFile(type=0, ticks_per_beat=TICKS_PER_BEAT)
     track = mido.MidiTrack()
     midi.tracks.append(track)
@@ -351,8 +314,9 @@ def test_options_refuse_impossible_values(options: dict[str, Any]) -> None:
 
 
 def test_a_mutable_selection_is_copied_rather_than_aliased() -> None:
-    """Swift's ``Set`` is a value type, so the frozen options must be too:
-    aliased, a later mutation would slip past the check that already ran."""
+    """Swift's ``Set`` is a value type, so the frozen options must be too: aliased, a later mutation
+    would slip past the check that already ran.
+    """
     given = {1}
     options = ImportOptions(midi_tracks=given)
     given.add(0)
@@ -367,14 +331,8 @@ def test_a_selected_track_below_one_is_named_by_the_option() -> None:
         ImportOptions(midi_tracks=frozenset({1, 0}))
 
 
-# --- Writing into a project ------------------------------------------------
-
-
 def test_the_step_active_flag_is_indexed_by_step(load_sample: Loader) -> None:
-    """48 is step-indexed and lives in slot 1, while the pool is note-indexed.
-
-    Two notes two steps apart light steps 1 and 3, never 1 and 2.
-    """
+    """48 is step-indexed and lives in slot 1, while the pool is note-indexed."""
     result = midi_import.convert(
         clip_of([(0, 60, 100), (2 * TICKS_PER_STEP, 64, 100)]),
         load_sample("Default.KeyStepPro"),
@@ -413,9 +371,6 @@ def test_track_must_be_one_of_the_devices_four(load_sample: Loader, track: int) 
         midi_import.convert(clip_of([(0, 60, 100)]), load_sample("Default.KeyStepPro"), track=track)
 
 
-# --- The committed clips ---------------------------------------------------
-
-
 def test_the_simple_clip_becomes_sixteen_steps(simple_clip: Path, load_sample: Loader) -> None:
     result = midi_import.convert(
         mido.MidiFile(simple_clip), load_sample("Default.KeyStepPro"), track=1
@@ -444,10 +399,7 @@ def test_the_chord_clip_keeps_every_voice(chord_clip: Path, load_sample: Loader)
 def test_the_simple_clip_round_trips_through_the_reader(
     simple_clip: Path, load_sample: Loader
 ) -> None:
-    """M5 out, M2's reader back in: the desk check issue #7 asks for.
-
-    Step, pitch and velocity only -- note lengths are not carried, by design.
-    """
+    """M5 out, M2's reader back in: the desk check issue #7 asks for."""
     result = midi_import.convert(
         mido.MidiFile(simple_clip), load_sample("Default.KeyStepPro"), track=1
     )
@@ -461,19 +413,13 @@ def test_the_simple_clip_round_trips_through_the_reader(
     assert all(note.active for note in notes)
 
 
-# --- M6: whole files ------------------------------------------------------
-
-
 def song_of(
     tracks: list[list[tuple[int, int, int]]],
     *,
     length: int = TICKS_PER_STEP,
     channels: list[int] | None = None,
 ) -> mido.MidiFile:
-    """A type 1 file, one track per list of ``(tick, pitch, velocity)``.
-
-    *channels* gives one channel per track, counting from 0.
-    """
+    """A type 1 file, one track per list of ``(tick, pitch, velocity)``."""
     midi = mido.MidiFile(type=1, ticks_per_beat=TICKS_PER_BEAT)
     for number, events in enumerate(tracks):
         channel = channels[number] if channels else 0
@@ -523,8 +469,7 @@ def test_a_selection_wider_than_the_device_is_reported(load_sample: Loader) -> N
 
 
 def test_a_track_longer_than_one_pattern_is_split_and_chained(load_sample: Loader) -> None:
-    """128 steps is two patterns, not a truncation. The chain is what makes
-    them one sequence -- the device stores no other arrangement."""
+    """128 steps is two patterns, not a truncation."""
     events = [(step * TICKS_PER_STEP, 60, 100) for step in range(128)]
     result = midi_import.convert_song(song_of([events]), load_sample("Default.KeyStepPro"))
 
@@ -543,14 +488,7 @@ def test_a_track_longer_than_one_pattern_is_split_and_chained(load_sample: Loade
 def test_a_note_past_the_first_pool_chunk_still_plays_on_every_pass(
     load_sample: Loader,
 ) -> None:
-    """``49`` is step-indexed and lives wholly in chunk 1, like ``48``.
-
-    One entry per step and at most 64 steps fills a chunk exactly, so it has
-    nothing to spill; chunks 2 and 3 read 0 in every sample file, and Arturia's
-    own descriptor fixes the middle index of both at [1] (spec 4). Reading it
-    from the note's own chunk reported a pattern's 65th note as playing on no
-    pass at all -- which nothing before M6 could produce.
-    """
+    """``49`` is step-indexed and lives wholly in chunk 1, like ``48``."""
     events = [(step * TICKS_PER_STEP, 60 + voice, 100) for step in range(32) for voice in range(3)]
     result = midi_import.convert_song(song_of([events]), load_sample("Default.KeyStepPro"))
     project = reader.read_project(result.raw, source_name="spilled")
@@ -610,8 +548,7 @@ def test_a_drum_pitch_outside_the_map_is_dropped_and_counted(load_sample: Loader
 
 
 def test_an_unset_drum_map_is_fitted_to_the_source(load_sample: Loader) -> None:
-    """The real map is device state, so writing drums means assuming one. The
-    factory default would drop every source that does not start at 36."""
+    """The real map is device state, so writing drums means assuming one."""
     midi = song_of([[(0, 31, 100), (TICKS_PER_STEP, 34, 100)]])
     result = midi_import.convert_song(
         midi, load_sample("Default.KeyStepPro"), options=ImportOptions(drum_track=1)
@@ -681,9 +618,6 @@ def test_every_target_pattern_is_checked_before_anything_is_written(
         midi_import.convert_song(song_of([events]), occupied)
 
 
-# --- M6: fitting the timing ------------------------------------------------
-
-
 def swung(percent: int, steps: int = 16) -> mido.MidiFile:
     """One note per step, displaced exactly as the export would displace it."""
     events = []
@@ -697,8 +631,9 @@ def swung(percent: int, steps: int = 16) -> mido.MidiFile:
 def test_a_swung_clip_comes_back_as_the_swing_it_was_made_with(
     percent: int, load_sample: Loader
 ) -> None:
-    """The fit inverts ``midi_export.swing_delay``, so the two agree by
-    construction rather than by coincidence (Timing_Calibration 3.2)."""
+    """The fit inverts ``midi_export.swing_delay``, so the two agree by construction rather than by
+    coincidence (Timing_Calibration 3.2).
+    """
     result = midi_import.convert_song(swung(percent), load_sample("Default.KeyStepPro"))
 
     assert result.plan.tracks[0].placements[0].swing_percent == percent
@@ -708,11 +643,7 @@ def test_a_swung_clip_comes_back_as_the_swing_it_was_made_with(
 def test_swing_survives_a_round_trip_through_the_exporter(
     percent: int, load_sample: Loader
 ) -> None:
-    """Out through ksp2midi and back in, which is the real check.
-
-    The two directions are written against the same equation; this holds them
-    to it end to end rather than against a clip this file generated itself.
-    """
+    """Out through ksp2midi and back in, which is the real check."""
     template = load_sample("Default.KeyStepPro")
     events = [(step * TICKS_PER_STEP, 60, 100) for step in range(16)]
     written = midi_import.convert_song(song_of([events]), template)
@@ -725,8 +656,9 @@ def test_swing_survives_a_round_trip_through_the_exporter(
 
 
 def test_a_fitted_groove_leaves_nothing_for_time_shift(load_sample: Loader) -> None:
-    """That is the point of fitting swing first: one pattern-level value
-    expresses the groove, so the scarce per-note field stays unspent."""
+    """That is the point of fitting swing first: one pattern-level value expresses the groove, so
+    the scarce per-note field stays unspent.
+    """
     result = midi_import.convert_song(swung(66), load_sample("Default.KeyStepPro"))
 
     assert {note.time_shift for note in result.notes} == {constants.TIME_SHIFT_CENTRE}
@@ -743,8 +675,9 @@ def test_swing_can_be_left_alone(load_sample: Loader) -> None:
 
 
 def test_an_off_grid_note_within_reach_is_stored_as_a_time_shift(load_sample: Loader) -> None:
-    """One unit is 1/400 of a beat -- 1.2 ticks at 480 PPQN, so 12 ticks is
-    exactly 10 of them (spec 6.4)."""
+    """One unit is 1/400 of a beat -- 1.2 ticks at 480 PPQN, so 12 ticks is exactly 10 of them (spec
+    6.4).
+    """
     midi = song_of([[(0, 60, 100), (2 * TICKS_PER_STEP + 12, 64, 100)]])
     result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
 
@@ -754,8 +687,9 @@ def test_an_off_grid_note_within_reach_is_stored_as_a_time_shift(load_sample: Lo
 
 
 def test_a_residual_past_the_shift_range_is_reported(load_sample: Loader) -> None:
-    """The range is a fixed 60 ticks either way, not half a step, so at a 1/4
-    grid most residuals do not fit and the report is the whole point."""
+    """The range is a fixed 60 ticks either way, not half a step, so at a 1/4 grid most residuals do
+    not fit and the report is the whole point.
+    """
     options = ImportOptions(steps_per_beat=1, fit_swing=False)
     midi = song_of([[(0, 60, 100), (TICKS_PER_BEAT + 200, 64, 100)]], length=TICKS_PER_BEAT)
     result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
@@ -773,14 +707,8 @@ def test_time_shift_can_be_turned_off(load_sample: Loader) -> None:
     assert {note.time_shift for note in result.notes} == {constants.TIME_SHIFT_CENTRE}
 
 
-# --- M6: the committed song ------------------------------------------------
-
-
 def test_the_m6_song_converts_whole(m6_song: Path, load_sample: Loader) -> None:
-    """The acceptance file: four tracks, chords, tied notes and a split.
-
-    Its drums sit on an ordinary channel, which is why --drum-track exists.
-    """
+    """The acceptance file: four tracks, chords, tied notes and a split."""
     result = midi_import.convert_song(
         mido.MidiFile(m6_song),
         load_sample("Default.KeyStepPro"),
@@ -842,8 +770,7 @@ def test_the_m6_song_round_trips_through_the_reader(m6_song: Path, load_sample: 
 
 
 def test_the_m6_song_is_all_audible(m6_song: Path, load_sample: Loader) -> None:
-    """Existence is not audibility: a pooled note whose step-active bit is
-    clear is silent (spec 4). Every note this writes must sound."""
+    """Existence is not audibility: a pooled note whose step-active bit is clear is silent."""
     result = midi_import.convert_song(
         mido.MidiFile(m6_song),
         load_sample("Default.KeyStepPro"),
@@ -865,17 +792,10 @@ def test_the_m6_song_never_adds_or_removes_a_key(m6_song: Path, load_sample: Loa
     assert result.raw.keys() == template.keys()
 
 
-# --- M6: source shapes the device cannot take at face value ----------------
-
-
 def mixed_of(
     events: list[tuple[int, int, int]], *, length: int = TICKS_PER_STEP, type: int = 0
 ) -> mido.MidiFile:
-    """A one-track file from ``(tick, pitch, channel)`` triples.
-
-    The shape of a type 0 file off the internet: every instrument on one track,
-    told apart only by its channel.
-    """
+    """A one-track file from ``(tick, pitch, channel)`` triples."""
     midi = mido.MidiFile(type=type, ticks_per_beat=TICKS_PER_BEAT)
     track = mido.MidiTrack()
     midi.tracks.append(track)
@@ -898,11 +818,7 @@ def mixed_of(
 def test_a_track_that_enters_late_keeps_its_place_against_the_others(
     load_sample: Loader,
 ) -> None:
-    """Anchoring each track on its own first note stacked them all on step 1.
-
-    The anchor belongs to the song: one origin for the file, so a part that
-    comes in at bar 3 still comes in at bar 3.
-    """
+    """Anchoring each track on its own first note stacked them all on step 1."""
     bar = 16 * TICKS_PER_STEP
     midi = song_of([[(0, 60, 100)], [(2 * bar, 72, 100)]])
 
@@ -927,9 +843,9 @@ def test_a_part_past_the_first_pattern_lands_in_a_later_one(load_sample: Loader)
 
 
 def test_a_short_track_keeps_its_own_length_beside_a_long_one(load_sample: Loader) -> None:
-    """The device loops each track's chain on its own, so a one-bar part under
-    an eight-bar one repeats against it. That is the sequencer working, not a
-    drift to be padded out to a common length."""
+    """The device loops each track's chain on its own, so a one-bar part under an eight-bar one
+    repeats against it.
+    """
     events = [(step * TICKS_PER_STEP, 60, 100) for step in range(128)]
     midi = song_of([events, [(0, 72, 100)]])
 
@@ -945,11 +861,7 @@ def test_a_short_track_keeps_its_own_length_beside_a_long_one(load_sample: Loade
 def test_a_track_holding_several_channels_becomes_one_device_track_each(
     load_sample: Loader,
 ) -> None:
-    """A type 0 file tells its instruments apart by channel and nothing else.
-
-    Merged, they became one track of interleaved parts -- and the percussion
-    channel went in as melodic pitches.
-    """
+    """A type 0 file tells its instruments apart by channel and nothing else."""
     midi = mixed_of([(0, 60, 0), (0, 72, 1), (TICKS_PER_STEP, 62, 0)])
 
     result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
@@ -986,8 +898,9 @@ def test_the_percussion_channel_of_a_mixed_track_is_still_found(load_sample: Loa
 
 
 def test_a_named_drum_track_keeps_every_channel_it_holds(load_sample: Loader) -> None:
-    """--drum-track names a track of the file, so splitting it by channel must
-    not leave half its kit behind on another device track."""
+    """--drum-track names a track of the file, so splitting it by channel must not leave half its
+    kit behind on another device track.
+    """
     midi = mixed_of([(0, 36, 0), (TICKS_PER_STEP, 38, 3)])
     options = ImportOptions(drum_track=1, drum_map=DrumMap.chromatic(36))
 
@@ -1000,10 +913,7 @@ def test_a_named_drum_track_keeps_every_channel_it_holds(load_sample: Loader) ->
 def test_more_notes_on_a_step_than_the_firmware_holds_is_refused_in_planning(
     load_sample: Loader,
 ) -> None:
-    """The writer refused this from underneath, after every decision was made.
-
-    Refusing it while planning is what names the step the user has to thin.
-    """
+    """The writer refused this from underneath, after every decision was made."""
     events = [(0, 40 + voice, 100) for voice in range(constants.MAX_NOTES_PER_STEP + 1)]
 
     with pytest.raises(ValueError, match="step 1"):
@@ -1011,9 +921,9 @@ def test_more_notes_on_a_step_than_the_firmware_holds_is_refused_in_planning(
 
 
 def test_a_timecode_division_file_is_refused() -> None:
-    """mido reads the division field signed, so an SMPTE file arrives with a
-    negative ticks_per_beat and every tick calculation inverts. Unguarded, it
-    converted in silence with the whole clip piled onto step 1."""
+    """mido reads the division field signed, so an SMPTE file arrives with a negative ticks_per_beat
+    and every tick calculation inverts.
+    """
     midi = song_of([[(0, 60, 100), (TICKS_PER_STEP, 62, 100)]])
     midi.ticks_per_beat = -7600
 
@@ -1036,8 +946,9 @@ def test_a_type_two_file_is_refused() -> None:
 def test_a_tempo_the_device_cannot_run_is_held_to_its_range(
     source: float, written: float, load_sample: Loader
 ) -> None:
-    """The three chunks store about 20,971 BPM, so the field is no guide to
-    what the hardware will play."""
+    """The three chunks store about 20,971 BPM, so the field is no guide to what the hardware will
+    play.
+    """
     midi = song_of([[(0, 60, 100)]])
     midi.tracks[0].insert(0, mido.MetaMessage("set_tempo", tempo=mido.bpm2tempo(source), time=0))
 
@@ -1057,9 +968,6 @@ def test_events_the_device_cannot_store_are_reported(load_sample: Loader) -> Non
 
     dropped = [d for d in result.diagnostics if d.code is Code.CONTROLLERS_DROPPED]
     assert [d.subjects for d in dropped] == [2]
-
-
-# --- #136: routing source tracks onto device tracks ------------------------
 
 
 def routed(result: midi_import.ImportResult) -> list[tuple[int, int | None]]:

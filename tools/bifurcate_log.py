@@ -1,9 +1,4 @@
-"""Bifurcation & Protocol Classifier for KeyStep Pro SysEx Capture Logs.
-
-Takes a capture log (.jsonl) and accurately classifies each packet into
-MCC -> Hardware vs. Hardware -> MCC based on Arturia SysEx opcodes and payloads.
-Fixes logs where MCC connected directly to physical MIDI endpoints.
-"""
+"""Split a SysEx capture log into MCC -> hardware and hardware -> MCC, by opcode."""
 
 import argparse
 import json
@@ -21,23 +16,20 @@ def classify_direction(entry: dict[str, Any]) -> str:
     raw_hex = str(sysex.get("raw_hex", ""))
     payload_hex = str(sysex.get("payload_hex", ""))
 
-    # Universal Identity Request / Reply
     if raw_hex.startswith("7E 7F 06 02"):
         return "HW_TO_MCC"
     if raw_hex.startswith("7E 7F 06 01"):
         return "MCC_TO_HW"
 
-    # Arturia Proprietary SysEx (00 20 6B ...)
     if sysex.get("is_arturia"):
-        # ACK (1C 00) or NACK (1D 00) from hardware
+        # ACK (1C 00) or NACK (1D 00).
         if payload_hex.startswith("1C") or payload_hex.startswith("1D"):
             return "HW_TO_MCC"
 
-        # Parameter query/set commands from MCC typically carry 5+ payload bytes (item, param, val)
+        # MCC's parameter query/set commands carry 5+ payload bytes: item, param, value.
         if sysex.get("payload_bytes", 0) >= 5:
             return "MCC_TO_HW"
 
-    # Generic fallback
     if raw_hex.startswith("00 00 66"):
         return "MCC_TO_HW"
 

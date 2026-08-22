@@ -4,13 +4,6 @@ import KSPKit
 import KSPMIDI
 import KSPRun
 
-/// `ksp-swift-cli export` -- write a `.KeyStepPro` project out as MIDI. A port of
-/// `src/ksp_cli/export.py`, which installs as `ksp2midi`.
-///
-/// All the rendering lives in `KSPMIDI` and the body in ``ExportRunner``; this is the argument
-/// surface and nothing else. Warnings go to stderr and the summary to stdout, so a pipeline can
-/// take the summary while a human still sees what the export was unsure about. The file is written
-/// either way -- an undecodable gate length is a caveat, not a failure.
 struct Export: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "export",
@@ -29,7 +22,6 @@ struct Export: ParsableCommand {
         case three = "3"
         case four = "4"
 
-        /// The number, or `nil` for `auto` -- which is what `ExportOptions` wants for it.
         var count: Int? { Int(rawValue) }
     }
 
@@ -166,8 +158,8 @@ struct Export: ParsableCommand {
                 patterns, option: "--patterns", limit: Constants.patternsPerTrack)
             parsedFlatVelocity = try parseFlatVelocity(flatVelocity)
         } catch {
-            // Through the runner's own failure shape rather than `ValidationError`, so the wording
-            // matches `ksp2midi`'s byte for byte -- ArgumentParser's would not.
+            // The runner's failure shape, not `ValidationError`: only it matches `ksp2midi` byte
+            // for byte.
             return try emit(RunResult.failure(ExportRunner.prog, "\(error)", code: 2))
         }
 

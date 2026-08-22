@@ -1,19 +1,4 @@
-"""``ksp-pull`` -- read a project off an attached KeyStep Pro over USB.
-
-The read lives in :mod:`ksp.bulk_read` and the protocol in :mod:`ksp.sysex`;
-this module handles arguments, the transport, paths and what gets printed. What
-comes back off the wire is the same flat dict ``lenient_json`` parses out of a
-file, so writing it is a canonical key order and a ``dump_path``, nothing more.
-
-MIDI Control Center is the only other way to get this file, and it wants a
-Recall To and an export for each one. This asks the device directly.
-
-The default walk is ``ksp.bulk_fast``'s: the same addresses MCC reads, coalesced
-into requests of up to 64 values and skipping what the existence array has
-already settled. H1.3 measured a request period that does not move with the
-payload, so that is about a thousand requests rather than 8,951 -- ten seconds
-against thirty-eight. ``--mcc-plan`` walks MCC's own stream instead.
-"""
+"""``ksp-pull`` -- read a project off an attached KeyStep Pro over USB."""
 
 from pathlib import Path
 from time import monotonic
@@ -45,11 +30,7 @@ _DEVICE_PANEL = "Device"
 
 
 class _Counted:
-    """The transport, with its requests counted for the summary.
-
-    Counting belongs here rather than in ``bulk_read``: how many frames a walk
-    costs is something to print, and ``ksp`` does not print.
-    """
+    """The transport, with its requests counted for the summary."""
 
     def __init__(self, inner: Transport) -> None:
         self._inner = inner
@@ -65,10 +46,7 @@ class _Counted:
 
 def _version(transport: Transport) -> str:
     """The firmware version, which no read address carries.
-
-    A project MCC exported holds one, so a byte-identical file needs the
-    identity request even though nothing in the read plan supplies it.
-    """
+    A project MCC exported holds one, so a byte-identical file needs this request."""
     reply = transport.exchange(sysex.IDENTITY_REQUEST)
     try:
         return sysex.parse_identity(reply)
@@ -147,12 +125,11 @@ def pull_command(
     verbose: VerboseInPanel = False,
 ) -> None:
     # From the top, not from the first frame: the 3.5 MB template parse and the
-    # write of the same size are most of a run that is not at the device, and a
-    # total that quietly left them out would be the wrong number to plan around.
+    # write of the same size are most of a run that is not at the device.
     began = monotonic()
 
-    # Before the device is touched: a read costs ten seconds and the operator's
-    # attention, and refusing it afterwards wastes both.
+    # Before the device is touched: a read costs ten seconds of the operator's
+    # attention, and refusing it afterwards wastes them.
     if output.exists() and not force:
         fail(f"{output} already exists (use --force to overwrite)", prog=PROG, code=1)
 
@@ -161,9 +138,7 @@ def pull_command(
     opened = monotonic()
     try:
         with UsbMidiTransport(timeout_ms=timeout) as device:
-            # The identity request is asked outside the count: what the summary
-            # reports is the size of the walk, which is the figure spec 7.8
-            # states and the one worth comparing a run against.
+            # Outside the count: the summary reports the size of the walk.
             version = DEFAULT_VERSION if no_identity else _version(device)
             transport = _Counted(device)
             raw = read_raw(transport, template_keys, version=version, fast=not mcc_plan, slot=slot)
@@ -175,8 +150,7 @@ def pull_command(
         fail(f"slot {slot}: {exc}", prog=PROG, code=1)
     reading = monotonic() - opened
 
-    # What was read has to parse as a project before it is worth writing: the
-    # point of the dump is that the rest of this tool can take it from here.
+    # What was read has to parse as a project before it is worth writing.
     try:
         project = read_project(raw, source_name=str(output))
     except ValueError as exc:

@@ -1,14 +1,4 @@
-"""The ``.KeyStepPro`` key grammar.
-
-All structure in these files lives in the key names -- the JSON itself is one
-flat object with no nesting::
-
-    <itemId>_<paramId>[_<idx1>][_<idx2>][_<idx3>]
-
-Spec section 2. Centralising key construction here means the two index spaces
-(step-indexed vs note-indexed) are the only thing a caller has to think about;
-getting the string right is not also their problem.
-"""
+"""The ``.KeyStepPro`` key grammar: ``<itemId>_<paramId>[_<idx1>][_<idx2>][_<idx3>]`` (spec 2)."""
 
 from collections.abc import Mapping
 from functools import lru_cache
@@ -41,15 +31,7 @@ def key(item: int, param: int, *indices: int) -> str:
 
 def get_int(raw: Mapping[str, Any], item: int, param: int, *indices: int) -> int | None:
     """Read one integer value, or ``None`` if the key is absent.
-
-    Absent is meaningful rather than exceptional: only item 123 carries drum
-    parameters (spec section 3.2), so probing one that may not apply gets
-    ``None`` rather than a lookup error.
-
-    Raises:
-        TypeError: if the key exists but does not hold an integer -- a file
-            shaped unlike every sample we have, worth surfacing loudly.
-    """
+    Absent is meaningful: only item 123 carries drum parameters (spec 3.2)."""
     k = key(item, param, *indices)
 
     value = raw.get(k)
@@ -64,12 +46,7 @@ def read_array(
     raw: dict[str, Any], item: int, param: int, *prefix: int, length: int
 ) -> list[int | None]:
     """Read a 1-based indexed array as a 0-based Python list.
-
-    The trailing index in these files runs 1..N (step 1..64, or note ordinal
-    1..64). The returned list is ordinary 0-based, so ``result[0]`` is the
-    file's index 1. Every caller wants one convention or the other and mixing
-    them is how the two index spaces get confused in the first place.
-    """
+    ``result[0]`` is the file's index 1."""
     base_key = key(item, param, *prefix) + "_"
 
     result: list[int | None] = [None] * length
