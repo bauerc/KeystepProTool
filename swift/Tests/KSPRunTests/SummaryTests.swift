@@ -4,12 +4,7 @@ import Testing
 
 @testable import KSPRun
 
-/// ``SummaryRunner`` and ``ProjectSummary``: what the app shows about a project before converting
-/// it. No Python twin -- this renders no text.
-///
-/// `project_5`'s counts are the hand-transcribed ground truth in `tests/fixtures/`. The rest are the
-/// Python reference implementation's answer for the same file, which is what the port is measured
-/// against everywhere else.
+/// `project_5`'s counts are the hand-transcribed ground truth in `tests/fixtures/`.
 @Suite struct SummaryTests {
     static func summarise(_ name: String) throws -> ProjectSummary {
         let result = SummaryRunner.run(
@@ -18,11 +13,7 @@ import Testing
         return try #require(result.summary)
     }
 
-    // MARK: - Shape
-
     @Test func itReportsEveryTrackAndEveryPatternSlot() throws {
-        // Including the empty ones: a grid draws all four tracks against all sixteen slots whether
-        // or not anything was ever recorded in them.
         let summary = try Self.summarise("user_empty_project.KeyStepPro")
         #expect(summary.tracks.count == 4)
         #expect(summary.tracks.map(\.number) == [1, 2, 3, 4])
@@ -42,23 +33,16 @@ import Testing
         #expect(summary.currentScene == 1)
     }
 
-    // MARK: - Tracks
-
     @Test func itNamesATrackAsTheExportedFileNamesIt() throws {
         let summary = try Self.summarise("project_5.KeyStepPro")
-        // Track 1 is the only one that can be in drum mode -- parameter 86 bit 6 is DRUM there and
-        // presumably ARP elsewhere, which the reader does not claim to decode.
         #expect(summary.tracks[0].name == "Track 1 (drum)")
         #expect(summary.tracks[0].mode == .drum)
         #expect(summary.tracks[2].name == "Track 3")
         #expect(summary.tracks[2].mode == .sequencer)
     }
 
-    // MARK: - Patterns
-
     @Test func itCountsTheNotesTheDescriptionRecords() throws {
-        // tests/fixtures/project_5.expected.json: two triggers on track 1 pattern 1, and the ten
-        // melodic notes on track 3 pattern 1 that prove the two index spaces.
+        // From tests/fixtures/project_5.expected.json.
         let summary = try Self.summarise("project_5.KeyStepPro")
         let drum = summary.tracks[0].patterns[0]
         #expect(drum.noteCount == 2)
@@ -71,7 +55,6 @@ import Testing
         #expect(melodic.mode == .seq)
         #expect(melodic.isEnabled)
 
-        // Everything else in the file is an untouched slot.
         #expect(summary.tracks[1].isEmpty)
         #expect(summary.tracks[3].isEmpty)
         #expect(summary.tracks[0].patterns.dropFirst().allSatisfy { $0.isEmpty })
@@ -85,8 +68,7 @@ import Testing
     }
 
     @Test func itKeepsTheHasDataLatchApartFromEmptiness() throws {
-        // project_9's first pattern has parameter 40 set while holding no notes -- the reader warns
-        // about the reverse, and this is the case that stops "empty" and "has data" being one field.
+        // project_9's first pattern has parameter 40 set while holding no notes.
         let summary = try Self.summarise("project_9.KeyStepPro")
         let pattern = summary.tracks[0].patterns[0]
         #expect(pattern.hasData)
@@ -96,19 +78,14 @@ import Testing
     }
 
     @Test func itCountsWhatIsSwitchedOnRatherThanWhatThePoolHolds() throws {
-        // initial_project is the only sample holding disabled notes: steps turned off, or notes
-        // sitting past the last step. A preview that counted the pool alone would promise notes the
-        // export then drops.
+        // initial_project is the only sample holding disabled notes.
         let summary = try Self.summarise("initial_project.KeyStepPro")
-        // Its first pattern is the extreme case: 76 in the pool, 8 switched on. 64 of them are
-        // melodic leftovers from before the track was switched to drums -- so the mode is the live
-        // set's, drum -- and 4 of the 12 triggers sit on steps that are turned off.
+        // 64 of the 76 are melodic leftovers from before the track was switched to drums.
         let crowded = summary.tracks[0].patterns[0]
         #expect(crowded.mode == .drum)
         #expect(crowded.noteCount == 76)
         #expect(crowded.enabledNoteCount == 8)
         #expect(crowded.stepCount == 16)
-        // Disabled is not absent -- the notes are still in the pool, and still not empty.
         #expect(!crowded.isEmpty)
         #expect(crowded.isEnabled)
         #expect(
@@ -116,11 +93,8 @@ import Testing
         )
     }
 
-    // MARK: - Chains
-
     @Test func itReportsNoChainWhereTheFileHoldsNone() throws {
-        // No sample in the repository chains anything -- every slot of every scene holds the
-        // sentinel -- so this is the whole corpus's answer, not one file's.
+        // No sample in the repository chains anything, so this is the whole corpus's answer.
         for name in ["project_5.KeyStepPro", "project_9.KeyStepPro", "initial_project.KeyStepPro"] {
             let summary = try Self.summarise(name)
             #expect(summary.tracks.allSatisfy { $0.chain.isEmpty })
@@ -129,8 +103,7 @@ import Testing
     }
 
     @Test func itGivesEveryChainedPatternTheChainItSitsIn() {
-        // Built here rather than read: the corpus has no chain to read, and the wiring from the
-        // current Scene down to a Pattern is exactly what would otherwise go untested.
+        // Built here rather than read: the corpus has no chain to read.
         let project = Project(
             device: "KeyStep Pro", version: nil, tempoBPM: 120, globalSwingPercent: 50,
             currentScene: 2,
@@ -146,12 +119,9 @@ import Testing
         #expect(summary.tracks[0].patterns[0].chain == [3, 1, 2])
         #expect(summary.tracks[0].patterns[2].chain == [3, 1, 2])
         #expect(summary.tracks[0].patterns[3].chain.isEmpty)
-        // A track nobody chained is unchained, whatever its neighbours do.
         #expect(summary.tracks[1].chain.isEmpty)
         #expect(summary.tracks[1].patterns.allSatisfy { $0.chain.isEmpty })
     }
-
-    // MARK: - Failure
 
     @Test func itReportsAnUnreadableFileInsteadOfAnEmptySummary() {
         let missing = SummaryRunner.run(
@@ -159,7 +129,6 @@ import Testing
         #expect(missing.summary == nil)
         #expect(missing.message?.isEmpty == false)
 
-        // A real file that is not a project: the failure is the format's, not the filesystem's.
         let wrongFormat = SummaryRunner.run(
             SummaryRunner.Options(path: RepoData.projectFiles.appending(path: "test_file.mid")))
         #expect(wrongFormat.summary == nil)
@@ -167,7 +136,6 @@ import Testing
     }
 }
 
-/// Sixteen empty pattern slots on a track, which is all a chain test needs under them.
 private func chainTrack(_ number: Int) -> Track {
     Track(
         number: number, itemID: Constants.trackItemIDs[number - 1],

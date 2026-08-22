@@ -1,12 +1,6 @@
 import Foundation
 import Testing
 
-/// The exit codes, asserted against the built binary rather than against ``DumpRunner``.
-///
-/// They are load-bearing and shared with the Python CLI -- **0 success, 1 file or format failure,
-/// 2 usage failure** -- and the mapping from a parser error to 2 lives in the `@main` entry point,
-/// which nothing else reaches. ArgumentParser's own default for a usage error is 64, so this is
-/// the test that would catch the entry point being replaced by a plain `main()`.
 @Suite struct ExitCodeTests {
     @Test func aGoodRunSucceeds() throws {
         #expect(try Self.run(["dump", Self.project]).code == 0)
@@ -30,8 +24,6 @@ import Testing
         #expect(result.stderr.contains("'--track' must be in 1...4"))
     }
 
-    /// Export's selection is parsed in the command body rather than by `validate()`, so that the
-    /// wording matches `ksp2midi`'s; this is the test that it still leaves through exit code 2.
     @Test func aMalformedExportSelectionIsTwo() throws {
         let result = try Self.run(["export", Self.project, "--tracks", "bad"])
         #expect(result.code == 2)
@@ -39,7 +31,6 @@ import Testing
             result.stderr == "ksp-swift-cli export: --tracks: 'bad' is not a number or a range\n")
     }
 
-    /// The range is checked where the export options are built, so both CLIs name the same limit.
     @Test(arguments: ["0", "11"]) func aRepeatCountOutsideItsRangeIsTwo(_ count: String) throws {
         let result = try Self.run(["export", Self.project, "--repeat", count])
         #expect(result.code == 2)
@@ -47,15 +38,12 @@ import Testing
     }
 
     @Test func flatVelocityFreshSucceeds() throws {
-        // --dry-run: this runs against the real project_files/ fixture, not a scratch copy, so
-        // nothing here may actually write a .mid beside it.
+        // --dry-run: this runs against the real fixture, so nothing here may write beside it.
         #expect(
             try Self.run(["export", Self.project, "--flat-velocity", "fresh", "--dry-run"]).code
                 == 0)
     }
 
-    /// Parsed in the command body, same as `--tracks`, so a word that is neither `fresh` nor a
-    /// number is refused before the export options are even built.
     @Test func flatVelocityNeitherFreshNorANumberIsTwo() throws {
         let result = try Self.run(["export", Self.project, "--flat-velocity", "loud"])
         #expect(result.code == 2)
@@ -64,7 +52,6 @@ import Testing
                 == "ksp-swift-cli export: --flat-velocity: 'loud' is not 'fresh' or a velocity\n")
     }
 
-    /// The range is checked where the export options are built, so both CLIs name the same limit.
     @Test(arguments: ["0", "128"]) func flatVelocityOutsideItsRangeIsTwo(_ value: String) throws {
         let result = try Self.run(["export", Self.project, "--flat-velocity", value])
         #expect(result.code == 2)
@@ -85,15 +72,9 @@ import Testing
         #expect(try Self.run([]).code == 2)
     }
 
-    // MARK: - Running it
-
     static let project = RepoData.projectFiles.appending(path: "project_5.KeyStepPro").path
 
-    /// Where SwiftPM put the executable.
-    ///
-    /// Resolved from the package directory rather than from `Bundle`: under the Command Line
-    /// Tools, Swift Testing's process is the `swiftpm` helper, so `Bundle.main` points into the
-    /// toolchain and `allBundles` never sees the `.xctest` beside the binary.
+    /// From the package directory, not `Bundle`: under the CLT `Bundle.main` is the swiftpm helper.
     static let executable: URL = {
         let build = RepoData.root.appending(path: "swift/.build")
         let debug = build.appending(path: "debug/ksp-swift-cli")

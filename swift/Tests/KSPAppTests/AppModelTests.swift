@@ -3,17 +3,14 @@ import Testing
 
 @testable import KSPApp
 
-/// The staged phase: a drop no longer writes, and the write happens when Convert says so.
 @MainActor
 @Suite struct AppModelTests {
-    /// What was handed to Finder, instead of handing it to Finder. A class so the model and the
-    /// test share the one instance.
+    /// A class so the model and the test share the one instance.
     private final class RevealLog {
         var revealed: [[URL]] = []
     }
 
-    /// Destinations the test owns, so nothing reaches MCC's Templates folder; a reveal that records
-    /// rather than opening a window; and a folder panel that never opens.
+    /// Destinations the test owns, so nothing reaches MCC's Templates folder.
     private func model(writingInto directory: URL, revealing log: RevealLog = RevealLog())
         -> AppModel
     {
@@ -46,8 +43,6 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
     }
 
-    /// The name is typed before the write, so the file is created under it rather than moved
-    /// afterwards -- and the destination on screen follows each keystroke.
     @Test func thePlanFollowsTheNameAsItIsTyped() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -80,7 +75,6 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: written.path))
     }
 
-    /// The never-overwrite ladder now applies to the name the user chose, not the source's stem.
     @Test func atypedNameThatIsTakenStepsAsideAndSaysSo() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -95,8 +89,6 @@ import Testing
         #expect(plan.note?.contains("My Song 2.KeyStepPro") == true)
     }
 
-    /// With the control on, the typed name names the folder the files land in -- the runner names
-    /// the files themselves.
     @Test func thetypedNameNamesTheFolderWhenTheExportSplits() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -111,7 +103,6 @@ import Testing
         #expect(plan.target == directory.appending(path: "My Song"))
     }
 
-    /// The control is off by default, so a drop still plans one file.
     @Test func anexportPlansOneFileUntilTheControlIsSwitched() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -123,8 +114,6 @@ import Testing
         #expect(plan.target == directory.appending(path: "project_5.mid"))
     }
 
-    /// A dry run describes one name, so editing the name drops it rather than leaving a stale
-    /// preview on screen.
     @Test func editingTheNameDiscardsADryRunPreview() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -154,7 +143,6 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
     }
 
-    /// Refused before a runner is called, and before anything is staged.
     @Test func anunconvertibleDropIsRefusedOutright() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -188,11 +176,9 @@ import Testing
             outcome.written.first, "conversion failed: \(outcome.headline)")
         #expect(outcome.wroteFile)
         #expect(FileManager.default.fileExists(atPath: written.path))
-        // Finder is asked to select the whole list, so a split run reveals every file of it.
         #expect(log.revealed == [outcome.written])
     }
 
-    /// A dry run is a look at what would happen, so the file stays staged.
     @Test func adryRunKeepsTheFileStagedAndWritesNothing() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -211,7 +197,6 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
     }
 
-    /// The same file, dry then wet, is the flow the toggle exists for.
     @Test func turningTheDryRunOffAndConvertingAgainWritesTheFile() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -235,19 +220,16 @@ import Testing
     }
 }
 
-/// The two destination folders: chosen independently, obeyed by the staged plan, and remembered.
 @MainActor
 @Suite struct AppModelFolderTests {
     private var midiFixture: URL { RepoData.projectFiles.appending(path: "m6-test-file.mid") }
 
-    /// The real placement rules, so a chosen folder is tested through the routing the app uses --
-    /// safe because a chosen folder is exactly what keeps `forProjects` away from MCC's.
+    /// A chosen folder is exactly what keeps `forProjects` away from MCC's Templates folder.
     private func model(picking picked: URL?, over defaults: UserDefaults) -> AppModel {
         AppModel(
             store: FolderStore(defaults: defaults), reveal: { _ in }, chooseFolder: { _ in picked })
     }
 
-    /// A defaults domain and a folder to pick, both this test's own and both cleaned up after it.
     private func withFolder(_ body: (UserDefaults, URL) throws -> Void) throws {
         try withVolatileDefaults { defaults in
             let chosen = try tempDirectory()
@@ -269,7 +251,6 @@ import Testing
         }
     }
 
-    /// The MIDI folder is set on its own and does not disturb where a project goes.
     @Test func achosenMIDIFolderTakesTheExportWithoutMovingProjects() throws {
         try withFolder { defaults, chosen in
             let model = model(picking: chosen, over: defaults)
@@ -316,8 +297,6 @@ import Testing
         }
     }
 
-    /// The warning stands while the folder is set, which is what "at the moment of choosing" has to
-    /// mean for a choice that outlives the moment.
     @Test func awarningStandsWhileAProjectFolderIsSet() throws {
         try withFolder { defaults, chosen in
             let model = model(picking: chosen, over: defaults)
@@ -331,7 +310,6 @@ import Testing
         }
     }
 
-    /// A MIDI folder says nothing about MCC: the Project Browser never lists `.mid` files.
     @Test func achosenMIDIFolderIsNotWarnedAbout() throws {
         try withFolder { defaults, chosen in
             let model = model(picking: chosen, over: defaults)
@@ -343,7 +321,6 @@ import Testing
     }
 }
 
-/// What a dropped project shows about itself before Convert is pressed.
 @MainActor
 @Suite struct AppModelSummaryTests {
     private func model() -> AppModel {
@@ -359,8 +336,6 @@ import Testing
         RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
     }
 
-    /// The drop stages immediately and the read follows, so a 3.5 MB parse never happens between
-    /// the file leaving the cursor and the window redrawing.
     @Test func adroppedProjectIsStagedLoadingAndThenSummarised() async throws {
         let model = model()
 
@@ -378,7 +353,6 @@ import Testing
         #expect(summary.tracks.count == 4)
     }
 
-    /// The other direction has no project to read: the staged view shows the plan and nothing else.
     @Test func adroppedMIDIFileHasNothingToSummarise() async throws {
         let model = model()
 
@@ -388,8 +362,6 @@ import Testing
         #expect(try #require(model.staged).summary == .absent)
     }
 
-    /// A project that will not read stays staged and says why -- the window must not offer an empty
-    /// list instead.
     @Test func anunreadableProjectStaysStagedAndShowsTheFailure() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -407,8 +379,6 @@ import Testing
         #expect(message.contains("broken.KeyStepPro"))
     }
 
-    /// The read outlives the drop it was for. Whichever guard catches it, a cancelled drop must not
-    /// be reopened by a summary that arrives afterwards.
     @Test func asummaryArrivingAfterACancelIsDropped() async throws {
         let model = model()
         model.accept(projectFixture)
@@ -424,9 +394,7 @@ import Testing
         }
     }
 
-    /// Dropping the same file again is a new drop, so it is a new read. The staged view keys its
-    /// `.task` on this identity: were it the path, the second drop would wait for a read that never
-    /// started and show a spinner for good.
+    /// The staged view keys its `.task` on this identity, not the path, or a redrop spins forever.
     @Test func redroppingTheSameProjectIsAnewDropAndIsReadAgain() async throws {
         let model = model()
         model.accept(projectFixture)
@@ -447,7 +415,6 @@ import Testing
         }
     }
 
-    /// A dry run is the same drop still staged, so its summary is not read a second time.
     @Test func adryRunKeepsTheSummaryItAlreadyHas() async throws {
         let model = model()
         model.settings.dryRun = true
@@ -463,8 +430,6 @@ import Testing
         #expect(after.preview != nil)
     }
 
-    /// Reading is idempotent: the view drives it from `.task`, which can run again for the same
-    /// staged file.
     @Test func summarisingTwiceKeepsTheFirstAnswer() async throws {
         let model = model()
         model.accept(projectFixture)
@@ -476,7 +441,6 @@ import Testing
         #expect(try #require(model.staged).summary == first)
     }
 
-    /// A drop converts the whole project until the user says otherwise.
     @Test func asummarisedProjectStartsFullyTicked() async throws {
         let model = model()
         model.accept(projectFixture)
@@ -489,7 +453,6 @@ import Testing
         #expect(model.blockReason == nil)
     }
 
-    /// A second drop is a second project, so what was unticked on the first must not carry over.
     @Test func anewDropStartsItsTicksAgain() async throws {
         let model = model()
         model.accept(projectFixture)
@@ -503,8 +466,6 @@ import Testing
         #expect(try #require(model.staged).selection.selectedCells.isEmpty)
     }
 
-    /// A dry run describes one selection, so changing the selection drops it -- the same rule the
-    /// name field follows.
     @Test func untickingSomethingDiscardsAdryRunPreview() async throws {
         let model = model()
         model.settings.dryRun = true
@@ -520,7 +481,6 @@ import Testing
             try #require(model.staged).selection.selectedCells[1] == Set(1...16).subtracting([5]))
     }
 
-    /// Nothing ticked is the one selection there is no export for.
     @Test func anemptySelectionBlocksConvert() async throws {
         let model = model()
         model.accept(projectFixture)
@@ -535,7 +495,6 @@ import Testing
         #expect(model.blockReason == nil)
     }
 
-    /// The button is disabled, but the rule is the model's.
     @Test func ablockedSelectionConvertsNothing() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -553,7 +512,6 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
     }
 
-    /// A MIDI drop has no grid at all, and an unread project has none yet: neither is blocked.
     @Test func adropWithoutAgridIsNeverBlocked() async throws {
         let model = model()
 
@@ -565,8 +523,6 @@ import Testing
         #expect(model.blockReason == nil)
     }
 
-    /// One cell, which no pair of sets could express: project_5 holds notes in slot 1 on the drum
-    /// track and on Track 3, and unticking the drum track's leaves Track 3's alone.
     @Test func convertingWithOneCellUntickedLeavesOnlyThatCellOut() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -590,7 +546,6 @@ import Testing
         #expect(outcome.note == "Excluded: Track 1 (drum) slot 1")
     }
 
-    /// The whole point of the ticks: the export runs over what is left.
     @Test func convertingAtickedProjectExportsOnlyWhatIsTickedAndSaysWhatIsNot() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -610,7 +565,6 @@ import Testing
         }
         #expect(try #require(outcome.written.first).lastPathComponent == "project_5.mid")
         #expect(outcome.note?.contains("Excluded: Track 2") == true)
-        // The runner names the tracks it wrote, and the unticked one is not among them.
         #expect(!outcome.headline.contains("Track 2"))
     }
 }

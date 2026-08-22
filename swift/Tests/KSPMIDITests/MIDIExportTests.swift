@@ -5,45 +5,29 @@ import Testing
 
 @testable import KSPMIDI
 
-/// MIDI export, checked against the hardware-confirmed project descriptions. A port of
-/// `tests/test_midi_export.py`.
-///
-/// `project_5` is the reference case: its notes, velocities, gates and step positions were read off
-/// the device display, so the exported file can be asserted note by note rather than against
-/// another piece of our own code.
-
 /// The 480/4 default: 1/16 steps at 480 ticks per beat.
 private let ticksPerStep = 120
 
-/// project_5 and project_9 carry real skip masks, so anything asserting one pattern's own content
-/// has to say which repeat it means.
 private func onePass() throws -> ExportOptions { try ExportOptions(passes: 1) }
 
-/// Grid only. For tests whose subject is the step size, not the groove.
 private func flat() throws -> ExportOptions { try ExportOptions(applyTimeShift: false) }
 
-/// project_5 Track 3 pattern 1, 0-based. The tenth note sits at step 13, which is what proves the
-/// two index spaces are different.
+/// The tenth note sits at step 13: note index and step index are different spaces.
 private let project5Steps = [0, 1, 2, 3, 4, 5, 6, 7, 8, 12]
 
-/// The same notes' time shifts (+1..+4, -1..-4, 0, +2) in ticks, at the unit tier 8 measured --
-/// 1/400 of a beat, so 1.2 ticks each at 480, rounded.
+/// Tier 8's unit is 1/400 of a beat, so the +1..+4/-1..-4 ramp is 1, 2, 4, 5 ticks at 480.
 private let project5RampTicks = [1, 2, 4, 5, -1, -2, -4, -5, 0, 2]
 
-/// Where those notes land once the shift is applied, which is the default.
 private let rampedStarts = zip(project5Steps, project5RampTicks).map { $0 * ticksPerStep + $1 }
 
 private func project5() throws -> Project { try Samples.project("project_5") }
 private func project9() throws -> Project { try Samples.project("project_9") }
 private func initialProject() throws -> Project { try Samples.project("initial_project") }
 
-/// One pass, so these assertions read the pattern rather than the cycle.
 private func exported5() throws -> ExportResult {
     try MIDIExport.exportProject(project5(), options: onePass())
 }
 
-/// The same, with the time shift left off. project_5 is the only sample carrying a shift, so every
-/// test whose subject is something else reads the grid here rather than the groove.
 private func exported5Flat() throws -> ExportResult {
     try MIDIExport.exportProject(
         project5(), options: ExportOptions(applyTimeShift: false, passes: 1))
@@ -62,15 +46,10 @@ private func exported5Flat() throws -> ExportResult {
         #expect(midi.format == .multipleTracksSynchronous)
     }
 
-    /// Track 1's drum set and a melodic track cannot share a MIDI track: they need different
-    /// channels and their pitch values mean different things -- a lane index is not a MIDI note.
     @Test func eachTrackAndParameterSetBecomesItsOwnMIDITrack() throws {
         #expect(try exported5().trackNames == ["Track 1 (drum)", "Track 3"])
     }
 
-    /// project_5 Track 3 pattern 1, straight from the description file. Beats 1-4 are C2 (48), 5-8
-    /// are C#2 (49), and two D (50) notes sit at beats 9 and 13 -- the second of which is the note
-    /// that proves the two index spaces, since it lives at note index 10 but step 13.
     @Test func melodicNotesMatchTheDocumentedDescription() throws {
         let notes = try played(exported5().midi, "Track 3")
 
@@ -80,17 +59,13 @@ private func exported5Flat() throws -> ExportResult {
         #expect(Set(notes.map(\.channel)) == [2])  // Track 3 -> MIDI channel 3
     }
 
-    /// The tie from beat 9 to beat 12 is stored as gate 4 and lasts 4 steps. That is the evidence
-    /// the displayed gate is a count of steps, which is what makes a duration derivable at all.
     @Test func gateBecomesNoteLengthInSteps() throws {
         let notes = try played(exported5().midi, "Track 3")
         #expect(notes[8].start == 8 * ticksPerStep)
         #expect(notes[8].duration == 4 * ticksPerStep)
-        #expect(notes[9].duration == Arithmetic.pyRound(3.5 * Double(ticksPerStep)))  // gate 3.5
+        #expect(notes[9].duration == Arithmetic.pyRound(3.5 * Double(ticksPerStep)))
     }
 
-    /// Beat 1 has gate 2 but beat 2 repeats the same pitch. The device retriggers; MIDI would be
-    /// left holding one note-on too many. Shortening the earlier note keeps the two equivalent.
     @Test func aGateRunningIntoTheNextNoteIsShortenedNotOverlapped() throws {
         let result = try exported5Flat()
         let notes = try played(result.midi, "Track 3")
@@ -103,11 +78,9 @@ private func exported5Flat() throws -> ExportResult {
         #expect(result.warnings.contains { $0.contains("shortened") })
     }
 
-    /// Kick on beats 1 and 5, velocities 127 and 50, gates 1 and 2.
     @Test func drumLanesMapOntoTheGeneralMIDIPercussionChannel() throws {
         let notes = try played(exported5Flat().midi, "Track 1 (drum)")
 
-        // Lane 0 under the default chromatic-36 map is the GM bass drum.
         #expect(notes.map(\.note) == [DrumMap.defaultChromaticLow, DrumMap.defaultChromaticLow])
         #expect(notes.map(\.channel) == [MIDIExport.drumChannel, MIDIExport.drumChannel])
         #expect(notes.map(\.start) == [0, 4 * ticksPerStep])
@@ -115,8 +88,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(notes.map(\.duration) == [ticksPerStep, 2 * ticksPerStep])
     }
 
-    /// The map is a device global, not project data (spec 3.2.1). Which one was used is therefore
-    /// an assumption, and one the output has to own up to on every export.
     @Test func theDrumMapIsNamedInTheOutputNotLeftImplied() throws {
         #expect(
             try exported5().warnings.contains {
@@ -124,7 +95,6 @@ private func exported5Flat() throws -> ExportResult {
             })
     }
 
-    /// The same lane must follow whatever map the user's device actually has.
     @Test func aCustomDrumMapMovesTheExportedNotes() throws {
         let options = try ExportOptions(drumMap: DrumMap.custom(Array(60..<84)), passes: 1)
         let result = try MIDIExport.exportProject(project5(), options: options)
@@ -132,8 +102,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(result.warnings.contains { $0.contains("custom (assumed - not in file)") })
     }
 
-    /// project_5's melodic notes ramp +1..+4 and -1..-4, and the export says so. Measured by tier 8
-    /// as 1/400 of a beat per unit, so at 480 the ramp is worth one to five ticks either side.
     @Test func timeShiftMovesNotesOffTheGrid() throws {
         let shifted = try played(exported5().midi, "Track 3").map(\.start)
         let grid = try played(exported5Flat().midi, "Track 3").map(\.start)
@@ -142,8 +110,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(grid == project5Steps.map { $0 * ticksPerStep })
     }
 
-    /// The whole of tier 8: R1 at 1/4 and R3 at 1/16 gave the same tick count. Re-clocking the
-    /// pattern to 1/8 moves the steps but must leave each note's displacement alone.
     @Test func theShiftDoesNotScaleWithTheStepSize() throws {
         let eighths = try MIDIExport.exportProject(
             withBits(project5(), raw: 12), options: onePass())
@@ -158,15 +124,12 @@ private func exported5Flat() throws -> ExportResult {
         #expect(offsets == project5RampTicks)
     }
 
-    /// project_5's first kick carries -1, and tick -1 does not exist in MIDI. The note keeps its
-    /// length and the export reports the clip rather than moving an onset quietly.
     @Test func aShiftBeforeTheStartIsHeldAtIt() throws {
         let result = try exported5()
         #expect(try played(result.midi, "Track 1 (drum)")[0].start == 0)
         #expect(result.diagnostics.entries.contains { $0.code == .timeShiftClipped })
     }
 
-    /// R5: swing 75% and shift +50 together came to exactly their sum.
     @Test func swingAndTimeShiftAdd() throws {
         let swung = try withSwing(project5(), 75)
         let both = try MIDIExport.exportProject(swung, options: onePass())
@@ -187,9 +150,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(together == zip(swingAlone, shiftAlone).map(+))
     }
 
-    /// project_9 uses patterns 2 and 3, and pattern 2 on two different tracks. Both tracks'
-    /// pattern 2 must start together, and pattern 3 must follow one 16-step pattern later -- not at
-    /// its own pattern index, which would leave a bar of silence for the pattern nobody used.
     @Test func patternsAreLaidEndToEndAndStayAlignedAcrossTracks() throws {
         let result = try MIDIExport.exportProject(project9(), options: onePass())
         #expect(result.patternNumbers == [2, 3])
@@ -200,33 +160,22 @@ private func exported5Flat() throws -> ExportResult {
         #expect(drums[0].start == 0)
         #expect(melodic[0].start == 0)
         #expect(drums[1].start == 16 * ticksPerStep)
-        #expect(melodic[0].note == 60)  // C3, as documented
-        #expect(drums[0].duration == 4 * ticksPerStep)  // test 1 sets gate 4
+        #expect(melodic[0].note == 60)
+        #expect(drums[0].duration == 4 * ticksPerStep)
     }
 
-    /// Two 16-step patterns at 120 BPM in 1/16 steps: two bars, four seconds.
-    ///
-    /// The Python asserts `midi.length == 4.0`; `swift-midi-file` exposes no duration property, and
-    /// reimplementing mido's tempo walk inside a test would be testing the reimplementation. The
-    /// tick length is what determines the seconds anyway -- 3840 ticks at 480 per beat is 8 beats,
-    /// four seconds at 120 BPM -- and it is the layer this milestone is meant to assert on.
     @Test func theFileLastsAsLongAsItsPatterns() throws {
         let arrangement = try MIDIExport.arrange(
             MIDIExport.renderProject(project9(), options: onePass()))
         #expect(arrangement.lengthTicks == 32 * ticksPerStep)
     }
 
-    /// The seam between two patterns is invisible in a merged export.
-    ///
-    /// project_9 holds patterns 2 and 3, so the second marker also proves the text carries the
-    /// pattern's own number rather than its position in the file.
     @Test func aMarkerNamesTheStartOfEveryPattern() throws {
         let found = try markers(MIDIExport.exportProject(project9(), options: onePass()).midi)
         #expect(found.map(\.tick) == [0, 16 * ticksPerStep])
         #expect(found.map(\.text) == ["pattern 2", "pattern 3"])
     }
 
-    /// The markers sit in front of end-of-track, whose delta shrinks to suit.
     @Test func theConductorTrackStillEndsWhereTheMusicDoes() throws {
         let midi = try MIDIExport.exportProject(project9(), options: onePass()).midi
         let conductor = midi.tracks[0]
@@ -245,7 +194,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(end == 32 * ticksPerStep)
     }
 
-    /// Each file starts at its own tick 0, so its one marker names it there.
     @Test func aSplitFileIsMarkedWithThePatternItHolds() throws {
         let results = try MIDIExport.exportSplit(project9(), options: onePass())
         #expect(
@@ -255,26 +203,18 @@ private func exported5Flat() throws -> ExportResult {
         #expect(results.allSatisfy { markers($0.midi).allSatisfy { $0.tick == 0 } })
     }
 
-    /// project_9 pattern 3's only hit is masked to 32, i.e. the second repeat. The device runs the
-    /// four sequences as repeats of the pattern (spec 5, protocol T5.8), so that note is silent on
-    /// the first pass and sounds on the second -- the whole difference between the repeats reading
-    /// and the pages one.
     @Test func aMaskedNoteLandsOnTheRepeatItPlaysIn() throws {
         let result = try MIDIExport.exportProject(project9())
         let drums = try played(result.midi, "Track 1 (drum)")
 
-        // Pattern 2 has no masks and stays one pass; pattern 3 expands to four, and its note sits
-        // one pass into them.
+        // Pattern 3 expands to four repeats, so its masked note sits one pass into them.
         #expect(drums.map(\.start) == [0, 32 * ticksPerStep])
         #expect(result.warnings.contains { $0.contains("rendered as 4 repeats") })
 
-        // 16 steps of pattern 2, then four 16-step repeats of pattern 3 -- ten seconds at 120 BPM.
         let arrangement = try MIDIExport.arrange(MIDIExport.renderProject(project9()))
         #expect(arrangement.lengthTicks == 80 * ticksPerStep)
     }
 
-    /// Rounding an undecodable gate to the nearest rung would produce a file that loads cleanly and
-    /// plays wrong, so the export uses the length a freshly placed note has and warns.
     @Test func aGateOffTheLadderFallsBackToTheDeviceDefaultAndSaysSo() throws {
         let pattern = try initialProject().track(1).pattern(1)
         let rendering = try MIDIExport.renderPattern(
@@ -290,7 +230,6 @@ private func exported5Flat() throws -> ExportResult {
             })
     }
 
-    /// Anything the reader could not resolve makes a MIDI file that may lie.
     @Test func readerWarningsSurviveIntoTheExport() throws {
         let result = try MIDIExport.exportProject(
             initialProject(), options: ExportOptions(includeStale: true, includeDisabled: true))
@@ -298,9 +237,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(result.warnings.contains { $0.contains("disabled note(s), step turned off") })
     }
 
-    /// One finding, one line. The export's versions of these two say what the reader's say *and*
-    /// name the flag that undoes them, so printing both would be pure repetition. Each must still
-    /// be said exactly once.
     @Test func theExportReplacesAReaderLineRatherThanEchoingIt() throws {
         let diagnostics = try MIDIExport.exportProject(initialProject()).diagnostics
 
@@ -317,14 +253,10 @@ private func exported5Flat() throws -> ExportResult {
             #expect(clashes.isEmpty, "\(readerCode) repeated")
         }
 
-        // And the surviving line is the one that names the flag.
         #expect(diagnostics.messages.contains { $0.contains("--include-stale exports both") })
         #expect(diagnostics.messages.contains { $0.contains("--include-disabled exports them") })
     }
 
-    /// initial_project Track 1 pattern 1 holds a melody *and* a drum pattern. Parameter 86 bit 6
-    /// says the track is in drum mode, so the 64-note melody is leftovers from before it was
-    /// switched over -- notes no hardware would play.
     @Test func onlyTheSetTheDevicePlaysIsExported() throws {
         let project = try initialProject().select(tracks: [1], patterns: [1])
 
@@ -338,9 +270,7 @@ private func exported5Flat() throws -> ExportResult {
         #expect(both.noteCount > live.noteCount)
     }
 
-    /// The flag only decides when *both* sets are populated. A track left in drum mode whose
-    /// pattern holds only a melody must still export that melody -- filtering on the flag alone
-    /// would silently drop real user data. No sample project has this combination, so it is built.
+    /// No sample project pairs drum mode with a melody-only pattern, so the case is built.
     @Test func aPatternHoldingOneSetIsExportedWhateverTheModeFlagSays() throws {
         let melodic = try project5().select(tracks: [3])
         let original = melodic.tracks[0]
@@ -373,8 +303,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(result.noteCount == 10)
     }
 
-    /// Swing percent is decoded; its timing meaning is the standard one. 75% gives the first step
-    /// of a pair three quarters of the pair, so the second starts half a step late.
     @Test func swingDelaysTheSecondStepOfEachPair() throws {
         let swung = try withSwing(project5(), 75)
         let grid = try MIDIExport.exportProject(
@@ -389,10 +317,7 @@ private func exported5Flat() throws -> ExportResult {
         #expect(result.warnings.contains { $0.contains("75% swing") })
     }
 
-    /// Pins the index space, because export and import count steps differently. The note parameter
-    /// numbers steps from 1 and export subtracts one before calling; the import planner is already
-    /// 0-based and calls it directly. Aligning the parity to either caller alone silently unswings
-    /// the other.
+    /// Export subtracts one before calling; the import planner is already 0-based and does not.
     @Test func swingDelayIsZeroBasedAndBothDirectionsShareIt() {
         #expect(MIDIExport.swingDelay(0, 75, 120) == 0)
         #expect(MIDIExport.swingDelay(1, 75, 120) == 60)
@@ -401,8 +326,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(MIDIExport.swingDelay(1, 50, 120) == 0)
     }
 
-    /// The per-pattern value takes precedence on the device (T7.6), so leaving the global out is
-    /// what the hardware does, not caution -- but it still gets named.
     @Test func aGlobalSwingIsReportedRatherThanApplied() throws {
         let base = try project5()
         let swung = Project(
@@ -423,21 +346,18 @@ private func exported5Flat() throws -> ExportResult {
         #expect(!result.warnings.contains { $0.contains("global swing") })
     }
 
-    /// Bits 3-4 of 99, measured by T5.1 -- so nobody has to supply it.
     @Test func stepSizeComesFromThePatternItself() throws {
         let eighths = try MIDIExport.exportProject(
             withBits(project5(), raw: 12), options: flat())
         #expect(try Array(played(eighths.midi, "Track 3").map(\.start).prefix(2)) == [0, 240])
     }
 
-    /// Bit 0, and why the default resolution is divisible by 3.
     @Test func aTripletPatternRendersTwoThirdsOfTheStep() throws {
         let triplets = try MIDIExport.exportProject(
             withBits(project5(), raw: 21), options: flat())
         #expect(try Array(played(triplets.midi, "Track 3").map(\.start).prefix(2)) == [0, 80])
     }
 
-    /// Rand and Walk have no MIDI equivalent, so the export says so (T5.5).
     @Test func aNonForwardDirectionIsReportedNotReordered() throws {
         let walking = try MIDIExport.exportProject(
             withBits(project5(), raw: 84), options: flat())
@@ -453,7 +373,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(try played(result.midi, "Track 1 (drum)")[0].note == 60)
     }
 
-    /// A step that does not land on a whole tick would drift over 64 steps.
     @Test(
         arguments: [
             (0, 480, 10, Constants.defaultGateLength, 1, "at least 1"),
@@ -480,8 +399,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(thrown?.description.contains("repeat must be 1-10") == true)
     }
 
-    /// `defaultGate` names the fallback instead of burying it in the code, and it only ever applies
-    /// to gates that did not decode -- a measured one is never overridden.
     @Test func theFallbackLengthIsTheCallersToName() throws {
         let real = try initialProject().track(1).pattern(1)
         let corrupt = drumGatesOffTheLadder(real)
@@ -492,15 +409,11 @@ private func exported5Flat() throws -> ExportResult {
         let doubled = try MIDIExport.renderPattern(
             corrupt, trackNumber: 1, kind: .drum, options: options)
 
-        // Every gate in the real pattern decodes now, so --default-gate moves nothing.
         #expect(!measured.warnings.contains { $0.contains("default length") })
         #expect(doubled.notes.allSatisfy { $0.durationTicks == ticksPerStep })
         #expect(doubled.warnings.contains { $0.contains("1-step default") })
     }
 
-    /// Merged, every track restarts at each pattern boundary. The device loops each track on its
-    /// own, so once the totals differ the file and the hardware stop agreeing about what plays
-    /// together -- worth saying out loud, because nothing in the .mid reveals it.
     @Test func tracksOfDifferentTotalLengthsAreReported() throws {
         let result = try MIDIExport.exportProject(project9())
         #expect(
@@ -508,12 +421,10 @@ private func exported5Flat() throws -> ExportResult {
                 $0.contains("different total lengths") && $0.contains("drift apart")
             })
 
-        // One track cannot disagree with itself, so the line must not appear.
         let alone = try MIDIExport.exportProject(project9().select(tracks: [1]))
         #expect(!alone.warnings.contains { $0.contains("different total lengths") })
     }
 
-    /// Everything above inspects an in-memory object; a DAW reads bytes.
     @Test func theWrittenFileReadsBackIdentically() throws {
         let result = try exported5()
         let reloaded = try MusicalMIDI1File(data: result.midi.rawData())
@@ -522,13 +433,7 @@ private func exported5Flat() throws -> ExportResult {
     }
 }
 
-/// The arithmetic layer, asserted as plain data rather than parsed MIDI.
-///
-/// This is the half that carries the port's risk; keeping it free of `SwiftMIDIFile` is what makes
-/// it a translation rather than a redesign.
 @Suite struct RenderLayerTests {
-    /// project_5 track 3 pattern 1: beats 1-4 C2, 5-8 C#2, then D at beats 9 and 13 -- the second
-    /// sitting at note index 10 but step 13.
     @Test func aPatternRendersFromItsOwnTickZero() throws {
         let rendering = try MIDIExport.renderPattern(
             project5().track(3).pattern(1), trackNumber: 3, kind: .seq, options: onePass())
@@ -544,7 +449,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(Set(rendering.notes.map(\.channel)) == [2])
     }
 
-    /// The tie from beat 9 to beat 12 stores gate 4 and lasts four steps.
     @Test func gateIsADurationInSteps() throws {
         let rendering = try MIDIExport.renderPattern(
             project5().track(3).pattern(1), trackNumber: 3, kind: .seq, options: onePass())
@@ -564,7 +468,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(Set(rendering.notes.map(\.channel)) == [MIDIExport.drumChannel])
     }
 
-    /// render -> arrange -> build: only the last step knows about MIDI.
     @Test func anArrangementCanBeBuiltWithoutTouchingTheMIDILibrary() throws {
         let arrangement = try MIDIExport.arrange(
             MIDIExport.renderProject(project5(), options: onePass()))
@@ -582,13 +485,9 @@ private func exported5Flat() throws -> ExportResult {
     }
 }
 
-/// A repeat count exists only in the exported file.
-///
-/// It is not `passes`: that is the device's own step-skip cycle, capped at four and rendered
-/// inside a pattern. This lays the whole arrangement down again, which the hardware has no way to
-/// store.
+/// A repeat lays the whole arrangement down again; `passes` is the device's own step-skip cycle.
 @Suite struct RepeatTests {
-    /// project_9's two 16-step patterns, which is one pass of the material.
+    /// project_9's two 16-step patterns: one pass of the material.
     let cycle = 32 * ticksPerStep
 
     @Test func oneRepeatIsWhatTheLayerAlreadyDid() throws {
@@ -596,8 +495,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(try MIDIExport.arrange(renderings, repeat: 1) == MIDIExport.arrange(renderings))
     }
 
-    /// Every track shifts by the same cycle, so pattern N still starts together on all of them in
-    /// the second and third rounds.
     @Test func repeatsLieEndToEndAndStayAlignedAcrossTracks() throws {
         let renderings = try MIDIExport.renderProject(project9(), options: onePass())
         let once = try MIDIExport.arrange(renderings)
@@ -615,8 +512,6 @@ private func exported5Flat() throws -> ExportResult {
         }
     }
 
-    /// The marker ruler names every pattern start in every round; the pattern list still answers
-    /// which patterns are in the file.
     @Test func everyRoundIsMarkedButThePatternListIsNot() throws {
         let arrangement = try MIDIExport.arrange(
             MIDIExport.renderProject(project9(), options: onePass()), repeat: 3)
@@ -639,7 +534,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(thrown?.description.contains("repeat must be 1-10") == true)
     }
 
-    /// The count rides on the options, which is what a CLI flag can set.
     @Test func awholeExportHonoursTheOption() throws {
         let once = try MIDIExport.exportProject(project9(), options: onePass())
         let twice = try MIDIExport.exportProject(
@@ -649,8 +543,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(twice.patternNumbers == once.patternNumbers)
     }
 
-    /// A split piece is a clip, and a repeated clip is a looped one: the count means the same
-    /// thing wherever the arrangement is laid out.
     @Test func eachSplitFileIsRepeatedToo() throws {
         let once = try MIDIExport.exportSplit(project9(), options: onePass())
         let twice = try MIDIExport.exportSplit(
@@ -660,8 +552,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(twice.map(\.noteCount) == once.map { 2 * $0.noteCount })
     }
 
-    /// What a rendering says about itself -- an off-ladder gate, a stale note set, tracks of
-    /// unequal length -- describes the material, so a second round of it is not a second finding.
     @Test func theMaterialsOwnDiagnosticsAreNotRepeated() throws {
         let renderings = try MIDIExport.renderProject(project9(), options: onePass())
         #expect(
@@ -669,9 +559,6 @@ private func exported5Flat() throws -> ExportResult {
                 == MIDIExport.arrange(renderings).warnings)
     }
 
-    /// Placing each round rather than copying the first is what makes this work: the seam between
-    /// rounds is resolved like any other collision, instead of leaving two note-ons for one pitch
-    /// with no note-off between.
     @Test func agateHeldPastTheEndOfAroundMeetsTheNextOne() throws {
         let length = 16 * ticksPerStep
         let held = Rendering(
@@ -689,8 +576,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(arrangement.warnings.contains { $0.contains("own note-off") })
     }
 
-    /// Only the first round starts at tick 0, so only there does a negative shift have nowhere to
-    /// go; later rounds have the room to honour it.
     @Test func aclippedTimeShiftIsClippedOnlyWhereThereIsNoRoom() throws {
         let length = 16 * ticksPerStep
         let early = Rendering(
@@ -706,9 +591,7 @@ private func exported5Flat() throws -> ExportResult {
     }
 }
 
-/// One file per non-empty (track, pattern), each from its own tick 0.
 @Suite struct SplitTests {
-    /// project_9 uses pattern 2 on two tracks and pattern 3 on one.
     @Test func oneResultPerTrackAndPattern() throws {
         let results = try MIDIExport.exportSplit(project9())
 
@@ -717,7 +600,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(results.allSatisfy { $0.noteCount == 1 })
     }
 
-    /// Merged, pattern 3 sits a pattern late; split, it stands alone.
     @Test func eachFileStartsAtTickZero() throws {
         let merged = try played(
             MIDIExport.exportProject(project9(), options: onePass()).midi, "Track 1 (drum)")
@@ -734,7 +616,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(results.map(\.trackNames) == [["Track 1 (drum)"], ["Track 3"]])
     }
 
-    /// --include-stale adds a MIDI track, not a file: same (track, pattern).
     @Test func bothNoteSetsOfOnePatternStayInOneFile() throws {
         let project = try initialProject().select(tracks: [1], patterns: [1])
         let results = try MIDIExport.exportSplit(
@@ -748,11 +629,6 @@ private func exported5Flat() throws -> ExportResult {
     }
 }
 
-/// One velocity on every note, instead of the ones the pattern stores.
-///
-/// A flat render reads a pattern's written content rather than its performance. It is a
-/// substitution, not a clamp: the fixed value wins over a stored 0 or 1 as much as over a stored
-/// 120.
 @Suite struct FlatVelocityTests {
     /// project_5 track 3 pattern 1, read off the device display.
     let stored = [60, 70, 90, 100, 60, 70, 90, 100, 60, 120]
@@ -762,8 +638,6 @@ private func exported5Flat() throws -> ExportResult {
             project.track(3).pattern(1), trackNumber: 3, kind: .seq, options: options)
     }
 
-    /// Not an invented default: what a freshly placed note carries on the device, so the number
-    /// is never re-typed above this module.
     @Test func theSubstituteIsTheMeasuredDeviceValue() {
         #expect(MIDIExport.defaultFlatVelocity == Constants.freshVelocity)
     }
@@ -772,8 +646,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(try seq(project5(), onePass()).notes.map(\.velocity) == stored)
     }
 
-    /// Asserted as the whole list: project_5 already stores a 100, so a substitution that only
-    /// reached some notes would still show one.
     @Test func setReplacesAllOfThem() throws {
         let options = try ExportOptions(passes: 1, flatVelocity: MIDIExport.defaultFlatVelocity)
         #expect(
@@ -796,8 +668,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(try render(flat) == Array(repeating: MIDIExport.defaultFlatVelocity, count: 10))
     }
 
-    /// Every note means every note: a drum hit's velocity is stored the same way and is replaced
-    /// the same way.
     @Test func theDrumSetFlattensToo() throws {
         let drums = try project5().track(1).pattern(1)
         let options = try ExportOptions(passes: 1, flatVelocity: MIDIExport.defaultFlatVelocity)
@@ -820,15 +690,12 @@ private func exported5Flat() throws -> ExportResult {
         #expect(thrown?.description.contains("flat_velocity must be 1-127") == true)
     }
 
-    /// The one value a caller might reasonably expect to mean silence.
     @Test func zeroIsRefusedAsANoteOffRatherThanSilenced() throws {
         let thrown = #expect(throws: KSPError.self) { try ExportOptions(flatVelocity: 0) }
         #expect(
             thrown?.description.contains("0 is a MIDI note-off, not a silent note") == true)
     }
 
-    /// Velocity is the only field substituted, so an off-ladder gate still falls back to the
-    /// default length and still says so.
     @Test func nothingElseAboutTheRenderingMoves() throws {
         let pattern = try drumGatesOffTheLadder(initialProject().track(1).pattern(1))
         let options = try ExportOptions(flatVelocity: MIDIExport.defaultFlatVelocity)
@@ -843,8 +710,6 @@ private func exported5Flat() throws -> ExportResult {
         #expect(flat.notes.map(\.durationTicks) == stored.notes.map(\.durationTicks))
     }
 
-    /// `with(passes:)` rebuilds the whole struct, so a field it forgets is dropped on exactly the
-    /// patterns that need four passes.
     @Test func theAutoPassPathKeepsTheFixedVelocity() throws {
         let renderings = try MIDIExport.renderProject(
             project5(), options: ExportOptions(flatVelocity: MIDIExport.defaultFlatVelocity))
@@ -857,12 +722,7 @@ private func exported5Flat() throws -> ExportResult {
     }
 }
 
-// MARK: - Case builders
-
-/// Corrupt every drum gate in `pattern`.
-///
-/// The ladder covers all of 0-127 (spec 6.1), so no sample project can exercise the fallback any
-/// more -- the only way in is a value the device could not have written.
+/// The ladder covers all of 0-127, so only a value the device could not write hits the fallback.
 private func drumGatesOffTheLadder(_ pattern: Pattern, raw: Int = 200) -> Pattern {
     let notes = pattern.notes.map { note -> Note in
         guard note.kind == .drum else { return note }
@@ -875,20 +735,14 @@ private func drumGatesOffTheLadder(_ pattern: Pattern, raw: Int = 200) -> Patter
     return replacing(pattern, notes: notes)
 }
 
-/// A copy of `project` with one pattern's melodic swing overridden.
-///
-/// None of the sample projects use swing, so the only way to cover it is to build the case; doing
-/// it on the model keeps the sample files untouched.
+/// No sample project uses swing, so the only way to cover it is to build the case.
 private func withSwing(_ project: Project, _ percent: Int) -> Project {
     replacingPattern1OfTrack3(project) { pattern in
         replacing(pattern, seqSwingPercent: percent)
     }
 }
 
-/// A copy of `project` with track 3 pattern 1's 99 field overridden.
-///
-/// Every sample project holds the same 20, so a non-default step size, triplet or direction can
-/// only be covered by building the case.
+/// Every sample project holds the same 20, so a non-default step size can only be built.
 private func withBits(_ project: Project, raw: Int) -> Project {
     replacingPattern1OfTrack3(project) { pattern in
         replacing(pattern, seqBits: PatternBits.decode(raw))
@@ -912,7 +766,6 @@ private func replacingPattern1OfTrack3(
         diagnostics: project.diagnostics)
 }
 
-/// Swift has no `dataclasses.replace`, and `Pattern` has twelve fields, so this stands in for it.
 private func replacing(
     _ pattern: Pattern, notes: [Note]? = nil, seqSwingPercent: Int? = nil,
     seqBits: PatternBits? = nil
@@ -927,7 +780,6 @@ private func replacing(
         diagnostics: pattern.diagnostics)
 }
 
-/// A copy of `pattern` with every note stored at `velocity`.
 private func withVelocity(_ pattern: Pattern, _ velocity: Int) -> Pattern {
     let notes = pattern.notes.map { note in
         Note(
