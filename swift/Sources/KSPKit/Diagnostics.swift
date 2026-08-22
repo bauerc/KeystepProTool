@@ -1,14 +1,5 @@
-/// Structured diagnostics, and how they collapse for display. A port of `src/ksp/diagnostics.py`.
-///
-/// The format has more unknowns than a converter can hide, so this package says what it assumed
-/// rather than deciding quietly. The problem is volume: one misread encoding affects dozens of
-/// notes across a dozen patterns, and as free text that buries the one-off findings that matter.
-///
-/// So a diagnostic is a record, not a sentence. It carries a stable ``Code``, the ``Site`` it came
-/// from, and how many notes or steps it is about. Reporting can then collapse a code's instances
-/// into a single counted line, and expand them again on request, without pattern-matching on
-/// English. Adding one means a ``Code`` member, a ``Diagnostics/summaries`` entry, and the call
-/// site: there is no type per diagnostic, because the variation is data.
+/// Structured diagnostics, and how they collapse for display. A diagnostic is a record rather
+/// than a sentence, so a code's instances collapse into one counted line without matching English.
 public enum Severity: String, Sendable, Hashable, Codable, CaseIterable {
     case warning
     case error
@@ -16,7 +7,6 @@ public enum Severity: String, Sendable, Hashable, Codable, CaseIterable {
 
 /// What kind of problem this is. Grouping keys off these, not off text.
 public enum Code: String, Sendable, Hashable, Codable, CaseIterable {
-    // --- reader ---
     case noVersionKey = "no-version-key"
     case mixedNoteSets = "mixed-note-sets"
     case drumModeFlagDisagrees = "drum-mode-flag-disagrees"
@@ -29,11 +19,9 @@ public enum Code: String, Sendable, Hashable, Codable, CaseIterable {
     case scaleOffList = "scale-off-list"
     case chainHasHole = "chain-has-hole"
 
-    // --- drum map ---
     case drumMapAssumed = "drum-map-assumed"
     case drumMapDuplicate = "drum-map-duplicate"
 
-    // --- export ---
     case disabledNotExported = "disabled-not-exported"
     case disabledExported = "disabled-exported"
     case staleNoteSet = "stale-note-set"
@@ -50,7 +38,6 @@ public enum Code: String, Sendable, Hashable, Codable, CaseIterable {
     case trackLengthsDiffer = "track-lengths-differ"
     case overlapsResolved = "overlaps-resolved"
 
-    // --- import ---
     case clipAnchored = "clip-anchored"
     case notesQuantised = "notes-quantised"
     case pastPatternEnd = "past-pattern-end"
@@ -71,11 +58,8 @@ public enum Code: String, Sendable, Hashable, Codable, CaseIterable {
     case tempoOutOfRange = "tempo-out-of-range"
 }
 
-/// How one code's instances read once collapsed.
-///
-/// `template` is formatted with `{sites}` and `{subjects}`, each already a counted noun phrase --
-/// "3 patterns", "41 notes". A template using neither is fine: some diagnostics are said once
-/// however often they arise.
+/// How one code's instances read once collapsed. `template` takes `{sites}` and `{subjects}`,
+/// each a counted noun phrase; a template using neither is said once however often it arises.
 public struct Summary: Sendable, Hashable {
     public let template: String
     public let subject: String
@@ -128,8 +112,7 @@ public struct Site: Sendable, Hashable {
 }
 
 extension Site {
-    /// No `scene`, matching `Site.to_dict`. The JSON output is one of the two ports' shared
-    /// contracts, so this stays as it is until both sides change together.
+    /// No `scene` key: the JSON output is a contract, so both ports omit it together.
     public func toJSON() -> JSONNode {
         .object([
             ("track", track.map { JSONNode.int($0) } ?? .null),
@@ -144,15 +127,13 @@ extension Site {
 public struct Diagnostic: Sendable, Hashable {
     public let code: Code
 
-    /// The specific, full sentence -- what `--verbose` shows. No site prefix and no "warning:"
-    /// prefix; both are added when rendering.
+    /// The full sentence `--verbose` shows; the site and "warning:" prefixes are added later.
     public let detail: String
 
     public let site: Site
     public let severity: Severity
 
-    /// How many notes, steps or lanes this one occurrence covers. Summed when the code is
-    /// collapsed, which is why a single line can honestly say "41 notes across 3 patterns".
+    /// How many notes, steps or lanes this occurrence covers; summed when the code is collapsed.
     public let subjects: Int
 
     public init(
@@ -172,9 +153,6 @@ public struct Diagnostic: Sendable, Hashable {
     }
 
     /// Copy with the given site parts filled in, leaving the rest alone.
-    ///
-    /// For diagnostics crossing a boundary that knows more than the code that raised them: the
-    /// reader knows the pattern, the export the track.
     public func at(
         track: Int? = nil, pattern: Int? = nil, kind: String? = nil, slot: Int? = nil
     ) -> Diagnostic {
@@ -186,7 +164,6 @@ public struct Diagnostic: Sendable, Hashable {
             severity: severity, subjects: subjects)
     }
 
-    /// A port of `Diagnostic.to_dict`, in its key order.
     public func toJSON() -> JSONNode {
         .object([
             ("code", .string(code.rawValue)),
@@ -214,8 +191,7 @@ public struct Group: Sendable, Hashable {
 
     /// The collapsed line.
     public var headline: String {
-        // A group of one keeps its own message: there is nothing to collapse, so summarising
-        // would lose its site for no gain.
+        // A group of one keeps its own message, which names its site.
         guard entries.count > 1, let summary = Diagnostics.summaries[code] else {
             return entries.first?.message ?? ""
         }
@@ -267,7 +243,7 @@ public struct Report: Sendable, Hashable {
             + "--verbose for detail"
     }
 
-    /// A port of `Report.to_list`: every entry in full, in order.
+    /// Every entry in full, in order.
     public func toJSON() -> JSONNode {
         .array(entries.map { $0.toJSON() })
     }
@@ -287,14 +263,10 @@ extension Report: Sequence {
     }
 }
 
-/// Builds a ``Report``, dropping exact repeats.
-///
-/// A class, not a struct: the reader and the export pass one collector down through the functions
-/// that raise into it, which is the Python object's behaviour and not a value type's.
+/// Builds a ``Report``, dropping exact repeats. A class: callers pass one down and raise into it.
 public final class Collector {
-    // Deduplication keys on (code, site, detail) rather than the rendered string, so two
-    // diagnostics that read alike but come from different patterns both survive and the counts
-    // stay honest.
+    // Keyed on (code, site, detail), not the rendered string, so alike diagnostics from different
+    // patterns both survive.
     private struct Fingerprint: Hashable {
         let code: Code
         let site: Site
@@ -333,10 +305,8 @@ public final class Collector {
     }
 }
 
-/// The summary table, kept as data so that adding a diagnostic does not mean adding a branch --
-/// and so that both ports carry the same wording.
+/// The summary table, one entry per ``Code``. Both ports carry the same wording verbatim.
 public enum Diagnostics {
-    /// One entry per ``Code``.
     public static let summaries: [Code: Summary] = [
         .noVersionKey: Summary(
             "no 'version' key (factory template rather than a saved project)"),

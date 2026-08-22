@@ -1,23 +1,14 @@
-/// Mapping the KeyStep Pro's 24 drum lanes to MIDI note numbers. A port of `src/ksp/drum_map.py`.
-///
-/// A drum note stores a **lane index** in parameter 117, not a pitch, and which note a lane
-/// transmits is a global device setting absent from the project file (spec section 3.2.1). This
-/// type therefore holds an *assumption about the user's device*, never a decoded fact, and every
-/// consumer is expected to say which map it used -- see ``describe()``.
-///
-/// The 24 lanes and the chromatic-from-36 default both come from that section, where the parameter
-/// table and capture D5 are recorded.
+/// The 24 drum lanes mapped to MIDI notes. Parameter 117 stores a lane, not a pitch, and which
+/// note a lane transmits is a device setting absent from the file (spec 3.2.1) -- so this is an
+/// assumption about the user's device, never a decoded fact.
 public struct DrumMap: Sendable, Hashable {
-    /// What the device's Drum Map menu actually reads (D5). The manual and MCC's Custom defaults
-    /// of 36..59 agree.
+    /// What the device's Drum Map menu reads, matching MCC's Custom defaults of 36..59.
     public static let defaultChromaticLow = 36
 
-    /// `globalParamId 79` (Drum output) defaults to 10, separately from tracks 1-4 which default
-    /// to 0-3.
+    /// Drum output (global 79) defaults to 10, separately from tracks 1-4, which default to 0-3.
     public static let defaultDrumChannel = 10
 
-    /// Highest Low note the device's encoder reaches in chromatic mode (D5), the same cap MCC
-    /// applies.
+    /// Highest Low note the device's encoder reaches in chromatic mode, the cap MCC applies too.
     public static let maxChromaticLow = 103
 
     public static let minNote = 0
@@ -26,8 +17,7 @@ public struct DrumMap: Sendable, Hashable {
     public let notes: [Int]
     public let name: String
 
-    /// Non-fatal oddities, e.g. a custom map that sends two lanes to the same note. Reported,
-    /// never silently repaired.
+    /// Non-fatal oddities, e.g. a custom map sending two lanes to the same note.
     public let diagnostics: Report
 
     public var warnings: [String] { diagnostics.messages }
@@ -54,9 +44,7 @@ public struct DrumMap: Sendable, Hashable {
             self.diagnostics = diagnostics
             return
         }
-        // The hardware permits this, so it is not an error -- but it makes note -> lane lossy, and
-        // a converter silently picking one lane is exactly the kind of quiet wrong answer this
-        // project avoids.
+        // The hardware permits this; it is not an error, only a lossy note -> lane lookup.
         let collector = Collector()
         for note in duplicates {
             let lanes = notes.indices.filter { notes[$0] == note }
@@ -69,9 +57,8 @@ public struct DrumMap: Sendable, Hashable {
 
     /// Lane *i* plays `low + i`, the device's Chromatic mode.
     public static func chromatic(_ low: Int = defaultChromaticLow) throws -> DrumMap {
-        // The device stops at Low note 103 too, which leaves the top lane on 126 -- Arturia's
-        // range is one short of 127 rather than this being an off-by-one, since D5 saw lane 0 fire
-        // 36 at a low note of 36. No separate overflow check is needed: 103 + 23 cannot exceed 127.
+        // The device's own cap leaves the top lane on 126; it is one short of 127, not an
+        // off-by-one, and 103 + 23 needs no separate overflow check.
         guard minNote...maxChromaticLow ~= low else {
             throw KSPError.value(
                 "chromatic low note \(low) is outside \(minNote)-\(maxChromaticLow)")
@@ -86,9 +73,6 @@ public struct DrumMap: Sendable, Hashable {
     }
 
     /// Build from an already-decoded config file.
-    ///
-    /// Deliberately takes parsed data, not a path: this module must not decide where files live.
-    /// The CLI reads the file and passes the result in, as `DrumMap.from_dict` has it do.
     public static func from(_ config: DrumMapConfig) throws -> DrumMap {
         switch config.mode ?? "chromatic" {
         case "chromatic":
@@ -117,11 +101,8 @@ public struct DrumMap: Sendable, Hashable {
         return notes[lane]
     }
 
-    /// The lane that plays `note`, or `nil` if the map does not reach it.
-    ///
-    /// `nil` is a real answer and must not be smoothed over. Snapping an unmapped drum hit to the
-    /// nearest lane produces a file that loads cleanly and plays the wrong instrument, with
-    /// nothing to signal the error -- the same failure mode as a guessed gate table.
+    /// The lane that plays `note`, or `nil` if the map does not reach it. Never snap to nearest:
+    /// that loads cleanly and plays the wrong instrument.
     public func laneForNote(_ note: Int) -> Int? {
         notes.firstIndex(of: note)
     }
@@ -132,10 +113,7 @@ public struct DrumMap: Sendable, Hashable {
         return "\(what) (assumed - not in file)"
     }
 
-    /// Render a lane as `lane 0 -> C1 (36) Bass Drum 1`.
-    ///
-    /// A lane the device does not have is shown as-is rather than resolved. The reader warns about
-    /// those separately; inventing a note for one here would hide it.
+    /// Render a lane as `lane 0 -> C1 (36) Bass Drum 1`; a lane the device lacks is shown as-is.
     public func labelForLane(_ lane: Int) -> String {
         guard hasLane(lane) else { return "lane \(lane) (out of range)" }
         let note = notes[lane]
@@ -152,9 +130,7 @@ public struct DrumMap: Sendable, Hashable {
         ])
     }
 
-    /// General MIDI percussion names, keyed by **MIDI note rather than by lane**, so they stay
-    /// correct under any drum map -- including a custom one where lane order says nothing about
-    /// which instrument is where.
+    /// General MIDI percussion names, keyed by MIDI note rather than by lane, so any map works.
     public static let gmDrumNames: [Int: String] = [
         35: "Acoustic Bass Drum",
         36: "Bass Drum 1",
@@ -206,11 +182,8 @@ public struct DrumMap: Sendable, Hashable {
     ]
 }
 
-/// A user's own drum map, as their config file spells it.
-///
-/// `mode` chooses between the device's two: `chromatic` takes `low`, `custom` takes all 24
-/// `notes`. Both fields are optional here because the Python reads them out of a plain dict with
-/// defaults; ``DrumMap/from(_:)`` applies the same ones.
+/// A user's own drum map as their config file spells it: `chromatic` takes `low`, `custom` takes
+/// all 24 `notes`, and ``DrumMap/from(_:)`` supplies the defaults for whatever is absent.
 public struct DrumMapConfig: Decodable, Sendable, Hashable {
     public let mode: String?
     public let low: Int?

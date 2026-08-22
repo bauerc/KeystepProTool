@@ -1,22 +1,8 @@
-/// Targeted edits to a parsed `.KeyStepPro` project -- a port of `src/ksp/mutate.py`.
-///
-/// Every operation here is specified by a hardware capture diff rather than inferred. Placing one
-/// melodic note costs **8 keys, not one** -- six note-indexed parameters, the step-indexed
-/// step-active flag in slot 1, and the pattern's data-state latch -- and the table with its fresh
-/// values is in spec section 4. Step skip (`49`) is deliberately not written: an empty project
-/// already holds 15, "plays on all four sequences", everywhere.
-///
-/// Every function returns a new dictionary and never adds or removes a key. The key set is fixed
-/// (spec section 2), so an address the file does not already carry is an error rather than
-/// something to create.
-///
-/// ``noteUpdates`` and ``drumNoteUpdates`` are the delta forms, letting a bulk writer apply
-/// placements to one working dictionary instead of copying the whole key set per note. This lives
-/// in `KSPKit` rather than `KSPMIDI` because `mutate.py` imports no MIDI library: it is `ksp/`
-/// minus MIDI, and keeping it here is what puts it on CI's Linux runner.
+/// Targeted edits to a parsed `.KeyStepPro` project. Placing one melodic note costs 8 keys, not
+/// one (spec 4); step skip (`49`) is deliberately not written, since a file already holds 15
+/// everywhere. Nothing here adds or removes a key: the key set is fixed (spec 2).
 public enum Mutate {
-    /// Pool chunks a melodic note may occupy. Track 1's fourth chunk is a zero-filled phantom the
-    /// firmware never uses (capture D2-chord4-tr1), so the real ceiling is 3 everywhere.
+    /// Pool chunks a melodic note may occupy. Track 1's fourth is a phantom the firmware never uses.
     static let slots = Constants.poolSlots
 
     static let noteParams = [
@@ -24,14 +10,11 @@ public enum Mutate {
         Constants.pSeqTimeShift, Constants.pSeqRandomness,
     ]
 
-    /// The drum set, in the same order, so one recipe serves both (spec 3.2). `117` holds a lane
-    /// index where `109` holds a pitch -- the one field that means something different.
+    /// The drum set in the same order, so one recipe serves both; `117` holds a lane, `109` a pitch.
     static let drumNoteParams = [
         Constants.pDrumNoteStep, Constants.pDrumPitch, Constants.pDrumGate,
         Constants.pDrumVelocity, Constants.pDrumTimeShift, Constants.pDrumRandomness,
     ]
-
-    // MARK: - Guards
 
     static func checkPattern(_ pattern: Int) throws {
         guard 1...Constants.patternsPerTrack ~= pattern else {
@@ -75,12 +58,7 @@ public enum Mutate {
         value < 0 ? "\(value)" : "+\(value)"
     }
 
-    // MARK: - Writing
-
-    /// Copy `raw` with `updates` applied, refusing any key it does not hold.
-    ///
-    /// The refusal is the point: the key set is fixed, so a key that is not already there means the
-    /// address was computed wrongly.
+    /// Copy `raw` with `updates` applied; a key the file lacks means the address was miscomputed.
     static func withValues(_ raw: RawProject, _ updates: [String: Int]) throws -> RawProject {
         let missing = updates.keys.filter { raw[$0] == nil }
         if !missing.isEmpty {
@@ -93,11 +71,7 @@ public enum Mutate {
         return result
     }
 
-    /// Apply `updates` to `raw` in place, refusing any key it does not hold.
-    ///
-    /// The one exception to this type's copy-on-write rule, and the reason the `*Updates`
-    /// functions exist: a converter placing hundreds of notes owns its working dictionary and
-    /// cannot afford a copy of 153,495 keys per note.
+    /// Apply `updates` in place: a bulk writer cannot afford a copy of 153,495 keys per note.
     public static func mergeUpdates(_ raw: inout RawProject, _ updates: [String: Int]) throws {
         let missing = updates.keys.filter { raw[$0] == nil }
         if !missing.isEmpty {
@@ -108,13 +82,8 @@ public enum Mutate {
         }
     }
 
-    // MARK: - Reading the pool
-
-    /// The 0-based step of each pool entry in one slot, stopping at the end of the live prefix.
-    ///
-    /// Throws if a sentinel is followed by a live entry. The melodic pool is compacted -- verified
-    /// across every sample file (spec section 4) -- so a hole means this pool is not shaped the way
-    /// every measurement says it should be, and appending to it is not something any capture covers.
+    /// The 0-based step of each live pool entry in one slot. Throws on a hole: the melodic pool
+    /// is compacted in every sample, so appending past one is unmeasured (spec 4).
     static func slotSteps(_ raw: RawProject, _ item: Int, _ pattern: Int, _ slot: Int) throws
         -> [Int]
     {
@@ -135,11 +104,8 @@ public enum Mutate {
         return live
     }
 
-    /// One drum pool chunk's note->step column, `nil` where it is empty.
-    ///
-    /// Unlike the melodic list this one may legitimately hold holes -- the device leaves one behind
-    /// when a lane is cleared and scans past it -- so this returns the whole chunk rather than a
-    /// live prefix, and a writer fills the first gap instead of appending after it.
+    /// One drum pool chunk's note->step column, `nil` where empty. The drum pool may hold holes,
+    /// so this is the whole chunk and a writer fills the first gap rather than appending.
     static func drumPool(_ raw: RawProject, _ pattern: Int, _ slot: Int) -> [Int?] {
         (0..<Constants.maxSteps).map { index -> Int? in
             guard
@@ -151,8 +117,6 @@ public enum Mutate {
             return value == Constants.sentinel ? nil : value
         }
     }
-
-    // MARK: - Melodic notes
 
     /// The key holding one melodic note's pitch, by 1-based pool ordinal.
     public static func pitchKey(track: Int, pattern: Int, note: Int, slot: Int = 1) throws -> String
@@ -166,10 +130,7 @@ public enum Mutate {
         return Keys.key(item, Constants.pSeqPitch, pattern, slot, note)
     }
 
-    /// Change one existing note's pitch. Exactly one key moves.
-    ///
-    /// Throws if that pool entry is empty: a pitch on a note that is not there is a pitch nothing
-    /// plays, so it means the wrong ordinal was addressed -- which is the failure this surfaces.
+    /// Change one existing note's pitch. Throws on an empty pool entry: nothing would play it.
     public static func setPitch(
         _ raw: RawProject, track: Int, pattern: Int, note: Int, pitch: Int, slot: Int = 1
     ) throws -> RawProject {
@@ -186,10 +147,7 @@ public enum Mutate {
         return try withValues(raw, [target: pitch])
     }
 
-    /// The keys one melodic note writes, without copying the project.
-    ///
-    /// ``placeNote`` is this plus a copy. A converter placing hundreds applies these to a working
-    /// dictionary of its own instead, so the whole key set is not copied per note.
+    /// The keys one melodic note writes, without copying the project; ``placeNote`` adds the copy.
     public static func noteUpdates(
         _ raw: RawProject, track: Int, pattern: Int, step: Int, pitch: Int,
         velocity: Int = Constants.freshVelocity, gate: Int = Constants.defaultGateStored,
@@ -222,8 +180,7 @@ public enum Mutate {
                     + "per-step limit")
         }
 
-        // The pool is one flat list chunked into slots of 64, so "the next free ordinal" spans
-        // them: a chord straddling a chunk boundary is ordinary.
+        // The pool is one flat list chunked into slots of 64, so the next free ordinal spans them.
         let chosen =
             slot
             ?? (perSlot.firstIndex { $0.count < Constants.maxSteps }.map { $0 + 1 } ?? slots)
@@ -231,8 +188,7 @@ public enum Mutate {
             throw KSPError.value("track \(track) pattern \(pattern) slot \(chosen) is full")
         }
 
-        // slotSteps has already established the pool is compacted, so the live count is the first
-        // free ordinal.
+        // slotSteps established the pool is compacted, so the live count is the first free ordinal.
         let ordinal = perSlot[chosen - 1].count + 1
 
         let values = [step - 1, pitch, gate, velocity, timeShift, randomness]
@@ -247,10 +203,8 @@ public enum Mutate {
         return updates
     }
 
-    /// Add a melodic note at `step` (1-based), at the first free pool ordinal.
-    ///
-    /// `activate: false` leaves the step-active flag clear, which places a note the device will not
-    /// sound. It exists to build the M4.1 control note and a converter must never use it.
+    /// Add a melodic note at `step` (1-based), at the first free pool ordinal. `activate: false`
+    /// places a note the device will not sound, which no converter should want.
     public static func placeNote(
         _ raw: RawProject, track: Int, pattern: Int, step: Int, pitch: Int,
         velocity: Int = Constants.freshVelocity, gate: Int = Constants.defaultGateStored,
@@ -265,14 +219,8 @@ public enum Mutate {
                 activate: activate))
     }
 
-    // MARK: - Drum notes
-
-    /// The keys one drum hit writes. The drum twin of ``noteUpdates``.
-    ///
-    /// Track 1 only, because item 123 is the only one carrying a drum set. What differs from the
-    /// melodic recipe is the step-active array: `52` is packed seven steps to an entry and
-    /// addressed **by lane**, so the bit is read, or-ed and written back rather than assigned --
-    /// assigning it would clear every other lane sharing that entry.
+    /// The keys one drum hit writes, on track 1 only. `52` packs seven steps per entry by lane, so
+    /// its bit is or-ed in: assigning would clear every other lane sharing that entry.
     public static func drumNoteUpdates(
         _ raw: RawProject, pattern: Int, lane: Int, step: Int,
         velocity: Int = Constants.freshVelocity, gate: Int = Constants.defaultGateStored,
@@ -349,13 +297,8 @@ public enum Mutate {
                 timeShift: timeShift, randomness: randomness, slot: slot, activate: activate))
     }
 
-    // MARK: - Pattern scalars
-
-    /// Set one pattern's step size in `99`, leaving the field's other bits.
-    ///
-    /// Bits 3-4 only (spec 3.3, protocol T5.1). Triplet, polyrhythm and direction are the user's
-    /// settings on the device and are not ours to overwrite, which is why this reads the stored
-    /// value rather than composing a fresh one. `drum: true` writes `116`, which shares the layout.
+    /// Set one pattern's step size in `99`, bits 3-4 only: triplet, polyrhythm and direction are
+    /// the user's settings. `drum: true` writes `116`, which shares the layout.
     public static func setStepSize(
         _ raw: RawProject, track: Int, pattern: Int, stepsPerBeat: Int, drum: Bool = false
     ) throws -> RawProject {
@@ -384,10 +327,8 @@ public enum Mutate {
             raw, [Keys.key(item, param, pattern): steps - Constants.stepCountOffset])
     }
 
-    /// Set one pattern's swing, as the percentage the device displays.
-    ///
-    /// Written per pattern (`97` / `114`) and never to the global `74`: the per-pattern value takes
-    /// precedence on the device, so a groove written to the global would simply not play.
+    /// Set one pattern's swing, as the percentage the device displays. Never the global `74`: the
+    /// per-pattern value takes precedence, so a groove written there would not play.
     public static func setSwing(
         _ raw: RawProject, track: Int, pattern: Int, percent: Int, drum: Bool = false
     ) throws -> RawProject {
@@ -402,11 +343,8 @@ public enum Mutate {
             raw, [Keys.key(item, param, pattern): percent - Constants.swingOffset])
     }
 
-    /// Set `86` bit 6, the flag deciding which note set a track plays.
-    ///
-    /// Track-level, and read-modify-write: the rest of `86` is the user's state. Only Track 1
-    /// carries a drum set, so turning the flag *on* anywhere else would select an ARP mode whose
-    /// notes we did not write.
+    /// Set `86` bit 6, deciding which note set a track plays. Read-modify-write, since the rest
+    /// of `86` is the user's state; only track 1 has a drum set to select.
     public static func setDrumMode(_ raw: RawProject, track: Int, on: Bool) throws -> RawProject {
         let item = try Keys.itemForTrack(track)
         if on && item != Constants.drumTrackItemID {
@@ -440,11 +378,8 @@ public enum Mutate {
         return try withValues(raw, updates)
     }
 
-    /// Chain `patterns` (1-based, in play order) for one track of one scene.
-    ///
-    /// Written contiguously from slot 1 with every remaining slot left at the sentinel, which is
-    /// the shape capture T5-chain-3 produced. This is how a sequence longer than one pattern is
-    /// played as one: the device stores no arrangement beyond it.
+    /// Chain `patterns` (1-based, in play order) for one track of one scene, written contiguously
+    /// from slot 1 with the remaining slots left at the sentinel.
     public static func setChain(
         _ raw: RawProject, scene: Int, track: Int, patterns: [Int]
     ) throws -> RawProject {
