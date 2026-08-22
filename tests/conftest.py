@@ -1,8 +1,4 @@
-"""Shared path fixtures.
-
-Tests resolve repository data through these rather than hardcoding paths, so
-that moving sample files is a one-line change here.
-"""
+"""Shared path fixtures."""
 
 import json
 from collections.abc import Callable
@@ -16,8 +12,7 @@ from ksp_cli.usb_transport import TransportError
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-#: Every sample project checked in, in the order they appear on disk. Both the
-#: byte-level invariants and the M3 round-trip parametrise over all of them.
+#: Every sample project checked in, in the order they appear on disk.
 SAMPLE_NAMES = [
     "Default.KeyStepPro",
     "baseline.KeyStepPro",
@@ -48,11 +43,7 @@ def simple_clip(project_files_dir: Path) -> Path:
 
 @pytest.fixture(scope="session")
 def m6_song(project_files_dir: Path) -> Path:
-    """M6's conversion fixture: four note-bearing tracks of real material.
-
-    One drum track on an ordinary channel, one of 3- and 4-note chords, one of
-    tied notes, and one running past what a single pattern holds.
-    """
+    """M6's conversion fixture: four note-bearing tracks of real material."""
     return project_files_dir / "m6-test-file.mid"
 
 
@@ -76,12 +67,7 @@ def captures_dir() -> Path:
 
 @pytest.fixture
 def require_capture(captures_dir: Path) -> Callable[[str], Path]:
-    """Resolve a capture by name, or skip.
-
-    Skipping rather than failing keeps ``-m hardware`` runnable on a fresh
-    clone, where the file is genuinely absent -- failing would conflate "not
-    captured yet" with "the capture disagrees".
-    """
+    """Resolve a capture by name, or skip."""
 
     def resolve(name: str) -> Path:
         path = captures_dir / name
@@ -94,8 +80,9 @@ def require_capture(captures_dir: Path) -> Callable[[str], Path]:
 
 @pytest.fixture(scope="session")
 def fixtures_dir() -> Path:
-    """Expected-value fixtures, stored as data so a future Swift port can
-    consume the identical files. See ROADMAP.md M1."""
+    """Expected-value fixtures, stored as data so a future Swift port can consume the identical
+    files.
+    """
     return Path(__file__).resolve().parent / "fixtures"
 
 
@@ -114,11 +101,7 @@ def sample_bytes(sample_name: str, project_files_dir: Path) -> bytes:
 
 
 def without_trailing_comma(data: bytes) -> bytes:
-    """MCC's bytes minus the comma before the closing brace -- the M3 target.
-
-    Asserting the comma is there to begin with keeps a mangled sample from
-    silently becoming the baseline (spec section 2).
-    """
+    """MCC's bytes minus the comma before the closing brace -- the M3 target."""
     assert data.endswith(b",\n}"), "sample does not end with MCC's trailing comma"
     return data[:-3] + b"\n}"
 
@@ -132,10 +115,7 @@ def _parsed_samples() -> dict[str, dict[str, int | str]]:
 def load_sample(
     _parsed_samples: dict[str, dict[str, int | str]], project_files_dir: Path
 ) -> Callable[[str], dict[str, int | str]]:
-    """Parse a sample once per session, returning a fresh copy each call.
-
-    The copy is the point: tests mutate what they are given.
-    """
+    """Parse a sample once per session, returning a fresh copy each call."""
 
     def load(name: str) -> dict[str, int | str]:
         if name not in _parsed_samples:
@@ -146,11 +126,7 @@ def load_sample(
 
 
 def load_tape(fixtures_dir: Path) -> list[tuple[bytes, bytes]]:
-    """The captured exchange as ``(request, reply)`` frame pairs, in order.
-
-    Tracked on purpose: the raw capture is gitignored, so a test bound to it
-    would skip silently in every worktree and on every fresh clone.
-    """
+    """The captured exchange as ``(request, reply)`` frame pairs, in order."""
     pairs = []
     for line in (fixtures_dir / "recall_tape.txt").read_text().splitlines():
         request, reply = line.split()
@@ -159,11 +135,7 @@ def load_tape(fixtures_dir: Path) -> list[tuple[bytes, bytes]]:
 
 
 class ReplayTransport:
-    """Answers out of a captured exchange, keyed by the request frame.
-
-    Keyed rather than sequential, so a plan that asks for the right things in
-    the wrong order still resolves -- and ``asked`` is what proves the order.
-    """
+    """Answers out of a captured exchange, keyed by the request frame."""
 
     def __init__(self, pairs: list[tuple[bytes, bytes]]) -> None:
         self._replies = dict(pairs)
@@ -224,13 +196,7 @@ def tape_values(path: Path) -> dict[str, int]:
 
 
 class DeviceModel:
-    """Answers any address from a tape's values, at any count the device allows.
-
-    Raw bytes in, raw bytes out -- the 0xFF sentinel included, so the reader's
-    correction of it is exercised rather than bypassed. Unlike ``ReplayTransport``
-    this answers requests the capture never contained, which is what lets the
-    merged walks and the single-pattern walk be tested at all.
-    """
+    """Answers any address from a tape's values, at any count the device allows."""
 
     def __init__(self, values: dict[str, int]) -> None:
         self._values = values
@@ -250,20 +216,14 @@ class DeviceModel:
         missing = [name for name in names if name not in self._values]
         if missing:
             raise LookupError(f"tape holds no value for {missing[0]}")
-        # The device echoes the slot it was asked about, so bulk_read's check of
-        # that echo is exercised rather than answered by a constant.
+        # Echo the slot asked about, so bulk_read's check of it is exercised.
         return build_reply(
             request, tuple(self._values[name] for name in names), sysex.parse_slot(frame)
         )
 
 
 class FakeDevice:
-    """A ``UsbMidiTransport`` whose slots are tapes, for the probes and the pull.
-
-    Anything else times out, which is also how the device behaves when byte 7
-    names a slot it will not answer for. ``filler`` makes the named slots answer
-    ``0x7f`` to everything, the shape a never-saved slot really returns.
-    """
+    """A ``UsbMidiTransport`` whose slots are tapes, for the probes and the pull."""
 
     def __init__(
         self,
@@ -319,11 +279,7 @@ def replay_transport(
 
 @pytest.fixture(scope="session")
 def identity_reply(repo_root: Path) -> bytes:
-    """Frame 9 of the capture, the device's answer to the identity request.
-
-    Read from the tracked truncated capture rather than recall_sysex.jsonl,
-    which is gitignored and would make this skip silently in a worktree.
-    """
+    """Frame 9 of the capture, the device's answer to the identity request."""
     capture = repo_root / "usb_midi_investigation" / "sysex_until_project_1_track_1_pattern_1.jsonl"
     for line in capture.read_text().splitlines():
         frame = json.loads(line)

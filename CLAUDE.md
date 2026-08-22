@@ -5,7 +5,17 @@ Guidance for Claude Code working in this repository.
 ## Conventions
 
 - Use Serena MCP and its tool
-- Comment concisely. Large docstrings on methods should NOT be used. At max TWO lines.
+- **A comment exists only where the code cannot document itself.** Docstrings are permitted when
+  concise — two lines at most, one for a module docstring, and none at all where the docstring
+  would restate the symbol name. No `Args:`/`Returns:`/`Raises:` sections: signatures are typed
+  and mypy is strict. Port narration, history, refactoring notes, architecture prose already in
+  this file, restatement of the line beneath, build or test instructions, and `// MARK:` / `# ---`
+  banners all go. Two exceptions: `src/ksp/constants.py` and `swift/Sources/KSPKit/Constants.swift`,
+  where a bare `48` or `127` cannot self-document, so every value keeps a **one-line** comment with
+  a spec pointer where one fits — the provenance essays live in `analysis/`; and a genuine trap,
+  one line, where behaviour reads as a bug a reader would otherwise "fix". Functional pragmas
+  (`# type: ignore`, `# pragma: no cover`, `# noqa`, `# shellcheck disable`) are directives, not
+  commentary, and are never touched.
 - Claude plan files committed to this repository are deleted as part of the implementing task.
 - Use subagents
 - DO NOT reply to PR comments

@@ -66,7 +66,6 @@ def main() -> int:
             print(f"  - Baseline:   {b_hex}")
             print(f"  + Comparison: {c_hex}")
 
-            # Highlight specific byte differences if lengths match
             b_bytes = bytes.fromhex(b_hex)
             c_bytes = bytes.fromhex(c_hex)
             if len(b_bytes) == len(c_bytes):

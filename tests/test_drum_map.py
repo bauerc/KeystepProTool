@@ -1,9 +1,4 @@
-"""The lane -> MIDI note map for drum tracks.
-
-The map is a *device global setting* that no project file contains, so these
-tests pin two separate things: that the tool's built-in default matches what
-Arturia documents, and that the tool never invents a mapping it does not have.
-"""
+"""The lane -> MIDI note map for drum tracks."""
 
 import json
 from pathlib import Path
@@ -22,23 +17,11 @@ from ksp_cli.dump import parse_drum_map, resolve_drum_map
 
 class TestDefaults:
     def test_device_has_twenty_four_lanes(self) -> None:
-        """Derived, not assumed: MCC's Drum Map group defines Note 1..Note 24.
-
-        Nothing in the project file has this cardinality -- the lane is a
-        value of parameter 117, never an index -- so the constant has to come
-        from the parameter dictionary.
-        """
+        """Derived, not assumed: MCC's Drum Map group defines Note 1..Note 24."""
         assert DRUM_LANE_COUNT == 24
 
     def test_default_matches_arturias_custom_note_defaults(self) -> None:
-        """The cross-check that the default is right.
-
-        ``KeyStepPro.json`` gives Note 1..Note 24 defaults of 36..59, and the
-        manual says "the default mapping starts at MIDI note 36". A chromatic
-        map from 36 must reproduce that run exactly. The device transmits that
-        same run (capture D5); ``test_hardware_tier4.py`` holds it against the
-        recording.
-        """
+        """The cross-check that the default is right."""
         assert DrumMap.chromatic(DEFAULT_CHROMATIC_LOW).notes == tuple(range(36, 60))
 
     def test_default_low_note_is_gm_kick(self) -> None:
@@ -64,12 +47,7 @@ class TestLookup:
         assert drum_map.lane_for_note(drum_map.note_for_lane(lane)) == lane
 
     def test_unmapped_note_returns_none(self) -> None:
-        """``None`` is the answer, not a nearest-lane guess.
-
-        Snapping an unmapped drum hit to the closest lane produces a file that
-        loads cleanly and plays the wrong instrument, with nothing to signal
-        the error -- the same failure mode as a guessed gate table.
-        """
+        """``None`` is the answer, not a nearest-lane guess."""
         assert DrumMap.chromatic(36).lane_for_note(100) is None
         assert DrumMap.chromatic(36).lane_for_note(35) is None
 
@@ -105,13 +83,7 @@ class TestValidation:
             DrumMap.chromatic(low)
 
     def test_the_devices_highest_low_note_still_fits(self) -> None:
-        """103 + 23 = 126, one short of 127.
-
-        The gap is Arturia's range being one short, not an off-by-one here:
-        capture D5 heard lane 0 fire 36 with the low note at 36, which is
-        ``low + i`` and rules out the ``low + i + 1`` reading that would have
-        landed the top lane exactly on 127.
-        """
+        """103 + 23 = 126, one short of 127."""
         assert DrumMap.chromatic(103).notes[-1] == 126
 
 

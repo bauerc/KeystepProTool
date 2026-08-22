@@ -1,23 +1,4 @@
-"""M5 and M6 -- a converted MIDI file, on the device.
-
-Same two phases as M4: these write the candidates, the operator loads them in
-MCC, pushes them to the KeyStep Pro and listens. What makes it a milestone is
-the listening, not a green run here.
-
-M4 already proved that a file built by ``place_note`` loads, transfers and
-plays back unchanged. M5 added that the notes came from a MIDI file nobody
-typed in. M6 adds everything a single monophonic clip could not reach: a drum
-track on Track 1, chords, carried gates, and a sequence too long for one
-pattern, which only plays as one sequence if the chain in ``121_84`` is right.
-
-Both candidates were confirmed **by ear**; neither readback has been taken, so
-the two readback tests skip until the captures exist. A readback diff is empty
-when the file is right (M4.1), which makes it the cheapest regression net
-available and the only way to catch a value that plays but is not the one we
-meant.
-
-The route is ``analysis/Hardware_Test_Protocol.md``, "The import route".
-"""
+"""M5 and M6 -- a converted MIDI file, on the device."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -66,7 +47,6 @@ def test_write_the_m5_candidate(simple_clip: Path, load_sample: Loader, captures
 def test_the_device_kept_the_converted_pattern(
     require_capture: Callable[[str], Path], simple_clip: Path, load_sample: Loader
 ) -> None:
-    """The pattern the device gives back is the clip we put in."""
     readback = lenient_json.load_path(require_capture(READBACK))
     expected = midi_import.convert(
         mido.MidiFile(simple_clip),
@@ -82,8 +62,6 @@ def test_the_device_kept_the_converted_pattern(
     ]
     assert all(note.active for note in notes)
 
-
-# --- M6: the whole file ----------------------------------------------------
 
 M6_CANDIDATE = "M6-song.KeyStepPro"
 M6_READBACK = "M6-song-readback.KeyStepPro"
@@ -127,12 +105,7 @@ def test_write_the_m6_candidate(m6_song: Path, load_sample: Loader, captures_dir
 def test_the_device_kept_the_converted_song(
     require_capture: Callable[[str], Path], m6_song: Path, load_sample: Loader
 ) -> None:
-    """Every track the device gives back is the one we put in.
-
-    Wider than M5's readback on purpose: this is where a drum lane, a chord's
-    pool ordinals, a carried gate and a pattern chain would each show up if the
-    device disagreed with us about any of them.
-    """
+    """Every track the device gives back is the one we put in."""
     readback = reader.read_project(lenient_json.load_path(require_capture(M6_READBACK)))
     expected = midi_import.convert_song(
         mido.MidiFile(m6_song), load_sample("Default.KeyStepPro"), options=_m6_options()

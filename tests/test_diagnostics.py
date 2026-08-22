@@ -1,9 +1,4 @@
-"""The diagnostics record, and how it collapses.
-
-The point of the module is that one problem affecting forty notes reads as one
-line by default and forty lines on request, without either view inventing or
-losing anything. These tests pin both directions.
-"""
+"""The diagnostics record, and how it collapses."""
 
 import pytest
 
@@ -16,8 +11,6 @@ from ksp.diagnostics import (
     Severity,
     Site,
 )
-
-# --- Sites and messages ---------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -51,9 +44,6 @@ def test_at_fills_in_site_parts_without_losing_the_rest() -> None:
     assert entry.at(track=3).site == Site(track=3, pattern=9, kind="drum")
 
 
-# --- Collection -----------------------------------------------------------
-
-
 def test_exact_repeats_are_dropped() -> None:
     collector = Collector()
     for _ in range(3):
@@ -74,9 +64,6 @@ def test_insertion_order_is_kept() -> None:
     collector.add(Code.GATE_SHORTENED, "first")
     collector.add(Code.TIME_SHIFT_CLIPPED, "second")
     assert collector.report().messages == ("first", "second")
-
-
-# --- Grouping and rendering -----------------------------------------------
 
 
 @pytest.fixture
@@ -164,9 +151,6 @@ def test_merge_concatenates_and_deduplicates() -> None:
     second.add(Code.GATE_SHORTENED, "shortened", site=Site(pattern=2))
     merged = first.report().merge(second.report())
     assert len(merged) == 2
-
-
-# --- The table ------------------------------------------------------------
 
 
 def test_every_code_has_a_summary() -> None:

@@ -34,8 +34,7 @@ def test_a_sign_survives_to_be_refused_by_range() -> None:
     "text", ["3", "", "3:", ":1", "3:x", "x:3", "1:2:3", "1_0:2", "2:1,", "1:2,3"]
 )
 def test_a_malformed_pair_names_itself(text: str) -> None:
-    # ``1_0`` and a non-ASCII digit are refused although ``int`` takes both:
-    # Swift's ``Int`` takes neither, and the two cores refuse the same input.
+    # ``1_0`` and a non-ASCII digit are refused although ``int`` takes both: Swift's does not.
     with pytest.raises(ValueError, match="is not a source:device pair"):
         parse_routes(text)
 
@@ -50,8 +49,7 @@ def test_a_malformed_pair_is_quoted_whole() -> None:
     [
         "99999999999999999999:1",
         "1:99999999999999999999",
-        # Int.min: Swift parses it and then traps on abs(), so it is refused by
-        # magnitude on that side rather than by absolute value.
+        # Int.min: Swift parses it and then traps on abs(), so it is refused by magnitude.
         "-9223372036854775808:1",
         # Past 4300 digits ``int`` raises its own message about
         # sys.set_int_max_str_digits, which is not what Swift's failed parse says.

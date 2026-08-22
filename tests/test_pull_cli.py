@@ -1,21 +1,4 @@
-"""``ksp-pull`` end to end, against a modelled device.
-
-The command cannot be run against hardware in CI, but everything except the USB
-layer can: ``FakeDevice`` answers out of the captured tapes, so the walk, the
-slot selection, the failure paths and -- the one that matters -- the bytes that
-land on disk are all exercised here.
-
-H3.2's gate is a byte-diff of a dump against MCC's own export of the same
-project. ``test_the_dump_is_byte_identical_to_mcc_s_export`` is that diff, run
-over the replayed capture. Passing it is not the same as passing on hardware,
-which is what H3.1 is for, but a regression that would fail the hardware gate
-fails here first.
-
-The diff is against ``without_trailing_comma``, not the raw export: this tool
-emits strict JSON and MCC emits one trailing comma before the closing brace, a
-deviation T6.2 settled at the device and ``test_round_trip`` bounds to that one
-byte. H3.2's diff on hardware will show the same byte and nothing else.
-"""
+"""``ksp-pull`` end to end, against a modelled device."""
 
 from pathlib import Path
 
@@ -47,11 +30,7 @@ def attached(monkeypatch: pytest.MonkeyPatch, device: FakeDevice) -> FakeDevice:
 
 
 class _Clock:
-    """A clock that moves only when a step is charged for its cost.
-
-    The replayed device answers instantly, so a real clock cannot separate the
-    run's halves at the tenth of a second the summary prints.
-    """
+    """A clock that moves only when a step is charged for its cost."""
 
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.now = 0.0
@@ -76,14 +55,7 @@ class _Clock:
 def test_the_dump_is_byte_identical_to_mcc_s_export(
     attached: FakeDevice, tmp_path: Path, project_files_dir: Path
 ) -> None:
-    """H3.2's byte-diff, over the capture rather than over the device.
-
-    The whole point of the read path is that the file it writes is the file MCC
-    writes. Key order, the value of every one of the 153,495 numeric keys, the
-    247 the firmware never sent and the three MCC-side constants it also never
-    sent all have to be right for this to hold, and nothing else in the suite
-    compares the finished artifact rather than the dict behind it.
-    """
+    """H3.2's byte-diff, over the capture rather than over the device."""
     written = tmp_path / "pulled.KeyStepPro"
 
     assert main([str(written)]) == 0
@@ -95,12 +67,7 @@ def test_the_dump_is_byte_identical_to_mcc_s_export(
 def test_the_walk_asks_for_64_values_at_a_time(
     attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """H3.1 asks for the coalesced walk, not MCC's 8,951 count-1 reads.
-
-    H1.3 measured a request period that does not move with the payload, so the
-    count is the whole of the speedup: the same addresses in about a ninth of
-    the frames.
-    """
+    """H3.1 asks for the coalesced walk, not MCC's 8,951 count-1 reads."""
     written = tmp_path / "pulled.KeyStepPro"
     assert main([str(written)]) == 0
 
@@ -185,11 +152,7 @@ def test_the_summary_times_the_whole_run_not_just_the_read(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The total has to include the template parse and the write.
-
-    Both are 3.5 MB and neither is at the device, so a "total" measured from the
-    first frame would understate a real run by most of it.
-    """
+    """The total has to include the template parse and the write."""
     clock = _Clock(monkeypatch)
     clock.charge("load_template", 5.0)
     clock.charge("read_raw", 2.0)
@@ -228,11 +191,7 @@ def test_a_slot_with_nothing_saved_in_it_is_refused(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Filler parses as a valid empty project, so it has to be caught here.
-
-    A dump of ``0x7f`` is well formed at every level below this one. Left alone
-    it writes a plausible file that silently is not the user's project.
-    """
+    """Filler parses as a valid empty project, so it has to be caught here."""
     empty = FakeDevice({3: DeviceModel(tape_values(fixtures_dir / "recall_tape.txt"))}, filler={3})
     monkeypatch.setattr(pull, "UsbMidiTransport", lambda **_: empty)
 

@@ -1,22 +1,6 @@
 #!/usr/bin/env bash
-# M11's acceptance gate: the Swift writer must reproduce the Python writer's bytes.
-#
-# The companion to port_parity.sh, which covers the read path. Each port milestone (M8-M12) ends in
-# a byte-comparison against the Python rather than in a feature, and this is M11's: the same project
-# through both writers has to come out identical, byte for byte, or the port has drifted.
-#
-# The Swift suite already writes every sample and compares it to MCC's bytes minus the trailing
-# comma, and the Python suite does the same, so the two are equal by transitivity. This says it
-# directly instead, which is what catches a drift that both suites would report as their own
-# problem rather than as a disagreement.
-#
-# The Python side is checked against MCC's own export as it writes, because a diff between the two
-# ports cannot see the case where both broke the same way. Our output is then MCC's bytes minus the
-# comma by the same transitivity, which is the property M11 actually claims.
-#
-# There is no CLI to drive: M11 deliberately added no command, and midi2ksp is M12. KSPKit takes no
-# third-party dependencies, though, so three lines of scratch compile straight into a binary
-# alongside it -- no package target, no entry point declared before its milestone.
+# Both writers over every sample, byte for byte. There is no CLI to drive the Swift side, so a
+# three-line scratch main compiles straight into a binary alongside dependency-free KSPKit.
 set -o pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
 
@@ -40,11 +24,9 @@ SWIFT
 
 mv "$source_file.new" "$source_file"
 
-# Unoptimised on purpose: -O costs more in compile time than it saves over six files. Rebuilt when
-# the sources have changed, since this runs on every Stop hook -- but keyed on their *contents*,
-# never their timestamps: a checkout, a stash pop or a branch switch all restore an older mtime, and
-# an mtime cache would then hand this gate a binary built from code that is no longer on disk. A
-# stale green here would be worse than no gate at all.
+# Unoptimised on purpose: -O costs more in compile time than it saves over six files. Rebuilt on the
+# sources' *contents*, never their timestamps -- a checkout or a stash pop restores an older mtime,
+# and an mtime cache would hand this gate a binary built from code no longer on disk.
 stamp=$scratch/sources.sha
 current=$(cat swift/Sources/KSPKit/*.swift "$source_file" | shasum | cut -d' ' -f1)
 if [[ ! -x $writer || $current != $(cat "$stamp" 2> /dev/null) ]]; then
@@ -61,10 +43,6 @@ trap 'rm -rf "$sandbox"' EXIT
 
 status=0
 count=0
-# The six writes are independent and each one costs a 3.5 MB parse and a 3.5 MB emit, so they go
-# across the cores for the reason midi_parity.sh sets out. The Python side below deliberately stays
-# one interpreter -- see its own comment -- and the cmp loop after it is too cheap to be worth
-# splitting. KSP_PARITY_JOBS=1 restores the serial order.
 jobs=${KSP_PARITY_JOBS:-$(getconf _NPROCESSORS_ONLN 2> /dev/null || echo 4)}
 for project in project_files/*.KeyStepPro; do
     count=$((count + 1))

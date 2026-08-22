@@ -1,18 +1,4 @@
-"""The drum note pool has holes, and the melodic note list does not.
-
-Spec section 4's "packed contiguously from index 1, with no gaps" is a rule
-for *writers*. On read, only the melodic set is observably compacted; deleting
-a drum note empties its entry and leaves the later ones where they are. A
-reader that stops at the first ``127`` therefore discards live drum notes --
-43 of them in ``initial_project`` -- and then reports their step-active flags
-as notes the file has lost.
-
-What makes the fix provable rather than plausible is that scanning the whole
-pool takes the flags-without-a-note count to exactly zero, on every pattern of
-every sample file, while leaving the pooled-but-unflagged notes (capture D1)
-untouched. See spec section 4, "The ``127`` sentinel" and "Pooled does not
-mean audible".
-"""
+"""The drum note pool has holes, and the melodic note list does not."""
 
 import pytest
 
@@ -39,9 +25,6 @@ def _drum_notes(project, pattern_number: int):  # type: ignore[no-untyped-def]
     return [n for n in pattern.notes if n.kind is NoteKind.DRUM]
 
 
-# --- The notes the old scan dropped ---------------------------------------
-
-
 @pytest.mark.parametrize(("pattern", "expected"), [(5, 42), (9, 49)])
 def test_patterns_with_holes_read_their_whole_pool(  # type: ignore[no-untyped-def]
     initial_project, pattern: int, expected: int
@@ -51,10 +34,7 @@ def test_patterns_with_holes_read_their_whole_pool(  # type: ignore[no-untyped-d
 
 
 def test_pattern_5_recovers_the_lane_12_and_lane_17_runs(initial_project) -> None:  # type: ignore[no-untyped-def]
-    """The specific notes finding 4 identified, so a regression is legible.
-
-    Both runs sit past the pool's first hole, at ordinals 30-34 and 36-41.
-    """
+    """The specific notes finding 4 identified, so a regression is legible."""
     notes = _drum_notes(initial_project, 5)
     for lane in (12, 17):
         in_lane = [n for n in notes if n.pitch == lane]
@@ -74,29 +54,18 @@ def test_pattern_9_recovers_the_lane_7_and_lane_19_runs(initial_project) -> None
 
 
 def test_the_false_alarms_are_gone(initial_project) -> None:  # type: ignore[no-untyped-def]
-    """Both warning classes the truncated scan produced.
-
-    The disabled-note warning must survive -- it is a real finding about the
-    file, not an artefact of the scan.
-    """
+    """Both warning classes the truncated scan produced."""
     warnings = [w for p in initial_project.tracks[0].patterns for w in p.warnings]
     assert not any("after the end of the note list" in w for w in warnings)
     assert not any("flagged active but hold no note" in w for w in warnings)
     assert any("disabled note(s), step turned off" in w for w in warnings)
 
 
-# --- The invariants that justify the two different scan rules --------------
-
-
 @pytest.mark.parametrize("name", PROJECTS)
 def test_every_flagged_drum_step_has_a_pooled_note(  # type: ignore[no-untyped-def]
     project_files_dir, load_sample, name: str
 ) -> None:
-    """Finding 5's invariant: `52` is a subset of the pool, never a superset.
-
-    A superset is what the truncated scan manufactured. The converse stays
-    false by design -- many pooled notes carry no flag, which is D1.
-    """
+    """Finding 5's invariant: `52` is a subset of the pool, never a superset."""
     raw = load_sample(name)
     project = load(project_files_dir / name)
     for pattern in project.tracks[0].patterns:
@@ -108,12 +77,7 @@ def test_every_flagged_drum_step_has_a_pooled_note(  # type: ignore[no-untyped-d
 
 
 def _decode_flags(raw, pattern: int) -> set[tuple[int, int]]:  # type: ignore[no-untyped-def]
-    """Unpack `52` straight from the file, independently of the reader.
-
-    Deliberately not ``reader._read_step_active``: comparing the reader
-    against itself would pass however the pool is scanned. Steps come out
-    1-based to match ``Note.step``.
-    """
+    """Unpack `52` straight from the file, independently of the reader."""
     item_id = constants.DRUM_TRACK_ITEM_ID
     flagged: set[tuple[int, int]] = set()
     for lane in range(constants.DRUM_LANE_COUNT):
@@ -127,11 +91,7 @@ def _decode_flags(raw, pattern: int) -> set[tuple[int, int]]:  # type: ignore[no
 
 @pytest.mark.parametrize("name", PROJECTS)
 def test_no_melodic_slot_holds_data_after_a_sentinel(load_sample, name: str) -> None:  # type: ignore[no-untyped-def]
-    """Why the melodic scan may keep stopping at the first ``127``.
-
-    If this ever fails, the melodic set has holes too and its scan needs the
-    same treatment as the drum one.
-    """
+    """Why the melodic scan may keep stopping at the first ``127``."""
     raw = load_sample(name)
     for item_id in constants.TRACK_ITEM_IDS:
         for pattern in range(1, constants.PATTERNS_PER_TRACK + 1):
@@ -149,11 +109,7 @@ def test_no_melodic_slot_holds_data_after_a_sentinel(load_sample, name: str) -> 
 
 
 def test_the_drum_pool_really_does_hold_holes(load_sample) -> None:  # type: ignore[no-untyped-def]
-    """The other half of the asymmetry, asserted directly.
-
-    Without this, a future change could make both scans stop at the first
-    sentinel again and only this file's note counts would notice.
-    """
+    """The other half of the asymmetry, asserted directly."""
     raw = load_sample("initial_project.KeyStepPro")
     item_id = constants.DRUM_TRACK_ITEM_ID
     holes = 0
@@ -168,14 +124,8 @@ def test_the_drum_pool_really_does_hold_holes(load_sample) -> None:  # type: ign
     assert holes, "initial_project patterns 5 and 9 are the corpus's only holed pools"
 
 
-# --- The spec's worked examples -------------------------------------------
-
-
-#: Every concrete key/value the spec quotes in section 4's "Why a note might
-#: not play" table. Pinned here so an edit to either the table or the reader
-#: cannot leave the authoritative reference quoting values that do not exist.
-#: CLAUDE.md tells the next reader to trust that document, so a stale example
-#: in it misleads more than no example would.
+#: Every concrete key/value the spec quotes in section 4's "Why a note might not play"
+#: table, so an edit to either side cannot leave the spec quoting values that do not exist.
 SPEC_EXAMPLES = {
     "initial_project.KeyStepPro": {
         # Row 1: a hole, with live notes either side of it.

@@ -44,8 +44,7 @@ def test_whitespace_around_items_is_ignored() -> None:
 
 @pytest.mark.parametrize("text", ["x", "", "1,", "2-", "-3", "2-3-4", "1..3", "1_0", "--5"])
 def test_a_malformed_item_names_itself(text: str) -> None:
-    # ``1_0`` and a non-ASCII digit are refused although ``int`` takes both:
-    # Swift's ``Int`` takes neither, and the two cores refuse the same input.
+    # ``1_0`` and a non-ASCII digit are refused although ``int`` takes both: Swift's does not.
     with pytest.raises(ValueError, match="is not a number or a range"):
         parse(text, limit=16)
 

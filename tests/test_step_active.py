@@ -1,16 +1,4 @@
-"""Step-active decoding, and the notes it stops the export from inventing.
-
-The device plays the step-active flags, not the note pool: capture D1 toggled
-a drum step off without deleting its note, the pooled entry survived
-byte-for-byte, and the step did not sound. T4.5 repeated it on the melodic
-parameter set with the same result, so both halves are measured (spec §4).
-
-The captures themselves are not in the repository (``project_files/captures/``
-is gitignored), so the hardware result is pinned here through the committed
-``initial_project``, which contains the same situation in real user material,
-plus direct tests of the packing arithmetic. ``test_hardware_tier4.py`` asserts
-against the captures directly and skips where they are absent.
-"""
+"""Step-active decoding, and the notes it stops the export from inventing."""
 
 from dataclasses import replace
 
@@ -22,8 +10,6 @@ from ksp.midi_export import ExportOptions, render_pattern, ticks_per_step
 from ksp.model import Note, NoteKind
 from ksp.reader import _check_step_active, load
 
-# --- The parameter 52 packing ---------------------------------------------
-#
 # Flattened [lane][part], lane-major, 7 bits per entry, 10 entries per lane.
 # Worked through by hand from D1/D3 and cross-checked on initial_project.
 
@@ -72,9 +58,6 @@ def test_drum_step_active_stays_within_the_file_arrays() -> None:
             assert 0 <= bit < constants.DRUM_STEP_ACTIVE_BITS_PER_ENTRY
 
 
-# --- The decode, against real user material -------------------------------
-
-
 @pytest.fixture(scope="module")
 def initial_project(project_files_dir):  # type: ignore[no-untyped-def]
     return load(project_files_dir / "initial_project.KeyStepPro")
@@ -86,24 +69,14 @@ def _drum_notes(project, pattern_number: int):  # type: ignore[no-untyped-def]
 
 
 def test_pattern_1_lane_0_is_fully_flagged(initial_project) -> None:  # type: ignore[no-untyped-def]
-    """The kick on steps 1, 5, 9, 13 is what `52` reads 17, 34 for.
-
-    Under the superseded 8-bits-per-entry reading this decoded to steps
-    1, 5, 10, 14 and disagreed with the pool -- which is what flagged the
-    packing as wrong in the first place.
-    """
+    """The kick on steps 1, 5, 9, 13 is what `52` reads 17, 34 for."""
     lane_0 = [n for n in _drum_notes(initial_project, 1) if n.pitch == 0]
     assert sorted(n.step for n in lane_0) == [1, 5, 9, 13]
     assert all(n.active for n in lane_0)
 
 
 def test_pattern_1_lane_17_is_only_half_flagged(initial_project) -> None:  # type: ignore[no-untyped-def]
-    """Eight pooled notes, four of them silent.
-
-    This is the D1 situation in material nobody authored for a test: the
-    pool holds every other step, the flags hold only half of those, and the
-    device plays the flags.
-    """
+    """Eight pooled notes, four of them silent."""
     lane_17 = [n for n in _drum_notes(initial_project, 1) if n.pitch == 17]
     assert sorted(n.step for n in lane_17) == [1, 3, 5, 7, 9, 11, 13, 15]
     assert sorted(n.step for n in lane_17 if n.active) == [3, 7, 13, 15]
@@ -117,8 +90,7 @@ def test_pattern_3_holds_wholly_unflagged_lanes(initial_project) -> None:  # typ
         assert in_lane, f"lane {lane} should hold pooled notes"
         assert not any(n.active for n in in_lane)
 
-    # Lane 7 in the same pattern is fully flagged, so this is not a pattern
-    # where the decode simply failed.
+    # Lane 7 is fully flagged, so this is not a pattern where the decode simply failed.
     lane_7 = [n for n in notes if n.pitch == 7]
     assert lane_7 and all(n.active for n in lane_7)
 
@@ -129,11 +101,7 @@ def test_reader_warns_about_disabled_notes(initial_project) -> None:  # type: ig
 
 
 def test_melodic_notes_are_flagged(initial_project) -> None:  # type: ignore[no-untyped-def]
-    """`48` and the melodic pool agree in every committed file.
-
-    Which is a corpus fact, not the behaviour: what the device does when they
-    disagree is capture T4.5, in ``test_hardware_tier4.py``.
-    """
+    """`48` and the melodic pool agree in every committed file."""
     pattern = initial_project.tracks[0].patterns[0]
     seq = [n for n in pattern.notes if n.kind is NoteKind.SEQ]
     assert seq and all(n.active for n in seq)
@@ -142,9 +110,6 @@ def test_melodic_notes_are_flagged(initial_project) -> None:  # type: ignore[no-
 def test_empty_project_has_no_flags(project_files_dir) -> None:  # type: ignore[no-untyped-def]
     project = load(project_files_dir / "user_empty_project.KeyStepPro")
     assert not any(pattern.notes for track in project.tracks for pattern in track.patterns)
-
-
-# --- The export consequence -----------------------------------------------
 
 
 def test_export_omits_disabled_notes_by_default(initial_project) -> None:  # type: ignore[no-untyped-def]
@@ -165,17 +130,12 @@ def test_include_disabled_restores_them(initial_project) -> None:  # type: ignor
 
     pooled = [n for n in pattern.notes if n.kind is NoteKind.DRUM]
     assert len(rendering.notes) == len(pooled)
-    # The reader still reports that these notes are disabled; what must not
-    # appear is the export saying it dropped them.
+    # The reader still reports them disabled; the export must not say it dropped them.
     assert not any("were not exported" in w for w in rendering.warnings)
 
 
 def test_a_disabled_note_does_not_stretch_the_pattern(initial_project) -> None:  # type: ignore[no-untyped-def]
-    """An omitted note must not widen the rendering it was omitted from.
-
-    Otherwise a pattern ends with silence whose length is set by a note the
-    device never plays.
-    """
+    """An omitted note must not widen the rendering it was omitted from."""
     pattern = initial_project.tracks[0].patterns[2]
     notes = tuple(
         replace(n, step=constants.MAX_STEPS, active=False) if i == 0 else n
@@ -190,17 +150,8 @@ def test_a_disabled_note_does_not_stretch_the_pattern(initial_project) -> None: 
     assert default.length_ticks < including.length_ticks
 
 
-# --- Past the last step is the other way to be disabled --------------------
-
-
 def test_notes_past_the_last_step_are_dropped_by_default(initial_project) -> None:  # type: ignore[no-untyped-def]
-    """initial_project Track 1 pattern 9 is 48 steps and holds notes to 63.
-
-    The user shortened the pattern, which is how the device disables a step.
-    Exporting those notes anyway would put material in the MIDI that the
-    hardware does not play, which is the same mistake as ignoring the
-    step-active flag.
-    """
+    """initial_project Track 1 pattern 9 is 48 steps and holds notes to 63."""
     pattern = initial_project.tracks[0].patterns[8]
     last = pattern.drum_step_count
     assert last == 48, "the fixture must still be the shortened pattern"
@@ -211,8 +162,7 @@ def test_notes_past_the_last_step_are_dropped_by_default(initial_project) -> Non
     rendering = render_pattern(pattern, track_number=1, kind=NoteKind.DRUM)
     step_ticks = ticks_per_step(pattern, NoteKind.DRUM, ExportOptions().ticks_per_beat)
     assert all(n.tick // step_ticks < last for n in rendering.notes)
-    # The pattern is its declared length, not stretched to reach a note that
-    # does not sound.
+    # Declared length, not stretched to reach a note that does not sound.
     assert rendering.length_ticks == last * step_ticks
     assert any("past the last step of 48" in w for w in rendering.warnings)
     assert any("--include-disabled" in w for w in rendering.warnings)
@@ -243,8 +193,6 @@ def test_a_pattern_within_its_length_is_untouched(project_files_dir) -> None:  #
     assert not any("past the last step" in w for w in rendering.warnings)
 
 
-# --- The flag-without-note cross-check -------------------------------------
-#
 # No sample project violates the invariant, so these build the violation.
 
 
@@ -266,8 +214,9 @@ def _seq_note(step: int, index: int = 1) -> Note:
 
 
 def test_a_flagged_step_backed_by_a_note_is_not_reported() -> None:
-    """``active`` is 0-based and ``Note.step`` 1-based; an off-by-one in the
-    bridge would invent an orphan for every step."""
+    """``active`` is 0-based and ``Note.step`` 1-based; an off-by-one in the bridge would invent an
+    orphan for every step.
+    """
     notes = [_seq_note(1), _seq_note(5, index=2)]
     diagnostics = _check_step_active(1, notes, frozenset({0, 4}), kind=NoteKind.SEQ)
 

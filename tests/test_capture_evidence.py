@@ -1,14 +1,4 @@
-"""What the captured tapes prove about the slot byte and the write direction.
-
-Spec section 7 rests on three claims that no other test would catch drifting,
-because nothing in ``src/`` reads these two tapes yet. They are asserted here
-against the captures themselves so that regenerating a tape, or re-editing the
-spec, has to keep agreeing with the wire.
-
-None of this confirms the device *honours* the slot byte -- that is H4.1, and it
-needs hardware. What it pins is that MCC sends it and that it is the only thing
-in the import stream naming the destination.
-"""
+"""What the captured tapes prove about the slot byte and the write direction."""
 
 from pathlib import Path
 
@@ -65,9 +55,9 @@ def test_the_write_replays_the_read_with_only_the_slot_changed(
     slot_2: list[tuple[bytes, bytes | None]],
     slot_3: list[tuple[bytes, bytes | None]],
 ) -> None:
-    """The two captures are the same project moved from slot 2 to slot 3, so
-    every write is the reply it came from with byte 7 rewritten -- which is what
-    leaves byte 7 as the only candidate for naming the destination."""
+    """The two captures are the same project moved from slot 2 to slot 3, so every write is the
+    reply it came from with byte 7 rewritten -- which leaves byte 7 as the destination.
+    """
     assert len(slot_2) == len(slot_3) == 8951
 
     def masked(frame: bytes) -> bytes:
@@ -85,9 +75,9 @@ def test_the_sentinel_is_read_but_cannot_be_written(
     slot_2: list[tuple[bytes, bytes | None]],
     slot_3: list[tuple[bytes, bytes | None]],
 ) -> None:
-    """0xFF survives the read (H1.5) and does not survive the write: MCC emits
-    the frame with its count intact and the payload byte gone, and the device
-    answers nothing at all."""
+    """0xFF survives the read (H1.5) and does not survive the write: MCC emits the frame with its
+    count intact and the payload byte gone, and the device answers nothing at all.
+    """
     _, reply = slot_2[955]
     assert reply is not None
     request, values = sysex.parse_reply(reply)
@@ -106,8 +96,9 @@ def test_the_sentinel_is_read_but_cannot_be_written(
 def test_the_two_slots_hold_different_projects(
     fixtures_dir: Path, slot_2: list[tuple[bytes, bytes | None]]
 ) -> None:
-    """An identical request stream answered differently -- 971 of 8,951
-    addresses -- so the reads are not both returning one loaded project."""
+    """An identical request stream answered differently -- 971 of 8,951 addresses -- so the reads
+    are not both returning one loaded project.
+    """
     slot_1 = load_pairs(fixtures_dir / "recall_tape.txt")
     requests = [(a.hex(), b.hex()) for (a, _), (b, _) in zip(slot_1, slot_2, strict=True)]
     assert all(a[:14] + a[16:] == b[:14] + b[16:] for a, b in requests)

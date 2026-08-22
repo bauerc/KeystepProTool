@@ -1,10 +1,4 @@
-"""What each command prints by default, and what --verbose adds.
-
-``initial_project`` is the case that motivated this: real user material where
-the same finding recurs in ten patterns. The invariant both tools must hold is
-that the default view never says anything ``--verbose`` does not support, and
-never hides a *kind* of problem -- only repeats of one.
-"""
+"""What each command prints by default, and what --verbose adds."""
 
 from pathlib import Path
 
@@ -20,9 +14,6 @@ def _warning_lines(text: str) -> list[str]:
     return [
         line for line in text.splitlines() if "warning:" in line or line.lstrip().startswith("!")
     ]
-
-
-# --- ksp2midi -------------------------------------------------------------
 
 
 def test_export_collapses_repeats_by_default(
@@ -64,8 +55,7 @@ def test_every_kind_survives_collapsing(
     argv = [str(project_files_dir / NOISY), "-o", str(tmp_path / "out.mid"), "--dry-run"]
     assert export_main(argv) == 0
     default = capsys.readouterr().err
-    # Not gate: the tier 2 sweep measured the full ladder, so every value in
-    # this file now decodes and that warning correctly no longer fires.
+    # Not gate: the full ladder now decodes, so that warning correctly never fires.
     for phrase in (
         "disabled (step turned off)",
         "drum lanes resolved through",
@@ -79,13 +69,7 @@ def test_every_kind_survives_collapsing(
 def test_the_step_skip_kind_survives_collapsing(
     project_files_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Checked against project_5, the only file that really skips steps.
-
-    ``initial_project`` reads 15 -- "plays on all four passes" -- in every
-    entry of the ``49`` array it actually uses, so it never had a step skip to
-    report. It appeared to until the reader stopped taking that array from the
-    note's own pool chunk instead of chunk 1, where it wholly lives (spec 4).
-    """
+    """Checked against project_5, the only file that really skips steps."""
     argv = [str(project_files_dir / "project_5.KeyStepPro"), "-o", str(tmp_path / "p5.mid")]
     assert export_main([*argv, "--dry-run"]) == 0
 
@@ -101,9 +85,6 @@ def test_quiet_still_shows_the_caveats(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "warning:" in captured.err
-
-
-# --- ksp-dump -------------------------------------------------------------
 
 
 def test_dump_summarises_at_the_end_by_default(

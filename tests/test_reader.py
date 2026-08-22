@@ -1,9 +1,4 @@
-"""Unit tests for the individual encodings and the two index spaces.
-
-``test_ground_truth.py`` proves the reader reproduces real files. These tests
-cover the pieces in isolation, so that a failure points at *which* encoding
-broke rather than just reporting that a note came out wrong.
-"""
+"""Unit tests for the individual encodings and the two index spaces."""
 
 from functools import lru_cache
 from pathlib import Path
@@ -35,21 +30,12 @@ class TestEncodings:
         [(0, 0.0625), (2, 0.1875), (8, 0.625), (15, 1.5), (28, 3.25), (48, 8.5), (127, 64.0)],
     )
     def test_the_rest_of_the_ladder_decodes(self, stored: int, expected: float) -> None:
-        """One value from each of the five display runs, plus both extremes.
-
-        These were the "unmeasured" values before the tier 2 sweep; stored 2 in
-        particular is ``initial_project``'s drum gate, the long-standing
-        ``?(2)``. ``tests/test_gate_ladder.py`` checks all 128 against the
-        transcription -- these pin the run boundaries readably.
-        """
+        """One value from each of the five display runs, plus both extremes."""
         assert constants.decode_gate(stored) == expected
 
     @pytest.mark.parametrize("stored", [-1, 128, 255])
     def test_a_gate_off_the_ladder_is_not_guessed(self, stored: int) -> None:
-        """The ladder covers every legal 7-bit value, so anything outside it is
-        corrupt input. Rounding it to the nearest rung would produce a file
-        that loads cleanly and plays wrong, which is the failure mode with no
-        symptom."""
+        """The ladder covers every legal 7-bit value, so anything outside it is corrupt input."""
         assert constants.decode_gate(stored) is None
 
     @pytest.mark.parametrize(
@@ -98,12 +84,7 @@ class TestSlotInitialisation:
         assert slot_is_initialised(sentinels, sentinels, sentinels)
 
     def test_a_real_note_at_step_zero_is_not_mistaken_for_zero_fill(self) -> None:
-        """The narrow test matters: step 1 with pitch 0 is a legal drum note.
-
-        project_5's kick is exactly that -- note->step 0, lane 0 -- so only
-        velocity separates it from uninitialised storage. Requiring all three
-        arrays to be uniformly zero is what keeps a real note readable.
-        """
+        """The narrow test matters: step 1 with pitch 0 is a legal drum note."""
         note_step = [0] + [constants.SENTINEL] * (constants.MAX_STEPS - 1)
         pitch = [0] + [constants.SENTINEL] * (constants.MAX_STEPS - 1)
         velocity = [127] + [constants.SENTINEL] * (constants.MAX_STEPS - 1)
@@ -157,22 +138,14 @@ class TestAgainstRealFiles:
     """The behaviours that only show up in files, kept close to their evidence."""
 
     def test_velocity_127_is_a_note_not_a_sentinel(self, project_files_dir: Path) -> None:
-        """project_5's first kick has velocity 127, a legal value.
-
-        Existence is decided by the note->step parameter alone. A reader that
-        tested velocity would drop this note entirely.
-        """
+        """project_5's first kick has velocity 127, a legal value."""
         project = cached_load(project_files_dir / "project_5.KeyStepPro")
         first_kick = project.track(1).pattern(1).notes[0]
         assert first_kick.velocity == constants.SENTINEL
         assert first_kick.kind is NoteKind.DRUM
 
     def test_note_index_and_step_index_diverge(self, project_files_dir: Path) -> None:
-        """The tenth note sits on step 13, and its skip mask comes from step 13.
-
-        This is the whole point of M1. Reading the skip mask at note index 10
-        instead would give 15 (the default) rather than the correct 12.
-        """
+        """The tenth note sits on step 13, and its skip mask comes from step 13."""
         project = cached_load(project_files_dir / "project_5.KeyStepPro")
         tenth = project.track(3).pattern(1).notes[9]
         assert (tenth.index, tenth.step) == (10, 13)
@@ -187,15 +160,7 @@ class TestAgainstRealFiles:
         assert (note.step, note.skip) == (1, (32,))
 
     def test_a_pattern_can_hold_both_parameter_sets(self, project_files_dir: Path) -> None:
-        """Track 1 pattern 1 of initial_project has a real melody and real drums.
-
-        Parameter 100 reads 26 in every pattern of every sample and cannot say
-        which plays, but parameter 86 bit 6 can: it is set on this track. So
-        the mode resolves to DRUM and the melody is leftovers -- and every
-        note is still reported, because a reader that silently dropped 64 real
-        user notes would hide exactly the surprise this test exists to keep
-        visible.
-        """
+        """Track 1 pattern 1 of initial_project has a real melody and real drums."""
         project = cached_load(project_files_dir / "initial_project.KeyStepPro")
         pattern = project.track(1).pattern(1)
         assert project.track(1).drum_mode is True
@@ -205,48 +170,22 @@ class TestAgainstRealFiles:
         assert any("is stale. Both are reported" in w for w in pattern.warnings)
 
     def test_drum_mode_bit_tracks_which_projects_hold_drums(self, project_files_dir: Path) -> None:
-        """Parameter 86 bit 6 is the drum-mode flag that 100 was expected to be.
-
-        MCC's dictionary names it ("Arp/Drum mode state : bit 6", paramId 86)
-        and the data agrees exactly: set on Track 1 in every sample holding
-        drum notes, clear in both empty baselines, and never set on tracks
-        2-4, which have no drum parameter set at all.
-        """
+        """Parameter 86 bit 6 is the drum-mode flag that 100 was expected to be."""
         with_drums = ("project_5", "project_9", "initial_project")
         without = ("Default", "user_empty_project")
 
-        # 1. Check projects that should have drum mode enabled
         for name in with_drums:
-            project = cached_load(project_files_dir / f"{name}.KeyStepPro")  # Read once
+            project = cached_load(project_files_dir / f"{name}.KeyStepPro")
             assert project.track(1).drum_mode is True, name
             assert [t.drum_mode for t in project.tracks[1:]] == [False] * 3, name
 
-        # 2. Check projects that should NOT have drum mode enabled
         for name in without:
-            project = cached_load(project_files_dir / f"{name}.KeyStepPro")  # Read once
+            project = cached_load(project_files_dir / f"{name}.KeyStepPro")
             assert project.track(1).drum_mode is False, name
             assert [t.drum_mode for t in project.tracks[1:]] == [False] * 3, name
 
     def test_step_active_flags_agree_with_the_note_list(self, project_files_dir: Path) -> None:
-        """The redundant step-active array is a free cross-check on the decode.
-
-        Where it disagrees the reader warns rather than reconciling, so this
-        asserts the hardware-confirmed projects produce no such warning.
-
-        Matched on the diagnostic's ``Code``, not on its wording. This test
-        spent M2-M9 searching for the text of a warning that M1's reader
-        raised and ``83ef72f`` deleted, so it matched nothing and could not
-        fail; keying off the enum is what stops a reworded message from
-        silently emptying it again.
-
-        Scoped to the two files whose values came off the device's display,
-        which is what makes a disagreement here mean the decode is wrong. That
-        also bounds it: neither holds a drum pool with holes, so the truncated
-        scan of finding 4 is invisible to it.
-        ``test_pool_holes.test_every_flagged_drum_step_has_a_pooled_note``
-        covers that, across all five samples and against an independent decode
-        of ``52`` rather than the reader's own.
-        """
+        """The redundant step-active array is a free cross-check on the decode."""
         for name in ("project_5.KeyStepPro", "project_9.KeyStepPro"):
             project = cached_load(project_files_dir / name)
             disagreements = [

@@ -45,7 +45,6 @@ fail() {
     exit "$status"
 }
 
-# 1. AUTO-FORMAT & LINT (Using uv to run Ruff)
 banner "=== [1/9] Auto-formatting with Ruff ==="
 run_step uv run ruff format .
 if ! run_step uv run ruff check --fix .; then
@@ -53,7 +52,6 @@ if ! run_step uv run ruff check --fix .; then
         "Claude: ruff could not auto-fix these violations. Correct them by hand."
 fi
 
-# 2. SECRET SCANNING (Independent system binary check)
 if command -v gitleaks &> /dev/null; then
     banner "\n=== [2/9] Scanning for exposed API keys ==="
     if ! run_step gitleaks detect --no-git --verbose; then
@@ -62,7 +60,6 @@ if command -v gitleaks &> /dev/null; then
     fi
 fi
 
-# 3. PARALLEL SYNTAX CHECK (Using uv's python environment)
 banner "\n=== [3/9] Running Parallel Syntax Check ==="
 if ! run_step uv run python -m compileall -q -j 0 src tests tools; then
     fail "❌ SYNTAX ERROR DETECTED" \
@@ -70,28 +67,22 @@ if ! run_step uv run python -m compileall -q -j 0 src tests tools; then
 fi
 banner "✅ Syntax passes."
 
-# 4. TYPE CHECK (Using uv to run Mypy)
 banner "\n=== [4/9] Running Fast Type Check ==="
 if ! run_step uv run mypy; then
     fail "❌ TYPE MISMATCH DETECTED" \
         "Claude: Review the Mypy trace above and correct variable assignments."
 fi
 
-# 5. PARALLEL UNIT TESTS (Using uv to run Pytest with xdist parallel cores)
 banner "\n=== [5/9] Running Parallel Unit Tests ==="
 if ! run_step uv run pytest -n auto -m "not slow and not hardware"; then
     fail "❌ UNIT TEST FAILURE" \
         "Claude: You broke existing runtime logic. Review the failing test above."
 fi
 
-# 6. SWIFT PACKAGE (M8 port; skipped where the toolchain is absent, as with gitleaks above)
+# Skipped where the toolchain is absent, as with gitleaks above.
 if command -v swift &> /dev/null; then
     banner "\n=== [6/9] Linting and testing the Swift package ==="
 
-    # Command Line Tools ship Swift Testing as a framework but, unlike a full Xcode, leave it off
-    # the compiler's search path and off the runtime's. Worse, the _Testing_Foundation cross-import
-    # overlay has no .swiftinterface there at all, so any test importing both Testing and Foundation
-    # fails to build without the frontend flag. Measured on CLT 6.2.3; under Xcode this stays empty.
     swift_flags=()
     developer_dir=$(xcode-select -p 2> /dev/null)
     clt_frameworks="$developer_dir/Library/Developer/Frameworks"
@@ -117,19 +108,10 @@ if command -v swift &> /dev/null; then
             "Claude: Review the failing Swift test above. 'swift test' builds, so this covers the build too."
     fi
 
-    # Steps 7-9 are the three parity gates, and together they are most of this script's cost. They
-    # all read the same things: the two implementations, the corpus they run over, and the tools
-    # doing the comparing. So one fingerprint over that set gates all three -- coarser than three
-    # separate stamps, and deliberately so, since anything that could move one could move another.
-    #
-    # Content hashes, never mtimes, for the reason writer_parity.sh gives about its own compile
-    # stamp: a checkout, a stash pop or a branch switch all restore an older mtime, and a stale
-    # green here would be worse than no gate at all. Hashing the built ksp-swift-cli is what covers
-    # every Swift source change -- step 6 above rebuilds and re-codesigns it before this is read,
-    # because KSPSwiftCLITests depends on the executable target. swift/Sources is swept too, which
-    # is what catches the bundled template: src/ksp_cli/templates/Default.KeyStepPro is a symlink
-    # to it and `find -type f` never sees a symlink.
-    #
+    # One fingerprint gates all three parity steps. Content hashes, never mtimes: a checkout, a
+    # stash pop or a branch switch all restore an older mtime, and a stale green would be worse than
+    # no gate. Hashing the built ksp-swift-cli is what covers every Swift source change, and sweeping
+    # swift/Sources is what catches the bundled template, which `find -type f` sees only there.
     # The stamp is written only after all three have passed, so a red run leaves nothing behind.
     parity_stamp=swift/.build/parity/gates.sha
     parity_fingerprint=$(
@@ -145,10 +127,6 @@ if command -v swift &> /dev/null; then
     if [[ -n $parity_fingerprint && $parity_fingerprint == $(cat "$parity_stamp" 2> /dev/null) ]]; then
         banner "\n=== [7-9/9] Parity gates: inputs unchanged since the last green run -- skipping ==="
     else
-        # 7. PORT PARITY (M10 onwards). Each port milestone ends in a byte-comparison against the
-        # Python rather than in a feature, and this is M10's: the same file through both readers and
-        # both output modes has to come out identical, character for character. The Swift CLI is
-        # gated off Linux, so CI cannot run this -- it is a dev-machine gate only.
         banner "\n=== [7/9] Comparing ksp-swift-cli dump against ksp-dump ==="
         if ! run_step ./scripts/port_parity.sh; then
             fail "❌ THE TWO PORTS DISAGREE" \
@@ -156,10 +134,6 @@ if command -v swift &> /dev/null; then
         fi
         banner "✅ Both ports agree."
 
-        # 8. WRITER PARITY (M11 onwards). The same again for the write path: both writers over
-        # every sample, byte for byte. Needs only swiftc, since KSPKit has no dependencies -- but it
-        # writes 3.5 MB files, so it stays beside port_parity as a dev-machine gate rather than a
-        # CI one.
         banner "\n=== [8/9] Comparing the Swift writer against the Python's ==="
         if ! run_step ./scripts/writer_parity.sh; then
             fail "❌ THE TWO WRITERS DISAGREE" \
@@ -167,11 +141,6 @@ if command -v swift &> /dev/null; then
         fi
         banner "✅ Both writers agree."
 
-        # 9. CONVERSION PARITY (M12 onwards). Both directions this time, over every project and
-        # every clip in the repository. The export half compares parsed events rather than bytes,
-        # because mido writes running status and swift-midi-file does not; the import half is a real
-        # cmp. Each direction reports itself absent until the subcommand it drives exists, so this
-        # arms itself as M12 lands rather than having to be switched on.
         banner "\n=== [9/9] Comparing the two ports' conversions, both directions ==="
         if ! run_step ./scripts/midi_parity.sh; then
             fail "❌ THE TWO PORTS CONVERT DIFFERENTLY" \
@@ -179,7 +148,6 @@ if command -v swift &> /dev/null; then
         fi
         banner "✅ Both ports convert alike."
 
-        # All three green: record what they were green for.
         mkdir -p "$(dirname "$parity_stamp")" && echo "$parity_fingerprint" > "$parity_stamp"
     fi
 else

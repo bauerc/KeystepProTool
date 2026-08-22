@@ -1,17 +1,7 @@
 """Distil a gitignored USB capture into a tracked replay fixture.
 
-The captures under ``usb_midi_investigation/`` are 3.5-5.3 MB and gitignored, so
-they are absent from every worktree and every fresh clone. This pairs each frame
-the host sent with the frame the device sent back and writes only the pair,
-which is all the replay tests need, at a size the repository can hold.
-
-Reads a *read* capture by default and a *write* capture under ``--write``, whose
-directions are the same frames with the roles swapped: the reply opcodes are
-what the host sends, and the device answers with an ack. See spec section 7.
-
-Takes the capture path as an optional argument, defaulting to the main
-checkout's copy, so it runs from a worktree without the capture being carried
-across.
+``--write`` reads a write capture, whose directions are the same frames with the
+roles swapped: the reply opcodes are what the host sends (spec section 7).
 """
 
 import json
@@ -26,14 +16,11 @@ REQUESTS = (0x0B, 0x01)
 REPLIES = (0x0C, 0x02)
 ACKS = (0x1C,)
 
-#: The capture's ``direction`` field is unreliable -- the extractor that made
-#: the project 2 and 3 captures wrote "inbound" for every row. The USB endpoint
-#: is what actually distinguishes them.
+#: The capture's ``direction`` field is unreliable; the USB endpoint distinguishes them.
 HOST_TO_DEVICE = "0x01"
 DEVICE_TO_HOST = "0x81"
 
-#: Reply column for a frame the device never answered. The project 3 capture
-#: holds one: the truncated 0xFF write that stalled the link (spec section 7.6).
+#: Reply column for a frame the device never answered (spec section 7.6).
 NO_REPLY = "-"
 
 

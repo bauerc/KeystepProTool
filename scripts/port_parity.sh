@@ -1,24 +1,10 @@
 #!/usr/bin/env bash
-# M10's acceptance gate: ksp-swift-cli must reproduce ksp-dump exactly.
-#
-# The ROADMAP has each port milestone (M8-M12) end in a byte-comparison against the Python rather
-# than in a feature, because the risk in the port is not discovery -- nothing is left to
-# reverse-engineer -- but thousands of lines of hand-converted arithmetic that look correct on
-# inspection. A diff against the reference implementation is the only thing that catches those.
-#
-# Both output modes, because they exercise different halves: --json pins the decoded model and the
-# key order, the tree pins the number formatting and the diagnostic wording.
-#
-# HOME is redirected for both sides so neither picks up a personal ~/.config drum map: the run has
-# to mean the same thing on every machine.
-#
-# The twelve comparisons run in parallel, for the reason midi_parity.sh explains at more length:
-# each one reads a 3.5 MB project through both ports, so the cost is the reading and not the
-# process, and they were already independent of one another. KSP_PARITY_JOBS=1 restores the serial
-# order.
+# Diffs ksp-swift-cli dump against ksp-dump in both output modes: --json pins the decoded model and
+# the key order, the tree pins the number formatting and the diagnostic wording. HOME is redirected
+# so neither side picks up a personal ~/.config drum map.
 set -o pipefail
 
-# Absolute, because this re-invokes itself as the per-comparison worker.
+# Absolute: this re-invokes itself as the per-comparison worker.
 self=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
 
@@ -28,8 +14,8 @@ if [[ ! -x $swift_cli ]]; then
     exit 1
 fi
 
-# One comparison, invoked as `$self --one <sandbox> <index>|<project>|<mode>`. Its two streams are
-# captured so the driver can replay them in index order rather than as they finish.
+# One comparison. Its streams are captured so the driver can replay them in index order rather than
+# as they finish.
 if [[ ${1-} == "--one" ]]; then
     sandbox=$2
     IFS='|' read -r index project mode <<< "$3"

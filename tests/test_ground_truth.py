@@ -1,16 +1,4 @@
-"""M1's regression test: the reader must reproduce the hardware-confirmed data.
-
-Expected values come from JSON fixtures rather than from assertions written
-inline, for two reasons. The Swift port (M10) can be checked against the
-same files instead of a translated copy of these expectations; and the
-fixtures were transcribed by hand from the descriptions in ``analysis/``, so
-what they encode is what a person read off the KeyStep Pro's display, not what
-this reader happens to produce. A test generated from the implementation would
-only prove the implementation agrees with itself.
-
-See ``tests/fixtures/README.md`` for what is hardware-confirmed and what is
-merely transcribed from the file.
-"""
+"""M1's regression test: the reader must reproduce the hardware-confirmed data."""
 
 import json
 from pathlib import Path
@@ -21,8 +9,7 @@ import pytest
 from ksp.model import Note, Project
 from ksp.reader import load
 
-#: The note fields a fixture pins down. Everything else on ``Note`` -- the raw
-#: gate value, the note ordinal -- is implementation detail that the ground
+#: The note fields a fixture pins down. The rest is implementation detail the ground
 #: truth documents say nothing about.
 COMPARED_FIELDS = (
     "kind",
@@ -88,13 +75,7 @@ def test_notes_match_ground_truth(case: tuple[dict[str, Any], Project]) -> None:
 
 
 def test_undocumented_patterns_are_empty(case: tuple[dict[str, Any], Project]) -> None:
-    """Nothing is decoded outside the patterns the description accounts for.
-
-    This is the half of the comparison that catches over-reading. A reader
-    that mistakes uninitialised storage for content -- Track 1 slot 4 is
-    zero-filled in every known file -- still passes the note-by-note check
-    above, because it invents notes in patterns the fixture never mentions.
-    """
+    """Nothing is decoded outside the patterns the description accounts for."""
     fixture, project = case
     documented = {(p["track"], p["pattern"]) for p in fixture["patterns"]}
     for track in project.tracks:
@@ -108,13 +89,7 @@ def test_undocumented_patterns_are_empty(case: tuple[dict[str, Any], Project]) -
 
 
 def test_unresolved_discrepancies_still_hold(case: tuple[dict[str, Any], Project]) -> None:
-    """Known description-vs-file conflicts stay visible until re-checked.
-
-    Each ``unresolved`` entry asserts the file really does disagree with the
-    description. If someone re-confirms the value on the hardware and corrects
-    one of the two, this fails and forces the fixture to be updated rather than
-    letting the conflict evaporate unnoticed.
-    """
+    """Known description-vs-file conflicts stay visible until re-checked."""
     fixture, _ = case
     for entry in fixture["unresolved"]:
         assert entry["documented"] != entry["in_file"], (
@@ -125,11 +100,7 @@ def test_unresolved_discrepancies_still_hold(case: tuple[dict[str, Any], Project
 
 
 def test_project_5_second_kick_shift_is_positive(project_files_dir: Path) -> None:
-    """The +1 the device displays for the second kick (T6.1), pinned by hand.
-
-    The description first transcribed -1 here. Asserting the decoded value
-    keeps the corrected reading anchored to the file rather than to prose.
-    """
+    """The +1 the device displays for the second kick (T6.1), pinned by hand."""
     project = load(project_files_dir / "project_5.KeyStepPro")
     second_kick = project.track(1).pattern(1).notes[1]
     assert second_kick.step == 5

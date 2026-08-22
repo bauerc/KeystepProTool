@@ -1,10 +1,4 @@
-"""``kspplus`` -- that a subcommand is the standalone command, not a copy of it.
-
-Each command is mounted on the group by the same ``register`` its own entry
-point uses, so the risk is not that one of them behaves differently in
-isolation but that the group dispatches somewhere else entirely. These tests
-run both ways and compare what came out.
-"""
+"""``kspplus`` -- that a subcommand is the standalone command, not a copy of it."""
 
 import re
 from pathlib import Path
@@ -17,12 +11,7 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def plain(text: str) -> str:
-    """Help text without styling.
-
-    Rich colours when it thinks it is on a terminal -- which CI is -- and it
-    styles the dashes of an option separately from its name, so ``--split``
-    is not a contiguous run of characters in the raw stream.
-    """
+    """Help text without styling."""
     return _ANSI.sub("", text)
 
 
@@ -125,7 +114,6 @@ def test_subcommand_help_is_its_own(
     assert "kspplus ksp2midi" in out  # the usage line names the way in
     # An option no other option's help text mentions, so this cannot pass on prose.
     assert "--include-disabled" in out
-    # The reason for Typer: seventeen options sorted into panels by what they affect.
     for panel in ("Selection", "Timing", "Drum mapping", "Output"):
         assert panel in out
 
