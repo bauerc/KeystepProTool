@@ -185,6 +185,7 @@ if has convert; then
         add import "$(basename "$clip") --midi-tracks 0" "$clip" --midi-tracks 0
         add import "$(basename "$clip") --midi-tracks 99" "$clip" --midi-tracks 99
         add import "$(basename "$clip") --midi-track 1 --midi-tracks 1" "$clip" --midi-track 1 --midi-tracks 1
+        add import "$(basename "$clip") --midi-tracks 1 --drum-track 2" "$clip" --midi-tracks 1 --drum-track 2
     done
 else
     echo "midi_parity: ksp-swift-cli has no 'convert' yet -- skipping the midi2ksp direction"

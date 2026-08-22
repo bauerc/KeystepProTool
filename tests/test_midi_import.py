@@ -470,9 +470,7 @@ def test_a_fifth_source_track_is_reported_rather_than_written(load_sample: Loade
     assert len(result.plan.tracks) == 4
     dropped = [d for d in result.diagnostics if d.code is Code.TRACKS_DROPPED]
     assert [d.subjects for d in dropped] == [1]
-    assert dropped[0].detail == (
-        "1 source track(s) had nowhere to go; the file holds 5 and the device has 4 tracks"
-    )
+    assert dropped[0].detail == ("1 source track(s) had nowhere to go; the device has 4 tracks")
 
 
 def test_a_selection_wider_than_the_device_is_reported(load_sample: Loader) -> None:
@@ -485,7 +483,7 @@ def test_a_selection_wider_than_the_device_is_reported(load_sample: Loader) -> N
     dropped = [d for d in result.diagnostics if d.code is Code.TRACKS_DROPPED]
     assert [d.subjects for d in dropped] == [1]
     assert dropped[0].detail == (
-        "1 source track(s) had nowhere to go; the selection holds 5 and the device has 4 tracks"
+        "1 selected source track(s) had nowhere to go; the device has 4 tracks"
     )
 
 
@@ -1069,6 +1067,16 @@ def test_a_route_is_honoured_below_the_starting_track(load_sample: Loader) -> No
     plan = midi_import.plan_song(midi_import.read_song(midi, options), options, first_track=3)
 
     assert [(track.track, track.source_track) for track in plan.tracks] == [(1, 1), (3, 2)]
+
+
+def test_a_drum_track_outside_the_selection_is_refused() -> None:
+    """Otherwise _assign reports it as holding no notes, which sends the user to fix the file."""
+    with pytest.raises(ValueError, match=r"drum_track 5 is not in the selection"):
+        ImportOptions(midi_tracks=frozenset({2, 3}), drum_track=5)
+
+
+def test_a_drum_track_inside_the_selection_is_allowed() -> None:
+    assert ImportOptions(midi_tracks=frozenset({2, 5}), drum_track=5).drum_track == 5
 
 
 def test_a_route_with_a_source_track_selection_is_refused() -> None:

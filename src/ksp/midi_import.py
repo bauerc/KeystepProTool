@@ -89,6 +89,11 @@ class ImportOptions:
             raise ValueError("midi_track counts from 1")
         if self.drum_track is not None and self.drum_track < 1:
             raise ValueError("drum_track counts from 1")
+        if self.midi_tracks and self.drum_track not in (None, *self.midi_tracks):
+            raise ValueError(
+                f"drum_track {self.drum_track} is not in the selection; a drum track must "
+                "be one of the source tracks read"
+            )
         self._check_routes()
 
     def _check_routes(self) -> None:
@@ -898,12 +903,13 @@ def _assign(
 
     dropped = len(melodic) - len(free)
     if dropped > 0:
-        # "holds", not "has": a type 0 track split across channels is several clips.
-        held = "the selection holds" if options.midi_tracks else "the file holds"
+        # No count of what was read: `dropped` is melodic against free, so a drum
+        # track, a route or a --track above 1 all break the arithmetic a total invites.
+        chosen = "selected " if options.midi_tracks else ""
         collector.add(
             Code.TRACKS_DROPPED,
-            f"{dropped} source track(s) had nowhere to go; {held} {len(song.clips)} and the "
-            f"device has {len(constants.TRACK_ITEM_IDS)} tracks",
+            f"{dropped} {chosen}source track(s) had nowhere to go; the device has "
+            f"{len(constants.TRACK_ITEM_IDS)} tracks",
             subjects=dropped,
         )
     assigned.sort(key=lambda placed: placed[1])

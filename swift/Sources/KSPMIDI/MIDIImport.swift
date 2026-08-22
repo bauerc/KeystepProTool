@@ -56,6 +56,11 @@ public struct ImportOptions: Sendable, Hashable {
         if let drumTrack, drumTrack < 1 {
             throw KSPError.value("drum_track counts from 1")
         }
+        if !midiTracks.isEmpty, let drumTrack, !midiTracks.contains(drumTrack) {
+            throw KSPError.value(
+                "drum_track \(drumTrack) is not in the selection; a drum track must be one of "
+                    + "the source tracks read")
+        }
         try ImportOptions.checkRoutes(routes, drumTrack: drumTrack, midiTracks: midiTracks)
         self.stepsPerBeat = stepsPerBeat
         self.midiTracks = midiTracks
@@ -867,12 +872,13 @@ extension MIDIImport {
 
         let dropped = melodic.count - free.count
         if dropped > 0 {
-            // "holds", not "has": a type 0 track split across channels is several clips.
-            let held = options.midiTracks.isEmpty ? "the file holds" : "the selection holds"
+            // No count of what was read: `dropped` is melodic against free, so a drum
+            // track, a route or a firstTrack above 1 all break the arithmetic a total invites.
+            let chosen = options.midiTracks.isEmpty ? "" : "selected "
             collector.add(
                 .tracksDropped,
-                "\(dropped) source track(s) had nowhere to go; \(held) \(song.clips.count) "
-                    + "and the device has \(Constants.trackItemIDs.count) tracks",
+                "\(dropped) \(chosen)source track(s) had nowhere to go; the device has "
+                    + "\(Constants.trackItemIDs.count) tracks",
                 subjects: dropped)
         }
         return assigned.stableSorted { $0.track < $1.track }

@@ -529,8 +529,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(dropped.map(\.subjects) == [1])
         #expect(
             dropped[0].detail
-                == "1 source track(s) had nowhere to go; the file holds 5 and the device has "
-                + "4 tracks")
+                == "1 source track(s) had nowhere to go; the device has 4 tracks")
     }
 
     @Test func aSelectionWiderThanTheDeviceIsReported() throws {
@@ -543,8 +542,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(dropped.map(\.subjects) == [1])
         #expect(
             dropped[0].detail
-                == "1 source track(s) had nowhere to go; the selection holds 5 and the device "
-                + "has 4 tracks")
+                == "1 selected source track(s) had nowhere to go; the device has 4 tracks")
     }
 
     @Test func aTrackLongerThanOnePatternIsSplitAndChained() throws {
@@ -1046,6 +1044,18 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         let plan = try MIDIImport.planSong(song, options: options, firstTrack: 3)
 
         #expect(plan.tracks.map { [$0.track, $0.sourceTrack] } == [[1, 1], [3, 2]])
+    }
+
+    /// Otherwise assign reports it as holding no notes, which sends the user to fix the file.
+    @Test func aDrumTrackOutsideTheSelectionIsRefused() {
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try ImportOptions(midiTracks: [2, 3], drumTrack: 5)
+        }
+        #expect(thrown?.description.contains("drum_track 5 is not in the selection") == true)
+    }
+
+    @Test func aDrumTrackInsideTheSelectionIsAllowed() throws {
+        #expect(try ImportOptions(midiTracks: [2, 5], drumTrack: 5).drumTrack == 5)
     }
 
     @Test func aRouteWithASourceTrackSelectionIsRefused() {
