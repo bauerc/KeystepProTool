@@ -54,6 +54,9 @@ public enum Code: String, Sendable, Hashable, Codable, CaseIterable {
     case trackSplitByChannel = "track-split-by-channel"
     case controllersDropped = "controllers-dropped"
     case tempoOutOfRange = "tempo-out-of-range"
+    case sourceTempoDiffers = "source-tempo-differs"
+    case sourceResolutionDiffers = "source-resolution-differs"
+    case sourceMeterDiffers = "source-meter-differs"
 }
 
 public struct Summary: Sendable, Hashable {
@@ -469,6 +472,21 @@ public enum Diagnostics {
             """
             the source's tempo is outside the 30-240 BPM the device runs at, and was held to the \
             nearest end of it
+            """),
+        .sourceTempoDiffers: Summary(
+            """
+            the source files do not all run at the same tempo; the device stores one tempo per \
+            project, so the first file's was taken
+            """),
+        .sourceResolutionDiffers: Summary(
+            """
+            the source files are not all written at the same resolution; their notes were \
+            rescaled to the first file's
+            """),
+        .sourceMeterDiffers: Summary(
+            """
+            the source files are not all in the same time signature; bar length was taken from \
+            the first file's
             """),
     ]
 }

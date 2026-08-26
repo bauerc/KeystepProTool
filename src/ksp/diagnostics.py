@@ -63,6 +63,9 @@ class Code(StrEnum):
     TRACK_SPLIT_BY_CHANNEL = "track-split-by-channel"
     CONTROLLERS_DROPPED = "controllers-dropped"
     TEMPO_OUT_OF_RANGE = "tempo-out-of-range"
+    SOURCE_TEMPO_DIFFERS = "source-tempo-differs"
+    SOURCE_RESOLUTION_DIFFERS = "source-resolution-differs"
+    SOURCE_METER_DIFFERS = "source-meter-differs"
 
 
 @dataclass(frozen=True)
@@ -252,6 +255,18 @@ SUMMARIES: Mapping[Code, Summary] = {
     Code.TEMPO_OUT_OF_RANGE: Summary(
         "the source's tempo is outside the 30-240 BPM the device runs at, and was held to the "
         "nearest end of it",
+    ),
+    Code.SOURCE_TEMPO_DIFFERS: Summary(
+        "the source files do not all run at the same tempo; the device stores one tempo per "
+        "project, so the first file's was taken",
+    ),
+    Code.SOURCE_RESOLUTION_DIFFERS: Summary(
+        "the source files are not all written at the same resolution; their notes were rescaled "
+        "to the first file's",
+    ),
+    Code.SOURCE_METER_DIFFERS: Summary(
+        "the source files are not all in the same time signature; bar length was taken from the "
+        "first file's",
     ),
 }
 

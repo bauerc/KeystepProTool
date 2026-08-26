@@ -1114,3 +1114,231 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(dropped.map(\.subjects) == [1])
     }
 }
+
+private func sourceOf(
+    _ name: String, _ tracks: [[(tick: Int, pitch: Int, velocity: Int)]],
+    ticksPerQuarterNote: Int = ticksPerBeat, length: Int = ticksPerStep
+) -> Source {
+    var built: [MusicalMIDI1File.Track] = []
+    for events in tracks {
+        var timed: [BuiltEvent] = []
+        for event in events {
+            timed.append(
+                BuiltEvent(
+                    tick: event.tick, kind: .on, pitch: event.pitch, velocity: event.velocity,
+                    channel: 0))
+            timed.append(
+                BuiltEvent(
+                    tick: event.tick + length, kind: .off, pitch: event.pitch, velocity: 64,
+                    channel: 0))
+        }
+        built.append(track(from: timed))
+    }
+    return Source(
+        name,
+        MusicalMIDI1File(
+            format: .multipleTracksSynchronous,
+            timebase: .init(ticksPerQuarterNote: UInt16(ticksPerQuarterNote)), tracks: built))
+}
+
+private func withSignature(_ source: Source, _ numerator: Int, _ denominator: Int)
+    -> Source
+{
+    var copy = source.midi
+    var first = copy.tracks[0]
+    first.events.insert(
+        .timeSignature(numerator: UInt8(numerator), denominator: UInt8(denominator)), at: 0)
+    copy.tracks[0] = first
+    return Source(source.name, copy)
+}
+
+private func withTempo(_ source: Source, bpm: Double) -> Source {
+    Source(source.name, withTempo(source.midi, bpm: bpm))
+}
+
+private func codes(_ result: ImportResult) -> Set<Code> {
+    Set(result.diagnostics.entries.map(\.code))
+}
+
+@Suite struct MultiFileTests {
+    @Test func twoFilesBecomeOneSong() throws {
+        let first = sourceOf("a.mid", [[(0, 60, 100)], [(0, 64, 100)]])
+        let second = sourceOf("b.mid", [[(0, 67, 100)]])
+
+        let song = try MIDIImport.readSongs([first, second])
+
+        #expect(song.clips.map { $0.notes[0].pitch } == [60, 64, 67])
+    }
+
+    @Test func everyClipRecordsTheFileItCameFrom() throws {
+        let first = sourceOf("a.mid", [[(0, 60, 100)], [(0, 64, 100)]])
+        let second = sourceOf("b.mid", [[(0, 67, 100)]])
+
+        let song = try MIDIImport.readSongs([first, second])
+
+        #expect(song.clips.map(\.sourceFile) == ["a.mid", "a.mid", "b.mid"])
+    }
+
+    /// One numbering across the run, so --route and --midi-tracks still address a track.
+    @Test func sourceTracksNumberOnThroughTheFiles() throws {
+        let first = sourceOf("a.mid", [[(0, 60, 100)], [(0, 64, 100)]])
+        let second = sourceOf("b.mid", [[(0, 67, 100)], [(0, 71, 100)]])
+
+        let song = try MIDIImport.readSongs([first, second])
+
+        #expect(song.clips.map(\.sourceTracks) == [[1], [2], [3], [4]])
+    }
+
+    @Test func aSelectionReachesIntoTheSecondFile() throws {
+        let first = sourceOf("a.mid", [[(0, 60, 100)], [(0, 64, 100)]])
+        let second = sourceOf("b.mid", [[(0, 67, 100)], [(0, 71, 100)]])
+
+        let song = try MIDIImport.readSongs(
+            [first, second], options: ImportOptions(midiTracks: [3]))
+
+        #expect(song.clips.map { $0.notes[0].pitch } == [67])
+        #expect(song.clips.map(\.sourceFile) == ["b.mid"])
+    }
+
+    @Test func aSelectionPastEveryFileIsRefusedNamingTheTotal() throws {
+        let first = sourceOf("a.mid", [[(0, 60, 100)], [(0, 64, 100)]])
+        let second = sourceOf("b.mid", [[(0, 67, 100)]])
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try MIDIImport.readSongs(
+                [first, second], options: ImportOptions(midiTracks: [4]))
+        }
+
+        #expect(
+            thrown?.description.contains("source track 4 was selected; the 2 files hold 3")
+                == true)
+    }
+
+    /// One beat is one beat: 96 ticks at 96 PPQ has to land on 480 at 480 PPQ.
+    @Test func aLaterFileAtAnotherResolutionIsRescaledOntoTheFirsts() throws {
+        let first = sourceOf("a.mid", [[(0, 60, 100)]])
+        let second = sourceOf("b.mid", [[(96, 67, 100)]], ticksPerQuarterNote: 96, length: 24)
+
+        let song = try MIDIImport.readSongs([first, second])
+
+        #expect(song.ticksPerBeat == ticksPerBeat)
+        #expect(song.clips.map { $0.notes[0].tick } == [0, ticksPerBeat])
+        #expect(song.resolutionConflicts == 1)
+    }
+
+    /// Rounding a sub-tick note to nothing would silently delete it.
+    @Test func rescalingDownLeavesAShortNoteATickLong() throws {
+        let first = sourceOf("a.mid", [[(0, 60, 100)]], ticksPerQuarterNote: 96, length: 24)
+        let second = sourceOf("b.mid", [[(0, 67, 100)]], length: 1)
+
+        let song = try MIDIImport.readSongs([first, second])
+
+        #expect(song.clips[1].notes[0].durationTicks == 1)
+    }
+
+    @Test func aLaterFilesResolutionIsReported() throws {
+        let first = sourceOf("a.mid", [[(0, 60, 100)]])
+        let second = sourceOf("b.mid", [[(0, 67, 100)]], ticksPerQuarterNote: 96, length: 24)
+
+        let result = try MIDIImport.convertSongs([first, second], try template())
+
+        #expect(codes(result).contains(.sourceResolutionDiffers))
+    }
+
+    @Test func theFirstFilesTempoIsWrittenAndTheDisagreementReported() throws {
+        let first = withTempo(sourceOf("a.mid", [[(0, 60, 100)]]), bpm: 140)
+        let second = withTempo(sourceOf("b.mid", [[(0, 67, 100)]]), bpm: 90)
+
+        let result = try MIDIImport.convertSongs([first, second], try template())
+
+        #expect(abs((result.plan.tempoBPM ?? 0) - 140) < 0.01)
+        #expect(codes(result).contains(.sourceTempoDiffers))
+    }
+
+    /// Nothing was overridden if nothing was written.
+    @Test func aTempoDisagreementIsSilentWhenNoTempoIsCarried() throws {
+        let first = withTempo(sourceOf("a.mid", [[(0, 60, 100)]]), bpm: 140)
+        let second = withTempo(sourceOf("b.mid", [[(0, 67, 100)]]), bpm: 90)
+        let options = try ImportOptions(carryTempo: false)
+
+        let result = try MIDIImport.convertSongs([first, second], try template(), options: options)
+
+        #expect(!codes(result).contains(.sourceTempoDiffers))
+    }
+
+    @Test func theFirstFilesMeterSetsTheBarAndTheDisagreementIsReported() throws {
+        let first = withSignature(sourceOf("a.mid", [[(0, 60, 100)]]), 4, 2)
+        let second = withSignature(sourceOf("b.mid", [[(0, 67, 100)]]), 3, 2)
+
+        let song = try MIDIImport.readSongs([first, second])
+        let result = try MIDIImport.convertSongs([first, second], try template())
+
+        #expect(song.beatsPerBar == 4)
+        #expect(song.meterConflicts == 1)
+        #expect(codes(result).contains(.sourceMeterDiffers))
+    }
+
+    @Test func agreeingFilesReportNothing() throws {
+        let first = sourceOf("a.mid", [[(0, 60, 100)]])
+        let second = sourceOf("b.mid", [[(0, 67, 100)]])
+
+        let raised = codes(try MIDIImport.convertSongs([first, second], try template()))
+
+        #expect(!raised.contains(.sourceTempoDiffers))
+        #expect(!raised.contains(.sourceResolutionDiffers))
+        #expect(!raised.contains(.sourceMeterDiffers))
+    }
+
+    @Test func aDeviceTrackRecordsTheFileItCameFrom() throws {
+        let first = sourceOf("a.mid", [[(0, 60, 100)]])
+        let second = sourceOf("b.mid", [[(0, 67, 100)]])
+
+        let result = try MIDIImport.convertSongs([first, second], try template())
+
+        #expect(result.plan.tracks.map(\.sourceFile) == ["a.mid", "b.mid"])
+    }
+
+    @Test func oneSourceReadsExactlyAsASingleFileDoes() throws {
+        let midi = songOf([[(0, 60, 100)], [(ticksPerStep, 64, 100)]])
+
+        let together = try MIDIImport.readSongs([Source("", midi)])
+
+        #expect(together == (try MIDIImport.readSong(midi)))
+    }
+
+    @Test func oneSourceConvertsExactlyAsASingleFileDoes() throws {
+        let midi = songOf([[(0, 60, 100)], [(ticksPerStep, 64, 100)]])
+
+        let together = try MIDIImport.convertSongs(
+            [Source("", midi)], try template())
+        let alone = try MIDIImport.convertSong(midi, try template())
+
+        #expect(changedTo(try template(), together.raw) == changedTo(try template(), alone.raw))
+    }
+
+    /// Counting the run's tempo events rather than one file's would claim a change.
+    @Test func twoConstantTempoFilesAreNotAtempoChange() throws {
+        let first = withTempo(sourceOf("a.mid", [[(0, 60, 100)]]), bpm: 120)
+        let second = withTempo(sourceOf("b.mid", [[(0, 67, 100)]]), bpm: 120)
+
+        let result = try MIDIImport.convertSongs([first, second], try template())
+
+        #expect(!codes(result).contains(.tempoChangesIgnored))
+    }
+
+    @Test func afileThatReallyChangesTempoIsStillReported() throws {
+        let first = withTempo(withTempo(sourceOf("a.mid", [[(0, 60, 100)]]), bpm: 120), bpm: 90)
+        let second = withTempo(sourceOf("b.mid", [[(0, 67, 100)]]), bpm: 120)
+
+        let result = try MIDIImport.convertSongs([first, second], try template())
+
+        #expect(codes(result).contains(.tempoChangesIgnored))
+    }
+
+    @Test func noSourceAtAllIsRefused() throws {
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try MIDIImport.readSongs([])
+        }
+
+        #expect(thrown?.description.contains("no source file was given") == true)
+    }
+}

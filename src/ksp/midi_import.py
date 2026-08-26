@@ -4,7 +4,7 @@ import math
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final, NamedTuple
 
 import mido
@@ -145,6 +145,14 @@ class ImportOptions:
 
 
 @dataclass(frozen=True)
+class Source:
+    """One MIDI file to read, and the name its clips are attributed to."""
+
+    name: str
+    midi: mido.MidiFile
+
+
+@dataclass(frozen=True)
 class Clip:
     """One source track's note events, in ticks. No MIDI library involved."""
 
@@ -153,6 +161,9 @@ class Clip:
     tempo_bpm: float
     source_tracks: tuple[int, ...]
     """Which tracks of the file the notes came from, counting from 1."""
+
+    source_file: str = ""
+    """The name the file was read under, empty when it was not given one."""
 
     @property
     def channels(self) -> tuple[int, ...]:
@@ -173,8 +184,15 @@ class Song:
     tempo_bpm: float
     beats_per_bar: float
     tempo_changes: int = 0
+    """The most any one source file changes tempo; several files are not a change."""
+
     controllers_dropped: int = 0
     """Events the device cannot store, counted across every track read."""
+
+    tempo_conflicts: int = 0
+    resolution_conflicts: int = 0
+    meter_conflicts: int = 0
+    """How many later source files the first file's timing overrode."""
 
     def steps_per_bar(self, steps_per_beat: int) -> int:
         return max(1, round(self.beats_per_bar * steps_per_beat))
@@ -219,6 +237,7 @@ class TrackPlan:
     placements: tuple[Placement, ...]
     is_drum: bool = False
     source_track: int | None = None
+    source_file: str = ""
 
     @property
     def notes(self) -> tuple[PlacedNote, ...]:
@@ -372,11 +391,35 @@ def _timing(midi: mido.MidiFile) -> tuple[int, tuple[int, int], int]:
 
 def check_selection(midi: mido.MidiFile, options: ImportOptions) -> None:
     """Refuse a selection naming a track *midi* does not have, lowest first."""
-    missing = sorted(number for number in options.midi_tracks if number > len(midi.tracks))
+    check_selections((Source("", midi),), options)
+
+
+def check_selections(sources: Sequence[Source], options: ImportOptions) -> None:
+    """Refuse a selection naming a track the *sources* between them do not have."""
+    total = sum(len(source.midi.tracks) for source in sources)
+    missing = sorted(number for number in options.midi_tracks if number > total)
     if missing:
-        raise ValueError(
-            f"source track {missing[0]} was selected; the file has {len(midi.tracks)} tracks"
+        held = (
+            f"the file has {total} tracks"
+            if len(sources) == 1
+            else f"the {len(sources)} files hold {total} tracks between them"
         )
+        raise ValueError(f"source track {missing[0]} was selected; {held}")
+
+
+def _rescaled(notes: Sequence[RenderedNote], source: int, target: int) -> tuple[RenderedNote, ...]:
+    """*notes* moved from a beat of *source* ticks onto one of *target* ticks."""
+    if source == target:
+        return tuple(notes)
+    return tuple(
+        replace(
+            note,
+            tick=(note.tick * target + source // 2) // source,
+            # Floored at one: a note shorter than a target tick would otherwise round away.
+            duration_ticks=max(1, (note.duration_ticks * target + source // 2) // source),
+        )
+        for note in notes
+    )
 
 
 def read_clip(midi: mido.MidiFile, options: ImportOptions | None = None) -> Clip:
@@ -408,41 +451,64 @@ def read_clip(midi: mido.MidiFile, options: ImportOptions | None = None) -> Clip
 def read_song(midi: mido.MidiFile, options: ImportOptions | None = None) -> Song:
     """One clip per note-bearing source track and channel, in file order.
     A type 0 track carrying several channels is split into one clip each."""
+    return read_songs((Source("", midi),), options)
+
+
+def read_songs(sources: Sequence[Source], options: ImportOptions | None = None) -> Song:
+    """Every source file's tracks as one song, numbered on through the files.
+    The first file's tempo, resolution and meter are the song's; a later file
+    disagreeing is rescaled onto them and counted."""
     options = options or ImportOptions()
-    _check_readable(midi)
-    check_selection(midi, options)
-    tempo, (numerator, denominator), changes = _timing(midi)
+    if not sources:
+        raise ValueError("no source file was given")
+    for source in sources:
+        _check_readable(source.midi)
+    check_selections(sources, options)
+
+    timings = [_timing(source.midi) for source in sources]
+    tempo, (numerator, denominator), _ = timings[0]
     tempo_bpm = float(mido.tempo2bpm(tempo))
+    ticks_per_beat = sources[0].midi.ticks_per_beat
 
     clips = []
     dropped = 0
-    for number, track in enumerate(midi.tracks, start=1):
-        if options.midi_tracks and number not in options.midi_tracks:
-            continue
-        read = _track_notes(track)
-        dropped += read.dropped
-        by_channel: dict[int, list[RenderedNote]] = {}
-        for note in read.notes:
-            by_channel.setdefault(note.channel, []).append(note)
-        for channel in sorted(by_channel):
-            notes = sorted(by_channel[channel], key=lambda note: (note.tick, note.pitch))
-            clips.append(
-                Clip(
-                    notes=tuple(notes),
-                    ticks_per_beat=midi.ticks_per_beat,
-                    tempo_bpm=tempo_bpm,
-                    source_tracks=(number,),
+    offset = 0
+    for source in sources:
+        midi = source.midi
+        for number, track in enumerate(midi.tracks, start=offset + 1):
+            if options.midi_tracks and number not in options.midi_tracks:
+                continue
+            read = _track_notes(track)
+            dropped += read.dropped
+            by_channel: dict[int, list[RenderedNote]] = {}
+            for note in read.notes:
+                by_channel.setdefault(note.channel, []).append(note)
+            for channel in sorted(by_channel):
+                notes = sorted(by_channel[channel], key=lambda note: (note.tick, note.pitch))
+                clips.append(
+                    Clip(
+                        notes=_rescaled(notes, midi.ticks_per_beat, ticks_per_beat),
+                        ticks_per_beat=ticks_per_beat,
+                        tempo_bpm=tempo_bpm,
+                        source_tracks=(number,),
+                        source_file=source.name,
+                    )
                 )
-            )
+        offset += len(midi.tracks)
 
     return Song(
         clips=tuple(clips),
-        ticks_per_beat=midi.ticks_per_beat,
+        ticks_per_beat=ticks_per_beat,
         tempo_bpm=tempo_bpm,
         # A bar in quarter notes, which is what a beat is here.
         beats_per_bar=numerator * 4 / denominator,
-        tempo_changes=changes,
+        tempo_changes=max(timing[2] for timing in timings),
         controllers_dropped=dropped,
+        tempo_conflicts=sum(1 for later, _, _ in timings[1:] if later != tempo),
+        resolution_conflicts=sum(
+            1 for source in sources[1:] if source.midi.ticks_per_beat != ticks_per_beat
+        ),
+        meter_conflicts=sum(1 for _, later, _ in timings[1:] if later != (numerator, denominator)),
     )
 
 
@@ -810,6 +876,7 @@ def plan_track(
         placements=tuple(placements),
         is_drum=is_drum,
         source_track=clip.source_tracks[0] if clip.source_tracks else None,
+        source_file=clip.source_file,
     )
 
 
@@ -835,6 +902,7 @@ def _merged(clips: Sequence[Clip]) -> Clip:
         ticks_per_beat=clips[0].ticks_per_beat,
         tempo_bpm=clips[0].tempo_bpm,
         source_tracks=clips[0].source_tracks,
+        source_file=clips[0].source_file,
     )
 
 
@@ -1005,6 +1073,26 @@ def plan_song(
                 f"the source changes tempo {song.tempo_changes} time(s); the device stores one "
                 f"tempo per project, so {song.tempo_bpm:g} BPM was taken and the rest ignored",
             )
+        if song.tempo_conflicts:
+            collector.add(
+                Code.SOURCE_TEMPO_DIFFERS,
+                f"{song.tempo_conflicts} source file(s) do not run at the first file's "
+                f"{song.tempo_bpm:g} BPM; the device stores one tempo per project, so the "
+                "first file's was written",
+            )
+
+    if song.resolution_conflicts:
+        collector.add(
+            Code.SOURCE_RESOLUTION_DIFFERS,
+            f"{song.resolution_conflicts} source file(s) are not written at the first file's "
+            f"{song.ticks_per_beat} ticks per beat; their notes were rescaled onto it",
+        )
+    if song.meter_conflicts:
+        collector.add(
+            Code.SOURCE_METER_DIFFERS,
+            f"{song.meter_conflicts} source file(s) are not in the first file's time signature; "
+            f"bars were counted at {song.beats_per_bar:g} beats throughout",
+        )
 
     return SongPlan(
         tracks=tuple(tracks),
@@ -1184,8 +1272,26 @@ def convert_song(
     first_track: int = 1,
 ) -> ImportResult:
     """Convert every note-bearing track of *midi* into the template *raw*."""
+    return convert_songs(
+        (Source("", midi),),
+        raw,
+        options=options,
+        first_pattern=first_pattern,
+        first_track=first_track,
+    )
+
+
+def convert_songs(
+    sources: Sequence[Source],
+    raw: Mapping[str, int | str],
+    *,
+    options: ImportOptions | None = None,
+    first_pattern: int = 1,
+    first_track: int = 1,
+) -> ImportResult:
+    """Convert every note-bearing track of every source into the template *raw*."""
     options = options or ImportOptions()
-    song = read_song(midi, options)
+    song = read_songs(sources, options)
     scene = get_int(raw, constants.ITEM_PROJECT, constants.P_CURRENT_SCENE) or 0
     plan = plan_song(
         song,
