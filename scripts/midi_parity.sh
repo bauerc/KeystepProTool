@@ -194,6 +194,16 @@ if has convert; then
         add import "$(basename "$clip") --flat-velocity past Int" "$clip" \
             --flat-velocity 99999999999999999999
     done
+    # Several sources, once rather than per clip: what they pin is the merge, not the material.
+    # Both orderings, because argument order decides which device track a file fills.
+    simple=project_files/test_file_simple.mid
+    chords=project_files/test_file.mid
+    add import "simple + chords"            "$simple" "$chords"
+    add import "chords + simple"            "$chords" "$simple"
+    add import "two files --midi-tracks 2"  "$simple" "$chords" --midi-tracks 2
+    add import "two files --midi-tracks 99" "$simple" "$chords" --midi-tracks 99
+    add import "two files --route"          "$simple" "$chords" --route 2:1,1:2
+    add import "two files --midi-track"     "$simple" "$chords" --midi-track 1
 else
     echo "midi_parity: ksp-swift-cli has no 'convert' yet -- skipping the midi2ksp direction"
 fi

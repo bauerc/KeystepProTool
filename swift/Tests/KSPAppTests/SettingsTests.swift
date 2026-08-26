@@ -20,7 +20,8 @@ import Testing
         let settings = Settings()
 
         let convert = settings.convertOptions(source: source, output: output)
-        #expect(convert.path == source)
+        // The app converts the one file that was dropped; the CLI is what takes several.
+        #expect(convert.paths == [source])
         #expect(convert.output == output)
         #expect(convert.configPath == drumMapConfigPath)
 
@@ -72,7 +73,7 @@ import Testing
         let mapped = Settings(dryRun: true, verbose: true)
             .convertOptions(source: source, output: output)
         let defaults = ConvertRunner.Options(
-            path: source, output: output, configPath: mapped.configPath)
+            paths: [source], output: output, configPath: mapped.configPath)
 
         #expect(mapped.track == defaults.track)
         #expect(mapped.pattern == defaults.pattern)
@@ -168,7 +169,7 @@ import Testing
 
         let mapped = Settings().selecting(selection).convertOptions(source: source, output: output)
         let defaults = ConvertRunner.Options(
-            path: source, output: output, configPath: mapped.configPath)
+            paths: [source], output: output, configPath: mapped.configPath)
 
         #expect(mapped.track == defaults.track)
         #expect(mapped.pattern == defaults.pattern)
@@ -224,7 +225,7 @@ import Testing
         let mapped = Settings(replaceVelocity: true, replaceSwing: true, replaceTimeShift: true)
             .convertOptions(source: source, output: output)
         let defaults = ConvertRunner.Options(
-            path: source, output: output, configPath: mapped.configPath)
+            paths: [source], output: output, configPath: mapped.configPath)
 
         #expect(mapped.fitSwing == defaults.fitSwing)
         #expect(mapped.fitTimeShift == defaults.fitTimeShift)

@@ -54,7 +54,7 @@ struct Settings: Sendable, Equatable {
     func convertOptions(source: URL, output: URL) -> ConvertRunner.Options {
         // `force` stays false: `Naming.vacant` found a free path, so the guard is a backstop.
         ConvertRunner.Options(
-            path: source, output: output, dryRun: dryRun, verbose: verbose,
+            paths: [source], output: output, dryRun: dryRun, verbose: verbose,
             configPath: drumMapConfigPath)
     }
 

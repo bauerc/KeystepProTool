@@ -1,4 +1,4 @@
-"""``midi2ksp`` -- write a MIDI clip into a ``.KeyStepPro`` project."""
+"""``midi2ksp`` -- write MIDI clips into a ``.KeyStepPro`` project."""
 
 from pathlib import Path
 from typing import Annotated
@@ -13,10 +13,11 @@ from ksp.midi_export import DEFAULT_FLAT_VELOCITY
 from ksp.midi_import import (
     ImportOptions,
     ImportResult,
+    Source,
     TrackPlan,
-    check_selection,
+    check_selections,
     convert,
-    convert_song,
+    convert_songs,
     saveable,
 )
 from ksp_cli.drum_map_option import DRUM_MAP_HELP, resolve_import_drum_map
@@ -29,13 +30,14 @@ from ksp_cli.runner import standalone
 
 PROG = "midi2ksp"
 
-HELP = "Convert a Standard MIDI file into an Arturia KeyStep Pro project."
+HELP = "Convert Standard MIDI files into an Arturia KeyStep Pro project."
 EPILOG = (
-    "Every note-bearing track of the file is converted, onto the device's four. Each is "
+    "Every note-bearing track of every file is converted, onto the device's four. Each is "
     "anchored so its first note lands on step 1, quantised to the step grid, and cut "
     "into 64-step patterns if it runs longer -- chained, never truncated. Note lengths, "
-    "velocity and tempo are carried. --midi-track converts a single track instead, into "
-    "the one pattern --track and --pattern name."
+    "velocity and tempo are carried. Several files merge in argument order, their tracks "
+    "numbered on through one another. --midi-track converts a single track of a single "
+    "file instead, into the one pattern --track and --pattern name."
 )
 
 _SOURCE_PANEL = "Source"
@@ -43,25 +45,32 @@ _DESTINATION_PANEL = "Destination"
 _TIMING_PANEL = "Timing"
 
 
-def _source(plan: TrackPlan, show_sources: bool) -> str:
-    """Where a track came from, named only when a route was given.
-    A clip merged from several source tracks has no one source, so it gets no mark."""
-    if not show_sources or plan.source_track is None:
-        return ""
-    return f"source {plan.source_track}"
+def _source(plan: TrackPlan, show_sources: bool, show_files: bool) -> str:
+    """Where a track came from: its source track, then the file it was read from.
+    A clip merged from several source tracks has no one source track, so it gets no number."""
+    marks = []
+    if show_sources and plan.source_track is not None:
+        marks.append(f"source {plan.source_track}")
+    if show_files and plan.source_file:
+        marks.append(plan.source_file)
+    return ", ".join(marks)
 
 
-def _marks(plan: TrackPlan, show_sources: bool) -> str:
+def _marks(plan: TrackPlan, show_sources: bool, show_files: bool) -> str:
     """The bracket after a track number in the per-track shape: kind, then source."""
     marks = ["drum"] if plan.is_drum else []
-    source = _source(plan, show_sources)
+    source = _source(plan, show_sources, show_files)
     if source:
         marks.append(source)
     return f" [{', '.join(marks)}]" if marks else ""
 
 
 def _summary(
-    result: ImportResult, destination: Path, dry_run: bool, show_sources: bool = False
+    result: ImportResult,
+    destination: Path,
+    dry_run: bool,
+    show_sources: bool = False,
+    show_files: bool = False,
 ) -> str:
     verb = "would write" if dry_run else "wrote"
     lines = [f"{verb} {destination}"]
@@ -69,7 +78,7 @@ def _summary(
     tracks = result.plan.tracks
     if len(tracks) == 1 and len(tracks[0].placements) == 1:
         # The single-target shape carries no [drum] mark, so only a route adds one.
-        source = _source(tracks[0], show_sources)
+        source = _source(tracks[0], show_sources, show_files)
         lines.append(
             f"  {result.note_count} note(s) onto track {result.track}"
             f"{f' [{source}]' if source else ''}, "
@@ -86,21 +95,30 @@ def _summary(
         )
         steps = ", ".join(str(p.step_count) for p in plan.placements)
         lines.append(
-            f"  track {plan.track}{_marks(plan, show_sources)}: "
+            f"  track {plan.track}{_marks(plan, show_sources, show_files)}: "
             f"{len(plan.notes)} note(s), {where} ({steps} steps)"
         )
     return "\n".join(lines)
 
 
 def convert_command(
-    path: Annotated[Path, typer.Argument(help="a Standard MIDI file")],
+    paths: Annotated[
+        list[Path],
+        typer.Argument(
+            metavar="PATHS...",
+            help="one or more Standard MIDI files, merged in argument order",
+        ),
+    ],
     output: Annotated[
         Path | None,
         typer.Option(
             "-o",
             "--output",
             rich_help_panel=OUTPUT_PANEL,
-            help="destination .KeyStepPro file (default: the input file with a .KeyStepPro suffix)",
+            help=(
+                "destination .KeyStepPro file (default: the first input file with a "
+                ".KeyStepPro suffix)"
+            ),
         ),
     ] = None,
     track: Annotated[
@@ -260,23 +278,30 @@ def convert_command(
     except ValueError as exc:
         fail(str(exc), prog=PROG, code=2)
 
+    if midi_track is not None and len(paths) > 1:
+        fail("--midi-track reads one file, and several were given", prog=PROG, code=2)
+
     # Cheapest checks first: reading the 3.5 MB template before either would
     # spend a file read and a parse to reject the command anyway.
-    destination = output or path.with_suffix(".KeyStepPro")
+    destination = output or paths[0].with_suffix(".KeyStepPro")
     if destination.exists() and not force:
         fail(f"{destination} already exists (use --force to overwrite)", prog=PROG, code=1)
 
-    try:
-        midi = mido.MidiFile(path)
-    except FileNotFoundError as exc:  # its message already names the file
-        fail(str(exc), prog=PROG, code=1)
-    except (OSError, EOFError, ValueError, IndexError) as exc:
-        # mido raises OSError for a file that is not MIDI at all, so this is the
-        # same class of failure as a truncated one rather than an IO error.
-        fail(f"{path}: not a readable MIDI file: {exc}", prog=PROG, code=1)
+    # Every file is read before any of them is converted, so one unreadable late in the
+    # list fails the run rather than half-filling a project.
+    sources: list[Source] = []
+    for source_path in paths:
+        try:
+            sources.append(Source(name=source_path.name, midi=mido.MidiFile(source_path)))
+        except FileNotFoundError as exc:  # its message already names the file
+            fail(str(exc), prog=PROG, code=1)
+        except (OSError, EOFError, ValueError, IndexError) as exc:
+            # mido raises OSError for a file that is not MIDI at all, so this is the
+            # same class of failure as a truncated one rather than an IO error.
+            fail(f"{source_path}: not a readable MIDI file: {exc}", prog=PROG, code=1)
 
     try:
-        check_selection(midi, options)
+        check_selections(sources, options)
     except ValueError as exc:
         fail(str(exc), prog=PROG, code=2)
 
@@ -286,10 +311,12 @@ def convert_command(
     # the song path is the only one that can place several tracks.
     try:
         if midi_track is not None:
-            result = convert(midi, loaded_template, track=track, pattern=pattern, options=options)
+            result = convert(
+                sources[0].midi, loaded_template, track=track, pattern=pattern, options=options
+            )
         else:
-            result = convert_song(
-                midi,
+            result = convert_songs(
+                sources,
                 loaded_template,
                 options=options,
                 first_pattern=pattern,
@@ -300,7 +327,7 @@ def convert_command(
 
     if not result.note_count:
         # A project with nothing in it looks like success and plays silence.
-        fail(f"{path}: no notes to convert", prog=PROG, code=1)
+        fail(f"{', '.join(str(p) for p in paths)}: no notes to convert", prog=PROG, code=1)
 
     if not dry_run:
         try:
@@ -311,7 +338,15 @@ def convert_command(
 
     print_report(result.diagnostics, prog=PROG, verbose=verbose)
     if not quiet:
-        print(_summary(result, destination, dry_run, show_sources=route is not None))
+        print(
+            _summary(
+                result,
+                destination,
+                dry_run,
+                show_sources=route is not None or len(paths) > 1,
+                show_files=len(paths) > 1,
+            )
+        )
 
 
 def register(app: typer.Typer) -> None:

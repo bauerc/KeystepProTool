@@ -9,21 +9,25 @@ import KSPRun
 struct Convert: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "convert",
-        abstract: "Convert a Standard MIDI file into an Arturia KeyStep Pro project.",
+        abstract: "Convert Standard MIDI files into an Arturia KeyStep Pro project.",
         discussion: """
-            Every note-bearing track of the file is converted, onto the device's four. Each is \
+            Every note-bearing track of every file is converted, onto the device's four. Each is \
             anchored so its first note lands on step 1, quantised to the step grid, and cut into \
             64-step patterns if it runs longer -- chained, never truncated. Note lengths, velocity \
-            and tempo are carried. --midi-track converts a single track instead, into the one \
-            pattern --track and --pattern name.
+            and tempo are carried. Several files merge in argument order, their tracks numbered \
+            on through one another. --midi-track converts a single track of a single file \
+            instead, into the one pattern --track and --pattern name.
             """)
 
-    @Argument(help: "a Standard MIDI file", completion: .file())
-    var path: String
+    @Argument(
+        help: "one or more Standard MIDI files, merged in argument order", completion: .file())
+    var paths: [String]
 
     @Option(
         name: [.customShort("o"), .customLong("output")],
-        help: "destination .KeyStepPro file (default: the input file with a .KeyStepPro suffix)")
+        help: """
+            destination .KeyStepPro file (default: the first input file with a .KeyStepPro suffix)
+            """)
     var output: String?
 
     @Option(help: "KeyStep Pro track to write to")
@@ -131,7 +135,7 @@ struct Convert: ParsableCommand {
     func run() throws {
         let result = ConvertRunner.run(
             ConvertRunner.Options(
-                path: URL(filePath: path),
+                paths: paths.map { URL(filePath: $0) },
                 output: output.map { URL(filePath: $0) },
                 track: track, pattern: pattern, drumTrack: drumTrack, routeSpec: route,
                 drumMapSpec: drumMapSpec,
