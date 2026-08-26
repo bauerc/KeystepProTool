@@ -347,6 +347,7 @@ it appears in the Project Browser ready to send to the device.
 | `--route SPEC` | Send named source tracks to named device tracks: `source:device` pairs, comma-separated (`3:1,1:2`). Tracks no pair names fill whatever is left |
 | `--drum-track N` | Write source track N as drums, onto KeyStep Pro track 1 |
 | `--drum-map SPEC` | `chromatic:N` or `custom:a,b,c,…` (default: fitted to the source) |
+| `--flat-velocity VALUE` | Write every note and trigger at one velocity instead of the source's — `fresh` for the measured fresh-note velocity (100), or 1–127 |
 | `--steps-per-beat N` | Step size to quantise to (default 4, i.e. 1/16 steps). Written into the pattern |
 | `--no-tempo` | Keep the template's tempo instead of the source's |
 | `--no-swing-fit` | Leave patterns straight instead of fitting the source's groove |
