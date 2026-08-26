@@ -316,7 +316,7 @@ reading — see protocol test T5.8.
 
 ## `midi2ksp`
 
-Turn a MIDI file into KeyStep Pro patterns:
+Turn one or more MIDI files into KeyStep Pro patterns:
 
 ```sh
 uv run midi2ksp my_song.mid --drum-track 3 -o my_song.KeyStepPro
@@ -338,11 +338,11 @@ it appears in the Project Browser ready to send to the device.
 
 | Option | Effect |
 |---|---|
-| `-o PATH` | Destination (default: the input file with a `.KeyStepPro` suffix) |
+| `-o PATH` | Destination (default: the first input file with a `.KeyStepPro` suffix) |
 | `--track N` | First KeyStep Pro track 1–4 to fill (default 1) |
 | `--pattern N` | First pattern 1–16 to write to (default 1). Every target must be empty |
 | `--template PATH` | Project to write into (default: MCC's factory default) |
-| `--midi-track N` | Convert only track N of the source, into the one `--track`/`--pattern` names |
+| `--midi-track N` | Convert only track N of the source, into the one `--track`/`--pattern` names. One source file only |
 | `--midi-tracks LIST` | Convert only these tracks of the source, as a song — comma-separated numbers and `N-M` ranges (`1,2,5`, `1-3`). Not usable with `--midi-track` or `--route` |
 | `--route SPEC` | Send named source tracks to named device tracks: `source:device` pairs, comma-separated (`3:1,1:2`). Tracks no pair names fill whatever is left |
 | `--drum-track N` | Write source track N as drums, onto KeyStep Pro track 1 |
@@ -388,6 +388,23 @@ interleave two takes.
     track 1 [drum, source 4]: 64 note(s), pattern 1 (64 steps)
     track 2 [source 3]: 160 note(s), pattern 1 (48 steps)
   ```
+- **Several files merge in argument order.** `midi2ksp bass.mid drums.mid` fills the device from
+  both, `bass.mid`'s tracks first. Source tracks are numbered on continuously through the files —
+  the first file's tracks, then the second's — so `--midi-tracks`, `--route` and `--drum-track`
+  address any track of any file with no new spelling. `--midi-track` is the exception: it converts
+  one track into one pattern, and takes one file only. The output is named after the first file
+  unless `-o` says otherwise, and the summary names each track's file:
+
+  ```
+  wrote bass.KeyStepPro
+    track 1 [source 1, bass.mid]: 32 note(s), pattern 1 (64 steps)
+    track 2 [source 2, drums.mid]: 64 note(s), pattern 1 (32 steps)
+  ```
+
+  **The first file sets the timing.** Its tempo, resolution and time signature are the project's,
+  since the device stores one of each; a later file that disagrees has its notes rescaled onto them
+  and is reported, rather than silently overriding or being silently overridden. A file that cannot
+  be read fails the whole run, naming it — nothing is written from a partial set.
 - **A source track holding several channels becomes one device track each.** A type 0 file — one
   track, everything on it — tells its instruments apart by channel and nothing else, so merging
   them would put a whole arrangement on one track with the percussion in it as melodic pitches.

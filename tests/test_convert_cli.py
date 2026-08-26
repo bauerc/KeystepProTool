@@ -454,3 +454,133 @@ def test_midi_tracks_with_a_route_is_an_argument_error(
 
     assert main(argv) == 2
     assert "routes and a source-track selection contradict each other" in capsys.readouterr().err
+
+
+def one_track(pitch: int) -> mido.MidiFile:
+    """A file whose single note-bearing track holds one note."""
+    midi = mido.MidiFile(type=1)
+    track = mido.MidiTrack()
+    track.append(mido.Message("note_on", note=pitch, velocity=100, time=0))
+    track.append(mido.Message("note_off", note=pitch, velocity=0, time=480))
+    midi.tracks.append(track)
+    return midi
+
+
+def two_files(tmp_path: Path, *args: str) -> tuple[Path, list[str]]:
+    one_track(60).save(tmp_path / "first.mid")
+    one_track(64).save(tmp_path / "second.mid")
+    output = tmp_path / "out.KeyStepPro"
+    return output, [
+        str(tmp_path / "first.mid"),
+        str(tmp_path / "second.mid"),
+        "-o",
+        str(output),
+        *args,
+    ]
+
+
+def test_several_sources_fill_tracks_in_argument_order(tmp_path: Path) -> None:
+    output, argv = two_files(tmp_path)
+
+    assert main(argv) == 0
+
+    project = reader.load(output)
+    assert [n.pitch for n in project.track(1).pattern(1).notes_of(NoteKind.SEQ)] == [60]
+    assert [n.pitch for n in project.track(2).pattern(1).notes_of(NoteKind.SEQ)] == [64]
+
+
+def test_the_argument_order_decides_which_track_a_file_lands_on(tmp_path: Path) -> None:
+    """The same two files the other way round swap the tracks they fill."""
+    output, argv = two_files(tmp_path)
+    argv[0], argv[1] = argv[1], argv[0]
+
+    assert main(argv) == 0
+
+    project = reader.load(output)
+    assert [n.pitch for n in project.track(1).pattern(1).notes_of(NoteKind.SEQ)] == [64]
+    assert [n.pitch for n in project.track(2).pattern(1).notes_of(NoteKind.SEQ)] == [60]
+
+
+def test_several_sources_name_their_file_in_the_summary(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, argv = two_files(tmp_path)
+
+    assert main(argv) == 0
+
+    out = capsys.readouterr().out
+    assert "track 1 [source 1, first.mid]" in out
+    assert "track 2 [source 2, second.mid]" in out
+
+
+def test_one_source_names_no_file_in_the_summary(
+    simple_clip: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A single path prints what it printed before, which is what holds the parity corpus still."""
+    argv = [str(simple_clip), "-o", str(tmp_path / "out.KeyStepPro")]
+
+    assert main(argv) == 0
+    assert ".mid" not in capsys.readouterr().out
+
+
+def test_the_default_output_is_named_after_the_first_source(tmp_path: Path) -> None:
+    one_track(60).save(tmp_path / "first.mid")
+    one_track(64).save(tmp_path / "second.mid")
+
+    assert main([str(tmp_path / "first.mid"), str(tmp_path / "second.mid")]) == 0
+
+    assert (tmp_path / "first.KeyStepPro").exists()
+    assert not (tmp_path / "second.KeyStepPro").exists()
+
+
+def test_an_unreadable_source_fails_the_whole_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Naming the path that failed, and writing nothing: a half-converted project is worse."""
+    one_track(60).save(tmp_path / "first.mid")
+    output = tmp_path / "out.KeyStepPro"
+    argv = [str(tmp_path / "first.mid"), str(tmp_path / "missing.mid"), "-o", str(output)]
+
+    assert main(argv) == 1
+    assert "missing.mid" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_a_route_reaches_across_the_files(tmp_path: Path) -> None:
+    """Source numbering runs on through the files, so a route addresses either of them."""
+    output, argv = two_files(tmp_path, "--route", "2:1,1:2")
+
+    assert main(argv) == 0
+
+    project = reader.load(output)
+    assert [n.pitch for n in project.track(1).pattern(1).notes_of(NoteKind.SEQ)] == [64]
+    assert [n.pitch for n in project.track(2).pattern(1).notes_of(NoteKind.SEQ)] == [60]
+
+
+def test_a_selection_reaches_across_the_files(tmp_path: Path) -> None:
+    output, argv = two_files(tmp_path, "--midi-tracks", "2")
+
+    assert main(argv) == 0
+
+    project = reader.load(output)
+    assert [n.pitch for n in project.track(1).pattern(1).notes_of(NoteKind.SEQ)] == [64]
+    assert project.track(2).pattern(1).notes_of(NoteKind.SEQ) == ()
+
+
+def test_a_selection_past_the_files_counts_them_all(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, argv = two_files(tmp_path, "--midi-tracks", "9")
+
+    assert main(argv) == 2
+    assert "the 2 files hold 2 tracks between them" in capsys.readouterr().err
+
+
+def test_midi_track_with_several_sources_is_an_argument_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--midi-track writes one track into one pattern; several files have no such track."""
+    _, argv = two_files(tmp_path, "--midi-track", "1")
+
+    assert main(argv) == 2
+    assert "--midi-track reads one file" in capsys.readouterr().err
