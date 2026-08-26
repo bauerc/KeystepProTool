@@ -38,6 +38,30 @@
           }
         ]
       }
+    ],
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/worktree-create.sh\"",
+            "timeout": 120,
+            "description": "Create the worktree at ~/repos/worktrees/<repo>/<name>, branched from a freshly fetched origin/main"
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/worktree-remove.sh\"",
+            "timeout": 120,
+            "description": "Force-remove the worktree and delete its branch when already merged, squash merges included"
+          }
+        ]
+      }
     ]
   }
 }
