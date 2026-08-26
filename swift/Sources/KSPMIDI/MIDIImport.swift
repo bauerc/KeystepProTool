@@ -39,6 +39,10 @@ public struct ImportOptions: Sendable, Hashable {
 
     public let routes: [TrackRoute]
 
+    /// Write every note and trigger at this velocity instead of the source's; `nil`
+    /// keeps the file's own. Written content: existence is never velocity.
+    public let flatVelocity: Int?
+
     public init(
         stepsPerBeat: Int = Constants.defaultStepsPerBeat,
         midiTracks: Set<Int> = [],
@@ -47,7 +51,8 @@ public struct ImportOptions: Sendable, Hashable {
         carryTempo: Bool = true,
         fitSwing: Bool = true,
         fitTimeShift: Bool = true,
-        routes: [TrackRoute] = []
+        routes: [TrackRoute] = [],
+        flatVelocity: Int? = nil
     ) throws {
         try Constants.checkStepsPerBeat(stepsPerBeat)
         if midiTracks.contains(where: { $0 < 1 }) {
@@ -62,6 +67,7 @@ public struct ImportOptions: Sendable, Hashable {
                     + "the source tracks read")
         }
         try ImportOptions.checkRoutes(routes, drumTrack: drumTrack, midiTracks: midiTracks)
+        try MIDIExport.checkFlatVelocity(flatVelocity)
         self.stepsPerBeat = stepsPerBeat
         self.midiTracks = midiTracks
         self.drumTrack = drumTrack
@@ -70,6 +76,7 @@ public struct ImportOptions: Sendable, Hashable {
         self.fitSwing = fitSwing
         self.fitTimeShift = fitTimeShift
         self.routes = routes
+        self.flatVelocity = flatVelocity
     }
 
     private static func checkRoutes(
@@ -675,7 +682,8 @@ extension MIDIImport {
 
             notes.append(
                 PlacedNote(
-                    step: local + 1, pitch: entry.note.pitch, velocity: entry.note.velocity,
+                    step: local + 1, pitch: entry.note.pitch,
+                    velocity: options.flatVelocity ?? entry.note.velocity,
                     gate: gate, timeShift: shift, lane: lane))
         }
 

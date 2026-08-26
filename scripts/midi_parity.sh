@@ -186,6 +186,13 @@ if has convert; then
         add import "$(basename "$clip") --midi-tracks 99" "$clip" --midi-tracks 99
         add import "$(basename "$clip") --midi-track 1 --midi-tracks 1" "$clip" --midi-track 1 --midi-tracks 1
         add import "$(basename "$clip") --midi-tracks 1 --drum-track 2" "$clip" --midi-tracks 1 --drum-track 2
+        add import "$(basename "$clip") --flat-velocity fresh" "$clip" --flat-velocity fresh
+        add import "$(basename "$clip") --flat-velocity 64" "$clip" --flat-velocity 64
+        add import "$(basename "$clip") --flat-velocity 0" "$clip" --flat-velocity 0
+        add import "$(basename "$clip") --flat-velocity loud" "$clip" --flat-velocity loud
+        # Must reach the range message, not "not a velocity": it pins the saturation.
+        add import "$(basename "$clip") --flat-velocity past Int" "$clip" \
+            --flat-velocity 99999999999999999999
     done
 else
     echo "midi_parity: ksp-swift-cli has no 'convert' yet -- skipping the midi2ksp direction"

@@ -16,7 +16,7 @@ from ksp.diagnostics import EMPTY_REPORT, Code, Collector, Report, Site
 from ksp.drum_map import DrumMap
 from ksp.keys import get_int, item_for_track
 from ksp.lenient_json import canonical
-from ksp.midi_export import RenderedNote, swing_delay
+from ksp.midi_export import RenderedNote, check_flat_velocity, swing_delay
 
 #: MIDI's default when a file carries no ``set_tempo``: 120 BPM in microseconds per beat.
 DEFAULT_TEMPO: Final = 500_000
@@ -80,6 +80,10 @@ class ImportOptions:
     """Where named source tracks go, overriding the fill-upwards rule.
     A drum track still lands on device track 1."""
 
+    flat_velocity: int | None = None
+    """Write every note and trigger at this velocity instead of the source's;
+    ``None`` keeps the file's own. Written content: existence is never velocity."""
+
     def __post_init__(self) -> None:
         check_steps_per_beat(self.steps_per_beat)
         # A plain set would stay aliased to the caller's, letting a later
@@ -95,6 +99,7 @@ class ImportOptions:
                 "be one of the source tracks read"
             )
         self._check_routes()
+        check_flat_velocity(self.flat_velocity)
 
     def _check_routes(self) -> None:
         """The faults a route has without knowing the song: range and clashes."""
@@ -652,7 +657,9 @@ def _place(
             PlacedNote(
                 step=local + 1,
                 pitch=entry.note.pitch,
-                velocity=entry.note.velocity,
+                velocity=(
+                    entry.note.velocity if options.flat_velocity is None else options.flat_velocity
+                ),
                 gate=gate,
                 time_shift=shift,
                 lane=lane,

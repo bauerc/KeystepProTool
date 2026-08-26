@@ -5,7 +5,7 @@ from ksp.midi_export import DEFAULT_FLAT_VELOCITY
 
 def parse_flat_velocity(text: str | None) -> int | None:
     """Parse ``--flat-velocity``'s value into a velocity, unvalidated.
-    A bare numeral passes through for :class:`ExportOptions` to range-check."""
+    A bare numeral passes through for the options type to range-check."""
     if text is None:
         return None
     if text == "fresh":

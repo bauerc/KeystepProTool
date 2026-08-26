@@ -1,7 +1,7 @@
 import KSPKit
 import KSPMIDI
 
-/// Parse `text` into a velocity, unvalidated -- `ExportOptions` does the range check.
+/// Parse `text` into a velocity, unvalidated -- the options type does the range check.
 public func parseFlatVelocity(_ text: String?) throws -> Int? {
     guard let text else { return nil }
     if text == "fresh" { return MIDIExport.defaultFlatVelocity }

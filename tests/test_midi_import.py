@@ -321,6 +321,8 @@ def test_quantise_refuses_a_step_count_the_device_cannot_hold() -> None:
         {"routes": (TrackRoute(1, 5),)},
         {"routes": (TrackRoute(1, 2), TrackRoute(1, 3))},
         {"routes": (TrackRoute(1, 2), TrackRoute(2, 2))},
+        {"flat_velocity": 0},
+        {"flat_velocity": 128},
     ],
 )
 def test_options_refuse_impossible_values(options: dict[str, Any]) -> None:
@@ -577,6 +579,43 @@ def test_an_unset_drum_map_is_fitted_to_the_source(load_sample: Loader) -> None:
     assert result.plan.drum_map.note_for_lane(0) == 31
     assert [note.lane for note in result.notes] == [0, 3]
     assert Code.DRUM_MAP_FITTED in {d.code for d in result.diagnostics}
+
+
+@pytest.mark.parametrize("velocity", [1, 127])
+def test_the_flat_velocity_bounds_are_accepted(velocity: int) -> None:
+    assert ImportOptions(flat_velocity=velocity).flat_velocity == velocity
+
+
+def test_a_flat_velocity_replaces_every_written_velocity(load_sample: Loader) -> None:
+    events = [(0, 60, 20), (TICKS_PER_STEP, 62, 90), (TICKS_PER_STEP * 2, 64, 127)]
+    result = midi_import.convert(
+        clip_of(events),
+        load_sample("Default.KeyStepPro"),
+        options=ImportOptions(flat_velocity=64),
+    )
+
+    assert [note.velocity for note in result.notes] == [64, 64, 64]
+
+
+def test_an_unset_flat_velocity_keeps_the_source_velocities(load_sample: Loader) -> None:
+    events = [(0, 60, 20), (TICKS_PER_STEP, 62, 90), (TICKS_PER_STEP * 2, 64, 127)]
+    result = midi_import.convert(clip_of(events), load_sample("Default.KeyStepPro"))
+
+    assert [note.velocity for note in result.notes] == [20, 90, 127]
+
+
+def test_a_flat_velocity_reaches_drum_triggers(load_sample: Loader) -> None:
+    """Drums are written through a different mutate call, off the same PlacedNote."""
+    midi = song_of([[(0, 36, 20), (TICKS_PER_STEP, 37, 90)]])
+    options = ImportOptions(
+        drum_track=1,
+        drum_map=DrumMap.chromatic(36),
+        flat_velocity=midi_export.DEFAULT_FLAT_VELOCITY,
+    )
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    assert [note.lane for note in result.notes] == [0, 1]
+    assert [note.velocity for note in result.notes] == [midi_export.DEFAULT_FLAT_VELOCITY] * 2
 
 
 def test_the_source_tempo_is_written(load_sample: Loader) -> None:

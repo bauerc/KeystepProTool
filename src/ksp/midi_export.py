@@ -44,6 +44,15 @@ DEFAULT_FLAT_VELOCITY: Final = constants.FRESH_VELOCITY
 MAX_REPEAT: Final = 10
 
 
+def check_flat_velocity(velocity: int | None) -> None:
+    """Shared by both directions; ``None`` means "leave every velocity alone"."""
+    if velocity is not None and not MIN_VELOCITY <= velocity <= MAX_VELOCITY:
+        raise ValueError(
+            f"flat_velocity must be {MIN_VELOCITY}-{MAX_VELOCITY}; "
+            "0 is a MIDI note-off, not a silent note"
+        )
+
+
 @dataclass(frozen=True)
 class ExportOptions:
     """Everything the project file cannot tell us about timing and mapping."""
@@ -97,13 +106,7 @@ class ExportOptions:
             raise ValueError("default_gate must be greater than 0")
         if self.passes is not None and not 1 <= self.passes <= constants.SKIP_CYCLE_PASSES:
             raise ValueError(f"passes must be 1-{constants.SKIP_CYCLE_PASSES}, or None for auto")
-        if self.flat_velocity is not None and not (
-            MIN_VELOCITY <= self.flat_velocity <= MAX_VELOCITY
-        ):
-            raise ValueError(
-                f"flat_velocity must be {MIN_VELOCITY}-{MAX_VELOCITY}; "
-                "0 is a MIDI note-off, not a silent note"
-            )
+        check_flat_velocity(self.flat_velocity)
         if not 1 <= self.repeat <= MAX_REPEAT:
             raise ValueError(f"repeat must be 1-{MAX_REPEAT}")
 
