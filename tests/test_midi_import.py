@@ -1162,3 +1162,247 @@ def test_routes_do_not_change_the_dropped_track_report(load_sample: Loader) -> N
     assert routed(result) == [(1, 5), (2, 1), (3, 2), (4, 3)]
     dropped = [d for d in result.diagnostics if d.code is Code.TRACKS_DROPPED]
     assert [d.subjects for d in dropped] == [1]
+
+
+def source_of(
+    name: str,
+    tracks: list[list[tuple[int, int, int]]],
+    *,
+    ticks_per_beat: int = TICKS_PER_BEAT,
+    tempo_bpm: float | None = None,
+    signature: tuple[int, int] | None = None,
+    length: int = TICKS_PER_STEP,
+) -> midi_import.Source:
+    """A named type 1 file, one track per list of ``(tick, pitch, velocity)``."""
+    midi = mido.MidiFile(type=1, ticks_per_beat=ticks_per_beat)
+    for number, events in enumerate(tracks):
+        track = mido.MidiTrack()
+        midi.tracks.append(track)
+        if number == 0 and tempo_bpm is not None:
+            track.append(mido.MetaMessage("set_tempo", tempo=mido.bpm2tempo(tempo_bpm), time=0))
+        if number == 0 and signature is not None:
+            numerator, denominator = signature
+            track.append(
+                mido.MetaMessage(
+                    "time_signature", numerator=numerator, denominator=denominator, time=0
+                )
+            )
+        timed: list[tuple[int, str, int, int]] = []
+        for tick, pitch, velocity in events:
+            timed.append((tick, "note_on", pitch, velocity))
+            timed.append((tick + length, "note_off", pitch, 64))
+        previous = 0
+        for tick, kind, pitch, velocity in sorted(timed):
+            track.append(
+                mido.Message(kind, note=pitch, velocity=velocity, time=tick - previous, channel=0)
+            )
+            previous = tick
+    return midi_import.Source(name, midi)
+
+
+def test_two_files_become_one_song() -> None:
+    first = source_of("a.mid", [[(0, 60, 100)], [(0, 64, 100)]])
+    second = source_of("b.mid", [[(0, 67, 100)]])
+
+    song = midi_import.read_songs((first, second))
+
+    assert [clip.notes[0].pitch for clip in song.clips] == [60, 64, 67]
+
+
+def test_every_clip_records_the_file_it_came_from() -> None:
+    first = source_of("a.mid", [[(0, 60, 100)], [(0, 64, 100)]])
+    second = source_of("b.mid", [[(0, 67, 100)]])
+
+    song = midi_import.read_songs((first, second))
+
+    assert [clip.source_file for clip in song.clips] == ["a.mid", "a.mid", "b.mid"]
+
+
+def test_source_tracks_number_on_through_the_files() -> None:
+    """One numbering across the run, so --route and --midi-tracks still address a track."""
+    first = source_of("a.mid", [[(0, 60, 100)], [(0, 64, 100)]])
+    second = source_of("b.mid", [[(0, 67, 100)], [(0, 71, 100)]])
+
+    song = midi_import.read_songs((first, second))
+
+    assert [clip.source_tracks for clip in song.clips] == [(1,), (2,), (3,), (4,)]
+
+
+def test_a_selection_reaches_into_the_second_file() -> None:
+    first = source_of("a.mid", [[(0, 60, 100)], [(0, 64, 100)]])
+    second = source_of("b.mid", [[(0, 67, 100)], [(0, 71, 100)]])
+
+    song = midi_import.read_songs((first, second), ImportOptions(midi_tracks=frozenset({3})))
+
+    assert [clip.notes[0].pitch for clip in song.clips] == [67]
+    assert [clip.source_file for clip in song.clips] == ["b.mid"]
+
+
+def test_a_selection_past_every_file_is_refused_naming_the_total() -> None:
+    first = source_of("a.mid", [[(0, 60, 100)], [(0, 64, 100)]])
+    second = source_of("b.mid", [[(0, 67, 100)]])
+
+    with pytest.raises(ValueError, match=r"source track 4 was selected; the 2 files hold 3"):
+        midi_import.read_songs((first, second), ImportOptions(midi_tracks=frozenset({4})))
+
+
+def test_a_later_file_at_another_resolution_is_rescaled_onto_the_firsts() -> None:
+    """One beat is one beat: 96 ticks at 96 PPQ has to land on 480 at 480 PPQ."""
+    first = source_of("a.mid", [[(0, 60, 100)]])
+    second = source_of("b.mid", [[(96, 67, 100)]], ticks_per_beat=96, length=24)
+
+    song = midi_import.read_songs((first, second))
+
+    assert song.ticks_per_beat == TICKS_PER_BEAT
+    assert [clip.notes[0].tick for clip in song.clips] == [0, TICKS_PER_BEAT]
+    assert song.resolution_conflicts == 1
+
+
+def test_rescaling_down_leaves_a_short_note_a_tick_long() -> None:
+    """Rounding a sub-tick note to nothing would silently delete it."""
+    first = source_of("a.mid", [[(0, 60, 100)]], ticks_per_beat=96, length=24)
+    second = source_of("b.mid", [[(0, 67, 100)]], length=1)
+
+    song = midi_import.read_songs((first, second))
+
+    assert song.clips[1].notes[0].duration_ticks == 1
+
+
+def test_a_later_files_resolution_is_reported(load_sample: Loader) -> None:
+    first = source_of("a.mid", [[(0, 60, 100)]])
+    second = source_of("b.mid", [[(0, 67, 100)]], ticks_per_beat=96, length=24)
+
+    result = midi_import.convert_songs((first, second), load_sample("Default.KeyStepPro"))
+
+    assert Code.SOURCE_RESOLUTION_DIFFERS in {d.code for d in result.diagnostics}
+
+
+def test_the_first_files_tempo_is_written_and_the_disagreement_reported(
+    load_sample: Loader,
+) -> None:
+    first = source_of("a.mid", [[(0, 60, 100)]], tempo_bpm=140)
+    second = source_of("b.mid", [[(0, 67, 100)]], tempo_bpm=90)
+
+    result = midi_import.convert_songs((first, second), load_sample("Default.KeyStepPro"))
+
+    assert result.plan.tempo_bpm == pytest.approx(140, abs=0.01)
+    assert Code.SOURCE_TEMPO_DIFFERS in {d.code for d in result.diagnostics}
+
+
+def test_a_tempo_disagreement_is_silent_when_no_tempo_is_carried(load_sample: Loader) -> None:
+    """Nothing was overridden if nothing was written."""
+    first = source_of("a.mid", [[(0, 60, 100)]], tempo_bpm=140)
+    second = source_of("b.mid", [[(0, 67, 100)]], tempo_bpm=90)
+    options = ImportOptions(carry_tempo=False)
+
+    result = midi_import.convert_songs(
+        (first, second), load_sample("Default.KeyStepPro"), options=options
+    )
+
+    assert Code.SOURCE_TEMPO_DIFFERS not in {d.code for d in result.diagnostics}
+
+
+def test_the_first_files_meter_sets_the_bar_and_the_disagreement_is_reported(
+    load_sample: Loader,
+) -> None:
+    first = source_of("a.mid", [[(0, 60, 100)]], signature=(4, 4))
+    second = source_of("b.mid", [[(0, 67, 100)]], signature=(3, 4))
+
+    song = midi_import.read_songs((first, second))
+    result = midi_import.convert_songs((first, second), load_sample("Default.KeyStepPro"))
+
+    assert song.beats_per_bar == 4
+    assert song.meter_conflicts == 1
+    assert Code.SOURCE_METER_DIFFERS in {d.code for d in result.diagnostics}
+
+
+def test_agreeing_files_report_nothing(load_sample: Loader) -> None:
+    first = source_of("a.mid", [[(0, 60, 100)]])
+    second = source_of("b.mid", [[(0, 67, 100)]])
+
+    result = midi_import.convert_songs((first, second), load_sample("Default.KeyStepPro"))
+    raised = {d.code for d in result.diagnostics}
+
+    assert Code.SOURCE_TEMPO_DIFFERS not in raised
+    assert Code.SOURCE_RESOLUTION_DIFFERS not in raised
+    assert Code.SOURCE_METER_DIFFERS not in raised
+
+
+def test_a_device_track_records_the_file_it_came_from(load_sample: Loader) -> None:
+    first = source_of("a.mid", [[(0, 60, 100)]])
+    second = source_of("b.mid", [[(0, 67, 100)]])
+
+    result = midi_import.convert_songs((first, second), load_sample("Default.KeyStepPro"))
+
+    assert [plan.source_file for plan in result.plan.tracks] == ["a.mid", "b.mid"]
+
+
+def test_one_source_reads_exactly_as_a_single_file_does() -> None:
+    midi = song_of([[(0, 60, 100)], [(TICKS_PER_STEP, 64, 100)]])
+
+    assert midi_import.read_songs((midi_import.Source("", midi),)) == midi_import.read_song(midi)
+
+
+def test_one_source_converts_exactly_as_a_single_file_does(load_sample: Loader) -> None:
+    midi = song_of([[(0, 60, 100)], [(TICKS_PER_STEP, 64, 100)]])
+    sources = (midi_import.Source("", midi),)
+
+    together = midi_import.convert_songs(sources, load_sample("Default.KeyStepPro"))
+    alone = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
+
+    assert together.raw == alone.raw
+
+
+def test_two_constant_tempo_files_are_not_a_tempo_change(load_sample: Loader) -> None:
+    """Counting the run's tempo events rather than one file's would claim a change."""
+    first = source_of("a.mid", [[(0, 60, 100)]], tempo_bpm=120)
+    second = source_of("b.mid", [[(0, 67, 100)]], tempo_bpm=120)
+
+    result = midi_import.convert_songs((first, second), load_sample("Default.KeyStepPro"))
+
+    assert Code.TEMPO_CHANGES_IGNORED not in {d.code for d in result.diagnostics}
+
+
+def test_a_file_that_really_changes_tempo_is_still_reported(load_sample: Loader) -> None:
+    first = source_of("a.mid", [[(0, 60, 100)]], tempo_bpm=120)
+    first.midi.tracks[0].append(mido.MetaMessage("set_tempo", tempo=mido.bpm2tempo(90), time=480))
+    second = source_of("b.mid", [[(0, 67, 100)]], tempo_bpm=120)
+
+    result = midi_import.convert_songs((first, second), load_sample("Default.KeyStepPro"))
+
+    assert Code.TEMPO_CHANGES_IGNORED in {d.code for d in result.diagnostics}
+
+
+def test_a_wholly_deselected_file_reports_no_disagreement(load_sample: Loader) -> None:
+    """It supplied no note to rescale, so there is nothing to have overridden."""
+    first = source_of("a.mid", [[(0, 60, 100)]], tempo_bpm=120)
+    second = source_of("b.mid", [[(0, 67, 100)]], ticks_per_beat=96, length=24, tempo_bpm=90)
+    options = ImportOptions(midi_tracks=frozenset({1}))
+
+    song = midi_import.read_songs((first, second), options)
+    result = midi_import.convert_songs(
+        (first, second), load_sample("Default.KeyStepPro"), options=options
+    )
+    raised = {d.code for d in result.diagnostics}
+
+    assert [clip.source_file for clip in song.clips] == ["a.mid"]
+    assert (song.tempo_conflicts, song.resolution_conflicts) == (0, 0)
+    assert Code.SOURCE_TEMPO_DIFFERS not in raised
+    assert Code.SOURCE_RESOLUTION_DIFFERS not in raised
+
+
+def test_a_zero_length_note_stays_zero_length_through_a_rescale() -> None:
+    """Otherwise the same file would gate differently for the company it keeps."""
+    first = source_of("a.mid", [[(0, 60, 100)]], ticks_per_beat=96, length=24)
+    second = source_of("b.mid", [[(0, 67, 100)]], length=0)
+
+    alone = midi_import.read_songs((second,))
+    rescaled = midi_import.read_songs((first, second))
+
+    assert alone.clips[0].notes[0].duration_ticks == 0
+    assert rescaled.clips[1].notes[0].duration_ticks == 0
+
+
+def test_no_source_at_all_is_refused() -> None:
+    with pytest.raises(ValueError, match=r"no source file was given"):
+        midi_import.read_songs(())

@@ -126,6 +126,17 @@ public struct ImportOptions: Sendable, Hashable {
     }
 }
 
+/// One MIDI file to read, and the name its clips are attributed to.
+public struct Source: Sendable {
+    public let name: String
+    public let midi: MusicalMIDI1File
+
+    public init(_ name: String, _ midi: MusicalMIDI1File) {
+        self.name = name
+        self.midi = midi
+    }
+}
+
 public struct Clip: Sendable, Hashable {
     public let notes: [RenderedNote]
     public let ticksPerBeat: Int
@@ -133,13 +144,18 @@ public struct Clip: Sendable, Hashable {
 
     public let sourceTracks: [Int]
 
+    /// The name the file was read under, empty when it was not given one.
+    public let sourceFile: String
+
     public init(
-        notes: [RenderedNote], ticksPerBeat: Int, tempoBPM: Double, sourceTracks: [Int]
+        notes: [RenderedNote], ticksPerBeat: Int, tempoBPM: Double, sourceTracks: [Int],
+        sourceFile: String = ""
     ) {
         self.notes = notes
         self.ticksPerBeat = ticksPerBeat
         self.tempoBPM = tempoBPM
         self.sourceTracks = sourceTracks
+        self.sourceFile = sourceFile
     }
 
     public var channels: [Int] { Set(notes.map(\.channel)).sorted() }
@@ -152,13 +168,20 @@ public struct Song: Sendable, Hashable {
     public let ticksPerBeat: Int
     public let tempoBPM: Double
     public let beatsPerBar: Double
+    /// The most any one source file changes tempo; several files are not a change.
     public let tempoChanges: Int
 
     public let controllersDropped: Int
 
+    /// How many later source files the first file's timing overrode.
+    public let tempoConflicts: Int
+    public let resolutionConflicts: Int
+    public let meterConflicts: Int
+
     public init(
         clips: [Clip], ticksPerBeat: Int, tempoBPM: Double, beatsPerBar: Double,
-        tempoChanges: Int = 0, controllersDropped: Int = 0
+        tempoChanges: Int = 0, controllersDropped: Int = 0, tempoConflicts: Int = 0,
+        resolutionConflicts: Int = 0, meterConflicts: Int = 0
     ) {
         self.clips = clips
         self.ticksPerBeat = ticksPerBeat
@@ -166,6 +189,9 @@ public struct Song: Sendable, Hashable {
         self.beatsPerBar = beatsPerBar
         self.tempoChanges = tempoChanges
         self.controllersDropped = controllersDropped
+        self.tempoConflicts = tempoConflicts
+        self.resolutionConflicts = resolutionConflicts
+        self.meterConflicts = meterConflicts
     }
 
     public func stepsPerBar(_ stepsPerBeat: Int) -> Int {
@@ -224,14 +250,17 @@ public struct TrackPlan: Sendable, Hashable {
     public let placements: [Placement]
     public let isDrum: Bool
     public let sourceTrack: Int?
+    public let sourceFile: String
 
     public init(
-        track: Int, placements: [Placement], isDrum: Bool = false, sourceTrack: Int? = nil
+        track: Int, placements: [Placement], isDrum: Bool = false, sourceTrack: Int? = nil,
+        sourceFile: String = ""
     ) {
         self.track = track
         self.placements = placements
         self.isDrum = isDrum
         self.sourceTrack = sourceTrack
+        self.sourceFile = sourceFile
     }
 
     public var notes: [PlacedNote] { placements.flatMap(\.notes) }
@@ -398,10 +427,33 @@ extension MIDIImport {
 
     /// Refuse a selection naming a track `midi` does not have, lowest first.
     public static func checkSelection(_ midi: MusicalMIDI1File, _ options: ImportOptions) throws {
-        let missing = options.midiTracks.filter { $0 > midi.tracks.count }.min()
-        if let missing {
-            throw KSPError.value(
-                "source track \(missing) was selected; the file has \(midi.tracks.count) tracks")
+        try checkSelections([Source("", midi)], options)
+    }
+
+    /// Refuse a selection naming a track the `sources` between them do not have.
+    public static func checkSelections(_ sources: [Source], _ options: ImportOptions) throws {
+        let total = sources.reduce(0) { $0 + $1.midi.tracks.count }
+        guard let missing = options.midiTracks.filter({ $0 > total }).min() else { return }
+        let held =
+            sources.count == 1
+            ? "the file has \(total) tracks"
+            : "the \(sources.count) files hold \(total) tracks between them"
+        throw KSPError.value("source track \(missing) was selected; \(held)")
+    }
+
+    /// `notes` moved from a beat of `source` ticks onto one of `target` ticks.
+    static func rescaled(_ notes: [RenderedNote], _ source: Int, _ target: Int) -> [RenderedNote] {
+        if source == target { return notes }
+        func scaled(_ value: Int) -> Int { (value * target + source / 2) / source }
+        return notes.map { note in
+            RenderedNote(
+                tick: scaled(note.tick),
+                // Floored at one so a note that had length keeps some; a zero-length one keeps
+                // none, which is what it would have had at the target resolution anyway.
+                durationTicks: note.durationTicks == 0 ? 0 : max(1, scaled(note.durationTicks)),
+                pitch: note.pitch,
+                velocity: note.velocity,
+                channel: note.channel)
         }
     }
 
@@ -435,41 +487,71 @@ extension MIDIImport {
     public static func readSong(_ midi: MusicalMIDI1File, options: ImportOptions? = nil) throws
         -> Song
     {
+        try readSongs([Source("", midi)], options: options)
+    }
+
+    /// Every source file's tracks as one song, numbered on through the files.
+    /// The first file's tempo, resolution and meter are the song's; a later file
+    /// disagreeing is rescaled onto them and counted.
+    public static func readSongs(_ sources: [Source], options: ImportOptions? = nil) throws -> Song
+    {
         let options = try options ?? ImportOptions()
-        try checkReadable(midi)
-        try checkSelection(midi, options)
-        let (tempo, signature, changes) = timing(midi)
+        if sources.isEmpty { throw KSPError.value("no source file was given") }
+        for source in sources { try checkReadable(source.midi) }
+        try checkSelections(sources, options)
+
+        let timings = sources.map { timing($0.midi) }
+        let (tempo, signature, _) = timings[0]
         let tempoBPM = tempoToBPM(tempo)
+        let ticksPerBeat = Int(sources[0].midi.timebase.ticksPerQuarterNote)
 
         var clips: [Clip] = []
         var dropped = 0
-        for (index, track) in midi.tracks.enumerated() {
-            let number = index + 1
-            if !options.midiTracks.isEmpty && !options.midiTracks.contains(number) { continue }
-            let read = trackNotes(track, timebase: midi.timebase)
-            dropped += read.dropped
-            var byChannel: [Int: [RenderedNote]] = [:]
-            for note in read.notes {
-                byChannel[note.channel, default: []].append(note)
-            }
-            for channel in byChannel.keys.sorted() {
-                let notes = (byChannel[channel] ?? []).stableSorted {
-                    ($0.tick, $0.pitch) < ($1.tick, $1.pitch)
+        var offset = 0
+        var contributed = [Bool](repeating: false, count: sources.count)
+        for (sourceIndex, source) in sources.enumerated() {
+            let midi = source.midi
+            let fileTicks = Int(midi.timebase.ticksPerQuarterNote)
+            for (index, track) in midi.tracks.enumerated() {
+                let number = offset + index + 1
+                if !options.midiTracks.isEmpty && !options.midiTracks.contains(number) { continue }
+                let read = trackNotes(track, timebase: midi.timebase)
+                dropped += read.dropped
+                var byChannel: [Int: [RenderedNote]] = [:]
+                for note in read.notes {
+                    byChannel[note.channel, default: []].append(note)
                 }
-                clips.append(
-                    Clip(
-                        notes: notes, ticksPerBeat: Int(midi.timebase.ticksPerQuarterNote),
-                        tempoBPM: tempoBPM, sourceTracks: [number]))
+                for channel in byChannel.keys.sorted() {
+                    let notes = (byChannel[channel] ?? []).stableSorted {
+                        ($0.tick, $0.pitch) < ($1.tick, $1.pitch)
+                    }
+                    clips.append(
+                        Clip(
+                            notes: rescaled(notes, fileTicks, ticksPerBeat),
+                            ticksPerBeat: ticksPerBeat,
+                            tempoBPM: tempoBPM, sourceTracks: [number], sourceFile: source.name))
+                    contributed[sourceIndex] = true
+                }
             }
+            offset += midi.tracks.count
         }
 
+        // Every count below covers only the files that put a clip in the song: one whose tracks
+        // were all deselected supplied no note to rescale and no tempo to be overridden.
+        let sounding = contributed.indices.filter { contributed[$0] }
+        let overridden = sounding.filter { $0 != 0 }
         return Song(
             clips: clips,
-            ticksPerBeat: Int(midi.timebase.ticksPerQuarterNote),
+            ticksPerBeat: ticksPerBeat,
             tempoBPM: tempoBPM,
             beatsPerBar: Double(signature.numerator) * 4 / Double(signature.denominator),
-            tempoChanges: changes,
-            controllersDropped: dropped)
+            tempoChanges: sounding.map { timings[$0].changes }.filter { $0 > 1 }.reduce(0, +),
+            controllersDropped: dropped,
+            tempoConflicts: overridden.filter { timings[$0].tempo != tempo }.count,
+            resolutionConflicts: overridden.filter {
+                Int(sources[$0].midi.timebase.ticksPerQuarterNote) != ticksPerBeat
+            }.count,
+            meterConflicts: overridden.filter { timings[$0].signature != signature }.count)
     }
 }
 
@@ -796,7 +878,7 @@ extension MIDIImport {
 
         return TrackPlan(
             track: track, placements: placements, isDrum: isDrum,
-            sourceTrack: clip.sourceTracks.first)
+            sourceTrack: clip.sourceTracks.first, sourceFile: clip.sourceFile)
     }
 
     public static func fitDrumMap(_ clip: Clip) throws -> DrumMap {
@@ -814,7 +896,7 @@ extension MIDIImport {
         }
         return Clip(
             notes: notes, ticksPerBeat: first.ticksPerBeat, tempoBPM: first.tempoBPM,
-            sourceTracks: first.sourceTracks)
+            sourceTracks: first.sourceTracks, sourceFile: first.sourceFile)
     }
 
     static func assign(
@@ -977,6 +1059,27 @@ extension MIDIImport {
                         + "tempo per project, so \(Arithmetic.general(song.tempoBPM)) BPM was "
                         + "taken and the rest ignored")
             }
+            if song.tempoConflicts > 0 {
+                collector.add(
+                    .sourceTempoDiffers,
+                    "\(song.tempoConflicts) source file(s) do not run at the first file's "
+                        + "\(Arithmetic.general(song.tempoBPM)) BPM; the device stores one tempo "
+                        + "per project, so the first file's was written")
+            }
+        }
+
+        if song.resolutionConflicts > 0 {
+            collector.add(
+                .sourceResolutionDiffers,
+                "\(song.resolutionConflicts) source file(s) are not written at the first file's "
+                    + "\(song.ticksPerBeat) ticks per beat; their notes were rescaled onto it")
+        }
+        if song.meterConflicts > 0 {
+            collector.add(
+                .sourceMeterDiffers,
+                "\(song.meterConflicts) source file(s) are not in the first file's time "
+                    + "signature; bars were counted at \(Arithmetic.general(song.beatsPerBar)) "
+                    + "beats throughout")
         }
 
         return SongPlan(
@@ -1121,8 +1224,18 @@ extension MIDIImport {
         _ midi: MusicalMIDI1File, _ raw: RawProject, options: ImportOptions? = nil,
         firstPattern: Int = 1, firstTrack: Int = 1
     ) throws -> ImportResult {
+        try convertSongs(
+            [Source("", midi)], raw, options: options, firstPattern: firstPattern,
+            firstTrack: firstTrack)
+    }
+
+    /// Convert every note-bearing track of every source into the template `raw`.
+    public static func convertSongs(
+        _ sources: [Source], _ raw: RawProject, options: ImportOptions? = nil,
+        firstPattern: Int = 1, firstTrack: Int = 1
+    ) throws -> ImportResult {
         let options = try options ?? ImportOptions()
-        let song = try readSong(midi, options: options)
+        let song = try readSongs(sources, options: options)
         let scene = try Keys.getInt(raw, Constants.itemProject, Constants.pCurrentScene) ?? 0
         let plan = try planSong(
             song, options: options, firstPattern: firstPattern, firstTrack: firstTrack,
