@@ -1156,6 +1156,21 @@ private func withTempo(_ source: Source, bpm: Double) -> Source {
     Source(source.name, withTempo(source.midi, bpm: bpm))
 }
 
+/// A second tempo one beat in, so the file's *first* tempo is left where it was.
+private func thenTempo(_ source: Source, bpm: Double, at tick: Int) -> Source {
+    var copy = source.midi
+    var first = copy.tracks[0]
+    first.events.append(
+        .init(
+            delta: .ticks(UInt32(tick)),
+            event: .tempo(
+                .musical(
+                    MIDIFileEvent.MusicalTempo(
+                        microsecondsPerQuarter: MIDIExport.bpmToMicroseconds(bpm))))))
+    copy.tracks[0] = first
+    return Source(source.name, copy)
+}
+
 private func codes(_ result: ImportResult) -> Set<Code> {
     Set(result.diagnostics.entries.map(\.code))
 }
@@ -1326,12 +1341,45 @@ private func codes(_ result: ImportResult) -> Set<Code> {
     }
 
     @Test func afileThatReallyChangesTempoIsStillReported() throws {
-        let first = withTempo(withTempo(sourceOf("a.mid", [[(0, 60, 100)]]), bpm: 120), bpm: 90)
+        let first = thenTempo(
+            withTempo(sourceOf("a.mid", [[(0, 60, 100)]]), bpm: 120), bpm: 90, at: 480)
         let second = withTempo(sourceOf("b.mid", [[(0, 67, 100)]]), bpm: 120)
 
         let result = try MIDIImport.convertSongs([first, second], try template())
 
+        // The files agree on their opening tempo; only the change within one of them is news.
         #expect(codes(result).contains(.tempoChangesIgnored))
+        #expect(!codes(result).contains(.sourceTempoDiffers))
+    }
+
+    /// It supplied no note to rescale, so there is nothing to have overridden.
+    @Test func awhollyDeselectedFileReportsNoDisagreement() throws {
+        let first = withTempo(sourceOf("a.mid", [[(0, 60, 100)]]), bpm: 120)
+        let second = withTempo(
+            sourceOf("b.mid", [[(0, 67, 100)]], ticksPerQuarterNote: 96, length: 24), bpm: 90)
+        let options = try ImportOptions(midiTracks: [1])
+
+        let song = try MIDIImport.readSongs([first, second], options: options)
+        let result = try MIDIImport.convertSongs(
+            [first, second], try template(), options: options)
+
+        #expect(song.clips.map(\.sourceFile) == ["a.mid"])
+        #expect(song.tempoConflicts == 0)
+        #expect(song.resolutionConflicts == 0)
+        #expect(!codes(result).contains(.sourceTempoDiffers))
+        #expect(!codes(result).contains(.sourceResolutionDiffers))
+    }
+
+    /// Otherwise the same file would gate differently for the company it keeps.
+    @Test func azeroLengthNoteStaysZeroLengthThroughArescale() throws {
+        let first = sourceOf("a.mid", [[(0, 60, 100)]], ticksPerQuarterNote: 96, length: 24)
+        let second = sourceOf("b.mid", [[(0, 67, 100)]], length: 0)
+
+        let alone = try MIDIImport.readSongs([second])
+        let rescaled = try MIDIImport.readSongs([first, second])
+
+        #expect(alone.clips[0].notes[0].durationTicks == 0)
+        #expect(rescaled.clips[1].notes[0].durationTicks == 0)
     }
 
     @Test func noSourceAtAllIsRefused() throws {

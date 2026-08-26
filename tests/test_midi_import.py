@@ -1334,6 +1334,36 @@ def test_a_file_that_really_changes_tempo_is_still_reported(load_sample: Loader)
     assert Code.TEMPO_CHANGES_IGNORED in {d.code for d in result.diagnostics}
 
 
+def test_a_wholly_deselected_file_reports_no_disagreement(load_sample: Loader) -> None:
+    """It supplied no note to rescale, so there is nothing to have overridden."""
+    first = source_of("a.mid", [[(0, 60, 100)]], tempo_bpm=120)
+    second = source_of("b.mid", [[(0, 67, 100)]], ticks_per_beat=96, length=24, tempo_bpm=90)
+    options = ImportOptions(midi_tracks=frozenset({1}))
+
+    song = midi_import.read_songs((first, second), options)
+    result = midi_import.convert_songs(
+        (first, second), load_sample("Default.KeyStepPro"), options=options
+    )
+    raised = {d.code for d in result.diagnostics}
+
+    assert [clip.source_file for clip in song.clips] == ["a.mid"]
+    assert (song.tempo_conflicts, song.resolution_conflicts) == (0, 0)
+    assert Code.SOURCE_TEMPO_DIFFERS not in raised
+    assert Code.SOURCE_RESOLUTION_DIFFERS not in raised
+
+
+def test_a_zero_length_note_stays_zero_length_through_a_rescale() -> None:
+    """Otherwise the same file would gate differently for the company it keeps."""
+    first = source_of("a.mid", [[(0, 60, 100)]], ticks_per_beat=96, length=24)
+    second = source_of("b.mid", [[(0, 67, 100)]], length=0)
+
+    alone = midi_import.read_songs((second,))
+    rescaled = midi_import.read_songs((first, second))
+
+    assert alone.clips[0].notes[0].duration_ticks == 0
+    assert rescaled.clips[1].notes[0].duration_ticks == 0
+
+
 def test_no_source_at_all_is_refused() -> None:
     with pytest.raises(ValueError, match=r"no source file was given"):
         midi_import.read_songs(())

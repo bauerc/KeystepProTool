@@ -411,12 +411,17 @@ def _rescaled(notes: Sequence[RenderedNote], source: int, target: int) -> tuple[
     """*notes* moved from a beat of *source* ticks onto one of *target* ticks."""
     if source == target:
         return tuple(notes)
+
+    def scaled(value: int) -> int:
+        return (value * target + source // 2) // source
+
     return tuple(
         replace(
             note,
-            tick=(note.tick * target + source // 2) // source,
-            # Floored at one: a note shorter than a target tick would otherwise round away.
-            duration_ticks=max(1, (note.duration_ticks * target + source // 2) // source),
+            tick=scaled(note.tick),
+            # Floored at one so a note that had length keeps some; a zero-length one keeps none,
+            # which is what it would have had at the target resolution anyway.
+            duration_ticks=max(1, scaled(note.duration_ticks)) if note.duration_ticks else 0,
         )
         for note in notes
     )
@@ -473,7 +478,8 @@ def read_songs(sources: Sequence[Source], options: ImportOptions | None = None) 
     clips = []
     dropped = 0
     offset = 0
-    for source in sources:
+    contributed = [False] * len(sources)
+    for index, source in enumerate(sources):
         midi = source.midi
         for number, track in enumerate(midi.tracks, start=offset + 1):
             if options.midi_tracks and number not in options.midi_tracks:
@@ -494,21 +500,26 @@ def read_songs(sources: Sequence[Source], options: ImportOptions | None = None) 
                         source_file=source.name,
                     )
                 )
+                contributed[index] = True
         offset += len(midi.tracks)
 
+    # Every count below covers only the files that put a clip in the song: one whose tracks
+    # were all deselected supplied no note to rescale and no tempo to be overridden.
+    sounding = [index for index, any_clip in enumerate(contributed) if any_clip]
+    overridden = [index for index in sounding if index]
     return Song(
         clips=tuple(clips),
         ticks_per_beat=ticks_per_beat,
         tempo_bpm=tempo_bpm,
         # A bar in quarter notes, which is what a beat is here.
         beats_per_bar=numerator * 4 / denominator,
-        tempo_changes=max(timing[2] for timing in timings),
+        tempo_changes=sum(timings[i][2] for i in sounding if timings[i][2] > 1),
         controllers_dropped=dropped,
-        tempo_conflicts=sum(1 for later, _, _ in timings[1:] if later != tempo),
+        tempo_conflicts=sum(1 for i in overridden if timings[i][0] != tempo),
         resolution_conflicts=sum(
-            1 for source in sources[1:] if source.midi.ticks_per_beat != ticks_per_beat
+            1 for i in overridden if sources[i].midi.ticks_per_beat != ticks_per_beat
         ),
-        meter_conflicts=sum(1 for _, later, _ in timings[1:] if later != (numerator, denominator)),
+        meter_conflicts=sum(1 for i in overridden if timings[i][1] != (numerator, denominator)),
     )
 
 

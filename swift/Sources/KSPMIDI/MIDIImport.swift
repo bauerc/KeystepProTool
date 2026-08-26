@@ -437,11 +437,13 @@ extension MIDIImport {
     /// `notes` moved from a beat of `source` ticks onto one of `target` ticks.
     static func rescaled(_ notes: [RenderedNote], _ source: Int, _ target: Int) -> [RenderedNote] {
         if source == target { return notes }
+        func scaled(_ value: Int) -> Int { (value * target + source / 2) / source }
         return notes.map { note in
             RenderedNote(
-                tick: (note.tick * target + source / 2) / source,
-                // Floored at one: a note shorter than a target tick would otherwise round away.
-                durationTicks: max(1, (note.durationTicks * target + source / 2) / source),
+                tick: scaled(note.tick),
+                // Floored at one so a note that had length keeps some; a zero-length one keeps
+                // none, which is what it would have had at the target resolution anyway.
+                durationTicks: note.durationTicks == 0 ? 0 : max(1, scaled(note.durationTicks)),
                 pitch: note.pitch,
                 velocity: note.velocity,
                 channel: note.channel)
@@ -499,7 +501,8 @@ extension MIDIImport {
         var clips: [Clip] = []
         var dropped = 0
         var offset = 0
-        for source in sources {
+        var contributed = [Bool](repeating: false, count: sources.count)
+        for (sourceIndex, source) in sources.enumerated() {
             let midi = source.midi
             let fileTicks = Int(midi.timebase.ticksPerQuarterNote)
             for (index, track) in midi.tracks.enumerated() {
@@ -520,24 +523,28 @@ extension MIDIImport {
                             notes: rescaled(notes, fileTicks, ticksPerBeat),
                             ticksPerBeat: ticksPerBeat,
                             tempoBPM: tempoBPM, sourceTracks: [number], sourceFile: source.name))
+                    contributed[sourceIndex] = true
                 }
             }
             offset += midi.tracks.count
         }
 
-        let later = timings.dropFirst()
+        // Every count below covers only the files that put a clip in the song: one whose tracks
+        // were all deselected supplied no note to rescale and no tempo to be overridden.
+        let sounding = contributed.indices.filter { contributed[$0] }
+        let overridden = sounding.filter { $0 != 0 }
         return Song(
             clips: clips,
             ticksPerBeat: ticksPerBeat,
             tempoBPM: tempoBPM,
             beatsPerBar: Double(signature.numerator) * 4 / Double(signature.denominator),
-            tempoChanges: timings.map(\.changes).max() ?? 0,
+            tempoChanges: sounding.map { timings[$0].changes }.filter { $0 > 1 }.reduce(0, +),
             controllersDropped: dropped,
-            tempoConflicts: later.filter { $0.tempo != tempo }.count,
-            resolutionConflicts: sources.dropFirst().filter {
-                Int($0.midi.timebase.ticksPerQuarterNote) != ticksPerBeat
+            tempoConflicts: overridden.filter { timings[$0].tempo != tempo }.count,
+            resolutionConflicts: overridden.filter {
+                Int(sources[$0].midi.timebase.ticksPerQuarterNote) != ticksPerBeat
             }.count,
-            meterConflicts: later.filter { $0.signature != signature }.count)
+            meterConflicts: overridden.filter { timings[$0].signature != signature }.count)
     }
 }
 
