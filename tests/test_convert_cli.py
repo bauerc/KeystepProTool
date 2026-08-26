@@ -6,6 +6,7 @@ import mido
 import pytest
 
 from ksp import lenient_json, reader
+from ksp.midi_export import DEFAULT_FLAT_VELOCITY
 from ksp.model import NoteKind
 from ksp_cli.convert import main
 from ksp_cli.loading import default_template
@@ -249,6 +250,46 @@ def test_a_bad_step_size_is_an_argument_error(
 
     assert main(argv) == 2
     assert "steps_per_beat" in capsys.readouterr().err
+
+
+def _written_velocities(project: Path) -> set[int]:
+    notes = reader.load(project).track(1).pattern(1).notes_of(NoteKind.SEQ)
+    return {note.velocity for note in notes}
+
+
+def test_flat_velocity_fresh_writes_the_measured_default(simple_clip: Path, tmp_path: Path) -> None:
+    destination = tmp_path / "out.KeyStepPro"
+    argv = [str(simple_clip), "-o", str(destination), "--flat-velocity", "fresh"]
+
+    assert main(argv) == 0
+    assert _written_velocities(destination) == {DEFAULT_FLAT_VELOCITY}
+
+
+def test_flat_velocity_accepts_an_explicit_value(simple_clip: Path, tmp_path: Path) -> None:
+    destination = tmp_path / "out.KeyStepPro"
+    argv = [str(simple_clip), "-o", str(destination), "--flat-velocity", "64"]
+
+    assert main(argv) == 0
+    assert _written_velocities(destination) == {64}
+
+
+@pytest.mark.parametrize("value", ["0", "128"])
+def test_flat_velocity_outside_the_range_is_an_argument_error(
+    value: str, simple_clip: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = [str(simple_clip), "-o", str(tmp_path / "out.KeyStepPro"), "--flat-velocity", value]
+
+    assert main(argv) == 2
+    assert "flat_velocity must be 1-127" in capsys.readouterr().err
+
+
+def test_flat_velocity_neither_fresh_nor_a_number_is_an_argument_error(
+    simple_clip: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = [str(simple_clip), "-o", str(tmp_path / "out.KeyStepPro"), "--flat-velocity", "loud"]
+
+    assert main(argv) == 2
+    assert "is not 'fresh' or a velocity" in capsys.readouterr().err
 
 
 def test_a_bad_template_is_a_runtime_error(

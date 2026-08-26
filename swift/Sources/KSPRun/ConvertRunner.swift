@@ -18,6 +18,7 @@ public enum ConvertRunner {
         public var template: URL?
         public var midiTrack: Int?
         public var midiTracksSpec: String?
+        public var flatVelocitySpec: String?
         public var stepsPerBeat: Int
         public var dryRun: Bool
         public var force: Bool
@@ -32,7 +33,7 @@ public enum ConvertRunner {
             routeSpec: String? = nil,
             drumMapSpec: String? = nil, carryTempo: Bool = true, fitSwing: Bool = true,
             fitTimeShift: Bool = true, template: URL? = nil, midiTrack: Int? = nil,
-            midiTracksSpec: String? = nil,
+            midiTracksSpec: String? = nil, flatVelocitySpec: String? = nil,
             stepsPerBeat: Int = Constants.defaultStepsPerBeat, dryRun: Bool = false,
             force: Bool = false, quiet: Bool = false, verbose: Bool = false, configPath: URL
         ) {
@@ -49,6 +50,7 @@ public enum ConvertRunner {
             self.template = template
             self.midiTrack = midiTrack
             self.midiTracksSpec = midiTracksSpec
+            self.flatVelocitySpec = flatVelocitySpec
             self.stepsPerBeat = stepsPerBeat
             self.dryRun = dryRun
             self.force = force
@@ -79,7 +81,8 @@ public enum ConvertRunner {
                 drumMap: try resolveImportDrumMap(
                     options.drumMapSpec, configPath: options.configPath),
                 carryTempo: options.carryTempo, fitSwing: options.fitSwing,
-                fitTimeShift: options.fitTimeShift, routes: try parseRoutes(options.routeSpec))
+                fitTimeShift: options.fitTimeShift, routes: try parseRoutes(options.routeSpec),
+                flatVelocity: try parseFlatVelocity(options.flatVelocitySpec))
         } catch {
             return fail("\(error)", code: 2)
         }

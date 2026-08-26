@@ -9,6 +9,7 @@ import typer
 from ksp import constants
 from ksp.constants import DEFAULT_STEPS_PER_BEAT
 from ksp.lenient_json import dump_path
+from ksp.midi_export import DEFAULT_FLAT_VELOCITY
 from ksp.midi_import import (
     ImportOptions,
     ImportResult,
@@ -19,6 +20,7 @@ from ksp.midi_import import (
     saveable,
 )
 from ksp_cli.drum_map_option import DRUM_MAP_HELP, resolve_import_drum_map
+from ksp_cli.flat_velocity import parse_flat_velocity
 from ksp_cli.loading import load_template
 from ksp_cli.midi_tracks_option import MIDI_TRACKS_HELP, resolve_midi_tracks
 from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
@@ -144,6 +146,19 @@ def convert_command(
             "--drum-map", metavar="SPEC", rich_help_panel=_SOURCE_PANEL, help=DRUM_MAP_HELP
         ),
     ] = None,
+    flat_velocity: Annotated[
+        str | None,
+        typer.Option(
+            "--flat-velocity",
+            metavar="VALUE",
+            rich_help_panel=_SOURCE_PANEL,
+            help=(
+                "write every note and trigger at this velocity instead of the source's: "
+                f"'fresh' for the measured fresh-note velocity ({DEFAULT_FLAT_VELOCITY}), "
+                "or 1-127"
+            ),
+        ),
+    ] = None,
     no_tempo: Annotated[
         bool,
         typer.Option(
@@ -240,6 +255,7 @@ def convert_command(
             fit_swing=not no_swing_fit,
             fit_time_shift=not no_time_shift,
             routes=parse_routes(route),
+            flat_velocity=parse_flat_velocity(flat_velocity),
         )
     except ValueError as exc:
         fail(str(exc), prog=PROG, code=2)

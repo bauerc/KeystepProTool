@@ -19,6 +19,15 @@ public enum MIDIExport {
     public static let defaultFlatVelocity = Constants.freshVelocity
 
     public static let maxRepeat = 10
+
+    /// Shared by both directions; `nil` means "leave every velocity alone".
+    public static func checkFlatVelocity(_ velocity: Int?) throws {
+        if let velocity, !(MIDIExport.minVelocity...MIDIExport.maxVelocity ~= velocity) {
+            throw KSPError.value(
+                "flat_velocity must be \(MIDIExport.minVelocity)-\(MIDIExport.maxVelocity); "
+                    + "0 is a MIDI note-off, not a silent note")
+        }
+    }
 }
 
 public struct ExportOptions: Sendable, Hashable {
@@ -77,13 +86,7 @@ public struct ExportOptions: Sendable, Hashable {
             throw KSPError.value(
                 "passes must be 1-\(Constants.skipCyclePasses), or None for auto")
         }
-        if let flatVelocity,
-            !(MIDIExport.minVelocity...MIDIExport.maxVelocity ~= flatVelocity)
-        {
-            throw KSPError.value(
-                "flat_velocity must be \(MIDIExport.minVelocity)-\(MIDIExport.maxVelocity); "
-                    + "0 is a MIDI note-off, not a silent note")
-        }
+        try MIDIExport.checkFlatVelocity(flatVelocity)
         if !(1...MIDIExport.maxRepeat ~= repeatCount) {
             throw KSPError.value("repeat must be 1-\(MIDIExport.maxRepeat)")
         }

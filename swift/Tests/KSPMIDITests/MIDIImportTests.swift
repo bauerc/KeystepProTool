@@ -1114,3 +1114,49 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(dropped.map(\.subjects) == [1])
     }
 }
+
+@Suite struct FlatVelocityImportTests {
+    @Test(arguments: [1, 127])
+    func theBoundsAreAccepted(velocity: Int) throws {
+        #expect(try ImportOptions(flatVelocity: velocity).flatVelocity == velocity)
+    }
+
+    @Test(arguments: [0, 128])
+    func aVelocityOutsideTheRangeIsRefused(velocity: Int) {
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try ImportOptions(flatVelocity: velocity)
+        }
+        #expect(
+            thrown?.description
+                == "flat_velocity must be 1-127; 0 is a MIDI note-off, not a silent note")
+    }
+
+    @Test func aFlatVelocityReplacesEveryWrittenVelocity() throws {
+        let events = [(0, 60, 20), (ticksPerStep, 62, 90), (ticksPerStep * 2, 64, 127)]
+        let result = try MIDIImport.convert(
+            clipOf(events), template(), options: ImportOptions(flatVelocity: 64))
+
+        #expect(result.notes.map(\.velocity) == [64, 64, 64])
+    }
+
+    @Test func anUnsetFlatVelocityKeepsTheSourceVelocities() throws {
+        let events = [(0, 60, 20), (ticksPerStep, 62, 90), (ticksPerStep * 2, 64, 127)]
+        let result = try MIDIImport.convert(clipOf(events), template())
+
+        #expect(result.notes.map(\.velocity) == [20, 90, 127])
+    }
+
+    /// Drums are written through a different `Mutate` call, off the same `PlacedNote`.
+    @Test func aFlatVelocityReachesDrumTriggers() throws {
+        let midi = songOf([[(0, 36, 20), (ticksPerStep, 37, 90)]])
+        let options = try ImportOptions(
+            drumTrack: 1, drumMap: DrumMap.chromatic(36),
+            flatVelocity: MIDIExport.defaultFlatVelocity)
+        let result = try MIDIImport.convertSong(midi, template(), options: options)
+
+        #expect(result.notes.map(\.lane) == [0, 1])
+        #expect(
+            result.notes.map(\.velocity)
+                == [MIDIExport.defaultFlatVelocity, MIDIExport.defaultFlatVelocity])
+    }
+}

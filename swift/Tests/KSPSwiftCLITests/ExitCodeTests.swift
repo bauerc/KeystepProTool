@@ -61,6 +61,31 @@ import Testing
                 + "0 is a MIDI note-off, not a silent note\n")
     }
 
+    @Test func convertFlatVelocityFreshSucceeds() throws {
+        // --dry-run: this runs against the real fixture, so nothing here may write beside it.
+        #expect(
+            try Self.run(["convert", Self.clip, "--flat-velocity", "fresh", "--dry-run"]).code
+                == 0)
+    }
+
+    @Test func convertFlatVelocityNeitherFreshNorANumberIsTwo() throws {
+        let result = try Self.run(["convert", Self.clip, "--flat-velocity", "loud"])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli convert: --flat-velocity: 'loud' is not 'fresh' or a velocity\n")
+    }
+
+    @Test(arguments: ["0", "128"])
+    func convertFlatVelocityOutsideItsRangeIsTwo(_ value: String) throws {
+        let result = try Self.run(["convert", Self.clip, "--flat-velocity", value])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli convert: flat_velocity must be 1-127; "
+                + "0 is a MIDI note-off, not a silent note\n")
+    }
+
     @Test func aMalformedMidiTracksIsTwo() throws {
         let result = try Self.run(["convert", Self.clip, "--midi-tracks", "bad"])
         #expect(result.code == 2)

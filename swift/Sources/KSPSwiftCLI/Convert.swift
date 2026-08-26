@@ -1,6 +1,7 @@
 import ArgumentParser
 import Foundation
 import KSPKit
+import KSPMIDI
 import KSPRun
 
 /// A project file is never synthesised: its key set is fixed at 153,495 numeric keys, so a template
@@ -50,6 +51,15 @@ struct Convert: ParsableCommand {
 
     @Option(name: .customLong("drum-map"), help: ArgumentHelp(drumMapHelp, valueName: "SPEC"))
     var drumMapSpec: String?
+
+    @Option(
+        name: .customLong("flat-velocity"),
+        help: ArgumentHelp(
+            """
+            write every note and trigger at this velocity instead of the source's: 'fresh' \
+            for the measured fresh-note velocity (\(MIDIExport.defaultFlatVelocity)), or 1-127
+            """, valueName: "VALUE"))
+    var flatVelocity: String?
 
     @Flag(
         name: .customLong("no-tempo"),
@@ -128,8 +138,8 @@ struct Convert: ParsableCommand {
                 carryTempo: !noTempo, fitSwing: !noSwingFit, fitTimeShift: !noTimeShift,
                 template: template.map { URL(filePath: $0) },
                 midiTrack: midiTrack, midiTracksSpec: midiTracks,
-                stepsPerBeat: stepsPerBeat, dryRun: dryRun, force: force, quiet: quiet,
-                verbose: verbose, configPath: drumMapConfigPath))
+                flatVelocitySpec: flatVelocity, stepsPerBeat: stepsPerBeat, dryRun: dryRun,
+                force: force, quiet: quiet, verbose: verbose, configPath: drumMapConfigPath))
         try emit(result)
     }
 }
