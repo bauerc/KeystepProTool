@@ -258,4 +258,112 @@ import Testing
                 == "Replacing: velocity with \(MIDIExport.defaultFlatVelocity) · swing with a "
                 + "flat grid · time shift with a flat grid")
     }
+
+    /// Nothing is ignored until it is asked for, so the app on defaults converts what the CLI on
+    /// defaults converts.
+    @Test func freshSettingsIgnoreNothing() {
+        let settings = Settings()
+        #expect(!settings.ignoreVelocity)
+        #expect(!settings.ignoreSwing)
+        #expect(!settings.ignoreTimeShift)
+
+        let mapped = settings.convertOptions(source: source, output: output)
+        let defaults = ConvertRunner.Options(
+            paths: [source], output: output, configPath: mapped.configPath)
+
+        #expect(mapped.flatVelocitySpec == defaults.flatVelocitySpec)
+        #expect(mapped.fitSwing == defaults.fitSwing)
+        #expect(mapped.fitTimeShift == defaults.fitTimeShift)
+    }
+
+    /// Pinned by parsing rather than by string equality, so the spelling cannot drift from the
+    /// number it stands for.
+    @Test func ignoringVelocityWritesTheFreshNoteValue() throws {
+        var settings = Settings()
+        settings.ignoreVelocity = true
+        let mapped = settings.convertOptions(source: source, output: output)
+
+        #expect(try parseFlatVelocity(mapped.flatVelocitySpec) == MIDIExport.defaultFlatVelocity)
+        #expect(mapped.fitSwing)
+        #expect(mapped.fitTimeShift)
+    }
+
+    /// On an import, swing is the groove fitted from the source, so ignoring it leaves the pattern
+    /// straight rather than flattening a grid the project already stores.
+    @Test func ignoringSwingStraightensEveryPatternAlone() {
+        var settings = Settings()
+        settings.ignoreSwing = true
+        let mapped = settings.convertOptions(source: source, output: output)
+
+        #expect(!mapped.fitSwing)
+        #expect(mapped.fitTimeShift)
+        #expect(mapped.flatVelocitySpec == nil)
+    }
+
+    @Test func ignoringTimeShiftQuantisesHardAlone() {
+        var settings = Settings()
+        settings.ignoreTimeShift = true
+        let mapped = settings.convertOptions(source: source, output: output)
+
+        #expect(!mapped.fitTimeShift)
+        #expect(mapped.fitSwing)
+        #expect(mapped.flatVelocitySpec == nil)
+    }
+
+    /// The inverse of ``replacingOnAnExportLeavesTheImportAlone``: the export's three mean something
+    /// else, so the import's must not reach `ExportRunner` at all.
+    @Test func ignoringOnAnImportLeavesTheExportAlone() {
+        let mapped = Settings(ignoreVelocity: true, ignoreSwing: true, ignoreTimeShift: true)
+            .exportOptions(source: output, output: source)
+        let defaults = ExportRunner.Options(
+            path: output, output: source, configPath: mapped.configPath)
+
+        #expect(mapped.flatVelocity == defaults.flatVelocity)
+        #expect(mapped.applySwing == defaults.applySwing)
+        #expect(mapped.applyTimeShift == defaults.applyTimeShift)
+    }
+
+    @Test func ignoringNothingSaysNothing() {
+        #expect(Settings().ignoredNote == nil)
+    }
+
+    /// Each choice names the value it substitutes rather than only saying it is off.
+    @Test func eachIgnoredChoiceNamesItsSubstitute() {
+        var velocity = Settings()
+        velocity.ignoreVelocity = true
+        #expect(
+            velocity.ignoredNote == "Ignoring: velocity, writing \(MIDIExport.defaultFlatVelocity)")
+
+        var swing = Settings()
+        swing.ignoreSwing = true
+        #expect(swing.ignoredNote == "Ignoring: swing, leaving every pattern straight")
+
+        var timeShift = Settings()
+        timeShift.ignoreTimeShift = true
+        #expect(timeShift.ignoredNote == "Ignoring: time shift, quantising hard")
+    }
+
+    @Test func allThreeIgnoresReadAsOneLine() {
+        let settings = Settings(ignoreVelocity: true, ignoreSwing: true, ignoreTimeShift: true)
+        #expect(
+            settings.ignoredNote
+                == "Ignoring: velocity, writing \(MIDIExport.defaultFlatVelocity) · swing, "
+                + "leaving every pattern straight · time shift, quantising hard")
+    }
+
+    /// The two panels answer for opposite directions, so a reader must never be able to mistake one
+    /// line for the other: not the verb it opens with, and not the substitute it names.
+    @Test func theTwoPanelsShareNoWording() {
+        let settings = Settings(
+            replaceVelocity: true, replaceSwing: true, replaceTimeShift: true,
+            ignoreVelocity: true, ignoreSwing: true, ignoreTimeShift: true)
+        let exported = settings.replacementNote
+        let imported = settings.ignoredNote
+
+        #expect(exported != imported)
+        #expect(imported?.hasPrefix("Replacing:") == false)
+        #expect(exported?.hasPrefix("Ignoring:") == false)
+        #expect(imported?.contains("with a flat grid") == false)
+        #expect(exported?.contains("leaving every pattern straight") == false)
+    }
 }

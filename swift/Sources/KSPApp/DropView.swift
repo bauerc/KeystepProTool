@@ -94,6 +94,12 @@ struct DropView: View {
 
                 Divider()
 
+                Text("MIDI import").font(.headline)
+
+                ignores
+
+                Divider()
+
                 Text("Options").font(.headline)
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -121,21 +127,43 @@ struct DropView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Replace with defaults").font(.subheadline)
 
-            replacement(
+            substitution(
                 "Velocity", isOn: $model.settings.replaceVelocity,
                 note: "Every note and trigger at the fresh-note velocity, "
                     + "\(MIDIExport.defaultFlatVelocity), not the one it stores.")
-            replacement(
+            substitution(
                 "Swing", isOn: $model.settings.replaceSwing,
                 note: "Every step on a flat grid, not the delay the pattern's swing applies.")
-            replacement(
+            substitution(
                 "Time Shift", isOn: $model.settings.replaceTimeShift,
                 note: "Every step on the grid, not the offset the note stores.")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func replacement(_ title: String, isOn: Binding<Bool>, note: String) -> some View {
+    /// Swing here is the import's sense: declining to fit one to the source, not flattening a grid
+    /// the project already stores.
+    private var ignores: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Ignore in the source").font(.subheadline)
+
+            substitution(
+                "Velocity", isOn: $model.settings.ignoreVelocity,
+                note: "Every note and trigger written at the fresh-note velocity, "
+                    + "\(MIDIExport.defaultFlatVelocity), not the source's own.")
+            substitution(
+                "Swing Fitting", isOn: $model.settings.ignoreSwing,
+                note: "Every pattern left straight at \(Constants.swingRangePercent.min)%, "
+                    + "not fitted to the source's groove.")
+            substitution(
+                "Time Shift", isOn: $model.settings.ignoreTimeShift,
+                note: "Every note quantised hard to its step at a time shift of 0, not given "
+                    + "the leftover it would otherwise keep.")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func substitution(_ title: String, isOn: Binding<Bool>, note: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Toggle(title, isOn: isOn)
                 .onChange(of: isOn.wrappedValue) { model.discardPreview() }
@@ -240,6 +268,10 @@ struct DropView: View {
                     // Only on the way out: these three mean something else on an import.
                     if staged.job.writesMIDI, let replaced = model.settings.replacementNote {
                         Text(replaced).font(.caption).foregroundStyle(.secondary)
+                    }
+
+                    if !staged.job.writesMIDI, let ignored = model.settings.ignoredNote {
+                        Text(ignored).font(.caption).foregroundStyle(.secondary)
                     }
 
                     if let preview = staged.preview {
