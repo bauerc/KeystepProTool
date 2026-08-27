@@ -114,31 +114,23 @@ never _audible_: they answer the two reasons a note is switched off, not the spe
 might not play.
 
 **`KSPApp` owns no format logic** — only where a file goes, what it is called and which options the
-window offers. `Destination.swift`, `Folders.swift`, `Conversion.swift`, `Settings.swift`,
-`PatternGrid.swift` and `SourceTrackList.swift` carry
+window offers. `Destination.swift`, `Folders.swift`, `Conversion.swift`, `Settings.swift` and
+`PatternGrid.swift` carry
 no SwiftUI so their rules are unit-tested; SwiftUI stays in `DropView.swift` and `KSPApp.swift`, and every mutable
 value lives on the one `@MainActor` `AppModel`, in `AppModel.swift` (Observation and AppKit, no
 SwiftUI). **A new option is a property on `Settings` and a line in its two mappings onto
 `ConvertRunner.Options`/`ExportRunner.Options`** — an option left out of those mappings keeps the
 runner's own default, which is what makes the app on defaults convert what the CLI on defaults
 converts. Conversions run in a `Task.detached`, which is what the `Sendable` `Options`/`RunResult`
-are for, and so does the staged view's read of a dropped file: `DropView`'s `.task` asks
+are for, and so does the staged view's read of a dropped project: `DropView`'s `.task` asks
 `AppModel.summarise()`, which asks `Conversion.summarise` for a `SummaryState`. **A preview reads
 through `SummaryRunner` and renders in `DropView`** — the runner returns no `RunResult` and so no
 CLI text, which is the whole reason a preview costs no Python mirror and no parity run.
-**Every staged file is read, and the drop's direction picks the runner**: a project through
-`SummaryRunner.run` into a `.project` state, a MIDI file through `SummaryRunner.song` into a
-`.song` one. A project previews as a track × pattern grid and a MIDI file as a list of its source
-tracks, and **what each decides lives in `PatternGrid.swift` and `SourceTrackList.swift`, not in
-`DropView`**: what a cell prints, which chained cells are joined, how a source track's row reads,
-and — in `AppLayout` — every dimension the window and both previews are built from. **Which source
-track is the drum track is not among them**: that is a format decision, so `SongSummary` reads it
-off the same first percussion *clip* `apply` does and hands the app an `isDrumTrack`. Deciding it
-in the app would decide it over whole tracks, and a track carrying channel 10 among others gives up
-only that channel to the drum track. That one enum is why
-the pattern axis fits: the staged pane scrolls vertically only, so a grid or a row too wide for it
-is _silently clipped_, and a test holds each under a budget subtracted from the window. Change the
-sidebar and the tests say so.
+The preview itself is a track × pattern grid, and **what it decides lives in `PatternGrid.swift`,
+not in `DropView`**: what a cell prints, which chained cells are joined, and — in `AppLayout` — every
+dimension the window and the grid are both built from. That one enum is why the pattern axis fits:
+the staged pane scrolls vertically only, so a grid too wide for it is _silently clipped_, and a test
+holds the grid under a budget subtracted from the window. Change the sidebar and the test says so.
 `scripts/bundle_app.sh` wraps the built binary in a `.app`; it is deliberately **not** in
 `validate.sh`, which compiles the target through `KSPAppTests` instead.
 **Nothing may add a dependency to `KSPKit`.**
