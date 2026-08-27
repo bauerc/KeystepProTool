@@ -11,16 +11,19 @@ public struct SongSummary: Sendable, Hashable {
     public let ticksPerBeat: Int
     /// Every track of the file, whether or not it holds notes.
     public let tracks: [SourceTrackSummary]
+    /// What the file will cost the import, said before anything is written.
+    public let diagnostics: Report
 
     public init(
         sourceName: String, tempoBPM: Double, beatsPerBar: Double, ticksPerBeat: Int,
-        tracks: [SourceTrackSummary]
+        tracks: [SourceTrackSummary], diagnostics: Report = Report()
     ) {
         self.sourceName = sourceName
         self.tempoBPM = tempoBPM
         self.beatsPerBar = beatsPerBar
         self.ticksPerBeat = ticksPerBeat
         self.tracks = tracks
+        self.diagnostics = diagnostics
     }
 
     public var isEmpty: Bool { tracks.allSatisfy(\.isEmpty) }
@@ -36,15 +39,32 @@ public struct SongSummary: Sendable, Hashable {
             guard let number = clip.sourceTracks.first else { continue }
             clips[number, default: []].append(clip)
         }
+        let tracks = midi.tracks.indices.map { index in
+            SourceTrackSummary(
+                number: index + 1, name: trackName(midi.tracks[index]),
+                clips: clips[index + 1] ?? [], ticksPerBar: ticksPerBar)
+        }
         self.init(
             sourceName: sourceName, tempoBPM: song.tempoBPM, beatsPerBar: song.beatsPerBar,
-            ticksPerBeat: song.ticksPerBeat,
-            tracks: midi.tracks.indices.map { index in
-                SourceTrackSummary(
-                    number: index + 1, name: trackName(midi.tracks[index]),
-                    clips: clips[index + 1] ?? [], ticksPerBar: ticksPerBar)
-            })
+            ticksPerBeat: song.ticksPerBeat, tracks: tracks, diagnostics: splitReport(tracks))
     }
+}
+
+/// A track carrying several channels is imported as a device track per channel, which is a
+/// surprise worth saying before the conversion runs rather than after. Worded as `convert` words
+/// it, in the tense of something that has not happened yet.
+private func splitReport(_ tracks: [SourceTrackSummary]) -> Report {
+    let collector = Collector()
+    let split = tracks.filter { $0.channels.count > 1 }
+    if !split.isEmpty {
+        collector.add(
+            .trackSplitByChannel,
+            "source track(s) \(split.map { String($0.number) }.joined(separator: ", ")) carry more "
+                + "than one channel; each channel becomes a device track of its own, the first "
+                + "percussion channel the drum track and the rest melodic",
+            subjects: split.reduce(0) { $0 + $1.channels.count })
+    }
+    return collector.report()
 }
 
 public struct SourceTrackSummary: Sendable, Hashable {
@@ -59,16 +79,13 @@ public struct SourceTrackSummary: Sendable, Hashable {
     /// The bars the track fills from the start, rounded up, which is what the import lays out --
     /// not the distance between its first note and its last. None where it holds no note.
     public let bars: Int
-    /// Every note on the percussion channel.
+    /// Notes on the percussion channel, which the import reads as drums without being asked.
+    /// Not a promise of a drum track: the device has one, so a second percussion track is
+    /// imported melodically, and `--drum-track` names a track of its own regardless.
     public let isPercussion: Bool
-    /// Any note on it, which is the one that says a drum track comes out of this: the import
-    /// splits a track by channel, so a track holding percussion among other things still yields
-    /// one. Reported here rather than left to the caller, which does not know a channel from a kit.
-    public let holdsPercussion: Bool
 
     public init(
-        number: Int, name: String, channels: [Int], noteCount: Int, bars: Int, isPercussion: Bool,
-        holdsPercussion: Bool
+        number: Int, name: String, channels: [Int], noteCount: Int, bars: Int, isPercussion: Bool
     ) {
         self.number = number
         self.name = name
@@ -76,7 +93,6 @@ public struct SourceTrackSummary: Sendable, Hashable {
         self.noteCount = noteCount
         self.bars = bars
         self.isPercussion = isPercussion
-        self.holdsPercussion = holdsPercussion
     }
 
     public var isEmpty: Bool { noteCount == 0 }
@@ -88,12 +104,10 @@ public struct SourceTrackSummary: Sendable, Hashable {
         // The file's own length rather than the placement's: a preview says what was dropped, and
         // a track past the fourth is never placed at all.
         let furthest = notes.map { $0.tick + $0.durationTicks }.max() ?? 0
-        let percussion = MIDIImport.drumChannel + 1
         self.init(
             number: number, name: name, channels: channels, noteCount: notes.count,
             bars: notes.isEmpty ? 0 : max(1, Arithmetic.ceilDiv(furthest, ticksPerBar)),
-            isPercussion: channels == [percussion],
-            holdsPercussion: channels.contains(percussion))
+            isPercussion: channels.contains(MIDIImport.drumChannel + 1))
     }
 }
 

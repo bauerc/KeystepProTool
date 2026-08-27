@@ -94,13 +94,11 @@ private func mixedTrackFile(
         let drums = try SongSummary(midi, sourceName: "kit.mid").tracks[0]
         #expect(drums.channels == [10])
         #expect(drums.isPercussion)
-        #expect(drums.holdsPercussion)
         #expect(drums.noteCount == 2)
         #expect(drums.bars == 2)
 
         let melodic = try Self.summarise("test_file.mid").tracks[0]
         #expect(!melodic.isPercussion)
-        #expect(!melodic.holdsPercussion)
         #expect(melodic.noteCount == 26)
     }
 
@@ -115,9 +113,20 @@ private func mixedTrackFile(
         #expect(track.channels == [1, 10])
         #expect(track.noteCount == 5)
         #expect(track.bars == 2)
-        // Not a drum track, but one comes out of it: the channel 10 half becomes one.
-        #expect(!track.isPercussion)
-        #expect(track.holdsPercussion)
+        // Percussion because channel 10 is in it, which is what the import reads as drums.
+        #expect(track.isPercussion)
+    }
+
+    @Test func itSaysSoBeforeConvertingWhenATrackWillBeSplitByChannel() throws {
+        let midi = mixedTrackFile([(0, 60, 0), (0, 36, 9)], name: "Mixed")
+        let summary = try SongSummary(midi, sourceName: "mixed.mid")
+        let entry = try #require(summary.diagnostics.entries.first)
+        #expect(entry.code == .trackSplitByChannel)
+        #expect(entry.detail.contains("source track(s) 1"))
+        #expect(entry.detail.contains("the first percussion channel the drum track"))
+
+        // A file whose tracks each hold one channel has nothing to say.
+        #expect(try Self.summarise("m6-test-file.mid").diagnostics.entries.isEmpty)
     }
 
     @Test func itSurvivesAFileDeclaringABarOfNoBeats() throws {
