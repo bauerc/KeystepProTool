@@ -408,7 +408,9 @@ interleave two takes.
 - **A source track holding several channels becomes one device track each.** A type 0 file — one
   track, everything on it — tells its instruments apart by channel and nothing else, so merging
   them would put a whole arrangement on one track with the percussion in it as melodic pitches.
-  `--drum-track N` still means the whole of source track N, channels and all.
+  Its channel 10 part becomes the drum track and the rest melodic, and the app says so before you
+  convert rather than after. `--drum-track N` still means the whole of source track N, channels
+  and all.
 - **A track's length is its own content rounded up to the bar**, then cut into 64-step patterns —
   the device's maximum. A split track's patterns are **chained** in the current scene, which is
   what makes them play as one sequence. Tracks are not padded to a common length: the device loops
@@ -438,8 +440,10 @@ anywhere but 36–59 would have every hit dropped. So an unconfigured import **f
 to the source's own pitches and reports which one it used. `--drum-map` overrides it, and a map in
 `~/.config/keysteppro/drum_map.json` is used ahead of fitting.
 
-A drum track is found on MIDI channel 10, which is what General MIDI reserves. Plenty of files put
-drums on an ordinary channel instead, and for those `--drum-track N` names it explicitly.
+A drum track is found on MIDI channel 10, which is what General MIDI reserves. Only the first one
+is: track 1 is the only one carrying a drum set, so a second channel 10 part is imported
+melodically. Plenty of files put drums on an ordinary channel instead, and for those
+`--drum-track N` names it explicitly.
 
 **Name the output file what you want the project called.** MCC's Project Browser lists the
 *filename*, so `midi2ksp song.mid -o "Y Control.KeyStepPro"` appears as `Y Control`. The project

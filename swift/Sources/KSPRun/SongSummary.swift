@@ -1,0 +1,122 @@
+import Foundation
+import KSPKit
+import KSPMIDI
+import SwiftMIDIFile
+
+/// What a MIDI file holds, said structurally: its source tracks and the counts a preview needs.
+public struct SongSummary: Sendable, Hashable {
+    public let sourceName: String
+    public let tempoBPM: Double
+    public let beatsPerBar: Double
+    public let ticksPerBeat: Int
+    /// Every track of the file, whether or not it holds notes.
+    public let tracks: [SourceTrackSummary]
+    /// What the file will cost the import, said before anything is written.
+    public let diagnostics: Report
+
+    public init(
+        sourceName: String, tempoBPM: Double, beatsPerBar: Double, ticksPerBeat: Int,
+        tracks: [SourceTrackSummary], diagnostics: Report = Report()
+    ) {
+        self.sourceName = sourceName
+        self.tempoBPM = tempoBPM
+        self.beatsPerBar = beatsPerBar
+        self.ticksPerBeat = ticksPerBeat
+        self.tracks = tracks
+        self.diagnostics = diagnostics
+    }
+
+    public var isEmpty: Bool { tracks.allSatisfy(\.isEmpty) }
+
+    public init(_ midi: MusicalMIDI1File, sourceName: String) throws {
+        // Default options, so no --midi-tracks selection can hide a track from the preview.
+        let song = try MIDIImport.readSong(midi)
+        // Guarded as `Song.stepsPerBar` is: a file may declare a bar of no beats, and a bar of no
+        // ticks would divide by zero below.
+        let ticksPerBar = max(1, Arithmetic.pyRound(Double(song.ticksPerBeat) * song.beatsPerBar))
+        var clips: [Int: [Clip]] = [:]
+        for clip in song.clips {
+            guard let number = clip.sourceTracks.first else { continue }
+            clips[number, default: []].append(clip)
+        }
+        let tracks = midi.tracks.indices.map { index in
+            SourceTrackSummary(
+                number: index + 1, name: trackName(midi.tracks[index]),
+                clips: clips[index + 1] ?? [], ticksPerBar: ticksPerBar)
+        }
+        self.init(
+            sourceName: sourceName, tempoBPM: song.tempoBPM, beatsPerBar: song.beatsPerBar,
+            ticksPerBeat: song.ticksPerBeat, tracks: tracks, diagnostics: splitReport(tracks))
+    }
+}
+
+/// A track carrying several channels is imported as a device track per channel, which is a
+/// surprise worth saying before the conversion runs rather than after. Worded as `convert` words
+/// it, in the tense of something that has not happened yet.
+private func splitReport(_ tracks: [SourceTrackSummary]) -> Report {
+    let collector = Collector()
+    let split = tracks.filter { $0.channels.count > 1 }
+    if !split.isEmpty {
+        collector.add(
+            .trackSplitByChannel,
+            "source track(s) \(split.map { String($0.number) }.joined(separator: ", ")) carry more "
+                + "than one channel; each channel becomes a device track of its own, the first "
+                + "percussion channel the drum track and the rest melodic",
+            subjects: split.reduce(0) { $0 + $1.channels.count })
+    }
+    return collector.report()
+}
+
+public struct SourceTrackSummary: Sendable, Hashable {
+    /// Counting from 1 over every track of the file, as `--midi-tracks` counts them.
+    public let number: Int
+    /// What the file calls this track, empty where it names none.
+    public let name: String
+    /// Counting from 1, as the import diagnostics word them. A track carrying several becomes
+    /// one device track per channel.
+    public let channels: [Int]
+    public let noteCount: Int
+    /// The bars the track fills from the start, rounded up, which is what the import lays out --
+    /// not the distance between its first note and its last. None where it holds no note.
+    public let bars: Int
+    /// Notes on the percussion channel, which the import reads as drums without being asked.
+    /// Not a promise of a drum track: the device has one, so a second percussion track is
+    /// imported melodically, and `--drum-track` names a track of its own regardless.
+    public let isPercussion: Bool
+
+    public init(
+        number: Int, name: String, channels: [Int], noteCount: Int, bars: Int, isPercussion: Bool
+    ) {
+        self.number = number
+        self.name = name
+        self.channels = channels
+        self.noteCount = noteCount
+        self.bars = bars
+        self.isPercussion = isPercussion
+    }
+
+    public var isEmpty: Bool { noteCount == 0 }
+
+    /// The clips one track of the file produced: one per channel, and none where it holds no note.
+    init(number: Int, name: String, clips: [Clip], ticksPerBar: Int) {
+        let notes = clips.flatMap(\.notes)
+        let channels = Set(notes.map { $0.channel + 1 }).sorted()
+        // The file's own length rather than the placement's: a preview says what was dropped, and
+        // a track past the fourth is never placed at all.
+        let furthest = notes.map { $0.tick + $0.durationTicks }.max() ?? 0
+        self.init(
+            number: number, name: name, channels: channels, noteCount: notes.count,
+            bars: notes.isEmpty ? 0 : max(1, Arithmetic.ceilDiv(furthest, ticksPerBar)),
+            isPercussion: channels.contains(MIDIImport.drumChannel + 1))
+    }
+}
+
+/// `mido` hands the Python this for free; the Swift library leaves it in the event stream.
+private func trackName(_ track: MusicalMIDI1File.Track) -> String {
+    for event in track.events {
+        if case .text(let text) = event.event, text.textType == .trackOrSequenceName {
+            return text.text
+        }
+    }
+    return ""
+}
