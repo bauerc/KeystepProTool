@@ -43,11 +43,12 @@ import Testing
         #expect(row.detail == "Source track 1 holds no notes, so nothing is imported from it.")
     }
 
-    @Test func thefirstPercussionTrackIsTheDrumTrackAndALaterOneIsNot() {
+    /// The reader names the drum track; a percussion track it did not name is imported melodically.
+    @Test func thedrumTrackTheReaderNamedIsTheOneBadgedDrums() {
         let list = SourceTrackList(
             syntheticSong(tracks: [
                 sourceTrack(1, name: "Bass"),
-                sourceTrack(2, name: "Kit", channels: [10]),
+                sourceTrack(2, name: "Kit", channels: [10], isDrumTrack: true),
                 sourceTrack(3, name: "Shaker", channels: [10]),
             ]))
 
@@ -58,15 +59,16 @@ import Testing
         #expect(list.rows[2].detail.contains("imported melodically"))
     }
 
-    @Test func asilentChannelTenTrackIsNotTakenForTheDrumTrack() {
+    /// Only the channel 10 part of a split track is the drum track, and the badge cannot say so.
+    @Test func asplitDrumTrackGivesUpOnlyItsChannelTenPart() {
         let list = SourceTrackList(
             syntheticSong(tracks: [
-                sourceTrack(1, name: "Empty kit", channels: [10], noteCount: 0),
-                sourceTrack(2, name: "Kit", channels: [10]),
+                sourceTrack(1, name: "Everything", channels: [1, 10], isDrumTrack: true)
             ]))
 
-        #expect(list.rows[0].badge == nil)
-        #expect(list.rows[1].badge == .drums)
+        #expect(list.rows[0].badge == .drums)
+        #expect(list.rows[0].detail.contains("that part of this one becomes the drum track"))
+        #expect(list.rows[0].detail.contains("Each channel becomes a device track of its own."))
     }
 
     @Test func atrackOnSeveralChannelsNamesThemAllAndSaysItSplits() {
@@ -111,13 +113,15 @@ import Testing
                 tracks: [sourceTrack(1, channels: [1, 10])],
                 diagnostics: collector.report()))
 
-        #expect(list.note?.contains("more than one channel") == true)
+        #expect(list.note(verbose: false)?.contains("more than one channel") == true)
+        #expect(list.note(verbose: true)?.contains("more than one channel") == true)
     }
 
     @Test func anuneventfulFileHasNoPreFlightNote() {
         let list = SourceTrackList(syntheticSong(tracks: [sourceTrack(1)]))
 
-        #expect(list.note == nil)
+        #expect(list.note(verbose: false) == nil)
+        #expect(list.note(verbose: true) == nil)
     }
 
     /// The staged pane scrolls vertically only, so anything wider than it is silently clipped.

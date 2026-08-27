@@ -22,6 +22,12 @@ One of the twenty-four drum sounds, each with its own track of triggers. Always 
 a bare "track" is a sequencer track.
 _Avoid_: lane, drum lane
 
+**Percussion**:
+Of a source track being imported: it carries MIDI channel 10, where General MIDI puts drums. Says
+what the file holds, never what the device will do with it — only one percussion part becomes
+drums, so the app badges that one _Drums_ and any other _Percussion_.
+_Avoid_: drum track for a source track that is not the one being imported as drums
+
 **Track mode**:
 Whether a track runs as a sequencer, an arpeggiator or drums. It belongs to the Project, not to a
 Scene.

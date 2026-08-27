@@ -11,6 +11,19 @@ private let ticksPerBeat = 480
 private func mixedTrackFile(
     _ events: [(tick: Int, pitch: Int, channel: Int)], name: String, length: Int = 120
 ) -> MusicalMIDI1File {
+    file([namedTrack(events, name: name, length: length)])
+}
+
+/// Several tracks, which is what it takes to have a second percussion track to be wrong about.
+private func file(_ tracks: [MusicalMIDI1File.Track]) -> MusicalMIDI1File {
+    MusicalMIDI1File(
+        format: .singleTrack, timebase: .init(ticksPerQuarterNote: UInt16(ticksPerBeat)),
+        tracks: tracks)
+}
+
+private func namedTrack(
+    _ events: [(tick: Int, pitch: Int, channel: Int)], name: String, length: Int = 120
+) -> MusicalMIDI1File.Track {
     var track = MusicalMIDI1File.Track()
     track.events.append(.text(type: .trackOrSequenceName, string: name))
     let timed =
@@ -34,9 +47,7 @@ private func mixedTrackFile(
                 : .noteOff(delta: delta, note: note, velocity: .midi1(64), channel: channel))
         previous = event.tick
     }
-    return MusicalMIDI1File(
-        format: .singleTrack, timebase: .init(ticksPerQuarterNote: UInt16(ticksPerBeat)),
-        tracks: [track])
+    return track
 }
 
 /// The counts are the ones the reading layer yields, cross-checked against the files themselves.
@@ -100,6 +111,35 @@ private func mixedTrackFile(
         let melodic = try Self.summarise("test_file.mid").tracks[0]
         #expect(!melodic.isPercussion)
         #expect(melodic.noteCount == 26)
+    }
+
+    /// `apply` takes the first percussion *clip*, so the summary must name the track it came from
+    /// -- the device has one drum track, and a second percussion part is imported melodically.
+    @Test func itNamesOnlyTheTrackTheImportWouldTakeForDrums() throws {
+        let midi = file([
+            namedTrack([(0, 60, 0)], name: "Bass"),
+            namedTrack([(0, 36, 9)], name: "Kit"),
+            namedTrack([(0, 42, 9)], name: "Shaker"),
+        ])
+
+        let tracks = try SongSummary(midi, sourceName: "kit.mid").tracks
+        #expect(tracks.map(\.isPercussion) == [false, true, true])
+        #expect(tracks.map(\.isDrumTrack) == [false, true, false])
+    }
+
+    /// A track carrying channel 10 among others still gives that clip up to the drum track.
+    @Test func asplitTrackIsNamedTheDrumTrackForItsChannelTenPart() throws {
+        let midi = file([
+            namedTrack([(0, 60, 0), (0, 36, 9)], name: "Mixed"),
+            namedTrack([(0, 42, 9)], name: "Shaker"),
+        ])
+
+        let tracks = try SongSummary(midi, sourceName: "mixed.mid").tracks
+        #expect(tracks.map(\.isDrumTrack) == [true, false])
+    }
+
+    @Test func afileWithNoPercussionNamesNoDrumTrack() throws {
+        #expect(try Self.summarise("m6-test-file.mid").tracks.allSatisfy { !$0.isDrumTrack })
     }
 
     @Test func itKeepsAMultiChannelTrackAsOneRow() throws {

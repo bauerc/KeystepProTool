@@ -329,7 +329,7 @@ struct DropView: View {
                 ForEach(list.rows, id: \.number) { trackRow($0) }
             }
 
-            if let note = list.note {
+            if let note = list.note(verbose: model.settings.verbose) {
                 Text(note).font(.caption).foregroundStyle(.secondary)
             }
 

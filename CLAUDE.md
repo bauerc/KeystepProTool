@@ -130,9 +130,12 @@ CLI text, which is the whole reason a preview costs no Python mirror and no pari
 `SummaryRunner.run` into a `.project` state, a MIDI file through `SummaryRunner.song` into a
 `.song` one. A project previews as a track × pattern grid and a MIDI file as a list of its source
 tracks, and **what each decides lives in `PatternGrid.swift` and `SourceTrackList.swift`, not in
-`DropView`**: what a cell prints, which chained cells are joined, which source track is the drum
-track — only the first percussion one is, so a later one is marked as imported melodically — and,
-in `AppLayout`, every dimension the window and both previews are built from. That one enum is why
+`DropView`**: what a cell prints, which chained cells are joined, how a source track's row reads,
+and — in `AppLayout` — every dimension the window and both previews are built from. **Which source
+track is the drum track is not among them**: that is a format decision, so `SongSummary` reads it
+off the same first percussion *clip* `apply` does and hands the app an `isDrumTrack`. Deciding it
+in the app would decide it over whole tracks, and a track carrying channel 10 among others gives up
+only that channel to the drum track. That one enum is why
 the pattern axis fits: the staged pane scrolls vertically only, so a grid or a row too wide for it
 is _silently clipped_, and a test holds each under a budget subtracted from the window. Change the
 sidebar and the tests say so.

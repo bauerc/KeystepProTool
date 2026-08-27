@@ -11,7 +11,12 @@ struct SourceTrackList: Equatable {
         case percussion
 
         /// ``drums`` says what the app calls the destination elsewhere.
-        var text: String { self == .drums ? "Drums" : "Percussion" }
+        var text: String {
+            switch self {
+            case .drums: return "Drums"
+            case .percussion: return "Percussion"
+            }
+        }
     }
 
     struct Row: Equatable {
@@ -55,9 +60,14 @@ struct SourceTrackList: Equatable {
                 + "\(counted(track.bars, "bar")) on \(channels)."
             switch badge {
             case .drums:
+                // Only the channel 10 part of a split track is the drum track; the badge alone
+                // would claim the whole row.
                 detail +=
-                    " Channel 10 is where the import looks for drums, so this one becomes "
-                    + "the drum track."
+                    track.channels.count == 1
+                    ? " Channel 10 is where the import looks for drums, so this one becomes "
+                        + "the drum track."
+                    : " Channel 10 is where the import looks for drums, so that part of this "
+                        + "one becomes the drum track."
             case .percussion:
                 detail +=
                     " Channel 10 is where the import looks for drums, but the device has "
@@ -74,22 +84,31 @@ struct SourceTrackList: Equatable {
 
     let header: String
     let rows: [Row]
-    /// What the read found, collapsed to a line per kind; `nil` where it found nothing.
-    let note: String?
+    /// What the read found; `nil` where it found nothing. Rendered once in both modes, as
+    /// ``Outcome`` renders its findings: a SwiftUI body is re-evaluated far more often than a file
+    /// is read, and the sidebar's toggle reaches this note as it reaches those.
+    let collapsedNote: String?
+    let allNotes: String?
+
+    func note(verbose: Bool) -> String? { verbose ? allNotes : collapsedNote }
 
     init(_ summary: SongSummary) {
-        // Only the first: the device has one drum track, so a later percussion track is melodic.
-        let drums = summary.tracks.first { $0.isPercussion && !$0.isEmpty }?.number
         self.header =
             "\(Arithmetic.general(summary.tempoBPM)) BPM · "
             + "\(Arithmetic.general(summary.beatsPerBar)) beats to the bar · "
             + counted(summary.tracks.count, "source track")
+        // The drum track is the reader's to name, not this view's to re-derive: it is decided over
+        // channels, where the import decides it, rather than over whole tracks.
         self.rows = summary.tracks.map { track in
-            guard track.isPercussion, !track.isEmpty else { return Row(track, badge: nil) }
-            return Row(track, badge: track.number == drums ? .drums : .percussion)
+            if track.isDrumTrack { return Row(track, badge: .drums) }
+            return Row(track, badge: track.isPercussion ? .percussion : nil)
         }
-        let lines = summary.diagnostics.render(verbose: false)
-        self.note = lines.isEmpty ? nil : lines.joined(separator: "\n")
+        self.collapsedNote = Self.note(summary.diagnostics.render(verbose: false))
+        self.allNotes = Self.note(summary.diagnostics.render(verbose: true))
+    }
+
+    private static func note(_ lines: [String]) -> String? {
+        lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 }
 
