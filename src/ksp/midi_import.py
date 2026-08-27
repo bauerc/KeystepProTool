@@ -860,7 +860,7 @@ def _cut_at_bars(
     *,
     total: int,
     steps_per_bar: int,
-    track: int,
+    source: int,
     first_pattern: int,
     available: int,
 ) -> list[tuple[int, int]]:
@@ -872,8 +872,9 @@ def _cut_at_bars(
         # cause there, and the two ports have to refuse the same way.
         if bar - 1 >= length:
             raise SegmentError(
-                f"segment bar {bar} of track {track} is past the track's {length} bar(s); a "
-                "boundary is where a pattern begins, so it has to fall inside the track"
+                f"segment bar {bar} of source track {source} is past the track's "
+                f"{length} bar(s); a boundary is where a pattern begins, so it has to "
+                "fall inside the track"
             )
 
     edges = [0, *((bar - 1) * steps_per_bar for bar in bars), total]
@@ -881,13 +882,14 @@ def _cut_at_bars(
     for (_, steps), bar in zip(cuts, (1, *bars), strict=True):
         if steps > constants.MAX_STEPS:
             raise SegmentError(
-                f"segmenting track {track} makes a pattern of {steps} steps from bar {bar}, past "
-                f"the device's {constants.MAX_STEPS}; cut it again before the tail runs over"
+                f"segmenting source track {source} makes a pattern of {steps} steps "
+                f"from bar {bar}, past the device's {constants.MAX_STEPS}; cut it again "
+                "before the tail runs over"
             )
     if len(cuts) > available:
         raise SegmentError(
-            f"segmenting track {track} makes {len(cuts)} patterns but only {available} are free "
-            f"from pattern {first_pattern}; a chain runs to pattern "
+            f"segmenting source track {source} makes {len(cuts)} patterns but only {available} are "
+            f"free from pattern {first_pattern}; a chain runs to pattern "
             f"{constants.PATTERNS_PER_TRACK} at most"
         )
     return cuts
@@ -937,7 +939,7 @@ def plan_track(
             segment_bars,
             total=total,
             steps_per_bar=steps_per_bar,
-            track=track,
+            source=clip.source_tracks[0],
             first_pattern=first_pattern,
             available=available,
         )

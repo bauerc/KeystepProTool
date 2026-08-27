@@ -2,9 +2,6 @@ import Foundation
 import KSPKit
 import KSPMIDI
 
-/// The largest track number a pair may spell; an oversized numeral is refused by the grammar.
-private let maxTrack = 2_147_483_647
-
 public let routeHelp = """
     send named source tracks to named device tracks: source:device pairs, comma-separated \
     (e.g. 3:1,1:2), both counting from 1. Tracks no pair names fill whatever is left, in source \
@@ -19,32 +16,16 @@ public func parseRoutes(_ text: String?) throws -> [TrackRoute] {
     var routes: [TrackRoute] = []
     for field in text.split(separator: ",", omittingEmptySubsequences: false) {
         let item = field.trimmingCharacters(in: .whitespacesAndNewlines)
+        let malformed = "--route: '\(item)' is not a source:device pair"
+        let oversized = "--route: '\(item)' names a track number too large to be one"
         let source = item.prefix { $0 != ":" }
-        guard source.count != item.count else {
-            throw KSPError.value("--route: '\(item)' is not a source:device pair")
-        }
+        guard source.count != item.count else { throw KSPError.value(malformed) }
         let device = item.dropFirst(source.count + 1)
-        guard !device.contains(":") else {
-            throw KSPError.value("--route: '\(item)' is not a source:device pair")
-        }
+        guard !device.contains(":") else { throw KSPError.value(malformed) }
         routes.append(
             TrackRoute(
-                source: try number(source, item: item), device: try number(device, item: item)))
+                source: try pairInt(source, malformed: malformed, oversized: oversized),
+                device: try pairInt(device, malformed: malformed, oversized: oversized)))
     }
     return routes
-}
-
-private func number(_ text: some StringProtocol, item: String) throws -> Int {
-    // Spelled out rather than left to `Int`, which differs from Python's `int` on what it takes.
-    let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    var digits = Substring(body)
-    if digits.first == "+" || digits.first == "-" { digits = digits.dropFirst() }
-    guard !digits.isEmpty, digits.allSatisfy({ $0.isASCII && $0.isNumber }) else {
-        throw KSPError.value("--route: '\(item)' is not a source:device pair")
-    }
-    // `magnitude`, not `abs`: `abs(Int.min)` traps, so a pasted `Int.min` would crash the CLI.
-    guard let value = Int(body), value.magnitude <= UInt(maxTrack) else {
-        throw KSPError.value("--route: '\(item)' names a track number too large to be one")
-    }
-    return value
 }

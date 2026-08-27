@@ -133,8 +133,9 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr
-                == "ksp-swift-cli convert: segment bar 4 of track 3 is past the track's 2 bar(s); "
-                + "a boundary is where a pattern begins, so it has to fall inside the track\n")
+                == "ksp-swift-cli convert: segment bar 4 of source track 5 is past the "
+                + "track's 2 bar(s); a boundary is where a pattern begins, so it has to "
+                + "fall inside the track\n")
     }
 
     @Test func aSegmentPastTheDevicesStepsIsTwo() throws {
@@ -142,8 +143,9 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr
-                == "ksp-swift-cli convert: segmenting track 4 makes a pattern of 112 steps from "
-                + "bar 2, past the device's 64; cut it again before the tail runs over\n")
+                == "ksp-swift-cli convert: segmenting source track 6 makes a pattern of "
+                + "112 steps from bar 2, past the device's 64; cut it again before the "
+                + "tail runs over\n")
     }
 
     @Test func aSegmentationNamingATrackTheSongLacksIsTwo() throws {
@@ -164,8 +166,8 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr
-                == "ksp-swift-cli convert: segmenting track 1 makes 8 patterns but only 5 are "
-                + "free from pattern 12; a chain runs to pattern 16 at most\n")
+                == "ksp-swift-cli convert: segmenting source track 6 makes 8 patterns but "
+                + "only 5 are free from pattern 12; a chain runs to pattern 16 at most\n")
     }
 
     @Test func aSegmentationWithASingleTargetIsTwo() throws {

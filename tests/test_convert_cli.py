@@ -630,8 +630,11 @@ def test_segment_bars_leaves_the_tracks_it_does_not_name_alone(
 @pytest.mark.parametrize(
     ("spec", "reason"),
     [
-        ("5:4", "segment bar 4 of track 3 is past the track's 2 bar(s)"),
-        ("6:2", "makes a pattern of 112 steps from bar 2, past the device's 64"),
+        ("5:4", "segment bar 4 of source track 5 is past the track's 2 bar(s)"),
+        (
+            "6:2",
+            "source track 6 makes a pattern of 112 steps from bar 2, past the device's 64",
+        ),
         ("9:2", "track 9 of the source carries nothing to segment"),
     ],
 )
@@ -661,7 +664,7 @@ def test_more_segments_than_the_chain_holds_is_an_argument_error(
     ]
 
     assert main(argv) == 2
-    assert "makes 8 patterns but only 5 are free from pattern 12" in capsys.readouterr().err
+    assert "source track 6 makes 8 patterns but only 5 are free" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

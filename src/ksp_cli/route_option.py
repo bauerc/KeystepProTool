@@ -1,10 +1,7 @@
 """The ``--route`` grammar for ``midi2ksp``: ``source:device`` pairs, comma-separated."""
 
 from ksp.midi_import import TrackRoute
-
-#: The largest track number a pair may spell. Python's ints are unbounded and
-#: Swift's are not, so an oversized numeral is refused by the grammar.
-_MAX_TRACK = 2**31 - 1
+from ksp_cli.pair_number import pair_int
 
 ROUTE_HELP = (
     "send named source tracks to named device tracks: source:device pairs, comma-separated "
@@ -23,23 +20,15 @@ def parse_routes(text: str | None) -> tuple[TrackRoute, ...]:
     routes = []
     for item in text.split(","):
         item = item.strip()
+        malformed = f"--route: '{item}' is not a source:device pair"
+        oversized = f"--route: '{item}' names a track number too large to be one"
         source, sep, device = item.partition(":")
         if not sep or ":" in device:
-            raise ValueError(f"--route: '{item}' is not a source:device pair")
-        routes.append(TrackRoute(_int(source, item), _int(device, item)))
+            raise ValueError(malformed)
+        routes.append(
+            TrackRoute(
+                pair_int(source, malformed=malformed, oversized=oversized),
+                pair_int(device, malformed=malformed, oversized=oversized),
+            )
+        )
     return tuple(routes)
-
-
-def _int(text: str, item: str) -> int:
-    # Spelled out rather than left to ``int``, which also takes underscores and
-    # non-ASCII digits: both cores must refuse exactly the same input.
-    body = text.strip()
-    digits = body[1:] if body[:1] in ("+", "-") else body
-    if not (digits.isascii() and digits.isdigit()):
-        raise ValueError(f"--route: '{item}' is not a source:device pair")
-    # Counted before converting: past 4300 digits ``int`` raises its own message
-    # about sys.set_int_max_str_digits, which is not something to show a user.
-    too_long = len(digits.lstrip("0")) > len(str(_MAX_TRACK))
-    if too_long or abs(int(body)) > _MAX_TRACK:
-        raise ValueError(f"--route: '{item}' names a track number too large to be one")
-    return int(body)

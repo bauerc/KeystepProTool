@@ -365,7 +365,7 @@ it appears in the Project Browser ready to send to the device.
 | `--track N` | First KeyStep Pro track 1–4 to fill (default 1) |
 | `--pattern N` | First pattern 1–16 to write to (default 1). Every target must be empty |
 | `--template PATH` | Project to write into (default: MCC's factory default) |
-| `--midi-track N` | Convert only track N of the source, into the one `--track`/`--pattern` names. One source file only |
+| `--midi-track N` | Convert only track N of the source, into the one `--track`/`--pattern` names. One source file only. Not usable with `--segment-bars` |
 | `--midi-tracks LIST` | Convert only these tracks of the source, as a song — comma-separated numbers and `N-M` ranges (`1,2,5`, `1-3`). Not usable with `--midi-track` or `--route` |
 | `--route SPEC` | Send named source tracks to named device tracks: `source:device` pairs, comma-separated (`3:1,1:2`). Tracks no pair names fill whatever is left |
 | `--segment-bars SPEC` | Break named source tracks into patterns at named bars: `source:bar` pairs, comma-separated (`2:5,2:9,3:3`). Tracks no pair names are still cut at the device's 64 steps. Not usable with `--midi-track` |
