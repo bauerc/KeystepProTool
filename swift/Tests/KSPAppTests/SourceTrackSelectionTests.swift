@@ -143,6 +143,16 @@ import Testing
         #expect(selection.exclusionNote == "Excluded: Track 5")
     }
 
+    /// No tick spells no valid `--midi-tracks`, and `blockReason` has already refused the run.
+    @Test func anemptyTickSetAsksTheRunnerForNothing() {
+        var selection = SourceTrackSelection(syntheticSong(tracks: [sourceTrack(1)]))
+
+        selection.toggle(1)
+
+        #expect(selection.spec == nil)
+        #expect(selection.blockReason != nil)
+    }
+
     @Test func aselectionWithNothingToTickSaysNothingAtAll() {
         let selection = SourceTrackSelection()
 

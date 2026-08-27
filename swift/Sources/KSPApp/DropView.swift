@@ -259,9 +259,7 @@ struct DropView: View {
                     Divider()
                     summary(staged)
 
-                    if let excluded = [
-                        staged.selection.exclusionNote, staged.sourceSelection.exclusionNote,
-                    ].compactMap({ $0 }).first {
+                    if let excluded = model.exclusionNote {
                         Text(excluded).font(.caption).foregroundStyle(.secondary)
                     }
 

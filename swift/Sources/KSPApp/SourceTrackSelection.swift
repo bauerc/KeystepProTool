@@ -65,7 +65,7 @@ struct SourceTrackSelection: Sendable, Equatable {
     /// `--midi-tracks` as the CLI spells it; `nil` where every track holding notes is ticked, which
     /// is the same conversion and leaves the runner's diagnostics reading as unselected.
     var spec: String? {
-        guard !dropped.isEmpty else { return nil }
+        guard !ticked.isEmpty, !dropped.isEmpty else { return nil }
         return ticked.sorted().map(String.init).joined(separator: ",")
     }
 
