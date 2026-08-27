@@ -99,14 +99,21 @@ public struct SourceTrackSummary: Sendable, Hashable {
 
     /// The clips one track of the file produced: one per channel, and none where it holds no note.
     init(number: Int, name: String, clips: [Clip], ticksPerBar: Int) {
-        let notes = clips.flatMap(\.notes)
-        let channels = Set(notes.map { $0.channel + 1 }).sorted()
+        var channels: Set<Int> = []
+        var noteCount = 0
         // The file's own length rather than the placement's: a preview says what was dropped, and
         // a track past the fourth is never placed at all.
-        let furthest = notes.map { $0.tick + $0.durationTicks }.max() ?? 0
+        var furthest = 0
+        for clip in clips {
+            for note in clip.notes {
+                channels.insert(note.channel + 1)
+                noteCount += 1
+                furthest = max(furthest, note.tick + note.durationTicks)
+            }
+        }
         self.init(
-            number: number, name: name, channels: channels, noteCount: notes.count,
-            bars: notes.isEmpty ? 0 : max(1, Arithmetic.ceilDiv(furthest, ticksPerBar)),
+            number: number, name: name, channels: channels.sorted(), noteCount: noteCount,
+            bars: noteCount == 0 ? 0 : max(1, Arithmetic.ceilDiv(furthest, ticksPerBar)),
             isPercussion: channels.contains(MIDIImport.drumChannel + 1))
     }
 }
