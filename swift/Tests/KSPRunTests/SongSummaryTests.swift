@@ -94,9 +94,14 @@ private func mixedTrackFile(
         let drums = try SongSummary(midi, sourceName: "kit.mid").tracks[0]
         #expect(drums.channels == [10])
         #expect(drums.isPercussion)
+        #expect(drums.holdsPercussion)
         #expect(drums.noteCount == 2)
         #expect(drums.bars == 2)
-        #expect(try !Self.summarise("test_file_simple.mid").tracks[0].isPercussion)
+
+        let melodic = try Self.summarise("test_file.mid").tracks[0]
+        #expect(!melodic.isPercussion)
+        #expect(!melodic.holdsPercussion)
+        #expect(melodic.noteCount == 26)
     }
 
     @Test func itKeepsAMultiChannelTrackAsOneRow() throws {
@@ -110,8 +115,20 @@ private func mixedTrackFile(
         #expect(track.channels == [1, 10])
         #expect(track.noteCount == 5)
         #expect(track.bars == 2)
-        // Only a track whose every note is percussion is one.
+        // Not a drum track, but one comes out of it: the channel 10 half becomes one.
         #expect(!track.isPercussion)
+        #expect(track.holdsPercussion)
+    }
+
+    @Test func itSurvivesAFileDeclaringABarOfNoBeats() throws {
+        var midi = mixedTrackFile([(0, 60, 0)], name: "Odd")
+        var track = midi.tracks[0]
+        track.events.insert(.timeSignature(numerator: 0, denominator: 2), at: 1)
+        midi.tracks[0] = track
+
+        // A bar of one tick, as `Song.stepsPerBar` clamps such a file to a bar of one step: the
+        // count is nonsense either way, but the preview reports it rather than trapping.
+        #expect(try SongSummary(midi, sourceName: "odd.mid").tracks[0].bars == 120)
     }
 
     @Test func itReportsAnUnreadableFileInsteadOfAnEmptySummary() {

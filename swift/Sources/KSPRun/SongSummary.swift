@@ -28,7 +28,9 @@ public struct SongSummary: Sendable, Hashable {
     public init(_ midi: MusicalMIDI1File, sourceName: String) throws {
         // Default options, so no --midi-tracks selection can hide a track from the preview.
         let song = try MIDIImport.readSong(midi)
-        let ticksPerBar = Arithmetic.pyRound(Double(song.ticksPerBeat) * song.beatsPerBar)
+        // Guarded as `Song.stepsPerBar` is: a file may declare a bar of no beats, and a bar of no
+        // ticks would divide by zero below.
+        let ticksPerBar = max(1, Arithmetic.pyRound(Double(song.ticksPerBeat) * song.beatsPerBar))
         var clips: [Int: [Clip]] = [:]
         for clip in song.clips {
             guard let number = clip.sourceTracks.first else { continue }
@@ -54,13 +56,19 @@ public struct SourceTrackSummary: Sendable, Hashable {
     /// one device track per channel.
     public let channels: [Int]
     public let noteCount: Int
-    /// The bars the notes span, rounded up; none where the track holds no note.
+    /// The bars the track fills from the start, rounded up, which is what the import lays out --
+    /// not the distance between its first note and its last. None where it holds no note.
     public let bars: Int
-    /// Every note on the percussion channel, which is what makes the import a drum track.
+    /// Every note on the percussion channel.
     public let isPercussion: Bool
+    /// Any note on it, which is the one that says a drum track comes out of this: the import
+    /// splits a track by channel, so a track holding percussion among other things still yields
+    /// one. Reported here rather than left to the caller, which does not know a channel from a kit.
+    public let holdsPercussion: Bool
 
     public init(
-        number: Int, name: String, channels: [Int], noteCount: Int, bars: Int, isPercussion: Bool
+        number: Int, name: String, channels: [Int], noteCount: Int, bars: Int, isPercussion: Bool,
+        holdsPercussion: Bool
     ) {
         self.number = number
         self.name = name
@@ -68,6 +76,7 @@ public struct SourceTrackSummary: Sendable, Hashable {
         self.noteCount = noteCount
         self.bars = bars
         self.isPercussion = isPercussion
+        self.holdsPercussion = holdsPercussion
     }
 
     public var isEmpty: Bool { noteCount == 0 }
@@ -79,10 +88,12 @@ public struct SourceTrackSummary: Sendable, Hashable {
         // The file's own length rather than the placement's: a preview says what was dropped, and
         // a track past the fourth is never placed at all.
         let furthest = notes.map { $0.tick + $0.durationTicks }.max() ?? 0
+        let percussion = MIDIImport.drumChannel + 1
         self.init(
             number: number, name: name, channels: channels, noteCount: notes.count,
             bars: notes.isEmpty ? 0 : max(1, Arithmetic.ceilDiv(furthest, ticksPerBar)),
-            isPercussion: !notes.isEmpty && channels == [MIDIImport.drumChannel + 1])
+            isPercussion: channels == [percussion],
+            holdsPercussion: channels.contains(percussion))
     }
 }
 
