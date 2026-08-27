@@ -79,9 +79,26 @@ import Testing
         #expect(list.rows[0].detail.contains("Each channel becomes a device track of its own."))
     }
 
+    @Test func theconductorTrackIsBadgedRatherThanLeftLookingEmpty() {
+        let list = SourceTrackList(
+            syntheticSong(tracks: [
+                sourceTrack(1, name: "My Song", noteCount: 0, isConductor: true),
+                sourceTrack(2, name: "Lead"),
+            ]))
+
+        #expect(list.rows[0].badge == .tempo)
+        #expect(list.rows[0].counts == "no notes")
+        #expect(
+            list.rows[0].detail
+                == "Source track 1 carries the file's tempo and time signature, not notes, so "
+                + "nothing is imported from it.")
+        #expect(list.rows[1].badge == nil)
+    }
+
     @Test func abadgeReadsAsTheAppElsewhereNamesTheDestination() {
         #expect(SourceTrackList.Badge.drums.text == "Drums")
         #expect(SourceTrackList.Badge.percussion.text == "Percussion")
+        #expect(SourceTrackList.Badge.tempo.text == "Tempo")
     }
 
     @Test func theheaderNamesTheTempoTheBarAndHowManyTracksThereAre() {

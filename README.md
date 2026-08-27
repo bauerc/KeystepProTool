@@ -77,7 +77,10 @@ its channels, and how many notes it holds over how many bars. A track holding no
 listed, dimmed and reading *no notes*, so a file whose parts are not where you expected them says
 so before you convert rather than after. The track the import will take for drums is marked
 **Drums**; a second channel 10 track is marked **Percussion** instead, because the device has one
-drum track and the rest come in melodically. Under the list sits what the read found — a track
+drum track and the rest come in melodically. The track carrying the file's tempo and time
+signature but no notes — track 1 of anything this tool exported — is marked **Tempo**, so a
+round-tripped file does not read as though a part went missing. Under the list sits what the read
+found — a track
 carrying several channels becomes a device track per channel, and that is worth knowing first.
 Hovering a track says what becomes of it. A file that will not read says so rather than showing an
 empty list.

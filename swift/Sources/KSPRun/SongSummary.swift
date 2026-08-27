@@ -47,7 +47,8 @@ public struct SongSummary: Sendable, Hashable {
             SourceTrackSummary(
                 number: index + 1, name: trackName(midi.tracks[index]),
                 clips: clips[index + 1] ?? [], ticksPerBar: ticksPerBar,
-                isDrumTrack: index + 1 == drumSource)
+                isDrumTrack: index + 1 == drumSource,
+                carriesTiming: carriesTiming(midi.tracks[index]))
         }
         self.init(
             sourceName: sourceName, tempoBPM: song.tempoBPM, beatsPerBar: song.beatsPerBar,
@@ -90,10 +91,13 @@ public struct SourceTrackSummary: Sendable, Hashable {
     public let isPercussion: Bool
     /// The one the import would take for the drum track, left to `--drum-track` to override.
     public let isDrumTrack: Bool
+    /// Carries the file's tempo and time signature but no notes, so the import reads nothing from
+    /// it. A track holding both is music, not bookkeeping, which is every track of a type 0 file.
+    public let isConductor: Bool
 
     public init(
         number: Int, name: String, channels: [Int], noteCount: Int, bars: Int, isPercussion: Bool,
-        isDrumTrack: Bool = false
+        isDrumTrack: Bool = false, isConductor: Bool = false
     ) {
         self.number = number
         self.name = name
@@ -102,12 +106,16 @@ public struct SourceTrackSummary: Sendable, Hashable {
         self.bars = bars
         self.isPercussion = isPercussion
         self.isDrumTrack = isDrumTrack
+        self.isConductor = isConductor
     }
 
     public var isEmpty: Bool { noteCount == 0 }
 
     /// The clips one track of the file produced: one per channel, and none where it holds no note.
-    init(number: Int, name: String, clips: [Clip], ticksPerBar: Int, isDrumTrack: Bool) {
+    init(
+        number: Int, name: String, clips: [Clip], ticksPerBar: Int, isDrumTrack: Bool,
+        carriesTiming: Bool
+    ) {
         var channels: Set<Int> = []
         var noteCount = 0
         // The file's own length rather than the placement's: a preview says what was dropped, and
@@ -124,7 +132,17 @@ public struct SourceTrackSummary: Sendable, Hashable {
             number: number, name: name, channels: channels.sorted(), noteCount: noteCount,
             bars: noteCount == 0 ? 0 : max(1, Arithmetic.ceilDiv(furthest, ticksPerBar)),
             isPercussion: channels.contains(MIDIImport.drumChannel + 1),
-            isDrumTrack: isDrumTrack)
+            isDrumTrack: isDrumTrack, isConductor: carriesTiming && noteCount == 0)
+    }
+}
+
+/// The events that make a track the file's timing rather than one of its parts.
+private func carriesTiming(_ track: MusicalMIDI1File.Track) -> Bool {
+    track.events.contains {
+        switch $0.event {
+        case .tempo, .timeSignature: return true
+        default: return false
+        }
     }
 }
 

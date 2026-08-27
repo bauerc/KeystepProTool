@@ -50,6 +50,21 @@ private func namedTrack(
     return track
 }
 
+/// A track carrying the timing a conductor track carries, and whatever notes are asked of it.
+private func timingTrack(
+    _ events: [(tick: Int, pitch: Int, channel: Int)] = [], name: String
+) -> MusicalMIDI1File.Track {
+    var track = namedTrack(events, name: name)
+    track.events.insert(
+        .init(
+            delta: .none,
+            event: .tempo(
+                .musical(MIDIFileEvent.MusicalTempo(microsecondsPerQuarter: 500_000)))),
+        at: 1)
+    track.events.insert(.timeSignature(numerator: 4, denominator: 2), at: 2)
+    return track
+}
+
 /// The counts are the ones the reading layer yields, cross-checked against the files themselves.
 @Suite struct SongSummaryTests {
     static func summarise(_ name: String) throws -> SongSummary {
@@ -97,6 +112,53 @@ private func namedTrack(
         // Track 6's furthest note ends at tick 15240, which is 7.9 bars of 1920.
         #expect(summary.tracks.map(\.bars) == [0, 0, 4, 3, 2, 8])
         #expect(try Self.summarise("test_file_simple.mid").tracks[0].bars == 2)
+    }
+
+    @Test func itMarksTheTrackCarryingTheTimingAndNoNotes() throws {
+        let midi = file([timingTrack(name: "Song"), namedTrack([(0, 60, 0)], name: "Lead")])
+
+        let tracks = try SongSummary(midi, sourceName: "song.mid").tracks
+
+        #expect(tracks[0].isConductor)
+        #expect(tracks[0].isEmpty)
+        #expect(!tracks[1].isConductor)
+    }
+
+    /// A type 0 file puts the timing and every note in one track, which is music, not bookkeeping.
+    @Test func atrackCarryingBothTheTimingAndNotesIsNotTheConductor() throws {
+        let midi = file([timingTrack([(0, 60, 0)], name: "Everything")])
+
+        let tracks = try SongSummary(midi, sourceName: "song.mid").tracks
+
+        #expect(!tracks[0].isConductor)
+        #expect(tracks[0].noteCount == 1)
+    }
+
+    /// An unused instrument track holds nothing either, but carries no timing to make it the one.
+    @Test func anemptyTrackCarryingNoTimingIsNotTheConductor() throws {
+        let midi = file([timingTrack(name: "Song"), namedTrack([], name: "Unused")])
+
+        let tracks = try SongSummary(midi, sourceName: "song.mid").tracks
+
+        #expect(tracks[0].isConductor)
+        #expect(tracks[1].isEmpty)
+        #expect(!tracks[1].isConductor)
+    }
+
+    /// What this tool exports, read back: track 1 is the conductor and the rest are the music.
+    @Test func aroundTrippedExportNamesItsFirstTrackTheConductor() throws {
+        let summary = try Self.summarise("m6-test-file.mid")
+
+        #expect(summary.tracks[0].isConductor)
+        #expect(summary.tracks.dropFirst().allSatisfy { !$0.isConductor })
+    }
+
+    /// `test_file_simple.mid` puts its notes in the same track as its timing.
+    @Test func afileWhoseFirstTrackHoldsNotesHasNoConductor() throws {
+        let summary = try Self.summarise("test_file_simple.mid")
+
+        #expect(summary.tracks[0].noteCount > 0)
+        #expect(summary.tracks.allSatisfy { !$0.isConductor })
     }
 
     @Test func itMarksAPercussionTrack() throws {

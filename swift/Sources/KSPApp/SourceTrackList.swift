@@ -11,12 +11,15 @@ struct SourceTrackList: Equatable {
     enum Badge: Equatable {
         case drums
         case percussion
+        case tempo
 
-        /// ``drums`` says what the app calls the destination elsewhere.
+        /// ``drums`` says what the app calls the destination elsewhere; ``tempo`` says what a DAW
+        /// calls the track the repo's own exporter writes as the conductor.
         var text: String {
             switch self {
             case .drums: return "Drums"
             case .percussion: return "Percussion"
+            case .tempo: return "Tempo"
             }
         }
     }
@@ -50,8 +53,14 @@ struct SourceTrackList: Equatable {
 
         private static func detail(_ track: SourceTrackSummary, badge: Badge?) -> String {
             guard !track.isEmpty else {
+                guard track.isConductor else {
+                    return
+                        "Source track \(track.number) holds no notes, so nothing is imported "
+                        + "from it."
+                }
                 return
-                    "Source track \(track.number) holds no notes, so nothing is imported from it."
+                    "Source track \(track.number) carries the file's tempo and time signature, "
+                    + "not notes, so nothing is imported from it."
             }
             let channels =
                 track.channels.count == 1
@@ -74,7 +83,8 @@ struct SourceTrackList: Equatable {
                 detail +=
                     " Channel 10 is where the import looks for drums, but the device has "
                     + "one drum track, so this one is imported melodically."
-            case nil:
+            // A conductor track holds no notes, so it returned above rather than reaching here.
+            case .tempo, nil:
                 break
             }
             if track.channels.count > 1 {
@@ -103,6 +113,7 @@ struct SourceTrackList: Equatable {
         // channels, where the import decides it, rather than over whole tracks.
         self.rows = summary.tracks.map { track in
             if track.isDrumTrack { return Row(track, badge: .drums) }
+            if track.isConductor { return Row(track, badge: .tempo) }
             return Row(track, badge: track.isPercussion ? .percussion : nil)
         }
         self.collapsedNote = Self.note(summary.diagnostics.render(verbose: false))
