@@ -47,6 +47,11 @@ _STRAIGHT: Final = constants.SWING_RANGE_PERCENT[0]
 _MIN_SWUNG_NOTES: Final = 3
 
 
+class SegmentError(ValueError):
+    """A segmentation refused rather than adjusted; its own class so a caller can
+    answer a boundary differently from a conversion that failed."""
+
+
 class TrackRoute(NamedTuple):
     """One source track of the file onto one device track, both counting from 1."""
 
@@ -167,21 +172,21 @@ class ImportOptions:
         named: set[int] = set()
         for entry in self.segments:
             if entry.source < 1:
-                raise ValueError(
+                raise SegmentError(
                     f"segment counts source tracks from 1, so {entry.source} is not one"
                 )
             if entry.source in named:
-                raise ValueError(f"segment names source track {entry.source} twice")
+                raise SegmentError(f"segment names source track {entry.source} twice")
             named.add(entry.source)
             previous = 1
             for bar in entry.bars:
                 if bar < 2:
-                    raise ValueError(
+                    raise SegmentError(
                         f"segment bar {bar} of source track {entry.source} is not a boundary; "
                         "bar 1 begins the first pattern"
                     )
                 if bar <= previous:
-                    raise ValueError(
+                    raise SegmentError(
                         f"segment bars of source track {entry.source} must ascend, and {bar} "
                         f"does not follow {previous}"
                     )
@@ -855,7 +860,7 @@ def _cut_at_bars(
     *,
     total: int,
     steps_per_bar: int,
-    track: int,
+    source: int,
     first_pattern: int,
     available: int,
 ) -> list[tuple[int, int]]:
@@ -866,23 +871,25 @@ def _cut_at_bars(
         # Counted, not multiplied out: Swift traps on the overflow an outsized bar would
         # cause there, and the two ports have to refuse the same way.
         if bar - 1 >= length:
-            raise ValueError(
-                f"segment bar {bar} of track {track} is past the track's {length} bar(s); a "
-                "boundary is where a pattern begins, so it has to fall inside the track"
+            raise SegmentError(
+                f"segment bar {bar} of source track {source} is past the track's "
+                f"{length} bar(s); a boundary is where a pattern begins, so it has to "
+                "fall inside the track"
             )
 
     edges = [0, *((bar - 1) * steps_per_bar for bar in bars), total]
     cuts = [(start, end - start) for start, end in pairwise(edges)]
     for (_, steps), bar in zip(cuts, (1, *bars), strict=True):
         if steps > constants.MAX_STEPS:
-            raise ValueError(
-                f"segmenting track {track} makes a pattern of {steps} steps from bar {bar}, past "
-                f"the device's {constants.MAX_STEPS}; cut it again before the tail runs over"
+            raise SegmentError(
+                f"segmenting source track {source} makes a pattern of {steps} steps "
+                f"from bar {bar}, past the device's {constants.MAX_STEPS}; cut it again "
+                "before the tail runs over"
             )
     if len(cuts) > available:
-        raise ValueError(
-            f"segmenting track {track} makes {len(cuts)} patterns but only {available} are free "
-            f"from pattern {first_pattern}; a chain runs to pattern "
+        raise SegmentError(
+            f"segmenting source track {source} makes {len(cuts)} patterns but only {available} are "
+            f"free from pattern {first_pattern}; a chain runs to pattern "
             f"{constants.PATTERNS_PER_TRACK} at most"
         )
     return cuts
@@ -932,7 +939,7 @@ def plan_track(
             segment_bars,
             total=total,
             steps_per_bar=steps_per_bar,
-            track=track,
+            source=clip.source_tracks[0],
             first_pattern=first_pattern,
             available=available,
         )
@@ -1133,7 +1140,7 @@ def plan_song(
 
     for entry in options.segments:
         if not any(clip.source_tracks == (entry.source,) for clip in song.clips):
-            raise ValueError(
+            raise SegmentError(
                 f"track {entry.source} of the source carries nothing to segment; a "
                 "segmentation names a source track the conversion reads, counting every track "
                 "of the file from 1"

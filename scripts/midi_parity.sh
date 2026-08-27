@@ -194,6 +194,24 @@ if has convert; then
         add import "$(basename "$clip") --flat-velocity past Int" "$clip" \
             --flat-velocity 99999999999999999999
     done
+    # Segmentation, once rather than per clip: the other fixtures are one or two bars, so
+    # only this one can carry a boundary that is legal as well as ones that are not.
+    m6=project_files/m6-test-file.mid
+    add import "--segment-bars 3:3"            "$m6" --segment-bars 3:3
+    add import "--segment-bars several"        "$m6" --segment-bars 3:2,3:3,6:5
+    add import "--segment-bars past content"   "$m6" --segment-bars 5:4
+    add import "--segment-bars past 64"        "$m6" --segment-bars 6:2
+    add import "--segment-bars past the chain" "$m6" --midi-tracks 6 --pattern 12 \
+        --segment-bars 6:2,6:3,6:4,6:5,6:6,6:7,6:8
+    add import "--segment-bars nothing there"  "$m6" --segment-bars 9:2
+    add import "--segment-bars bad"            "$m6" --segment-bars bad
+    add import "--segment-bars bar 1"          "$m6" --segment-bars 3:1
+    add import "--segment-bars descending"     "$m6" --segment-bars 3:5,3:3
+    add import "--segment-bars 0:3"            "$m6" --segment-bars 0:3
+    # Int.min: Swift parses it and would trap on abs(). This holds the magnitude bound in place.
+    add import "--segment-bars Int.min"        "$m6" --segment-bars=-9223372036854775808:1
+    add import "--segment-bars + --midi-track" "$m6" --midi-track 3 --segment-bars 3:2
+
     # Several sources, once rather than per clip: what they pin is the merge, not the material.
     # Both orderings, because argument order decides which device track a file fills.
     simple=project_files/test_file_simple.mid

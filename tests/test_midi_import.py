@@ -617,7 +617,8 @@ def test_a_segment_longer_than_the_device_plays_is_refused(load_sample: Loader) 
             song_of([events]), load_sample("Default.KeyStepPro"), options=options
         )
     assert str(caught.value) == (
-        "segmenting track 1 makes a pattern of 80 steps from bar 1, past the device's 64; cut "
+        "segmenting source track 1 makes a pattern of 80 steps from bar 1, past the "
+        "device's 64; cut "
         "it again before the tail runs over"
     )
 
@@ -632,7 +633,8 @@ def test_a_boundary_past_the_tracks_content_is_refused(load_sample: Loader) -> N
             song_of([events]), load_sample("Default.KeyStepPro"), options=options
         )
     assert str(caught.value) == (
-        "segment bar 9 of track 1 is past the track's 3 bar(s); a boundary is where a pattern "
+        "segment bar 9 of source track 1 is past the track's 3 bar(s); a boundary is where "
+        "a pattern "
         "begins, so it has to fall inside the track"
     )
 
@@ -663,7 +665,8 @@ def test_segments_that_outrun_the_free_patterns_are_refused(load_sample: Loader)
             first_pattern=15,
         )
     assert str(caught.value) == (
-        "segmenting track 1 makes 3 patterns but only 2 are free from pattern 15; a chain runs "
+        "segmenting source track 1 makes 3 patterns but only 2 are free from pattern 15; a "
+        "chain runs "
         "to pattern 16 at most"
     )
 

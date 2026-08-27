@@ -11,6 +11,7 @@ public enum ConvertRunner {
         public var pattern: Int
         public var drumTrack: Int?
         public var routeSpec: String?
+        public var segmentBarsSpec: String?
         public var drumMapSpec: String?
         public var carryTempo: Bool
         public var fitSwing: Bool
@@ -31,6 +32,7 @@ public enum ConvertRunner {
         public init(
             paths: [URL], output: URL? = nil, track: Int = 1, pattern: Int = 1,
             drumTrack: Int? = nil, routeSpec: String? = nil,
+            segmentBarsSpec: String? = nil,
             drumMapSpec: String? = nil, carryTempo: Bool = true, fitSwing: Bool = true,
             fitTimeShift: Bool = true, template: URL? = nil, midiTrack: Int? = nil,
             midiTracksSpec: String? = nil, flatVelocitySpec: String? = nil,
@@ -43,6 +45,7 @@ public enum ConvertRunner {
             self.pattern = pattern
             self.drumTrack = drumTrack
             self.routeSpec = routeSpec
+            self.segmentBarsSpec = segmentBarsSpec
             self.drumMapSpec = drumMapSpec
             self.carryTempo = carryTempo
             self.fitSwing = fitSwing
@@ -82,6 +85,7 @@ public enum ConvertRunner {
                     options.drumMapSpec, configPath: options.configPath),
                 carryTempo: options.carryTempo, fitSwing: options.fitSwing,
                 fitTimeShift: options.fitTimeShift, routes: try parseRoutes(options.routeSpec),
+                segments: try resolveSegments(options.midiTrack, options.segmentBarsSpec),
                 flatVelocity: try parseFlatVelocity(options.flatVelocitySpec))
         } catch {
             return fail("\(error)", code: 2)
@@ -146,6 +150,8 @@ public enum ConvertRunner {
                     sources, loadedTemplate, options: importOptions,
                     firstPattern: options.pattern, firstTrack: options.track)
             }
+        } catch KSPError.segment(let message) {
+            return fail(message, code: 2)
         } catch {
             return fail("\(error)", code: 1)
         }

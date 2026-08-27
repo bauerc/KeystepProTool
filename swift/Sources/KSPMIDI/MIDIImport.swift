@@ -149,22 +149,22 @@ public struct ImportOptions: Sendable, Hashable {
         var named: Set<Int> = []
         for entry in segments {
             if entry.source < 1 {
-                throw KSPError.value(
+                throw KSPError.segment(
                     "segment counts source tracks from 1, so \(entry.source) is not one")
             }
             if named.contains(entry.source) {
-                throw KSPError.value("segment names source track \(entry.source) twice")
+                throw KSPError.segment("segment names source track \(entry.source) twice")
             }
             named.insert(entry.source)
             var previous = 1
             for bar in entry.bars {
                 if bar < 2 {
-                    throw KSPError.value(
+                    throw KSPError.segment(
                         "segment bar \(bar) of source track \(entry.source) is not a boundary; "
                             + "bar 1 begins the first pattern")
                 }
                 if bar <= previous {
-                    throw KSPError.value(
+                    throw KSPError.segment(
                         "segment bars of source track \(entry.source) must ascend, and \(bar) "
                             + "does not follow \(previous)")
                 }
@@ -865,15 +865,17 @@ extension MIDIImport {
     /// Explicit bar boundaries into one `(offset, steps)` pair per pattern.
     /// Refused rather than adjusted: a boundary the device cannot play is not a boundary.
     static func cutAtBars(
-        _ bars: [Int], total: Int, stepsPerBar: Int, track: Int, firstPattern: Int, available: Int
+        _ bars: [Int], total: Int, stepsPerBar: Int, source: Int, firstPattern: Int,
+        available: Int
     ) throws -> [(offset: Int, steps: Int)] {
         let length = max(1, Arithmetic.floorDiv(total, stepsPerBar))
         // Counted, not multiplied out: an outsized bar would trap on the multiplication,
         // where Python's unbounded ints simply refuse it.
         for bar in bars where bar - 1 >= length {
-            throw KSPError.value(
-                "segment bar \(bar) of track \(track) is past the track's \(length) bar(s); a "
-                    + "boundary is where a pattern begins, so it has to fall inside the track")
+            throw KSPError.segment(
+                "segment bar \(bar) of source track \(source) is past the track's "
+                    + "\(length) bar(s); a boundary is where a pattern begins, so it has to "
+                    + "fall inside the track")
         }
 
         let edges = [0] + bars.map { ($0 - 1) * stepsPerBar } + [total]
@@ -881,16 +883,16 @@ extension MIDIImport {
             (offset: $0, steps: $1 - $0)
         }
         for (cut, bar) in zip(cuts, [1] + bars) where cut.steps > Constants.maxSteps {
-            throw KSPError.value(
-                "segmenting track \(track) makes a pattern of \(cut.steps) steps from bar "
-                    + "\(bar), past the device's \(Constants.maxSteps); cut it again before "
-                    + "the tail runs over")
+            throw KSPError.segment(
+                "segmenting source track \(source) makes a pattern of \(cut.steps) steps "
+                    + "from bar \(bar), past the device's \(Constants.maxSteps); cut it again "
+                    + "before the tail runs over")
         }
         if cuts.count > available {
-            throw KSPError.value(
-                "segmenting track \(track) makes \(cuts.count) patterns but only \(available) "
-                    + "are free from pattern \(firstPattern); a chain runs to pattern "
-                    + "\(Constants.patternsPerTrack) at most")
+            throw KSPError.segment(
+                "segmenting source track \(source) makes \(cuts.count) patterns but only "
+                    + "\(available) are free from pattern \(firstPattern); a chain runs to "
+                    + "pattern \(Constants.patternsPerTrack) at most")
         }
         return cuts
     }
@@ -941,8 +943,9 @@ extension MIDIImport {
             }
         } else {
             cuts = try cutAtBars(
-                segmentBars, total: total, stepsPerBar: stepsPerBar, track: track,
-                firstPattern: firstPattern, available: available)
+                segmentBars, total: total, stepsPerBar: stepsPerBar,
+                source: clip.sourceTracks[0], firstPattern: firstPattern,
+                available: available)
         }
 
         var placements: [Placement] = []
@@ -1105,7 +1108,7 @@ extension MIDIImport {
 
         for entry in options.segments
         where !song.clips.contains(where: { $0.sourceTracks == [entry.source] }) {
-            throw KSPError.value(
+            throw KSPError.segment(
                 "track \(entry.source) of the source carries nothing to segment; a "
                     + "segmentation names a source track the conversion reads, counting every "
                     + "track of the file from 1")

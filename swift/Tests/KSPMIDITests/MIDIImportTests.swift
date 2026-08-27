@@ -633,8 +633,8 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         }
         #expect(
             thrown?.description
-                == "segmenting track 1 makes a pattern of 80 steps from bar 1, past the "
-                + "device's 64; cut it again before the tail runs over")
+                == "segmenting source track 1 makes a pattern of 80 steps from bar 1, "
+                + "past the device's 64; cut it again before the tail runs over")
     }
 
     /// A pattern beginning after the last bar would be an empty link in the chain.
@@ -646,8 +646,8 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         }
         #expect(
             thrown?.description
-                == "segment bar 9 of track 1 is past the track's 3 bar(s); a boundary is where "
-                + "a pattern begins, so it has to fall inside the track")
+                == "segment bar 9 of source track 1 is past the track's 3 bar(s); a "
+                + "boundary is where a pattern begins, so it has to fall inside the track")
     }
 
     /// This port traps where Python widens, so the bar is counted, never multiplied out.
@@ -671,8 +671,8 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         }
         #expect(
             thrown?.description
-                == "segmenting track 1 makes 3 patterns but only 2 are free from pattern 15; a "
-                + "chain runs to pattern 16 at most")
+                == "segmenting source track 1 makes 3 patterns but only 2 are free from "
+                + "pattern 15; a chain runs to pattern 16 at most")
     }
 
     /// Every fault the segmentation grammar refuses, in the wording the Python port uses.

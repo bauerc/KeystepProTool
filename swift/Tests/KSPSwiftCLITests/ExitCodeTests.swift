@@ -111,6 +111,75 @@ import Testing
                 "ksp-swift-cli convert: --midi-track and --midi-tracks contradict each other"))
     }
 
+    @Test func aSegmentationCutsTheTrackItNames() throws {
+        // --dry-run: this runs against the real fixtures, so nothing here may write beside them.
+        let result = try Self.run(["convert", Self.song, "--segment-bars", "3:3", "--dry-run"])
+        #expect(result.code == 0)
+        #expect(result.stdout.contains("track 1: 64 note(s), patterns 1-2 (32, 32 steps)"))
+        #expect(
+            result.stderr.contains("track 1 was cut at bar(s) 3 across patterns 1-2 and chained"))
+    }
+
+    @Test func aMalformedSegmentBarsIsTwo() throws {
+        let result = try Self.run(["convert", Self.song, "--segment-bars", "bad"])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli convert: --segment-bars: 'bad' is not a source:bar pair\n")
+    }
+
+    @Test func aBoundaryPastTheTracksContentIsTwo() throws {
+        let result = try Self.run(["convert", Self.song, "--segment-bars", "5:4"])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli convert: segment bar 4 of source track 5 is past the "
+                + "track's 2 bar(s); a boundary is where a pattern begins, so it has to "
+                + "fall inside the track\n")
+    }
+
+    @Test func aSegmentPastTheDevicesStepsIsTwo() throws {
+        let result = try Self.run(["convert", Self.song, "--segment-bars", "6:2"])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli convert: segmenting source track 6 makes a pattern of "
+                + "112 steps from bar 2, past the device's 64; cut it again before the "
+                + "tail runs over\n")
+    }
+
+    @Test func aSegmentationNamingATrackTheSongLacksIsTwo() throws {
+        let result = try Self.run(["convert", Self.song, "--segment-bars", "9:2"])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli convert: track 9 of the source carries nothing to segment; a "
+                + "segmentation names a source track the conversion reads, counting every track "
+                + "of the file from 1\n")
+    }
+
+    @Test func moreSegmentsThanTheChainHoldsIsTwo() throws {
+        let result = try Self.run([
+            "convert", Self.song, "--midi-tracks", "6", "--pattern", "12",
+            "--segment-bars", "6:2,6:3,6:4,6:5,6:6,6:7,6:8",
+        ])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli convert: segmenting source track 6 makes 8 patterns but "
+                + "only 5 are free from pattern 12; a chain runs to pattern 16 at most\n")
+    }
+
+    @Test func aSegmentationWithASingleTargetIsTwo() throws {
+        let result = try Self.run([
+            "convert", Self.song, "--midi-track", "3", "--segment-bars", "3:2",
+        ])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr.hasPrefix(
+                "ksp-swift-cli convert: --midi-track and --segment-bars contradict each other"))
+    }
+
     @Test func severalSourcesNameTheirFileInTheSummary() throws {
         // --dry-run: this runs against the real fixtures, so nothing here may write beside them.
         let result = try Self.run(["convert", Self.clip, Self.chords, "--dry-run"])
@@ -169,6 +238,7 @@ import Testing
     static let project = RepoData.projectFiles.appending(path: "project_5.KeyStepPro").path
     static let clip = RepoData.projectFiles.appending(path: "test_file_simple.mid").path
     static let chords = RepoData.projectFiles.appending(path: "test_file.mid").path
+    static let song = RepoData.projectFiles.appending(path: "m6-test-file.mid").path
 
     /// From the package directory, not `Bundle`: under the CLT `Bundle.main` is the swiftpm helper.
     static let executable: URL = {
