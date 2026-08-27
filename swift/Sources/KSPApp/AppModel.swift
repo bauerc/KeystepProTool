@@ -21,6 +21,7 @@ final class AppModel {
         var preview: Outcome?
         var summary: SummaryState = .loading
         var selection = GridSelection()
+        var sourceSelection = SourceTrackSelection()
         /// Identity, not path: dropping the same file again is a new drop and needs a new read.
         let id = UUID()
     }
@@ -106,8 +107,12 @@ final class AppModel {
         // A late answer must not reopen a drop that has since been cancelled or replaced.
         guard case .staged(var current) = phase, current.id == staged.id else { return }
         current.summary = state
-        // A song has no grid, so it leaves the selection alone.
-        if case .project(let summary) = state { current.selection = GridSelection(summary) }
+        // Each drop kind seeds its own, and leaves the other inert.
+        switch state {
+        case .project(let summary): current.selection = GridSelection(summary)
+        case .song(let summary): current.sourceSelection = SourceTrackSelection(summary)
+        case .loading, .failed: break
+        }
         phase = .staged(current)
     }
 
@@ -125,16 +130,28 @@ final class AppModel {
 
     func toggle(pattern: Int) { mutateSelection { $0.toggle(pattern: pattern) } }
 
+    func toggle(sourceTrack: Int) {
+        mutate { $0.sourceSelection.toggle(sourceTrack) }
+    }
+
     private func mutateSelection(_ change: (inout GridSelection) -> Void) {
+        mutate { change(&$0.selection) }
+    }
+
+    private func mutate(_ change: (inout Staged) -> Void) {
         guard case .staged(var staged) = phase else { return }
-        change(&staged.selection)
+        change(&staged)
         phase = .staged(staged)
         discardPreview()
     }
 
     var blockReason: String? {
-        guard let staged, case .project = staged.summary else { return nil }
-        return staged.selection.blockReason
+        guard let staged else { return nil }
+        switch staged.summary {
+        case .project: return staged.selection.blockReason
+        case .song: return staged.sourceSelection.blockReason
+        case .loading, .failed: return nil
+        }
     }
 
     func discardPreview() {
@@ -149,9 +166,11 @@ final class AppModel {
         let plan = plan(for: staged.job)
         phase = .working(plan.source.lastPathComponent)
 
-        let selection = staged.selection
+        // Both are applied: the one the drop did not seed is inert, and reaches the other runner.
         let outcome = await Conversion.run(
-            plan, settings: settings.selecting(selection), excluded: selection.exclusionNote)
+            plan, settings: settings.selecting(staged.selection).selecting(staged.sourceSelection),
+            excluded: [staged.selection.exclusionNote, staged.sourceSelection.exclusionNote]
+                .compactMap { $0 }.first)
 
         guard !outcome.dryRun else {
             var current = staged

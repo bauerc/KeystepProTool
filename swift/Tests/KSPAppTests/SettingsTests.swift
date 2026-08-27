@@ -163,6 +163,39 @@ import Testing
         #expect(mapped.cells.isEmpty)
     }
 
+    @Test func thetickedSourceTracksReachTheImportAsTheOptionTheCLITakes() {
+        var selection = SourceTrackSelection(
+            syntheticSong(tracks: (1...6).map { sourceTrack($0) }))
+        selection.toggle(1)
+
+        let mapped = Settings().selecting(selection).convertOptions(source: source, output: output)
+
+        #expect(mapped.midiTracksSpec == "2,3,4")
+    }
+
+    @Test func atickOnEverySourceTrackHoldingNotesAsksForNothing() {
+        let mapped = Settings()
+            .selecting(SourceTrackSelection(syntheticSong(tracks: [sourceTrack(1)])))
+            .convertOptions(source: source, output: output)
+        let defaults = ConvertRunner.Options(
+            paths: [source], output: output, configPath: mapped.configPath)
+
+        #expect(mapped.midiTracksSpec == defaults.midiTracksSpec)
+        #expect(mapped.midiTracksSpec == nil)
+    }
+
+    @Test func thesourceTracksLeaveTheExportAlone() {
+        var selection = SourceTrackSelection(
+            syntheticSong(tracks: (1...6).map { sourceTrack($0) }))
+        selection.toggle(1)
+
+        let mapped = Settings().selecting(selection).exportOptions(source: output, output: source)
+        let defaults = ExportRunner.Options(
+            path: output, output: source, configPath: mapped.configPath)
+
+        #expect(mapped.cells == defaults.cells)
+    }
+
     @Test func aselectionLeavesTheImportRoutingAlone() {
         var selection = GridSelection(syntheticSummary())
         selection.toggle(track: 3)

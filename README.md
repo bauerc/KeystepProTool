@@ -82,6 +82,15 @@ carrying several channels becomes a device track per channel, and that is worth 
 Hovering a track says what becomes of it. A file that will not read says so rather than showing an
 empty list.
 
+**Ticking what is imported.** The device has four tracks and a MIDI file may hold more, so each
+source track carries a checkbox and the first four holding notes start ticked — the same set
+`--midi-tracks 1,2,3,4` reads, and that is the option the app hands the conversion, not a mechanism
+of its own. Under the list a line says where you stand: "5 of 6 source tracks ticked; the device has
+4 tracks." Tick a fifth and it is flagged rather than refused — "That needs 5 device tracks, so 1
+would be dropped" — because what competes for those four is a channel, not a track, so a track
+carrying two of them asks for two and a track holding nothing asks for none. Untick everything and
+Convert says so rather than writing an empty project, and the result names what was left out.
+
 **Ticking what is exported.** Every slot starts ticked, and the export follows the ticks. Click a
 slot to leave that one out, a track name to leave out the whole track, a slot number to leave that
 slot out on every track. Any set of cells will do — a slot dropped on one track alone is kept on the

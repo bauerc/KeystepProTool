@@ -259,7 +259,9 @@ struct DropView: View {
                     Divider()
                     summary(staged)
 
-                    if let excluded = staged.selection.exclusionNote {
+                    if let excluded = [
+                        staged.selection.exclusionNote, staged.sourceSelection.exclusionNote,
+                    ].compactMap({ $0 }).first {
                         Text(excluded).font(.caption).foregroundStyle(.secondary)
                     }
 
@@ -316,17 +318,30 @@ struct DropView: View {
                     repeatCount: model.settings.repeatCount,
                     isSplit: model.settings.splitPerPattern))
         case .song(let summary):
-            trackList(SourceTrackList(summary))
+            trackList(SourceTrackList(summary), selection: staged.sourceSelection)
         }
     }
 
     /// Unscrolled, like ``grid(_:selection:length:)``: the staged view already scrolls.
-    private func trackList(_ list: SourceTrackList) -> some View {
+    private func trackList(_ list: SourceTrackList, selection: SourceTrackSelection) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(list.header).font(.caption).foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 3) {
-                ForEach(list.rows, id: \.number) { trackRow($0) }
+                ForEach(list.rows, id: \.number) {
+                    trackRow($0, ticked: selection.isTicked($0.number))
+                }
+            }
+
+            if let count = selection.countLine {
+                Text(count).font(.caption).foregroundStyle(.secondary)
+            }
+
+            // Ticking past the device's four is flagged, not refused, so Convert stays enabled.
+            if let overflow = selection.overflowNote {
+                Label(overflow, systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if let note = list.note(verbose: model.settings.verbose) {
@@ -338,16 +353,25 @@ struct DropView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// One source track. Dimmed where it holds nothing -- not struck through, which in the grid
-    /// beside it means unticked, and nothing here is tickable yet.
-    private func trackRow(_ row: SourceTrackList.Row) -> some View {
+    /// One source track. Dimmed where it holds nothing and struck through where it is unticked,
+    /// which are the two meanings the grid beside it gives the same marks.
+    private func trackRow(_ row: SourceTrackList.Row, ticked: Bool) -> some View {
         HStack(spacing: AppLayout.trackColumnGap) {
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { ticked }, set: { _ in model.toggle(sourceTrack: row.number) })
+            )
+            .toggleStyle(.checkbox)
+            .labelsHidden()
+            .frame(width: AppLayout.trackTickWidth, alignment: .leading)
             Text("\(row.number)")
                 .font(.caption).monospacedDigit().foregroundStyle(.tertiary)
                 .frame(width: AppLayout.trackNumberWidth, alignment: .trailing)
             Text(row.name)
                 .font(.caption).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
                 .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.secondary : .primary)
+                .strikethrough(!ticked)
                 .frame(width: AppLayout.trackNameWidth, alignment: .leading)
             badge(row.badge)
                 .frame(width: AppLayout.trackBadgeWidth, alignment: .leading)
@@ -362,7 +386,7 @@ struct DropView: View {
         }
         .opacity(row.isEmpty ? 0.6 : 1)
         .contentShape(Rectangle())
-        .help(row.detail)
+        .help(row.detail + (ticked ? "" : " · unticked, so it will not be imported"))
     }
 
     @ViewBuilder

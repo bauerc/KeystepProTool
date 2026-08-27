@@ -4,7 +4,9 @@ import KSPRun
 
 /// The preview list: one row per source track of a dropped MIDI file, in the file's own order.
 struct SourceTrackList: Equatable {
-    static let legend = "Counts are the notes in the file. Hover a track for what it becomes."
+    static let legend =
+        "Untick a source track to leave it out. Counts are the notes in the file. Hover a "
+        + "track for what it becomes."
 
     enum Badge: Equatable {
         case drums
@@ -33,7 +35,7 @@ struct SourceTrackList: Equatable {
 
         init(_ track: SourceTrackSummary, badge: Badge?) {
             self.number = track.number
-            self.name = track.name.isEmpty ? "Track \(track.number)" : track.name
+            self.name = sourceTrackName(track)
             self.badge = badge
             self.channels =
                 track.channels.isEmpty
@@ -110,6 +112,11 @@ struct SourceTrackList: Equatable {
     private static func note(_ lines: [String]) -> String? {
         lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
+}
+
+/// What the file calls a track, or its number where it names none.
+func sourceTrackName(_ track: SourceTrackSummary) -> String {
+    track.name.isEmpty ? "Track \(track.number)" : track.name
 }
 
 private func counted(_ count: Int, _ noun: String) -> String {
