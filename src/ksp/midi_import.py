@@ -5,6 +5,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, replace
+from itertools import pairwise
 from typing import Final, NamedTuple
 
 import mido
@@ -53,6 +54,14 @@ class TrackRoute(NamedTuple):
     device: int
 
 
+class TrackSegments(NamedTuple):
+    """Where one source track breaks into patterns: the bars a pattern begins at,
+    counting from 1. Bar 1 is not listed, and no bars at all is the automatic split."""
+
+    source: int
+    bars: tuple[int, ...]
+
+
 @dataclass(frozen=True)
 class ImportOptions:
     """Everything the MIDI file cannot tell us about the target project."""
@@ -80,6 +89,10 @@ class ImportOptions:
     """Where named source tracks go, overriding the fill-upwards rule.
     A drum track still lands on device track 1."""
 
+    segments: tuple[TrackSegments, ...] = ()
+    """Where named source tracks break into patterns, overriding the automatic split.
+    Tracks no entry names are still cut at the device's step limit as before."""
+
     flat_velocity: int | None = None
     """Write every note and trigger at this velocity instead of the source's;
     ``None`` keeps the file's own. Written content: existence is never velocity."""
@@ -99,6 +112,7 @@ class ImportOptions:
                 "be one of the source tracks read"
             )
         self._check_routes()
+        self._check_segments()
         check_flat_velocity(self.flat_velocity)
 
     def _check_routes(self) -> None:
@@ -147,6 +161,31 @@ class ImportOptions:
                 )
             sources.add(route.source)
             devices[route.device] = route
+
+    def _check_segments(self) -> None:
+        """The faults a segmentation has without knowing the song: range and order."""
+        named: set[int] = set()
+        for entry in self.segments:
+            if entry.source < 1:
+                raise ValueError(
+                    f"segment counts source tracks from 1, so {entry.source} is not one"
+                )
+            if entry.source in named:
+                raise ValueError(f"segment names source track {entry.source} twice")
+            named.add(entry.source)
+            previous = 1
+            for bar in entry.bars:
+                if bar < 2:
+                    raise ValueError(
+                        f"segment bar {bar} of source track {entry.source} is not a boundary; "
+                        "bar 1 begins the first pattern"
+                    )
+                if bar <= previous:
+                    raise ValueError(
+                        f"segment bars of source track {entry.source} must ascend, and {bar} "
+                        f"does not follow {previous}"
+                    )
+                previous = bar
 
 
 @dataclass(frozen=True)
@@ -811,6 +850,42 @@ def quantise(clip: Clip, *, step_count: int, options: ImportOptions | None = Non
     )
 
 
+def _cut_at_bars(
+    bars: Sequence[int],
+    *,
+    total: int,
+    steps_per_bar: int,
+    track: int,
+    first_pattern: int,
+    available: int,
+) -> list[tuple[int, int]]:
+    """Explicit bar boundaries into one ``(offset, steps)`` pair per pattern.
+    Refused rather than adjusted: a boundary the device cannot play is not a boundary."""
+    length = max(1, total // steps_per_bar)
+    for bar in bars:
+        if (bar - 1) * steps_per_bar >= total:
+            raise ValueError(
+                f"segment bar {bar} of track {track} is past the track's {length} bar(s); a "
+                "boundary is where a pattern begins, so it has to fall inside the track"
+            )
+
+    edges = [0, *((bar - 1) * steps_per_bar for bar in bars), total]
+    cuts = [(start, end - start) for start, end in pairwise(edges)]
+    for (_, steps), bar in zip(cuts, (1, *bars), strict=True):
+        if steps > constants.MAX_STEPS:
+            raise ValueError(
+                f"segmenting track {track} makes a pattern of {steps} steps from bar {bar}, past "
+                f"the device's {constants.MAX_STEPS}; cut it again before the tail runs over"
+            )
+    if len(cuts) > available:
+        raise ValueError(
+            f"segmenting track {track} makes {len(cuts)} patterns but only {available} are free "
+            f"from pattern {first_pattern}; a chain runs to pattern "
+            f"{constants.PATTERNS_PER_TRACK} at most"
+        )
+    return cuts
+
+
 def plan_track(
     clip: Clip,
     *,
@@ -821,6 +896,7 @@ def plan_track(
     drum_map: DrumMap | None = None,
     first_pattern: int = 1,
     steps_per_bar: int = 16,
+    segment_bars: tuple[int, ...] = (),
     origin: float,
 ) -> TrackPlan:
     """Lay one source track out across as many patterns as it needs.
@@ -848,22 +924,34 @@ def plan_track(
             subjects=moved,
         )
 
-    count = -(-total // constants.MAX_STEPS)
     available = constants.PATTERNS_PER_TRACK - first_pattern + 1
-    if count > available:
-        collector.add(
-            Code.PAST_PATTERN_END,
-            f"track {track} needs {count} patterns but only {available} are free from pattern "
-            f"{first_pattern}; the tail was dropped",
-            site=site,
-            subjects=count - available,
+    if segment_bars:
+        cuts = _cut_at_bars(
+            segment_bars,
+            total=total,
+            steps_per_bar=steps_per_bar,
+            track=track,
+            first_pattern=first_pattern,
+            available=available,
         )
-        count = available
+    else:
+        count = -(-total // constants.MAX_STEPS)
+        if count > available:
+            collector.add(
+                Code.PAST_PATTERN_END,
+                f"track {track} needs {count} patterns but only {available} are free from pattern "
+                f"{first_pattern}; the tail was dropped",
+                site=site,
+                subjects=count - available,
+            )
+            count = available
+        cuts = [
+            (offset, min(constants.MAX_STEPS, total - offset))
+            for offset in (index * constants.MAX_STEPS for index in range(count))
+        ]
 
     placements = []
-    for index in range(count):
-        offset = index * constants.MAX_STEPS
-        steps = min(constants.MAX_STEPS, total - offset)
+    for index, (offset, steps) in enumerate(cuts):
         inside = [entry for entry in snapped if offset <= entry.step < offset + steps]
         placements.append(
             _place(
@@ -881,13 +969,22 @@ def plan_track(
             )
         )
 
-    if count > 1:
-        collector.add(
-            Code.PATTERN_SPLIT,
-            f"track {track} runs {total} steps, past the device's {constants.MAX_STEPS}; it was "
-            f"split across patterns {first_pattern}-{first_pattern + count - 1} and chained",
-            site=site,
-        )
+    if len(cuts) > 1:
+        last = first_pattern + len(cuts) - 1
+        if segment_bars:
+            collector.add(
+                Code.PATTERN_SEGMENTED,
+                f"track {track} was cut at bar(s) {_listed(segment_bars)} across patterns "
+                f"{first_pattern}-{last} and chained",
+                site=site,
+            )
+        else:
+            collector.add(
+                Code.PATTERN_SPLIT,
+                f"track {track} runs {total} steps, past the device's {constants.MAX_STEPS}; it "
+                f"was split across patterns {first_pattern}-{last} and chained",
+                site=site,
+            )
 
     return TrackPlan(
         track=track,
@@ -1032,6 +1129,13 @@ def plan_song(
             subjects=song.controllers_dropped,
         )
 
+    for entry in options.segments:
+        if not any(clip.source_tracks == (entry.source,) for clip in song.clips):
+            raise ValueError(
+                f"track {entry.source} of the source holds no notes; a segmentation counts every "
+                "track of the file from 1, including ones that carry only tempo or a name"
+            )
+
     assigned = _assign(song, options, collector, first_track)
 
     drum_map = options.drum_map
@@ -1044,6 +1148,7 @@ def plan_song(
             "The real map is a device setting the project file does not carry",
         )
 
+    segments = {entry.source: entry.bars for entry in options.segments}
     steps_per_bar = song.steps_per_bar(options.steps_per_beat)
     ticks_per_step = song.ticks_per_beat / options.steps_per_beat
     origin = _anchor([clip for clip, _, _ in assigned], ticks_per_step)
@@ -1065,6 +1170,7 @@ def plan_song(
             drum_map=drum_map,
             first_pattern=first_pattern,
             steps_per_bar=steps_per_bar,
+            segment_bars=segments.get(clip.source_tracks[0], ()) if clip.source_tracks else (),
             origin=origin,
         )
         for clip, track, is_drum in assigned

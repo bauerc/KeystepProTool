@@ -41,6 +41,7 @@ public enum Code: String, Sendable, Hashable, Codable, CaseIterable {
     case pastPatternEnd = "past-pattern-end"
     case multipleSources = "multiple-sources"
     case patternSplit = "pattern-split"
+    case patternSegmented = "pattern-segmented"
     case poolOverflow = "pool-overflow"
     case tracksDropped = "tracks-dropped"
     case gateApproximated = "gate-approximated"
@@ -423,6 +424,11 @@ public enum Diagnostics {
             """
             {sites} run longer than the device's 64-step maximum and were split across consecutive \
             patterns, chained in the current scene so they play as one sequence
+            """, site: "track"),
+        .patternSegmented: Summary(
+            """
+            {sites} were cut at the bars asked for and laid across consecutive patterns, chained \
+            in the current scene so they play as one sequence
             """, site: "track"),
         .poolOverflow: Summary(
             "{subjects} did not fit; a pattern holds 192 events and the firmware refuses the rest"),
