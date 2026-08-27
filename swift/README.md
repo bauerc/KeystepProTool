@@ -285,7 +285,8 @@ product, not just a target, so both faces link it by name.
 `AppKit.framework` and `UniformTypeIdentifiers.framework`, and a `.app` is a directory with an
 `Info.plist` — so the GUI is an ordinary `executableTarget` and `scripts/bundle_app.sh` does the
 wrapping and the ad-hoc signing. `xcodebuild`, `actool` and `ibtool` are the only things missing
-from a CLT install, and a hand-assembled bundle needs none of them.
+from a CLT install, and a hand-assembled bundle needs none of them. `bundle_app.sh` is deliberately
+**not** in `validate.sh`, which compiles the target through `KSPAppTests` instead.
 
 `RunResult` carries the run twice over. `stdout`/`stderr`/`code` are the terminal's view, rendered
 inside `KSPRun` so the CLI stays a shell — `emit(_:)` in `KSPSwiftCLI` is the only place they reach
@@ -294,11 +295,42 @@ a stream — and so the parity scripts keep comparing text this module produced.
 terminal: M13.2's app lists findings through `Report.render(verbose:)` and reveals what was
 written, rather than re-parsing `stderr` or re-deriving the destination rule.
 
+The model serialises through `JSONNode` rather than `Encodable`: `JSONEncoder` controls neither key
+order nor the `120` vs `120.0` rendering of a whole-numbered `Double`, and both are load-bearing on
+the parity contract.
+
 `KSPRun` carries one resource: `Resources/Default.KeyStepPro`, MCC's factory default, which
 `convert` overwrites when the user names no `--template`. The real bytes live there and
 `src/ksp_cli/templates/Default.KeyStepPro` is a symlink to them, not the other way round — SwiftPM
 copies a symlink *as a symlink* (measured, with both `.copy` and `.process`), which would leave a
 dangling link in the bundle, while Python and hatchling follow one transparently.
+
+### Inside `KSPApp`
+
+**`KSPApp` owns no format logic** — only where a file goes, what it is called and which options the
+window offers. SwiftUI lives in `DropView.swift` and `KSPApp.swift` and nowhere else in the target,
+which is what leaves the rules themselves as plain types a test can call. Every mutable value lives
+on the one `@MainActor` `AppModel`, which is Observation and AppKit, no SwiftUI.
+
+**A new option is a property on `Settings` plus a line in each of its two mappings** onto
+`ConvertRunner.Options` and `ExportRunner.Options`. An option left out of a mapping silently keeps
+the runner's own default — and that is exactly what makes the app on defaults convert what the CLI
+on defaults converts. Conversions run in a `Task.detached`, which is what the `Sendable` `Options`
+and `RunResult` are for; so does the staged view's read of a dropped project, where `DropView`'s
+`.task` asks `AppModel.summarise()`, which asks `Conversion.summarise` for a `SummaryState`.
+
+**`SummaryRunner` is the deliberate exception to `RunResult`.** It returns a `ProjectSummary` and
+renders no text at all. No CLI output to compare means no Python mirror and no parity gate, which
+is the whole reason the preview work is affordable — so **a preview must never add a CLI flag**
+(#115); giving it a subcommand would forfeit the exemption and pay full parity. Its counts say
+*enabled*, never *audible*: they answer the two reasons a note is switched off, not the spec's six
+reasons one might not play.
+
+The preview is a track × pattern grid, and **what it decides lives in `PatternGrid.swift`**, not in
+`DropView`: what a cell prints, which chained cells are joined, and — in `AppLayout` — every
+dimension the window and the grid are both built from. That one enum is why the pattern axis fits.
+The staged pane scrolls vertically only, so a grid too wide for it is *silently clipped*; a test
+holds the grid under a budget subtracted from the window. Change the sidebar and the test says so.
 
 `KSPSwiftCLI` has no `main.swift`. That is a choice, not a requirement: SwiftPM will happily let
 `KSPSwiftCLITests` `@testable import` an executable target that uses top-level code, and the suite

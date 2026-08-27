@@ -26,6 +26,16 @@
             "description": "Block dangerous shell operations before they execute"
           }
         ]
+      },
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|mcp__serena__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/scripts/protect_claude_md.py\"",
+            "description": "CLAUDE.md is readable but not writable by the agent; the denial says where the content belongs instead"
+          }
+        ]
       }
     ],
     "Stop": [
