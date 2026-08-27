@@ -44,6 +44,22 @@ struct Settings: Sendable, Equatable {
         return parts.isEmpty ? nil : "Replacing: " + parts.joined(separator: " · ")
     }
 
+    /// Write every note and trigger at the measured fresh-note velocity instead of the source's.
+    var ignoreVelocity = false
+    /// Leave every pattern straight instead of fitting the source's groove. Import-only, and in the
+    /// import's sense: an export's swing is the delay the pattern already stores.
+    var ignoreSwing = false
+    /// Quantise hard instead of giving each note's leftover to its time shift.
+    var ignoreTimeShift = false
+
+    var ignoredNote: String? {
+        var parts: [String] = []
+        if ignoreVelocity { parts.append("velocity, writing \(MIDIExport.defaultFlatVelocity)") }
+        if ignoreSwing { parts.append("swing, leaving every pattern straight") }
+        if ignoreTimeShift { parts.append("time shift, quantising hard") }
+        return parts.isEmpty ? nil : "Ignoring: " + parts.joined(separator: " · ")
+    }
+
     /// `ConvertRunner`'s `track`/`pattern` are routing, not selection, so the import is untouched.
     func selecting(_ selection: GridSelection) -> Settings {
         var copy = self
@@ -53,9 +69,12 @@ struct Settings: Sendable, Equatable {
 
     func convertOptions(source: URL, output: URL) -> ConvertRunner.Options {
         // `force` stays false: `Naming.vacant` found a free path, so the guard is a backstop.
+        // The three ignores are the runner's own defaults inverted.
         ConvertRunner.Options(
-            paths: [source], output: output, dryRun: dryRun, verbose: verbose,
-            configPath: drumMapConfigPath)
+            paths: [source], output: output, fitSwing: !ignoreSwing,
+            fitTimeShift: !ignoreTimeShift,
+            flatVelocitySpec: ignoreVelocity ? freshVelocitySpec : nil,
+            dryRun: dryRun, verbose: verbose, configPath: drumMapConfigPath)
     }
 
     func exportOptions(source: URL, output: URL) -> ExportRunner.Options {
