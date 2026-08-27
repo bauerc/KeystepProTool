@@ -15,7 +15,7 @@ Guidance for Claude Code working in this repository.
 - Serena's tools for symbol work — but after `EnterWorktree` Serena still writes to the main
   checkout, so use `Edit` inside a worktree.
 - Send wide greps, corpus dumps and spec lookups to the subagents in `.claude/agents/`.
-- On pull requests: read the comments and act on them, leave the replies to Cameron.
+- On pull requests: read the comments and act on them, leave the replies to the User.
 - A Claude plan file committed here is deleted by the task that implements it.
 
 ## What this is
