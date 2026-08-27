@@ -368,6 +368,7 @@ it appears in the Project Browser ready to send to the device.
 | `--midi-track N` | Convert only track N of the source, into the one `--track`/`--pattern` names. One source file only |
 | `--midi-tracks LIST` | Convert only these tracks of the source, as a song — comma-separated numbers and `N-M` ranges (`1,2,5`, `1-3`). Not usable with `--midi-track` or `--route` |
 | `--route SPEC` | Send named source tracks to named device tracks: `source:device` pairs, comma-separated (`3:1,1:2`). Tracks no pair names fill whatever is left |
+| `--segment-bars SPEC` | Break named source tracks into patterns at named bars: `source:bar` pairs, comma-separated (`2:5,2:9,3:3`). Tracks no pair names are still cut at the device's 64 steps. Not usable with `--midi-track` |
 | `--drum-track N` | Write source track N as drums, onto KeyStep Pro track 1 |
 | `--drum-map SPEC` | `chromatic:N` or `custom:a,b,c,…` (default: fitted to the source) |
 | `--flat-velocity VALUE` | Write every note and trigger at one velocity instead of the source's — `fresh` for the measured fresh-note velocity (100), or 1–127 |
@@ -439,7 +440,11 @@ interleave two takes.
   what makes them play as one sequence. Tracks are not padded to a common length: the device loops
   each track's chain on its own, so a one-bar part under an eight-bar one repeats against it,
   which is what the sequencer is for. Nothing is truncated until the 16 pattern slots run out, and
-  then it is reported.
+  then it is reported. `--segment-bars` replaces that cut for the tracks it names —
+  `--segment-bars 2:5,2:9` breaks source track 2 at bars 5 and 9 — and the patterns it makes are
+  chained exactly as a split track's are. A boundary the device cannot play is **refused, naming
+  the rule it breaks**, never quietly moved: a segment past 64 steps, a boundary past the track's
+  own last bar, and more segments than the chain has free patterns each stop the run.
 - **Chords are kept whole.** Notes sharing a step are consecutive entries in the pattern's pool.
   Two firmware ceilings apply: 192 events per pattern, past which the tail is dropped with a
   count, and 16 notes on any one step, which is refused outright — the conversion stops and names

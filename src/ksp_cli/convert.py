@@ -13,6 +13,7 @@ from ksp.midi_export import DEFAULT_FLAT_VELOCITY
 from ksp.midi_import import (
     ImportOptions,
     ImportResult,
+    SegmentError,
     Source,
     TrackPlan,
     check_selections,
@@ -27,6 +28,7 @@ from ksp_cli.midi_tracks_option import MIDI_TRACKS_HELP, resolve_midi_tracks
 from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
 from ksp_cli.route_option import ROUTE_HELP, parse_routes
 from ksp_cli.runner import standalone
+from ksp_cli.segment_bars_option import SEGMENT_BARS_HELP, resolve_segments
 
 PROG = "midi2ksp"
 
@@ -158,6 +160,15 @@ def convert_command(
         str | None,
         typer.Option("--route", metavar="SPEC", rich_help_panel=_SOURCE_PANEL, help=ROUTE_HELP),
     ] = None,
+    segment_bars: Annotated[
+        str | None,
+        typer.Option(
+            "--segment-bars",
+            metavar="SPEC",
+            rich_help_panel=_SOURCE_PANEL,
+            help=SEGMENT_BARS_HELP,
+        ),
+    ] = None,
     drum_map_spec: Annotated[
         str | None,
         typer.Option(
@@ -273,6 +284,7 @@ def convert_command(
             fit_swing=not no_swing_fit,
             fit_time_shift=not no_time_shift,
             routes=parse_routes(route),
+            segments=resolve_segments(midi_track, segment_bars),
             flat_velocity=parse_flat_velocity(flat_velocity),
         )
     except ValueError as exc:
@@ -322,6 +334,8 @@ def convert_command(
                 first_pattern=pattern,
                 first_track=track,
             )
+    except SegmentError as exc:
+        fail(str(exc), prog=PROG, code=2)
     except ValueError as exc:
         fail(str(exc), prog=PROG, code=1)
 

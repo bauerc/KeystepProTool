@@ -584,3 +584,117 @@ def test_midi_track_with_several_sources_is_an_argument_error(
 
     assert main(argv) == 2
     assert "--midi-track reads one file" in capsys.readouterr().err
+
+
+def _chained_steps(project: Path, track: int) -> list[int]:
+    """The step count of each pattern the track's chain runs through, in chain order."""
+    loaded = reader.load(project)
+    chain = next(c for c in loaded.chained_scenes[0].chains if c.track == track)
+    return [loaded.track(track).pattern(number).seq_step_count for number in chain.patterns]
+
+
+def test_segment_bars_cuts_a_source_track_where_it_is_asked_to(
+    m6_song: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Source track 3 is four bars, which the automatic split leaves whole."""
+    destination = tmp_path / "out.KeyStepPro"
+    argv = [str(m6_song), "-o", str(destination), "--segment-bars", "3:3"]
+
+    assert main(argv) == 0
+    assert _chained_steps(destination, 1) == [32, 32]
+    captured = capsys.readouterr()
+    assert "track 1 was cut at bar(s) 3 across patterns 1-2 and chained" in captured.err
+    assert "track 1: 64 note(s), patterns 1-2 (32, 32 steps)" in captured.out
+
+
+def test_segment_bars_gathers_the_pairs_naming_one_track(m6_song: Path, tmp_path: Path) -> None:
+    destination = tmp_path / "out.KeyStepPro"
+    argv = [str(m6_song), "-o", str(destination), "--segment-bars", "3:2,3:3"]
+
+    assert main(argv) == 0
+    assert _chained_steps(destination, 1) == [16, 16, 32]
+
+
+def test_segment_bars_leaves_the_tracks_it_does_not_name_alone(
+    m6_song: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Source track 6 still runs past 64 steps and still says so in the split's words."""
+    destination = tmp_path / "out.KeyStepPro"
+    argv = [str(m6_song), "-o", str(destination), "--segment-bars", "3:3"]
+
+    assert main(argv) == 0
+    assert _chained_steps(destination, 4) == [64, 64]
+    assert "track 4 runs 128 steps, past the device's 64" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("spec", "reason"),
+    [
+        ("5:4", "segment bar 4 of track 3 is past the track's 2 bar(s)"),
+        ("6:2", "makes a pattern of 112 steps from bar 2, past the device's 64"),
+        ("9:2", "track 9 of the source carries nothing to segment"),
+    ],
+)
+def test_a_boundary_the_song_refuses_is_an_argument_error(
+    spec: str, reason: str, m6_song: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A boundary is an argument, so it leaves by the usage door and not the conversion's."""
+    argv = [str(m6_song), "-o", str(tmp_path / "out.KeyStepPro"), "--segment-bars", spec]
+
+    assert main(argv) == 2
+    assert reason in capsys.readouterr().err
+
+
+def test_more_segments_than_the_chain_holds_is_an_argument_error(
+    m6_song: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = [
+        str(m6_song),
+        "-o",
+        str(tmp_path / "out.KeyStepPro"),
+        "--midi-tracks",
+        "6",
+        "--pattern",
+        "12",
+        "--segment-bars",
+        "6:2,6:3,6:4,6:5,6:6,6:7,6:8",
+    ]
+
+    assert main(argv) == 2
+    assert "makes 8 patterns but only 5 are free from pattern 12" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("spec", "reason"),
+    [
+        ("bad", "--segment-bars: 'bad' is not a source:bar pair"),
+        ("0:3", "segment counts source tracks from 1, so 0 is not one"),
+        ("3:1", "segment bar 1 of source track 3 is not a boundary"),
+        ("3:5,3:3", "segment bars of source track 3 must ascend, and 3 does not follow 5"),
+    ],
+)
+def test_a_malformed_segmentation_is_an_argument_error(
+    spec: str, reason: str, m6_song: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = [str(m6_song), "-o", str(tmp_path / "out.KeyStepPro"), "--segment-bars", spec]
+
+    assert main(argv) == 2
+    assert reason in capsys.readouterr().err
+
+
+def test_segment_bars_with_a_single_target_is_an_argument_error(
+    m6_song: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--midi-track writes the one pattern the target names, which no boundary can cut."""
+    argv = [
+        str(m6_song),
+        "-o",
+        str(tmp_path / "out.KeyStepPro"),
+        "--midi-track",
+        "3",
+        "--segment-bars",
+        "3:2",
+    ]
+
+    assert main(argv) == 2
+    assert "--midi-track and --segment-bars contradict each other" in capsys.readouterr().err
