@@ -107,11 +107,14 @@ so anything in `KSPSwiftCLI` is reachable only from the CLI, and the app has to 
 `RunResult`: the rendered `stdout`/`stderr`/`code` the CLI prints through its single `emit(_:)`,
 plus the same run structurally as `diagnostics` and `destinations`, which is what the app reads
 instead of re-parsing the text. **`SummaryRunner` is the exception, and deliberately so**: it
-returns a `ProjectSummary` and renders no text at all, which is what keeps a preview off the parity
-contract — no CLI output to compare means no Python mirror. Giving it a subcommand would forfeit
-that and pay full parity, so a preview issue must not add a flag (#115). Its counts say _enabled_,
-never _audible_: they answer the two reasons a note is switched off, not the spec's six reasons one
-might not play.
+returns a `ProjectSummary` for a project and a `SongSummary` for a MIDI file, and renders no text at
+all, which is what keeps a preview off the parity contract — no CLI output to compare means no
+Python mirror. Giving it a subcommand would forfeit that and pay full parity, so a preview issue
+must not add a flag (#115). Its project counts say _enabled_, never _audible_: they answer the two
+reasons a note is switched off, not the spec's six reasons one might not play. A `SongSummary` is
+one row per source track of the file, numbered as `--midi-tracks` numbers them, so a track holding
+only a tempo still has a row; a type 0 track carrying several channels stays one row, and its
+channel list is what says the import will make a device track of each.
 
 **`KSPApp` owns no format logic** — only where a file goes, what it is called and which options the
 window offers. `Destination.swift`, `Folders.swift`, `Conversion.swift`, `Settings.swift` and
