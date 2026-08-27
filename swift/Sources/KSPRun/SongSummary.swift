@@ -39,10 +39,15 @@ public struct SongSummary: Sendable, Hashable {
             guard let number = clip.sourceTracks.first else { continue }
             clips[number, default: []].append(clip)
         }
+        // `apply`'s own `drumSource`, read the same way off the same clips, so the preview cannot
+        // name a drum track the import would not. A clip is one channel of one track, which is why
+        // a track carrying channel 10 among others still gives up its channel 10 part to this.
+        let drumSource = song.clips.first { $0.isPercussion }?.sourceTracks.first
         let tracks = midi.tracks.indices.map { index in
             SourceTrackSummary(
                 number: index + 1, name: trackName(midi.tracks[index]),
-                clips: clips[index + 1] ?? [], ticksPerBar: ticksPerBar)
+                clips: clips[index + 1] ?? [], ticksPerBar: ticksPerBar,
+                isDrumTrack: index + 1 == drumSource)
         }
         self.init(
             sourceName: sourceName, tempoBPM: song.tempoBPM, beatsPerBar: song.beatsPerBar,
@@ -83,9 +88,12 @@ public struct SourceTrackSummary: Sendable, Hashable {
     /// Not a promise of a drum track: the device has one, so a second percussion track is
     /// imported melodically, and `--drum-track` names a track of its own regardless.
     public let isPercussion: Bool
+    /// The one the import would take for the drum track, left to `--drum-track` to override.
+    public let isDrumTrack: Bool
 
     public init(
-        number: Int, name: String, channels: [Int], noteCount: Int, bars: Int, isPercussion: Bool
+        number: Int, name: String, channels: [Int], noteCount: Int, bars: Int, isPercussion: Bool,
+        isDrumTrack: Bool = false
     ) {
         self.number = number
         self.name = name
@@ -93,12 +101,13 @@ public struct SourceTrackSummary: Sendable, Hashable {
         self.noteCount = noteCount
         self.bars = bars
         self.isPercussion = isPercussion
+        self.isDrumTrack = isDrumTrack
     }
 
     public var isEmpty: Bool { noteCount == 0 }
 
     /// The clips one track of the file produced: one per channel, and none where it holds no note.
-    init(number: Int, name: String, clips: [Clip], ticksPerBar: Int) {
+    init(number: Int, name: String, clips: [Clip], ticksPerBar: Int, isDrumTrack: Bool) {
         var channels: Set<Int> = []
         var noteCount = 0
         // The file's own length rather than the placement's: a preview says what was dropped, and
@@ -114,7 +123,8 @@ public struct SourceTrackSummary: Sendable, Hashable {
         self.init(
             number: number, name: name, channels: channels.sorted(), noteCount: noteCount,
             bars: noteCount == 0 ? 0 : max(1, Arithmetic.ceilDiv(furthest, ticksPerBar)),
-            isPercussion: channels.contains(MIDIImport.drumChannel + 1))
+            isPercussion: channels.contains(MIDIImport.drumChannel + 1),
+            isDrumTrack: isDrumTrack)
     }
 }
 

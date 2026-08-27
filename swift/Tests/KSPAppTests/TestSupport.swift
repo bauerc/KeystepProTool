@@ -72,3 +72,32 @@ func syntheticSummary(
                 })
         })
 }
+
+/// Percussion is derived rather than passed: every caller means it as "carries channel 10".
+/// ``isDrumTrack`` is not, because the reader decides it over channels rather than tracks.
+func sourceTrack(
+    _ number: Int, name: String = "", channels: [Int] = [1], noteCount: Int = 8, bars: Int = 2,
+    isDrumTrack: Bool = false
+) -> SourceTrackSummary {
+    let silent = noteCount == 0
+    return SourceTrackSummary(
+        number: number, name: name, channels: silent ? [] : channels, noteCount: noteCount,
+        bars: silent ? 0 : bars, isPercussion: !silent && channels.contains(10),
+        isDrumTrack: isDrumTrack)
+}
+
+func syntheticSong(
+    tempoBPM: Double = 120, beatsPerBar: Double = 4, tracks: [SourceTrackSummary],
+    diagnostics: Report = Report()
+) -> SongSummary {
+    SongSummary(
+        sourceName: "synthetic.mid", tempoBPM: tempoBPM, beatsPerBar: beatsPerBar,
+        ticksPerBeat: 480, tracks: tracks, diagnostics: diagnostics)
+}
+
+func summariseSong(_ name: String) throws -> SongSummary {
+    let result = SummaryRunner.song(
+        SummaryRunner.Options(path: RepoData.projectFiles.appending(path: name)))
+    #expect(result.message == nil)
+    return try #require(result.summary)
+}

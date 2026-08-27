@@ -19,7 +19,7 @@ final class AppModel {
         var job: Job
         /// What a dry run said, if one has been made since the name last changed.
         var preview: Outcome?
-        var summary: SummaryState = .absent
+        var summary: SummaryState = .loading
         var selection = GridSelection()
         /// Identity, not path: dropping the same file again is a new drop and needs a new read.
         let id = UUID()
@@ -96,17 +96,18 @@ final class AppModel {
             return
         }
         name = Naming.stem(of: url)
-        phase = .staged(Staged(job: job, summary: job.isProject ? .loading : .absent))
+        phase = .staged(Staged(job: job))
     }
 
     func summarise() async {
-        guard let staged, staged.job.isProject, staged.summary == .loading else { return }
-        let state = await Conversion.summarise(staged.job.source)
+        guard let staged, staged.summary == .loading else { return }
+        let state = await Conversion.summarise(staged.job)
 
         // A late answer must not reopen a drop that has since been cancelled or replaced.
         guard case .staged(var current) = phase, current.id == staged.id else { return }
         current.summary = state
-        if case .ready(let summary) = state { current.selection = GridSelection(summary) }
+        // A song has no grid, so it leaves the selection alone.
+        if case .project(let summary) = state { current.selection = GridSelection(summary) }
         phase = .staged(current)
     }
 
@@ -132,7 +133,7 @@ final class AppModel {
     }
 
     var blockReason: String? {
-        guard let staged, case .ready = staged.summary else { return nil }
+        guard let staged, case .project = staged.summary else { return nil }
         return staged.selection.blockReason
     }
 

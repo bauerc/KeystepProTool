@@ -20,6 +20,14 @@ enum AppLayout {
     static let cellSpacing: CGFloat = 3
     static let cellHeight: CGFloat = 17
 
+    /// The source-track list a dropped MIDI file previews as, column by column.
+    static let trackNumberWidth: CGFloat = 22
+    static let trackNameWidth: CGFloat = 150
+    static let trackBadgeWidth: CGFloat = 78
+    static let trackChannelsWidth: CGFloat = 70
+    static let trackCountsWidth: CGFloat = 130
+    static let trackColumnGap: CGFloat = 8
+
     static var contentWidth: CGFloat {
         windowWidth - sidebarWidth - dividerWidth - 2 * mainPadding - scrollerAllowance
     }
@@ -29,6 +37,14 @@ enum AppLayout {
 
     static var gridWidth: CGFloat {
         gridOrigin + CGFloat(columnCount) * cellWidth + CGFloat(columnCount - 1) * cellSpacing
+    }
+
+    static var trackListWidth: CGFloat {
+        let columns = [
+            trackNumberWidth, trackNameWidth, trackBadgeWidth, trackChannelsWidth,
+            trackCountsWidth,
+        ]
+        return columns.reduce(0, +) + CGFloat(columns.count - 1) * trackColumnGap
     }
 
     /// The leading edge of a column, 0-based, in its row's own coordinates.

@@ -59,11 +59,11 @@ struct Outcome: Sendable, Equatable {
     func findings(verbose: Bool) -> [String] { verbose ? all : collapsed }
 }
 
-/// ``absent`` is a MIDI drop -- no project to read, which is not a project that read as empty.
+/// What a staged file turned out to hold. Both drop kinds are read; only the shape differs.
 enum SummaryState: Equatable {
-    case absent
     case loading
-    case ready(ProjectSummary)
+    case project(ProjectSummary)
+    case song(SongSummary)
     case failed(String)
 }
 
@@ -124,13 +124,23 @@ enum Conversion {
             dryRun: settings.dryRun, folder: plan.intoFolder ? target : nil)
     }
 
-    static func summarise(_ source: URL) async -> SummaryState {
-        let result = await Task.detached(priority: .userInitiated) {
-            SummaryRunner.run(SummaryRunner.Options(path: source))
-        }.value
-
-        if let summary = result.summary { return .ready(summary) }
-        return .failed(result.message ?? "That project could not be read.")
+    /// Detached for the reason a conversion is: the parse is the file's whole size and the window
+    /// must keep drawing. The job, not the path, says which runner reads it.
+    static func summarise(_ job: Job) async -> SummaryState {
+        switch job {
+        case .toMIDI(let source):
+            let result = await Task.detached(priority: .userInitiated) {
+                SummaryRunner.run(SummaryRunner.Options(path: source))
+            }.value
+            if let summary = result.summary { return .project(summary) }
+            return .failed(result.message ?? "That project could not be read.")
+        case .toProject(let source):
+            let result = await Task.detached(priority: .userInitiated) {
+                SummaryRunner.song(SummaryRunner.Options(path: source))
+            }.value
+            if let summary = result.summary { return .song(summary) }
+            return .failed(result.message ?? "That MIDI file could not be read.")
+        }
     }
 
     static func outcome(

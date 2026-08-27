@@ -71,6 +71,17 @@ hovering any slot says more. Those counts are *enabled*, not audible: a note on 
 or past the last step is not counted, and the other reasons one might not sound are the format
 spec's. A project that will not read says so there rather than showing an empty list.
 
+**What is in a MIDI file.** A dropped `.mid` is read the same way, and the staged view lists its
+source tracks in the file's own order — the number `--midi-tracks` would call each one, its name,
+its channels, and how many notes it holds over how many bars. A track holding nothing is still
+listed, dimmed and reading *no notes*, so a file whose parts are not where you expected them says
+so before you convert rather than after. The track the import will take for drums is marked
+**Drums**; a second channel 10 track is marked **Percussion** instead, because the device has one
+drum track and the rest come in melodically. Under the list sits what the read found — a track
+carrying several channels becomes a device track per channel, and that is worth knowing first.
+Hovering a track says what becomes of it. A file that will not read says so rather than showing an
+empty list.
+
 **Ticking what is exported.** Every slot starts ticked, and the export follows the ticks. Click a
 slot to leave that one out, a track name to leave out the whole track, a slot number to leave that
 slot out on every track. Any set of cells will do — a slot dropped on one track alone is kept on the
