@@ -303,14 +303,17 @@ def test_a_bad_template_is_a_runtime_error(
     assert "template" in capsys.readouterr().err
 
 
+def note_track(pitch: int) -> mido.MidiTrack:
+    track = mido.MidiTrack()
+    track.append(mido.Message("note_on", note=pitch, velocity=100, time=0))
+    track.append(mido.Message("note_off", note=pitch, velocity=0, time=480))
+    return track
+
+
 def two_tracks() -> mido.MidiFile:
     """A type 1 file whose note-bearing tracks are 1 and 2."""
     midi = mido.MidiFile(type=1)
-    for pitch in (60, 64):
-        track = mido.MidiTrack()
-        track.append(mido.Message("note_on", note=pitch, velocity=100, time=0))
-        track.append(mido.Message("note_off", note=pitch, velocity=0, time=480))
-        midi.tracks.append(track)
+    midi.tracks.extend(note_track(pitch) for pitch in (60, 64))
     return midi
 
 
@@ -459,10 +462,7 @@ def test_midi_tracks_with_a_route_is_an_argument_error(
 def one_track(pitch: int) -> mido.MidiFile:
     """A file whose single note-bearing track holds one note."""
     midi = mido.MidiFile(type=1)
-    track = mido.MidiTrack()
-    track.append(mido.Message("note_on", note=pitch, velocity=100, time=0))
-    track.append(mido.Message("note_off", note=pitch, velocity=0, time=480))
-    midi.tracks.append(track)
+    midi.tracks.append(note_track(pitch))
     return midi
 
 
