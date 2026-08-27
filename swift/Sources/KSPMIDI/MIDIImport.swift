@@ -862,14 +862,15 @@ extension MIDIImport {
             swingPercent: placement.swingPercent, diagnostics: collector.report())
     }
 
-    /// Lengths are per track, never padded: the device loops each track's chain on its own.
     /// Explicit bar boundaries into one `(offset, steps)` pair per pattern.
     /// Refused rather than adjusted: a boundary the device cannot play is not a boundary.
     static func cutAtBars(
         _ bars: [Int], total: Int, stepsPerBar: Int, track: Int, firstPattern: Int, available: Int
     ) throws -> [(offset: Int, steps: Int)] {
         let length = max(1, Arithmetic.floorDiv(total, stepsPerBar))
-        for bar in bars where (bar - 1) * stepsPerBar >= total {
+        // Counted, not multiplied out: an outsized bar would trap on the multiplication,
+        // where Python's unbounded ints simply refuse it.
+        for bar in bars where bar - 1 >= length {
             throw KSPError.value(
                 "segment bar \(bar) of track \(track) is past the track's \(length) bar(s); a "
                     + "boundary is where a pattern begins, so it has to fall inside the track")
@@ -894,6 +895,7 @@ extension MIDIImport {
         return cuts
     }
 
+    /// Lengths are per track, never padded: the device loops each track's chain on its own.
     public static func planTrack(
         _ clip: Clip, track: Int, collector: Collector, options: ImportOptions? = nil,
         isDrum: Bool = false, drumMap: DrumMap? = nil, firstPattern: Int = 1,
@@ -1104,9 +1106,9 @@ extension MIDIImport {
         for entry in options.segments
         where !song.clips.contains(where: { $0.sourceTracks == [entry.source] }) {
             throw KSPError.value(
-                "track \(entry.source) of the source holds no notes; a segmentation counts "
-                    + "every track of the file from 1, including ones that carry only tempo or "
-                    + "a name")
+                "track \(entry.source) of the source carries nothing to segment; a "
+                    + "segmentation names a source track the conversion reads, counting every "
+                    + "track of the file from 1")
         }
 
         let assigned = try assign(song, options, collector, firstTrack)
@@ -1123,7 +1125,7 @@ extension MIDIImport {
         }
 
         let segments = Dictionary(
-            options.segments.map { ($0.source, $0.bars) }, uniquingKeysWith: { first, _ in first })
+            options.segments.map { ($0.source, $0.bars) }, uniquingKeysWith: { _, last in last })
         let stepsPerBar = song.stepsPerBar(options.stepsPerBeat)
         let ticksPerStep = Double(song.ticksPerBeat) / Double(options.stepsPerBeat)
         let origin = anchor(assigned.map(\.clip), ticksPerStep)

@@ -637,6 +637,18 @@ def test_a_boundary_past_the_tracks_content_is_refused(load_sample: Loader) -> N
     )
 
 
+def test_a_bar_too_large_to_multiply_out_is_refused_not_crashed(load_sample: Loader) -> None:
+    """The Swift port traps where Python widens, so the bar is counted, never multiplied."""
+    events = [(step * TICKS_PER_STEP, 60, 100) for step in range(48)]
+    options = ImportOptions(segments=(TrackSegments(source=1, bars=(2**62,)),))
+
+    with pytest.raises(ValueError) as caught:
+        midi_import.convert_song(
+            song_of([events]), load_sample("Default.KeyStepPro"), options=options
+        )
+    assert "is past the track's 3 bar(s)" in str(caught.value)
+
+
 def test_segments_that_outrun_the_free_patterns_are_refused(load_sample: Loader) -> None:
     """Three patterns cannot be chained from pattern 15; the automatic split drops a
     tail here, but a boundary that was asked for is refused instead."""
@@ -667,7 +679,11 @@ def test_illegal_boundaries_are_refused_before_a_file_is_read(
     assert str(caught.value) == message
 
 
-def test_a_segmentation_naming_a_silent_source_track_is_refused(load_sample: Loader) -> None:
+def test_a_segmentation_naming_a_track_the_run_never_reads_is_refused(
+    load_sample: Loader,
+) -> None:
+    """Silent, deselected or past the end of the file all land here, so the wording
+    says what the conversion saw rather than guessing why."""
     events = [(step * TICKS_PER_STEP, 60, 100) for step in range(48)]
     options = ImportOptions(segments=(TrackSegments(source=3, bars=(2,)),))
 
@@ -676,9 +692,27 @@ def test_a_segmentation_naming_a_silent_source_track_is_refused(load_sample: Loa
             song_of([events]), load_sample("Default.KeyStepPro"), options=options
         )
     assert str(caught.value) == (
-        "track 3 of the source holds no notes; a segmentation counts every track of the file "
-        "from 1, including ones that carry only tempo or a name"
+        "track 3 of the source carries nothing to segment; a segmentation names a source track "
+        "the conversion reads, counting every track of the file from 1"
     )
+
+
+def test_a_source_track_split_by_channel_is_segmented_on_every_part(
+    load_sample: Loader,
+) -> None:
+    """The option names a source track, and both channels of one are that track."""
+    midi = mixed_of(
+        [(step * TICKS_PER_STEP, 60, 0) for step in range(48)]
+        + [(step * TICKS_PER_STEP, 72, 1) for step in range(48)]
+    )
+    options = ImportOptions(segments=(TrackSegments(source=1, bars=(2,)),))
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    assert [[p.step_count for p in plan.placements] for plan in result.plan.tracks] == [
+        [16, 32],
+        [16, 32],
+    ]
 
 
 def test_a_track_no_segmentation_names_is_still_split_automatically(

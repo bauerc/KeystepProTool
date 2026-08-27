@@ -863,7 +863,9 @@ def _cut_at_bars(
     Refused rather than adjusted: a boundary the device cannot play is not a boundary."""
     length = max(1, total // steps_per_bar)
     for bar in bars:
-        if (bar - 1) * steps_per_bar >= total:
+        # Counted, not multiplied out: Swift traps on the overflow an outsized bar would
+        # cause there, and the two ports have to refuse the same way.
+        if bar - 1 >= length:
             raise ValueError(
                 f"segment bar {bar} of track {track} is past the track's {length} bar(s); a "
                 "boundary is where a pattern begins, so it has to fall inside the track"
@@ -1132,8 +1134,9 @@ def plan_song(
     for entry in options.segments:
         if not any(clip.source_tracks == (entry.source,) for clip in song.clips):
             raise ValueError(
-                f"track {entry.source} of the source holds no notes; a segmentation counts every "
-                "track of the file from 1, including ones that carry only tempo or a name"
+                f"track {entry.source} of the source carries nothing to segment; a "
+                "segmentation names a source track the conversion reads, counting every track "
+                "of the file from 1"
             )
 
     assigned = _assign(song, options, collector, first_track)

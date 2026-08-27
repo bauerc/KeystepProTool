@@ -650,6 +650,17 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
                 + "a pattern begins, so it has to fall inside the track")
     }
 
+    /// This port traps where Python widens, so the bar is counted, never multiplied out.
+    @Test func abarTooLargeToMultiplyOutIsRefusedNotCrashed() throws {
+        let events = (0..<48).map { (tick: $0 * ticksPerStep, pitch: 60, velocity: 100) }
+        let options = try ImportOptions(
+            segments: [TrackSegments(source: 1, bars: [Int.max])])
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try MIDIImport.convertSong(songOf([events]), template(), options: options)
+        }
+        #expect(thrown?.description.contains("is past the track's 3 bar(s)") == true)
+    }
+
     /// The automatic split drops a tail here; a boundary that was asked for is refused instead.
     @Test func segmentsThatOutrunTheFreePatternsAreRefused() throws {
         let events = (0..<48).map { (tick: $0 * ticksPerStep, pitch: 60, velocity: 100) }
@@ -698,7 +709,9 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(thrown?.description == message)
     }
 
-    @Test func aSegmentationNamingASilentSourceTrackIsRefused() throws {
+    /// Silent, deselected or past the end of the file all land here, so the wording says
+    /// what the conversion saw rather than guessing why.
+    @Test func asegmentationNamingATrackTheRunNeverReadsIsRefused() throws {
         let events = (0..<48).map { (tick: $0 * ticksPerStep, pitch: 60, velocity: 100) }
         let options = try ImportOptions(segments: [TrackSegments(source: 3, bars: [2])])
         let thrown = #expect(throws: KSPError.self) {
@@ -706,8 +719,21 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         }
         #expect(
             thrown?.description
-                == "track 3 of the source holds no notes; a segmentation counts every track of "
-                + "the file from 1, including ones that carry only tempo or a name")
+                == "track 3 of the source carries nothing to segment; a segmentation names a "
+                + "source track the conversion reads, counting every track of the file from 1")
+    }
+
+    /// The option names a source track, and both channels of one are that track.
+    @Test func asourceTrackSplitByChannelIsSegmentedOnEveryPart() throws {
+        let events =
+            (0..<48).map { (tick: $0 * ticksPerStep, pitch: 60, channel: 0) }
+            + (0..<48).map { (tick: $0 * ticksPerStep, pitch: 72, channel: 1) }
+        let options = try ImportOptions(segments: [TrackSegments(source: 1, bars: [2])])
+
+        let result = try MIDIImport.convertSong(mixedOf(events), template(), options: options)
+
+        #expect(
+            result.plan.tracks.map { $0.placements.map(\.stepCount) } == [[16, 32], [16, 32]])
     }
 
     /// Absent boundaries the automatic split is untouched, track by track.
