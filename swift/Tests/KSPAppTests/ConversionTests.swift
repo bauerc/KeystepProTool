@@ -410,9 +410,9 @@ import Testing
 @Suite struct ConversionSummaryTests {
     @Test func summarisingAProjectReportsItsTracksAndPatterns() async throws {
         let state = await Conversion.summarise(
-            RepoData.projectFiles.appending(path: "project_5.KeyStepPro"))
+            .toMIDI(RepoData.projectFiles.appending(path: "project_5.KeyStepPro")))
 
-        guard case .ready(let summary) = state else {
+        guard case .project(let summary) = state else {
             Issue.record("a readable project should have been summarised, got \(state)")
             return
         }
@@ -424,9 +424,9 @@ import Testing
 
     @Test func anemptyProjectSummarisesAsEmptyRatherThanFailing() async throws {
         let state = await Conversion.summarise(
-            RepoData.projectFiles.appending(path: "user_empty_project.KeyStepPro"))
+            .toMIDI(RepoData.projectFiles.appending(path: "user_empty_project.KeyStepPro")))
 
-        guard case .ready(let summary) = state else {
+        guard case .project(let summary) = state else {
             Issue.record("an empty project should still have been summarised, got \(state)")
             return
         }
@@ -440,7 +440,7 @@ import Testing
         let broken = directory.appending(path: "broken.KeyStepPro")
         try Data("not a project".utf8).write(to: broken)
 
-        let state = await Conversion.summarise(broken)
+        let state = await Conversion.summarise(.toMIDI(broken))
 
         guard case .failed(let message) = state else {
             Issue.record("an unreadable project should have failed, got \(state)")
@@ -448,5 +448,46 @@ import Testing
         }
         #expect(message.contains("broken.KeyStepPro"))
         #expect(!message.hasPrefix("ksp-swift-cli"))
+    }
+
+    @Test func summarisingAMIDIFileReportsItsSourceTracks() async throws {
+        let state = await Conversion.summarise(
+            .toProject(RepoData.projectFiles.appending(path: "test_file.mid")))
+
+        guard case .song(let summary) = state else {
+            Issue.record("a readable MIDI file should have been summarised, got \(state)")
+            return
+        }
+        #expect(summary.sourceName == "test_file.mid")
+        #expect(!summary.tracks.isEmpty)
+        #expect(!summary.isEmpty)
+    }
+
+    @Test func anunreadableMIDIFileComesBackAsAFailureNamingTheFile() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let broken = directory.appending(path: "broken.mid")
+        try Data("not a MIDI file".utf8).write(to: broken)
+
+        let state = await Conversion.summarise(.toProject(broken))
+
+        guard case .failed(let message) = state else {
+            Issue.record("an unreadable MIDI file should have failed, got \(state)")
+            return
+        }
+        #expect(message.contains("broken.mid"))
+        #expect(!message.hasPrefix("ksp-swift-cli"))
+    }
+
+    @Test func amissingMIDIFileFailsRatherThanSummarisingNothing() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let state = await Conversion.summarise(.toProject(directory.appending(path: "gone.mid")))
+
+        guard case .failed = state else {
+            Issue.record("a missing MIDI file should have failed, got \(state)")
+            return
+        }
     }
 }

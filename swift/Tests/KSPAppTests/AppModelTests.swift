@@ -336,6 +336,10 @@ import Testing
         RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
     }
 
+    private var midiFixture: URL {
+        RepoData.projectFiles.appending(path: "m6-test-file.mid")
+    }
+
     @Test func adroppedProjectIsStagedLoadingAndThenSummarised() async throws {
         let model = model()
 
@@ -345,7 +349,7 @@ import Testing
 
         await model.summarise()
 
-        guard case .ready(let summary) = try #require(model.staged).summary else {
+        guard case .project(let summary) = try #require(model.staged).summary else {
             Issue.record("the staged project should have been summarised")
             return
         }
@@ -353,13 +357,63 @@ import Testing
         #expect(summary.tracks.count == 4)
     }
 
-    @Test func adroppedMIDIFileHasNothingToSummarise() async throws {
+    @Test func adroppedMIDIFileIsStagedLoadingAndThenSummarised() async throws {
         let model = model()
 
-        model.accept(RepoData.projectFiles.appending(path: "m6-test-file.mid"))
+        model.accept(midiFixture)
+
+        #expect(try #require(model.staged).summary == .loading)
+
         await model.summarise()
 
-        #expect(try #require(model.staged).summary == .absent)
+        guard case .song(let summary) = try #require(model.staged).summary else {
+            Issue.record("the staged MIDI file should have been summarised")
+            return
+        }
+        #expect(summary.sourceName == "m6-test-file.mid")
+        #expect(!summary.tracks.isEmpty)
+    }
+
+    /// A song has no grid to tick, so nothing it reads may stop Convert.
+    @Test func asummarisedSongBlocksNothing() async throws {
+        let model = model()
+        model.accept(midiFixture)
+
+        await model.summarise()
+
+        #expect(model.blockReason == nil)
+    }
+
+    @Test func anunreadableMIDIFileStaysStagedAndShowsTheFailure() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let broken = directory.appending(path: "broken.mid")
+        try Data("not a MIDI file".utf8).write(to: broken)
+        let model = model()
+
+        model.accept(broken)
+        await model.summarise()
+
+        guard case .failed(let message) = try #require(model.staged).summary else {
+            Issue.record("an unreadable MIDI file should have shown its failure")
+            return
+        }
+        #expect(message.contains("broken.mid"))
+    }
+
+    @Test func asongArrivingAfterACancelIsDropped() async throws {
+        let model = model()
+        model.accept(midiFixture)
+
+        let reading = Task { await model.summarise() }
+        await Task.yield()
+        model.cancel()
+        await reading.value
+
+        guard case .idle = model.phase else {
+            Issue.record("a cancelled drop should have stayed cancelled")
+            return
+        }
     }
 
     @Test func anunreadableProjectStaysStagedAndShowsTheFailure() async throws {
@@ -409,7 +463,7 @@ import Testing
 
         await model.summarise()
 
-        guard case .ready = try #require(model.staged).summary else {
+        guard case .project = try #require(model.staged).summary else {
             Issue.record("the second drop should have been read too")
             return
         }

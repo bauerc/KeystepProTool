@@ -256,10 +256,8 @@ struct DropView: View {
                         Text(note).font(.caption).foregroundStyle(.secondary)
                     }
 
-                    if staged.summary != .absent {
-                        Divider()
-                        summary(staged.summary, selection: staged.selection)
-                    }
+                    Divider()
+                    summary(staged)
 
                     if let excluded = staged.selection.exclusionNote {
                         Text(excluded).font(.caption).foregroundStyle(.secondary)
@@ -302,21 +300,84 @@ struct DropView: View {
     }
 
     @ViewBuilder
-    private func summary(_ state: SummaryState, selection: GridSelection) -> some View {
-        switch state {
-        case .absent:
-            EmptyView()
+    private func summary(_ staged: AppModel.Staged) -> some View {
+        switch staged.summary {
         case .loading:
-            ProgressView("Reading the project…").controlSize(.small)
+            ProgressView(staged.job.isProject ? "Reading the project…" : "Reading the MIDI file…")
+                .controlSize(.small)
         case .failed(let message):
             Label(message, systemImage: "exclamationmark.triangle")
                 .font(.caption).foregroundStyle(.orange).textSelection(.enabled)
-        case .ready(let summary):
+        case .project(let summary):
             grid(
-                PatternGrid(summary), selection: selection,
+                PatternGrid(summary), selection: staged.selection,
                 length: ExportLength(
-                    summary, selection: selection, repeatCount: model.settings.repeatCount,
+                    summary, selection: staged.selection,
+                    repeatCount: model.settings.repeatCount,
                     isSplit: model.settings.splitPerPattern))
+        case .song(let summary):
+            trackList(SourceTrackList(summary))
+        }
+    }
+
+    /// Unscrolled, like ``grid(_:selection:length:)``: the staged view already scrolls.
+    private func trackList(_ list: SourceTrackList) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(list.header).font(.caption).foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(list.rows, id: \.number) { trackRow($0) }
+            }
+
+            if let note = list.note {
+                Text(note).font(.caption).foregroundStyle(.secondary)
+            }
+
+            Text(SourceTrackList.legend).font(.caption2).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// One source track. Dimmed where it holds nothing -- not struck through, which in the grid
+    /// beside it means unticked, and nothing here is tickable yet.
+    private func trackRow(_ row: SourceTrackList.Row) -> some View {
+        HStack(spacing: AppLayout.trackColumnGap) {
+            Text("\(row.number)")
+                .font(.caption).monospacedDigit().foregroundStyle(.tertiary)
+                .frame(width: AppLayout.trackNumberWidth, alignment: .trailing)
+            Text(row.name)
+                .font(.caption).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
+                .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.secondary : .primary)
+                .frame(width: AppLayout.trackNameWidth, alignment: .leading)
+            badge(row.badge)
+                .frame(width: AppLayout.trackBadgeWidth, alignment: .leading)
+            Text(row.channels)
+                .font(.caption).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                .foregroundStyle(.secondary)
+                .frame(width: AppLayout.trackChannelsWidth, alignment: .leading)
+            Text(row.counts)
+                .font(.caption).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.tertiary : .secondary)
+                .frame(width: AppLayout.trackCountsWidth, alignment: .leading)
+        }
+        .opacity(row.isEmpty ? 0.6 : 1)
+        .contentShape(Rectangle())
+        .help(row.detail)
+    }
+
+    @ViewBuilder
+    private func badge(_ badge: SourceTrackList.Badge?) -> some View {
+        if let badge {
+            Text(badge.text)
+                .font(.caption2).lineLimit(1)
+                .padding(.horizontal, 6).padding(.vertical, 1)
+                .background(
+                    Capsule().fill(
+                        badge == .drums
+                            ? Color.accentColor.opacity(0.22) : Color.secondary.opacity(0.12))
+                )
+        } else {
+            Color.clear.frame(height: 1)
         }
     }
 
