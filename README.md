@@ -77,10 +77,22 @@ its channels, and how many notes it holds over how many bars. A track holding no
 listed, dimmed and reading *no notes*, so a file whose parts are not where you expected them says
 so before you convert rather than after. The track the import will take for drums is marked
 **Drums**; a second channel 10 track is marked **Percussion** instead, because the device has one
-drum track and the rest come in melodically. Under the list sits what the read found — a track
+drum track and the rest come in melodically. The track carrying the file's tempo and time
+signature but no notes — track 1 of anything this tool exported — is marked **Tempo**, so a
+round-tripped file does not read as though a part went missing. Under the list sits what the read
+found — a track
 carrying several channels becomes a device track per channel, and that is worth knowing first.
 Hovering a track says what becomes of it. A file that will not read says so rather than showing an
 empty list.
+
+**Ticking what is imported.** The device has four tracks and a MIDI file may hold more, so each
+source track carries a checkbox and the first four holding notes start ticked — the same set
+`--midi-tracks 1,2,3,4` reads, and that is the option the app hands the conversion, not a mechanism
+of its own. Under the list a line says where you stand: "5 of 6 source tracks ticked; the device has
+4 tracks." Tick a fifth and it is flagged rather than refused — "That needs 5 device tracks, so 1
+would be dropped" — because what competes for those four is a channel, not a track, so a track
+carrying two of them asks for two and a track holding nothing asks for none. Untick everything and
+Convert says so rather than writing an empty project, and the result names what was left out.
 
 **Ticking what is exported.** Every slot starts ticked, and the export follows the ticks. Click a
 slot to leave that one out, a track name to leave out the whole track, a slot number to leave that

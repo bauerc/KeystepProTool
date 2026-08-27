@@ -21,6 +21,7 @@ enum AppLayout {
     static let cellHeight: CGFloat = 17
 
     /// The source-track list a dropped MIDI file previews as, column by column.
+    static let trackTickWidth: CGFloat = 18
     static let trackNumberWidth: CGFloat = 22
     static let trackNameWidth: CGFloat = 150
     static let trackBadgeWidth: CGFloat = 78
@@ -41,7 +42,7 @@ enum AppLayout {
 
     static var trackListWidth: CGFloat {
         let columns = [
-            trackNumberWidth, trackNameWidth, trackBadgeWidth, trackChannelsWidth,
+            trackTickWidth, trackNumberWidth, trackNameWidth, trackBadgeWidth, trackChannelsWidth,
             trackCountsWidth,
         ]
         return columns.reduce(0, +) + CGFloat(columns.count - 1) * trackColumnGap

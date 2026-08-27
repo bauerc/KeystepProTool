@@ -28,6 +28,13 @@ what the file holds, never what the device will do with it — only one percussi
 drums, so the app badges that one _Drums_ and any other _Percussion_.
 _Avoid_: drum track for a source track that is not the one being imported as drums
 
+**Conductor track**:
+Of a MIDI file being imported: the track carrying the file's tempo and time signature and no
+notes, which is what `midi_export` writes as track 1 of every export. Nothing is imported from it,
+so the app badges it _Tempo_ — the word a DAW puts on the same track, where "conductor" is the
+word this codebase writes.
+_Avoid_: title track, track 0, tempo track for a track that also holds notes
+
 **Track mode**:
 Whether a track runs as a sequencer, an arpeggiator or drums. It belongs to the Project, not to a
 Scene.

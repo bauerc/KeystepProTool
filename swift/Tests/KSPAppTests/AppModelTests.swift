@@ -374,7 +374,7 @@ import Testing
         #expect(!summary.tracks.isEmpty)
     }
 
-    /// A song has no grid to tick, so nothing it reads may stop Convert.
+    /// Four of its six tracks hold notes, so the default ticks them all and nothing is refused.
     @Test func asummarisedSongBlocksNothing() async throws {
         let model = model()
         model.accept(midiFixture)
@@ -382,6 +382,61 @@ import Testing
         await model.summarise()
 
         #expect(model.blockReason == nil)
+    }
+
+    @Test func asummarisedSongTicksTheTracksThatHoldNotes() async throws {
+        let model = model()
+        model.accept(midiFixture)
+
+        await model.summarise()
+
+        let selection = try #require(model.staged).sourceSelection
+        #expect([3, 4, 5, 6].allSatisfy { selection.isTicked($0) })
+        #expect(!selection.isTicked(1))
+        #expect(selection.spec == nil)
+    }
+
+    @Test func untickingAsourceTrackDiscardsAdryRunPreview() async throws {
+        let model = model()
+        model.settings.dryRun = true
+        model.accept(midiFixture)
+        await model.summarise()
+        await model.convert()
+        #expect(try #require(model.staged).preview != nil)
+
+        model.toggle(sourceTrack: 3)
+
+        #expect(try #require(model.staged).preview == nil)
+        #expect(try #require(model.staged).sourceSelection.spec == "4,5,6")
+    }
+
+    @Test func untickingEverySourceTrackBlocksConvert() async throws {
+        let model = model()
+        model.accept(midiFixture)
+        await model.summarise()
+
+        for track in 3...6 { model.toggle(sourceTrack: track) }
+
+        #expect(model.blockReason?.contains("Nothing is ticked") == true)
+    }
+
+    /// The ticks are the CLI's own selection, so a run reads what they name and nothing else.
+    @Test func adryRunReadsOnlyTheTickedSourceTracks() async throws {
+        let model = model()
+        model.settings.dryRun = true
+        model.accept(midiFixture)
+        await model.summarise()
+        model.toggle(sourceTrack: 3)
+        model.toggle(sourceTrack: 4)
+
+        await model.convert()
+
+        let staged = try #require(model.staged)
+        let preview = try #require(staged.preview)
+        #expect(preview.headline.contains("track 1"))
+        #expect(preview.headline.contains("track 2"))
+        #expect(!preview.headline.contains("track 3"))
+        #expect(preview.note?.contains("Excluded:") == true)
     }
 
     @Test func anunreadableMIDIFileStaysStagedAndShowsTheFailure() async throws {
