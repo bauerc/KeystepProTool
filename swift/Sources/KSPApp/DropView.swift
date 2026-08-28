@@ -338,10 +338,72 @@ struct DropView: View {
         case .loading:
             ProgressView("Planning the import…").controlSize(.small)
         case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle")
-                .font(.caption).foregroundStyle(.orange).textSelection(.enabled)
-        case .ready(let summary):
-            segmentationGrid(SegmentationGrid(summary))
+            // A limit the planner refuses outright leaves no plan to draw, and the refusal already
+            // names the limit and where; it is the one exceeded limit shown without a gauge.
+            VStack(alignment: .leading, spacing: 6) {
+                Text(Limits.heading).font(.caption).fontWeight(.medium)
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .ready(let plan):
+            VStack(alignment: .leading, spacing: 12) {
+                segmentationGrid(SegmentationGrid(plan.summary))
+                limits(Limits(plan.summary))
+                findingList(plan.findings(verbose: model.settings.verbose), count: plan.all.count)
+            }
+        }
+    }
+
+    /// Five rows, whatever the plan holds: a limit left out reads as a limit there is no need to
+    /// think about. Amber and red differ by symbol as well as colour.
+    private func limits(_ limits: Limits) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(Limits.heading).font(.caption).fontWeight(.medium)
+
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(limits.gauges) { gauge in
+                    HStack(spacing: AppLayout.labelGap) {
+                        Text(gauge.name)
+                            .font(.caption)
+                            .frame(width: AppLayout.limitNameWidth, alignment: .leading)
+                        Text(gauge.figure)
+                            .font(.caption).monospacedDigit()
+                            .frame(width: AppLayout.limitFigureWidth, alignment: .trailing)
+                        if let symbol = symbol(gauge.status) {
+                            Image(systemName: symbol).font(.caption2)
+                        }
+                        if let site = gauge.site {
+                            Text(site).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .foregroundStyle(colour(gauge.status))
+                }
+            }
+
+            ForEach(limits.exceeded.flatMap(\.notes), id: \.self) { note in
+                Label(note, systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func symbol(_ status: Limits.Status) -> String? {
+        switch status {
+        case .within: return nil
+        case .near: return "exclamationmark.circle"
+        case .over: return "exclamationmark.triangle"
+        }
+    }
+
+    private func colour(_ status: Limits.Status) -> Color {
+        switch status {
+        case .within: return .primary
+        case .near: return .orange
+        case .over: return .red
         }
     }
 
@@ -362,12 +424,6 @@ struct DropView: View {
                     }
                 }
                 ForEach(grid.rows, id: \.track) { segmentationRow($0) }
-            }
-
-            ForEach(grid.warnings, id: \.self) { warning in
-                Label(warning, systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Text(SegmentationGrid.legend).font(.caption2).foregroundStyle(.secondary)
@@ -409,8 +465,8 @@ struct DropView: View {
     /// Where the planner put each source track, for the pickers to show as their automatic answer.
     /// Empty while a plan is in flight, which leaves a picker reading "Automatic" on its own.
     private func placements(_ state: SegmentationState) -> [Int: String] {
-        guard case .ready(let summary) = state else { return [:] }
-        return SegmentationGrid.placements(summary)
+        guard case .ready(let plan) = state else { return [:] }
+        return SegmentationGrid.placements(plan.summary)
     }
 
     /// Unscrolled, like ``grid(_:selection:length:)``: the staged view already scrolls.
@@ -757,13 +813,17 @@ struct DropView: View {
     }
 
     /// "Finding", not "note": a note is a melodic event (ADR 0001).
-    @ViewBuilder
     private func findings(_ outcome: Outcome) -> some View {
-        if !outcome.all.isEmpty {
-            DisclosureGroup("\(outcome.all.count) finding(s)") {
+        findingList(outcome.findings(verbose: model.settings.verbose), count: outcome.all.count)
+    }
+
+    /// Shared so a plan's findings and a run's read alike; the plan raises them first.
+    @ViewBuilder
+    private func findingList(_ findings: [String], count: Int) -> some View {
+        if count > 0 {
+            DisclosureGroup("\(count) finding(s)") {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(outcome.findings(verbose: model.settings.verbose), id: \.self) {
-                        finding in
+                    ForEach(findings, id: \.self) { finding in
                         Text(finding).font(.caption).textSelection(.enabled)
                     }
                 }

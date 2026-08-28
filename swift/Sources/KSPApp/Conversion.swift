@@ -67,10 +67,26 @@ enum SummaryState: Equatable {
     case failed(String)
 }
 
+/// What the import would lay down, and what the planner already found wrong with it.
+struct StagedPlan: Equatable {
+    let summary: SegmentationSummary
+    /// Rendered once, for the reason ``Outcome`` renders its own once.
+    let collapsed: [String]
+    let all: [String]
+
+    init(summary: SegmentationSummary, diagnostics: Report) {
+        self.summary = summary
+        self.collapsed = diagnostics.render(verbose: false)
+        self.all = diagnostics.render(verbose: true)
+    }
+
+    func findings(verbose: Bool) -> [String] { verbose ? all : collapsed }
+}
+
 /// What the import would lay down. Import-only, so a staged project leaves it at ``loading``.
 enum SegmentationState: Equatable {
     case loading
-    case ready(SegmentationSummary)
+    case ready(StagedPlan)
     case failed(String)
 }
 
@@ -162,7 +178,7 @@ enum Conversion {
         guard let summary = outcome.summary else {
             return .failed(outcome.message ?? "That MIDI file could not be read.")
         }
-        return .ready(summary)
+        return .ready(StagedPlan(summary: summary, diagnostics: outcome.diagnostics))
     }
 
     static func outcome(

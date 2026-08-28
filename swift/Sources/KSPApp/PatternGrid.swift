@@ -37,6 +37,11 @@ enum AppLayout {
     static let trackDestinationWidth: CGFloat = 170
     static let trackColumnGap: CGFloat = 8
 
+    /// The limit block's two aligned columns. "Patterns per track" is the longest name, and
+    /// "192 / 192" the widest figure.
+    static let limitNameWidth: CGFloat = 128
+    static let limitFigureWidth: CGFloat = 62
+
     /// The staged pane at ``minimumWindowWidth`` -- the narrowest it ever gets, and so the only
     /// width at which a row being clipped cannot be resized away.
     static var minimumContentWidth: CGFloat {

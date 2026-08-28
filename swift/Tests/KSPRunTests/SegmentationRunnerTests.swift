@@ -43,6 +43,21 @@ private func options(
                 == plan.tracks.map { $0.placements.map(\.stepCount) })
     }
 
+    /// The findings the plan already produced, carried rather than thrown away: the staged view
+    /// has to say what would be lost before the conversion runs, not after.
+    @Test func theplansOwnFindingsComeBackWithIt() throws {
+        let outcome = SegmentationRunner.run(options("m6-test-file.mid"))
+
+        #expect(!outcome.diagnostics.isEmpty)
+        #expect(outcome.diagnostics.contains { $0.code == .patternSplit })
+    }
+
+    @Test func afileThatWillNotReadCarriesNoFindings() {
+        let unreadable = SegmentationRunner.run(options("no-such-file.mid"))
+
+        #expect(unreadable.diagnostics.isEmpty)
+    }
+
     /// A file that will not read says so rather than leaving an empty preview to be read as an
     /// import that would lay nothing down.
     @Test func afileThatWillNotReadSaysSoRatherThanPreviewingNothing() {

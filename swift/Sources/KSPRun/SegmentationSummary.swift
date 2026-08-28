@@ -21,8 +21,13 @@ public struct SegmentationSummary: Sendable, Hashable {
     /// `planTrack` decided, because a preview that disagrees with the conversion is worse than none.
     init(song: Song, plan: SongPlan) {
         let dropped = droppedPatterns(plan.diagnostics)
+        let overflowed = droppedNotes(plan.diagnostics)
         self.init(
-            tracks: plan.tracks.map { SegmentedTrack($0, droppedPatterns: dropped[$0.track] ?? 0) },
+            tracks: plan.tracks.map {
+                SegmentedTrack(
+                    $0, droppedPatterns: dropped[$0.track] ?? 0,
+                    droppedNotes: overflowed[$0.track] ?? [:])
+            },
             unplaced: unplacedSources(song, plan))
     }
 }
@@ -52,7 +57,7 @@ public struct SegmentedTrack: Sendable, Hashable {
         self.droppedPatterns = droppedPatterns
     }
 
-    init(_ plan: TrackPlan, droppedPatterns: Int) {
+    init(_ plan: TrackPlan, droppedPatterns: Int, droppedNotes: [Int: Int] = [:]) {
         // A running total of the planner's own step counts, so where the cut falls is reported
         // rather than recomputed from the 64-step rule.
         var step = 1
@@ -60,7 +65,9 @@ public struct SegmentedTrack: Sendable, Hashable {
         for placement in plan.placements {
             segments.append(
                 Segment(
-                    pattern: placement.pattern, stepCount: placement.stepCount, firstStep: step))
+                    pattern: placement.pattern, stepCount: placement.stepCount, firstStep: step,
+                    noteCount: placement.notes.count, busiestStep: busiest(placement.notes),
+                    droppedNotes: droppedNotes[placement.pattern] ?? 0))
             step += placement.stepCount
         }
         self.init(
@@ -76,17 +83,29 @@ public struct SegmentedTrack: Sendable, Hashable {
     public var isSplit: Bool { segments.count > 1 }
 }
 
-/// One pattern of a run, and where in the run it picks up.
+/// One pattern of a run, and where in the run it picks up. The pool limits are counted per pattern,
+/// so a split run carries them here rather than on the track.
 public struct Segment: Sendable, Hashable {
     public let pattern: Int
     public let stepCount: Int
     /// Counting the run's own steps from 1: the split point, where this is not the first.
     public let firstStep: Int
+    public let noteCount: Int
+    /// The most notes on any one step, which is what the 16-per-step limit is measured in.
+    public let busiestStep: Int
+    /// Never part of ``noteCount``: the plan holds only what fit, so this is what would be lost.
+    public let droppedNotes: Int
 
-    public init(pattern: Int, stepCount: Int, firstStep: Int = 1) {
+    public init(
+        pattern: Int, stepCount: Int, firstStep: Int = 1, noteCount: Int = 0, busiestStep: Int = 0,
+        droppedNotes: Int = 0
+    ) {
         self.pattern = pattern
         self.stepCount = stepCount
         self.firstStep = firstStep
+        self.noteCount = noteCount
+        self.busiestStep = busiestStep
+        self.droppedNotes = droppedNotes
     }
 
     public var lastStep: Int { firstStep + stepCount - 1 }
@@ -129,6 +148,25 @@ private func droppedPatterns(_ report: Report) -> [Int: Int] {
         dropped[track, default: 0] += entry.subjects
     }
     return dropped
+}
+
+/// Track and then pattern: the pool is per pattern, so a split run can overflow one half of itself
+/// while the other comes nowhere near.
+private func droppedNotes(_ report: Report) -> [Int: [Int: Int]] {
+    var dropped: [Int: [Int: Int]] = [:]
+    for entry in report where entry.code == .poolOverflow {
+        guard let track = entry.site.track, let pattern = entry.site.pattern else { continue }
+        dropped[track, default: [:]][pattern, default: 0] += entry.subjects
+    }
+    return dropped
+}
+
+private func busiest(_ notes: [PlacedNote]) -> Int {
+    var held: [Int: Int] = [:]
+    for note in notes {
+        held[note.step, default: 0] += 1
+    }
+    return held.values.max() ?? 0
 }
 
 /// The parts the planner read against the parts it gave a device track. Counted per part rather
