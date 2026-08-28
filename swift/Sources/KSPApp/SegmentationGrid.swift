@@ -34,12 +34,6 @@ struct SegmentationGrid: Equatable {
         }
     }
 
-    /// One continuous split rail, in points from its row's leading edge.
-    struct SplitRun: Equatable {
-        let x: CGFloat
-        let width: CGFloat
-    }
-
     struct Row: Equatable {
         /// 1-4.
         let track: Int
@@ -47,7 +41,7 @@ struct SegmentationGrid: Equatable {
         /// The row label's tooltip.
         let detail: String
         let cells: [Cell]
-        let runs: [SplitRun]
+        let runs: [AppLayout.Rail]
         let isEmpty: Bool
 
         init(track: Int, plan: SegmentedTrack?) {
@@ -71,7 +65,7 @@ struct SegmentationGrid: Equatable {
             var parts: [String] = []
             if let source = plan.sourceTrack { parts.append("Source track \(source)") }
             if plan.isDrum { parts.append("drum") }
-            parts.append(counted(plan.noteCount, "note"))
+            parts.append(counted(plan.noteCount, plan.isDrum ? "trigger" : "note"))
             parts.append(located(plan.patterns))
             parts.append("\(counted(plan.stepCount, "step")) in all")
             return parts.joined(separator: " · ")
@@ -85,25 +79,9 @@ struct SegmentationGrid: Equatable {
 
         /// Neighbouring columns only. The planner splits into consecutive patterns, but a rail
         /// drawn across a gap would claim a run that is not there.
-        private static func runs(in patterns: [Int]) -> [SplitRun] {
+        private static func runs(in patterns: [Int]) -> [AppLayout.Rail] {
             let held = Set(patterns.filter { (1...AppLayout.columnCount).contains($0) })
-            var links: Set<Int> = []
-            for pattern in held where held.contains(pattern + 1) { links.insert(pattern) }
-
-            var runs: [SplitRun] = []
-            var pattern = 1
-            while pattern <= AppLayout.columnCount {
-                guard links.contains(pattern) else {
-                    pattern += 1
-                    continue
-                }
-                var last = pattern
-                while links.contains(last) { last += 1 }
-                let rail = AppLayout.rail(from: pattern, to: last)
-                runs.append(SplitRun(x: rail.x, width: rail.width))
-                pattern = last + 1
-            }
-            return runs
+            return AppLayout.rails(joining: held.filter { held.contains($0 + 1) })
         }
     }
 
@@ -133,7 +111,7 @@ struct SegmentationGrid: Equatable {
         }
         for track in summary.tracks where track.droppedPatterns > 0 {
             warnings.append(
-                "Track \(track.deviceTrack) runs past pattern \(AppLayout.columnCount); "
+                "Track \(track.deviceTrack) runs past pattern \(Constants.patternsPerTrack); "
                     + "\(counted(track.droppedPatterns, "pattern")) of its tail would be dropped.")
         }
         return warnings

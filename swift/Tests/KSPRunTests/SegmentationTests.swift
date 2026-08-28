@@ -149,11 +149,14 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(drum.sourceTrack == 1)
     }
 
-    @Test func theplannersDiagnosticsAreCarriedSoTheViewCanSayWhy() throws {
+    /// The planner counts what it dropped; the summary names which tracks they were.
+    @Test func whatTheplannerCountsAsDroppedIsWhatTheSummaryNames() throws {
         let six = song((1...6).map { clip(source: $0, notes: 4, channel: $0 - 1) })
+        let plan = try MIDIImport.planSong(six)
 
-        let summary = try summarise(six)
+        let summary = SegmentationSummary(song: six, plan: plan)
 
-        #expect(summary.diagnostics.contains { $0.code == .tracksDropped })
+        let counted = plan.diagnostics.first { $0.code == .tracksDropped }?.subjects
+        #expect(summary.unplaced.count == counted)
     }
 }

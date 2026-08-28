@@ -129,7 +129,3 @@ struct SourceTrackList: Equatable {
 func sourceTrackName(_ track: SourceTrackSummary) -> String {
     track.name.isEmpty ? "Track \(track.number)" : track.name
 }
-
-func counted(_ count: Int, _ noun: String) -> String {
-    "\(count) \(noun)\(count == 1 ? "" : "s")"
-}

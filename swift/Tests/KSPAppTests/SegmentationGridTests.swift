@@ -103,7 +103,9 @@ private func segmented(
 
         #expect(grid.warnings.count == 1)
         #expect(grid.warnings[0].contains("Track 1"))
-        #expect(grid.warnings[0].contains("2"))
+        #expect(grid.warnings[0].contains("2 patterns"))
+        // The device's own count, not the grid's column count, which only happens to match.
+        #expect(grid.warnings[0].contains("pattern \(Constants.patternsPerTrack)"))
     }
 
     @Test func anemptyPlanWarnsAboutNothing() {
@@ -124,12 +126,23 @@ private func segmented(
         #expect(detail.contains("patterns 1-2"))
     }
 
-    @Test func thedrumTrackSaysSo() {
+    /// A drum event is a trigger, as the device's vocabulary has it and the export grid says it.
+    @Test func thedrumTrackSaysSoAndCountsTriggersRatherThanNotes() {
         let grid = SegmentationGrid(
             SegmentationSummary(
-                tracks: [segmented(1, source: 2, patterns: [(1, 16)], isDrum: true)]))
+                tracks: [segmented(1, source: 2, patterns: [(1, 16)], notes: 8, isDrum: true)]))
 
         #expect(grid.rows[0].detail.contains("drum"))
+        #expect(grid.rows[0].detail.contains("8 triggers"))
+        #expect(!grid.rows[0].detail.contains("note"))
+    }
+
+    @Test func amelodicTrackStillCountsNotes() {
+        let grid = SegmentationGrid(
+            SegmentationSummary(
+                tracks: [segmented(1, source: 2, patterns: [(1, 16)], notes: 8)]))
+
+        #expect(grid.rows[0].detail.contains("8 notes"))
     }
 
     @Test func aslotSaysWhatItWillHold() {

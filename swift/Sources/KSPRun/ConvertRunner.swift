@@ -87,8 +87,7 @@ public enum ConvertRunner {
             flatVelocity: try parseFlatVelocity(options.flatVelocitySpec))
     }
 
-    /// Carries the wording a read failure reports with, so moving the loop out of ``run`` left the
-    /// two messages it can produce exactly where they were.
+    /// Why a source could not be read, in the words the run reports it with.
     struct ReadFailure: Error {
         let message: String
     }

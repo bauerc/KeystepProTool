@@ -384,17 +384,7 @@ struct DropView: View {
         }
         .padding(.bottom, 4)
         // Under the cells for the reason the Chain rail is: a rail behind them would band.
-        .overlay(alignment: .bottomLeading) { splitRails(row.runs) }
-    }
-
-    /// The bar under the patterns one run was split across, drawn as a Chain's is.
-    private func splitRails(_ runs: [SegmentationGrid.SplitRun]) -> some View {
-        ForEach(runs.indices, id: \.self) { index in
-            Capsule()
-                .fill(Color.accentColor)
-                .frame(width: runs[index].width, height: 2)
-                .offset(x: runs[index].x)
-        }
+        .overlay(alignment: .bottomLeading) { rails(row.runs) }
     }
 
     private func segmentationSlot(_ cell: SegmentationGrid.Cell) -> some View {
@@ -582,7 +572,7 @@ struct DropView: View {
     }
 
     /// A chain that jumps gets no bar; its cells are still tinted, and the caption says the order.
-    private func rails(_ runs: [PatternGrid.ChainRun]) -> some View {
+    private func rails(_ runs: [AppLayout.Rail]) -> some View {
         ForEach(runs.indices, id: \.self) { index in
             Capsule()
                 .fill(Color.accentColor)

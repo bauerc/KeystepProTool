@@ -9,14 +9,10 @@ public struct SegmentationSummary: Sendable, Hashable {
     public let tracks: [SegmentedTrack]
     /// Source tracks holding notes that the plan gave no device track.
     public let unplaced: [UnplacedSource]
-    public let diagnostics: Report
 
-    public init(
-        tracks: [SegmentedTrack], unplaced: [UnplacedSource] = [], diagnostics: Report = Report()
-    ) {
+    public init(tracks: [SegmentedTrack], unplaced: [UnplacedSource] = []) {
         self.tracks = tracks
         self.unplaced = unplaced
-        self.diagnostics = diagnostics
     }
 
     public var isEmpty: Bool { tracks.isEmpty }
@@ -27,7 +23,7 @@ public struct SegmentationSummary: Sendable, Hashable {
         let dropped = droppedPatterns(plan.diagnostics)
         self.init(
             tracks: plan.tracks.map { SegmentedTrack($0, droppedPatterns: dropped[$0.track] ?? 0) },
-            unplaced: unplacedSources(song, plan), diagnostics: plan.diagnostics)
+            unplaced: unplacedSources(song, plan))
     }
 }
 
@@ -112,6 +108,8 @@ public struct UnplacedSource: Sendable, Hashable {
 private func droppedPatterns(_ report: Report) -> [Int: Int] {
     var dropped: [Int: Int] = [:]
     for entry in report where entry.code == .pastPatternEnd {
+        // Load-bearing, not defensive: `quantise` raises this code counting dropped *notes* and
+        // names no track, while `planTrack` counts dropped *patterns* and names one.
         guard let track = entry.site.track else { continue }
         dropped[track, default: 0] += entry.subjects
     }
