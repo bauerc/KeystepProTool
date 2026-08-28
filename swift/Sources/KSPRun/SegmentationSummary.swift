@@ -103,9 +103,8 @@ public struct Segment: Sendable, Hashable {
 
     public var lastStep: Int { firstStep + stepCount - 1 }
 
-    /// The bar this pattern begins at, counted from 1 as `--segment-bars` counts. The automatic
-    /// split cuts every 64 steps, which is a whole number of bars only where the bar divides 64,
-    /// so a cut that falls mid-bar reports the bar it falls in.
+    /// The bar this pattern begins at, counted from 1 as `--segment-bars` counts. A cut falling
+    /// mid-bar -- the automatic split cuts at 64 steps, not at bars -- reports the bar it is in.
     public func firstBar(stepsPerBar: Int) -> Int {
         Arithmetic.floorDiv(firstStep - 1, max(1, stepsPerBar)) + 1
     }

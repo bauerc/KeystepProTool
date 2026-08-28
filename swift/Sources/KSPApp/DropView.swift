@@ -358,8 +358,7 @@ struct DropView: View {
     /// only draws what it answered.
     @ViewBuilder
     private func boundaryLanes(_ summary: SegmentationSummary) -> some View {
-        let lanes = Set(summary.tracks.compactMap(\.sourceTrack)).sorted()
-            .compactMap { SegmentLane(source: $0, summary: summary) }
+        let lanes = SegmentLane.lanes(in: summary)
         if !lanes.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
@@ -382,6 +381,7 @@ struct DropView: View {
         }
     }
 
+    @ViewBuilder
     private func boundaryLane(_ lane: SegmentLane) -> some View {
         HStack(spacing: 0) {
             Text(lane.name)
@@ -397,6 +397,12 @@ struct DropView: View {
             .coordinateSpace(name: laneSpace(lane))
         }
         .padding(.bottom, 4)
+        if let note = lane.note {
+            Label(note, systemImage: "info.circle")
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 4)
+        }
     }
 
     private func laneSpace(_ lane: SegmentLane) -> String { "lane-\(lane.sourceTrack)" }
@@ -416,11 +422,10 @@ struct DropView: View {
     }
 
     private func laneBoundary(_ lane: SegmentLane, handle: SegmentLane.Handle) -> some View {
-        // Drawn at the bar it would snap to, so the drag shows the cut it is about to make.
         let held = dragging.flatMap {
             $0.source == lane.sourceTrack && $0.handle == handle.index ? $0.x : nil
         }
-        let x = held.map { lane.x(ofBar: lane.bar(forHandle: handle.index, atX: $0)) } ?? handle.x
+        let x = held.map { lane.x(forHandle: handle.index, atX: $0) } ?? handle.x
         return Capsule()
             .fill(Color.accentColor)
             .frame(width: AppLayout.laneBoundaryWidth, height: AppLayout.laneHeight)

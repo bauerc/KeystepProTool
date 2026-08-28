@@ -150,8 +150,7 @@ enum Conversion {
         }
     }
 
-    /// A plan, and the reason it was not one. A refused boundary is told apart from a file that
-    /// could not be read because only one of the two is something the hand that asked can undo.
+    /// A plan, or the reason it is not one.
     struct Segmentation {
         let state: SegmentationState
         /// The planner's own words for a boundary it would not cut at; `nil` for anything else.

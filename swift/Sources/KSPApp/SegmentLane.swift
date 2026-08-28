@@ -68,6 +68,8 @@ struct SegmentLane: Equatable, Identifiable {
     let barCount: Int
     let regions: [Region]
     let handles: [Handle]
+    /// What a first drag here would move besides the boundary under the hand.
+    let note: String?
 
     var id: Int { sourceTrack }
 
@@ -77,6 +79,13 @@ struct SegmentLane: Equatable, Identifiable {
     /// The lane label's tooltip.
     var detail: String {
         "\(name) — \(counted(barCount, "bar")), \(counted(regions.count, "pattern"))"
+    }
+
+    /// Every lane a plan has, in source order. Which source tracks get one is this type's to
+    /// say rather than the view's.
+    static func lanes(in summary: SegmentationSummary) -> [SegmentLane] {
+        Set(summary.tracks.compactMap(\.sourceTrack)).sorted()
+            .compactMap { SegmentLane(source: $0, summary: summary) }
     }
 
     /// `nil` where the plan placed nothing from this source track, and where the run's own cuts
@@ -103,6 +112,10 @@ struct SegmentLane: Equatable, Identifiable {
         self.handles = cuts.enumerated().map {
             Handle(index: $0.offset, bar: $0.element, x: Self.x(ofBar: $0.element, in: bars))
         }
+        self.note = Self.note(
+            raggedCuts: longest.segments.dropFirst()
+                .filter { ($0.firstStep - 1) % stepsPerBar != 0 }
+                .map { $0.firstBar(stepsPerBar: stepsPerBar) })
         self.regions = zip(edges, edges.dropFirst()).enumerated().map { offset, edge in
             let x = Self.x(ofBar: edge.0, in: bars)
             return Region(
@@ -116,9 +129,8 @@ struct SegmentLane: Equatable, Identifiable {
         }
     }
 
-    /// The bar a handle dragged to `x` would land on: snapped to the nearest, then held between
-    /// its neighbours and inside the track. Past the step limit and past the free patterns stay
-    /// the planner's to refuse.
+    /// The bar a handle dragged to `x` lands on, snapped and held between its neighbours. Past
+    /// the step limit and past the free patterns stay the planner's to refuse.
     func bar(forHandle index: Int, atX x: CGFloat) -> Int {
         guard handles.indices.contains(index) else { return 0 }
         let width = AppLayout.laneWidth / CGFloat(max(1, barCount))
@@ -128,12 +140,27 @@ struct SegmentLane: Equatable, Identifiable {
         return min(max(snapped, lowest), highest)
     }
 
+    /// Where a handle dragged to `x` is drawn: on the bar it would land on, so a drag in flight
+    /// shows the cut it is about to make rather than the pointer.
+    func x(forHandle index: Int, atX x: CGFloat) -> CGFloat {
+        self.x(ofBar: bar(forHandle: index, atX: x))
+    }
+
     /// The leading edge of a bar, 1-based, in the lane's own coordinates, which is where a
     /// boundary beginning at it is drawn.
     func x(ofBar bar: Int) -> CGFloat { Self.x(ofBar: bar, in: barCount) }
 
     private static func x(ofBar bar: Int, in barCount: Int) -> CGFloat {
         AppLayout.laneWidth * CGFloat(bar - 1) / CGFloat(max(1, barCount))
+    }
+
+    /// A segmentation can only name bars, so a cut the automatic split put inside one has to move
+    /// to its start the moment any boundary here is dragged. Said before it happens, not after.
+    private static func note(raggedCuts bars: [Int]) -> String? {
+        guard !bars.isEmpty else { return nil }
+        let named = bars.map(String.init).joined(separator: ", ")
+        return "Its automatic cut falls inside bar \(named) rather than on it. Moving any "
+            + "boundary here pulls that cut to the bar's start, since a segmentation names bars."
     }
 
     private static func label(from first: Int, to last: Int) -> String {

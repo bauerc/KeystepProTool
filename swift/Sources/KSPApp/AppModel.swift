@@ -208,10 +208,8 @@ final class AppModel {
         discardPreview()
     }
 
-    /// Both selections and the boundaries. A drop is one kind or the other, so the selection it
-    /// did not seed is inert and leaves its option at the runner's own default. Takes the drop
-    /// rather than reading ``staged``, because ``convert()`` has left the staged phase by the
-    /// time it needs this.
+    /// Both selections and the boundaries; the one a drop did not seed is inert. Takes the drop
+    /// because ``convert()`` has left the staged phase by the time it needs this.
     func conversionSettings(_ staged: Staged) -> Settings {
         settings.selecting(staged.selection).selecting(staged.sourceSelection)
             .segmenting(staged.boundaries)

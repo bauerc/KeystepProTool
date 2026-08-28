@@ -178,6 +178,37 @@ private func lane(_ summary: SegmentationSummary, source: Int) throws -> Segment
         #expect(two.regions[0].detail.contains("Pattern") == false)
     }
 
+    /// One lane per source track, in source order, and none for a track that cannot have one.
+    @Test func everySourceTrackWithARunGetsALaneInOrder() {
+        let lanes = SegmentLane.lanes(
+            in: summary([
+                segmented(1, source: 5, steps: [64]),
+                segmented(2, source: 2, steps: [64, 32]),
+                segmented(3, steps: [32]),
+            ]))
+
+        #expect(lanes.map(\.sourceTrack) == [2, 5])
+    }
+
+    /// A bar longer than the device's 64 steps puts two automatic cuts inside one of them, which
+    /// is a segmentation no `--segment-bars` can name, so that run gets no lane at all.
+    @Test func arunWhoseCutsCannotBeNamedInBarsGetsNoLane() {
+        let lanes = SegmentLane.lanes(
+            in: summary([segmented(1, source: 2, steps: [64, 64])], stepsPerBar: 128))
+
+        #expect(lanes.isEmpty)
+    }
+
+    /// The drag draws itself at the bar it would land on, so what is on screen mid-drag is the
+    /// cut that will be asked for when it is let go of.
+    @Test func adragInFlightIsDrawnOnTheBarItWouldLandOn() throws {
+        let subject = try lane(summary([segmented(1, source: 2, steps: [64, 64])]), source: 2)
+        let bar = AppLayout.laneWidth / 8
+
+        #expect(subject.x(forHandle: 0, atX: bar * 2 + 1) == subject.x(ofBar: 3))
+        #expect(subject.x(forHandle: 0, atX: -400) == subject.x(ofBar: 2))
+    }
+
     @Test func adragSnapsToTheNearestBar() throws {
         let subject = try lane(summary([segmented(1, source: 2, steps: [64, 64])]), source: 2)
         let bar = AppLayout.laneWidth / 8
@@ -212,5 +243,17 @@ private func lane(_ summary: SegmentationSummary, source: Int) throws -> Segment
 
         #expect(subject.barCount == 6)
         #expect(subject.handles.map(\.bar) == [6])
+    }
+
+    /// That cut is at step 65 and bar 6 begins at step 61, so a first drag moves it four steps
+    /// whichever boundary the hand was on. A segmentation can only name bars, so it is said
+    /// rather than prevented -- and never said where the cuts already fall on bars.
+    @Test func alaneWhoseCutFallsMidBarSaysWhatADragWouldMove() throws {
+        let ragged = try lane(
+            summary([segmented(1, source: 2, steps: [64, 8])], stepsPerBar: 12), source: 2)
+        let aligned = try lane(summary([segmented(1, source: 2, steps: [64, 32])]), source: 2)
+
+        #expect(ragged.note?.contains("inside bar 6") == true)
+        #expect(aligned.note == nil)
     }
 }
