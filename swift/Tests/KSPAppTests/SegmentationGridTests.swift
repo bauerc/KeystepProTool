@@ -189,41 +189,41 @@ private func segmented(
     }
 
     @Test func itnamesWhereThePlannerPutEachSourceTrack() {
-        let grid = SegmentationGrid(
+        let placements = SegmentationGrid.placements(
             SegmentationSummary(tracks: [
                 segmented(1, source: 3, patterns: [(1, 64)]),
                 segmented(2, source: 5, patterns: [(1, 32)]),
             ]))
 
-        #expect(grid.placements == [3: "Track 1", 5: "Track 2"])
+        #expect(placements == [3: "Track 1", 5: "Track 2"])
     }
 
     /// A source track carrying several channels became a device track apiece, and the picker must
     /// say so rather than name one of them.
     @Test func asourceTrackOnTwoDeviceTracksNamesBoth() {
-        let grid = SegmentationGrid(
+        let placements = SegmentationGrid.placements(
             SegmentationSummary(tracks: [
                 segmented(2, source: 4, patterns: [(1, 16)]),
                 segmented(1, source: 4, patterns: [(1, 16)]),
             ]))
 
-        #expect(grid.placements == [4: "Tracks 1, 2"])
+        #expect(placements == [4: "Tracks 1, 2"])
     }
 
     @Test func asourceTrackWithNowhereToGoIsPlacedNowhere() {
-        let grid = SegmentationGrid(
+        let placements = SegmentationGrid.placements(
             SegmentationSummary(
                 tracks: [segmented(1, source: 3, patterns: [(1, 64)])],
                 unplaced: [UnplacedSource(sourceTrack: 7, noteCount: 12)]))
 
-        #expect(grid.placements == [3: "Track 1", 7: "dropped"])
+        #expect(placements == [3: "Track 1", 7: "dropped"])
     }
 
     /// A merged clip has no one source track, so it names none rather than claiming the first.
     @Test func atrackWithoutASourceIsPlacedNowhere() {
-        let grid = SegmentationGrid(
+        let placements = SegmentationGrid.placements(
             SegmentationSummary(tracks: [segmented(1, patterns: [(1, 64)])]))
 
-        #expect(grid.placements.isEmpty)
+        #expect(placements.isEmpty)
     }
 }

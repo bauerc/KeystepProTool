@@ -128,9 +128,8 @@ struct SourceTrackSelection: Sendable, Equatable {
         return ticked.sorted().map(String.init).joined(separator: ",")
     }
 
-    /// `--route` as the CLI spells it, naming only the tracks placed by hand. A track left on
-    /// ``Destination/automatic`` is deliberately unrouted: routing one merges its channels onto a
-    /// single device track, which would move tracks nobody touched.
+    /// `--route` as the CLI spells it, naming only the tracks placed by hand: routing one merges
+    /// its channels onto a single device track, which would move tracks nobody touched.
     var routeSpec: String? {
         let pairs = placed.compactMap { number -> String? in
             guard case .track(let device) = chosen[number] else { return nil }
@@ -145,11 +144,11 @@ struct SourceTrackSelection: Sendable, Equatable {
     /// The ticked tracks placed by hand, in source order.
     private var placed: [Int] { chosen.keys.filter(ticked.contains).sorted() }
 
-    /// The ticked track the import will write as drums: the one set to ``Destination/drums``, or
-    /// the one the reader found on channel 10, which is where the assignment looks when no option
-    /// names one.
+    /// The ticked track the import will write as drums. The fallback is the first ticked track on
+    /// channel 10 rather than the reader's `isDrumTrack`, which names the first over the whole
+    /// file: the assignment looks among the clips actually read, so skipping it promotes the next.
     private var drumSource: Int? {
-        drumTrack ?? tracks.first { ticked.contains($0.number) && $0.isDrumTrack }?.number
+        drumTrack ?? tracks.first { ticked.contains($0.number) && $0.isPercussion }?.number
     }
 
     /// A destination the run would refuse rather than resolve, named before it can reach the run.
@@ -158,8 +157,11 @@ struct SourceTrackSelection: Sendable, Equatable {
         for number in placed {
             guard let device = chosen[number]?.device else { continue }
             if let first = holder[device] {
+                // Named as they were chosen: two tracks set to Drums did not ask for "Track 1".
+                let sent = chosen[first] == chosen[number] ? chosen[number] : .track(device)
                 return "Source tracks \(first) and \(number) are both sent to "
-                    + "\(Destination.track(device).label); one device track holds one source track."
+                    + "\(sent?.label ?? Destination.track(device).label); one device track holds "
+                    + "one source track."
             }
             holder[device] = number
         }
@@ -179,9 +181,8 @@ struct SourceTrackSelection: Sendable, Equatable {
         return nil
     }
 
-    /// One per channel of a ticked track: `apply` fills the device's tracks with clips, and a
-    /// source track carrying several channels gives up one apiece. A track placed by hand is the
-    /// exception -- naming it merges its channels onto the one device track it was sent to.
+    /// One per channel of a ticked track: `apply` fills the device's tracks with clips. A track
+    /// placed by hand asks for one — naming it merges its channels onto the track it was sent to.
     private var demand: Int {
         tracks.filter { ticked.contains($0.number) }
             .reduce(0) { $0 + (chosen[$1.number] == nil ? $1.channels.count : 1) }

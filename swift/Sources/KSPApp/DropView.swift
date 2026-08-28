@@ -407,7 +407,7 @@ struct DropView: View {
     /// Empty while a plan is in flight, which leaves a picker reading "Automatic" on its own.
     private func placements(_ state: SegmentationState) -> [Int: String] {
         guard case .ready(let summary) = state else { return [:] }
-        return SegmentationGrid(summary).placements
+        return SegmentationGrid.placements(summary)
     }
 
     /// Unscrolled, like ``grid(_:selection:length:)``: the staged view already scrolls.
@@ -504,7 +504,7 @@ struct DropView: View {
                     set: { model.send(sourceTrack: row.number, to: $0) })
             ) {
                 ForEach(SourceTrackSelection.destinations) {
-                    Text(label($0, placement: placement)).tag($0)
+                    Text(destinationLabel($0, placement: placement)).tag($0)
                 }
             }
             .labelsHidden()
@@ -515,7 +515,7 @@ struct DropView: View {
 
     /// The automatic choice reads as where the planner actually put the track, so the default is
     /// the assignment rather than a promise about it.
-    private func label(
+    private func destinationLabel(
         _ destination: SourceTrackSelection.Destination, placement: String?
     ) -> String {
         guard destination == .automatic, let placement else { return destination.label }

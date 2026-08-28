@@ -284,7 +284,7 @@ import Testing
 
         #expect(
             selection.blockReason
-                == "Source tracks 1 and 2 are both sent to Track 1; one device track holds one "
+                == "Source tracks 1 and 2 are both sent to Drums; one device track holds one "
                 + "source track.")
     }
 
@@ -324,6 +324,24 @@ import Testing
                 + "track; only device track 1 carries a drum set.")
     }
 
+    /// `isDrumTrack` names the first channel 10 track of the whole file, but the assignment looks
+    /// among the clips it read, so skipping that one promotes the next.
+    @Test func skippingOneDrumTrackPromotesTheNextToHoldTrackOne() {
+        var selection = SourceTrackSelection(
+            syntheticSong(tracks: [
+                sourceTrack(1, channels: [10], isDrumTrack: true), sourceTrack(2, channels: [10]),
+                sourceTrack(3), sourceTrack(4),
+            ]))
+
+        selection.send(1, to: .skip)
+        selection.send(3, to: .track(1))
+
+        #expect(
+            selection.blockReason
+                == "Source track 3 is sent to Track 1, which source track 2 holds as the drum "
+                + "track; only device track 1 carries a drum set.")
+    }
+
     @Test func adetectedDrumTrackThatIsSkippedNoLongerHoldsTrackOne() {
         var selection = SourceTrackSelection(
             syntheticSong(tracks: [
@@ -349,5 +367,55 @@ import Testing
         selection.send(1, to: .track(1))
 
         #expect(selection.overflowNote == nil)
+    }
+
+    /// The app words these itself, so they are pinned against the core that would refuse them:
+    /// a clash the app misses reaches the runner, and one it invents blocks a legal conversion.
+    @Test(
+        arguments: [
+            [(2, SourceTrackSelection.Destination.track(3)), (4, .track(3))],
+            [(2, SourceTrackSelection.Destination.drums), (3, .track(1))],
+        ])
+    func aclashTheAppNamesIsOneTheCoreWouldRefuse(
+        sent: [(source: Int, to: SourceTrackSelection.Destination)]
+    ) throws {
+        var selection = SourceTrackSelection(syntheticSong(tracks: (1...4).map { sourceTrack($0) }))
+        for entry in sent { selection.send(entry.source, to: entry.to) }
+        #expect(selection.blockReason != nil)
+
+        #expect(throws: KSPError.self) {
+            _ = try ImportOptions(
+                midiTracks: [1, 2, 3, 4], drumTrack: selection.drumTrack,
+                routes: try resolveRoutes(nil, selection.routeSpec))
+        }
+    }
+
+    /// The one block the app owns outright: `--drum-track` takes a single number, so a second
+    /// track set to Drums would reach the core as a melodic one and be imported without a word.
+    @Test func asecondDrumsIsRefusedHereBecauseTheCoreCannotSpellIt() throws {
+        var selection = SourceTrackSelection(syntheticSong(tracks: (1...4).map { sourceTrack($0) }))
+        selection.send(1, to: .drums)
+        selection.send(2, to: .drums)
+        #expect(selection.blockReason != nil)
+
+        let options = try ImportOptions(
+            midiTracks: [1, 2, 3, 4], drumTrack: selection.drumTrack,
+            routes: try resolveRoutes(nil, selection.routeSpec))
+
+        #expect(options.drumTrack == 1)
+    }
+
+    @Test func aroutingTheAppAllowsIsOneTheCoreAccepts() throws {
+        var selection = SourceTrackSelection(syntheticSong(tracks: (1...4).map { sourceTrack($0) }))
+        selection.send(3, to: .track(2))
+        selection.send(4, to: .drums)
+        #expect(selection.blockReason == nil)
+
+        let options = try ImportOptions(
+            midiTracks: [1, 2, 3, 4], drumTrack: selection.drumTrack,
+            routes: try resolveRoutes(nil, selection.routeSpec))
+
+        #expect(options.routes == [TrackRoute(source: 3, device: 2)])
+        #expect(options.drumTrack == 4)
     }
 }

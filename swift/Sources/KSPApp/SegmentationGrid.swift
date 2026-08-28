@@ -90,9 +90,6 @@ struct SegmentationGrid: Equatable {
     let rows: [Row]
     /// What will not survive the import, said before it runs.
     let warnings: [String]
-    /// Where the planner put each source track, keyed by source track, for the destination pickers
-    /// to show as their automatic answer rather than working one out of their own.
-    let placements: [Int: String]
 
     init(_ summary: SegmentationSummary) {
         let byTrack = Dictionary(
@@ -104,10 +101,11 @@ struct SegmentationGrid: Equatable {
         self.columns = Array(1...AppLayout.columnCount)
         self.rows = (1...Constants.trackItemIDs.count).map { Row(track: $0, plan: byTrack[$0]) }
         self.warnings = Self.warnings(summary)
-        self.placements = Self.placements(summary)
     }
 
-    private static func placements(_ summary: SegmentationSummary) -> [Int: String] {
+    /// Where the planner put each source track, keyed by source track, for the destination pickers
+    /// to show as their automatic answer rather than working one out of their own.
+    static func placements(_ summary: SegmentationSummary) -> [Int: String] {
         var devices: [Int: [Int]] = [:]
         for track in summary.tracks {
             guard let source = track.sourceTrack else { continue }
