@@ -9,7 +9,7 @@ _MAX_MIDI_TRACKS = 65535
 MIDI_TRACKS_HELP = (
     "read only these tracks of the source file, counting from 1 over every track of the file, "
     f"including ones that carry only tempo or a name: {SELECTION_HELP}. Not usable with "
-    "--midi-track or --route"
+    "--midi-track"
 )
 
 

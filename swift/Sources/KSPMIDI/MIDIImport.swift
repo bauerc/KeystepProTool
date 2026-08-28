@@ -101,11 +101,6 @@ public struct ImportOptions: Sendable, Hashable {
     private static func checkRoutes(
         _ routes: [TrackRoute], drumTrack: Int?, midiTracks: Set<Int>
     ) throws {
-        if !routes.isEmpty && !midiTracks.isEmpty {
-            throw KSPError.value(
-                "routes and a source-track selection contradict each other; name the source "
-                    + "tracks with one or the other")
-        }
         let tracks = Constants.trackItemIDs.count
         var sources: Set<Int> = []
         var devices: [Int: TrackRoute] = [:]
@@ -119,6 +114,12 @@ public struct ImportOptions: Sendable, Hashable {
                 throw KSPError.value(
                     "route \(route.source):\(route.device) names device track \(route.device); "
                         + "the device has \(tracks) tracks")
+            }
+            if !midiTracks.isEmpty && !midiTracks.contains(route.source) {
+                throw KSPError.value(
+                    "route \(route.source):\(route.device) names source track \(route.source), "
+                        + "which is not in the selection; a route must name one of the source "
+                        + "tracks read")
             }
             if sources.contains(route.source) {
                 throw KSPError.value("route names source track \(route.source) twice")

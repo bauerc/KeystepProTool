@@ -82,7 +82,8 @@ public enum ConvertRunner {
             drumTrack: options.drumTrack,
             drumMap: try resolveImportDrumMap(options.drumMapSpec, configPath: options.configPath),
             carryTempo: options.carryTempo, fitSwing: options.fitSwing,
-            fitTimeShift: options.fitTimeShift, routes: try parseRoutes(options.routeSpec),
+            fitTimeShift: options.fitTimeShift,
+            routes: try resolveRoutes(options.midiTrack, options.routeSpec),
             segments: try resolveSegments(options.midiTrack, options.segmentBarsSpec),
             flatVelocity: try parseFlatVelocity(options.flatVelocitySpec))
     }

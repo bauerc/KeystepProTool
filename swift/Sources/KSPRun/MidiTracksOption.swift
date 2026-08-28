@@ -8,7 +8,7 @@ private let maxMidiTracks = 65535
 public let midiTracksHelp = """
     read only these tracks of the source file, counting from 1 over every track of the file, \
     including ones that carry only tempo or a name: \(selectionHelp). Not usable with \
-    --midi-track or --route
+    --midi-track
     """
 
 /// The source tracks the two spellings name between them.

@@ -1331,11 +1331,16 @@ def test_a_drum_track_inside_the_selection_is_allowed() -> None:
     assert ImportOptions(midi_tracks=frozenset({2, 5}), drum_track=5).drum_track == 5
 
 
-def test_a_route_with_a_source_track_selection_is_refused() -> None:
-    with pytest.raises(
-        ValueError, match=r"routes and a source-track selection contradict each other"
-    ):
-        ImportOptions(midi_tracks=frozenset({1}), routes=(TrackRoute(1, 2),))
+def test_a_route_inside_the_selection_is_allowed() -> None:
+    options = ImportOptions(midi_tracks=frozenset({1, 3}), routes=(TrackRoute(3, 1),))
+
+    assert options.routes == (TrackRoute(3, 1),)
+
+
+def test_a_route_outside_the_selection_is_refused() -> None:
+    """Otherwise it names a track the read never returns, which _assign reports as empty."""
+    with pytest.raises(ValueError, match=r"route 2:1 names source track 2, which is not in the"):
+        ImportOptions(midi_tracks=frozenset({1, 3}), routes=(TrackRoute(2, 1),))
 
 
 def test_two_sources_on_one_device_track_are_refused() -> None:

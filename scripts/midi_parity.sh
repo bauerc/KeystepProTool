@@ -186,6 +186,8 @@ if has convert; then
         add import "$(basename "$clip") --midi-tracks 99" "$clip" --midi-tracks 99
         add import "$(basename "$clip") --midi-track 1 --midi-tracks 1" "$clip" --midi-track 1 --midi-tracks 1
         add import "$(basename "$clip") --midi-tracks 1 --drum-track 2" "$clip" --midi-tracks 1 --drum-track 2
+        add import "$(basename "$clip") --midi-tracks 1,2 --route 2:1" "$clip" --midi-tracks 1,2 --route 2:1
+        add import "$(basename "$clip") --midi-tracks 1,2 --route 3:1" "$clip" --midi-tracks 1,2 --route 3:1
         add import "$(basename "$clip") --flat-velocity fresh" "$clip" --flat-velocity fresh
         add import "$(basename "$clip") --flat-velocity 64" "$clip" --flat-velocity 64
         add import "$(basename "$clip") --flat-velocity 0" "$clip" --flat-velocity 0

@@ -26,7 +26,7 @@ from ksp_cli.flat_velocity import parse_flat_velocity
 from ksp_cli.loading import load_template
 from ksp_cli.midi_tracks_option import MIDI_TRACKS_HELP, resolve_midi_tracks
 from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
-from ksp_cli.route_option import ROUTE_HELP, parse_routes
+from ksp_cli.route_option import ROUTE_HELP, resolve_routes
 from ksp_cli.runner import standalone
 from ksp_cli.segment_bars_option import SEGMENT_BARS_HELP, resolve_segments
 
@@ -283,7 +283,7 @@ def convert_command(
             carry_tempo=not no_tempo,
             fit_swing=not no_swing_fit,
             fit_time_shift=not no_time_shift,
-            routes=parse_routes(route),
+            routes=resolve_routes(midi_track, route),
             segments=resolve_segments(midi_track, segment_bars),
             flat_velocity=parse_flat_velocity(flat_velocity),
         )
