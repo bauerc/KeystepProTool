@@ -52,6 +52,37 @@ enum AppLayout {
     static func x(ofColumn index: Int) -> CGFloat {
         gridOrigin + CGFloat(index) * (cellWidth + cellSpacing)
     }
+
+    /// One continuous rail under a row, in points from its leading edge.
+    struct Rail: Equatable {
+        let x: CGFloat
+        let width: CGFloat
+    }
+
+    /// A rail spanning columns `from` through `to`, both 1-based.
+    static func rail(from: Int, to: Int) -> Rail {
+        let span = CGFloat(to - from + 1)
+        return Rail(
+            x: x(ofColumn: from - 1), width: span * cellWidth + (span - 1) * cellSpacing)
+    }
+
+    /// The rails over runs of joined columns, where `links` holds the column each join starts at.
+    /// Shared so the export grid's Chain and the import grid's split cannot be drawn differently.
+    static func rails(joining links: Set<Int>) -> [Rail] {
+        var rails: [Rail] = []
+        var column = 1
+        while column <= columnCount {
+            guard links.contains(column) else {
+                column += 1
+                continue
+            }
+            var last = column
+            while links.contains(last) { last += 1 }
+            rails.append(rail(from: column, to: last))
+            column = last + 1
+        }
+        return rails
+    }
 }
 
 /// The preview grid: four tracks down, sixteen pattern slots across.
@@ -92,12 +123,6 @@ struct PatternGrid: Equatable {
         }
     }
 
-    /// One continuous Chain rail, in points from its row's leading edge.
-    struct ChainRun: Equatable {
-        let x: CGFloat
-        let width: CGFloat
-    }
-
     struct Row: Equatable {
         /// 1-4.
         let track: Int
@@ -107,7 +132,7 @@ struct PatternGrid: Equatable {
         /// The Chain in play order, or nil when the track is in none.
         let chainDetail: String?
         let cells: [Cell]
-        let runs: [ChainRun]
+        let runs: [AppLayout.Rail]
 
         init(_ track: TrackSummary) {
             let chain = track.chain
@@ -143,31 +168,13 @@ struct PatternGrid: Equatable {
 
         /// A Chain is a play order, not a range: two cells join only where it plays one straight
         /// after the other *and* they are neighbouring columns.
-        private static func runs(in chain: [Int]) -> [ChainRun] {
+        private static func runs(in chain: [Int]) -> [AppLayout.Rail] {
             var links: Set<Int> = []
             for (from, to) in zip(chain, chain.dropFirst())
             where drawable(from) && drawable(to) && to == from + 1 {
                 links.insert(from)
             }
-
-            var runs: [ChainRun] = []
-            var pattern = 1
-            while pattern <= AppLayout.columnCount {
-                guard links.contains(pattern) else {
-                    pattern += 1
-                    continue
-                }
-                var last = pattern
-                while links.contains(last) { last += 1 }
-                let span = CGFloat(last - pattern + 1)
-                runs.append(
-                    ChainRun(
-                        x: AppLayout.x(ofColumn: pattern - 1),
-                        width: span * AppLayout.cellWidth
-                            + (span - 1) * AppLayout.cellSpacing))
-                pattern = last + 1
-            }
-            return runs
+            return AppLayout.rails(joining: links)
         }
 
         private static func drawable(_ pattern: Int) -> Bool {
