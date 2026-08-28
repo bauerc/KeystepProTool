@@ -197,29 +197,6 @@ import Testing
         #expect(mapped.routeSpec == "3:4")
     }
 
-    /// The boundaries reach the runner as `--segment-bars`, which is the option the CLI already
-    /// cuts on, rather than as a second mechanism of the app's own.
-    @Test func draggedBoundariesReachTheRunnerAsTheSegmentation() {
-        var boundaries = SegmentBoundaries()
-        boundaries.seed(source: 2, bars: [5, 9])
-        boundaries.move(source: 2, handle: 0, to: 4)
-
-        let mapped = Settings().segmenting(boundaries)
-            .convertOptions(source: source, output: output)
-
-        #expect(mapped.segmentBarsSpec == "2:4,2:9")
-    }
-
-    @Test func anuntouchedSegmentationAsksForNothing() {
-        let mapped = Settings().segmenting(SegmentBoundaries())
-            .convertOptions(source: source, output: output)
-        let defaults = ConvertRunner.Options(
-            paths: [source], output: output, configPath: mapped.configPath)
-
-        #expect(mapped.segmentBarsSpec == defaults.segmentBarsSpec)
-        #expect(mapped.segmentBarsSpec == nil)
-    }
-
     @Test func atickOnEverySourceTrackHoldingNotesAsksForNothing() {
         let mapped = Settings()
             .selecting(SourceTrackSelection(syntheticSong(tracks: [sourceTrack(1)])))

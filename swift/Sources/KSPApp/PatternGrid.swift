@@ -50,17 +50,6 @@ enum AppLayout {
         gridOrigin + CGFloat(columnCount) * cellWidth + CGFloat(columnCount - 1) * cellSpacing
     }
 
-    /// The boundary lane under the import grid, on the grid's own pattern axis so the two line up.
-    /// Fixed with the grid it sits under: a stretching axis would put a bar under the pointer at
-    /// one window width and not at another.
-    static var laneWidth: CGFloat { gridWidth - gridOrigin }
-    static let laneHeight: CGFloat = 22
-    /// The drawn boundary, and the wider strip that catches the pointer reaching for it.
-    static let laneBoundaryWidth: CGFloat = 2
-    static let laneGrabWidth: CGFloat = 11
-    /// Narrower than this and a region's label only smears, so it is left off.
-    static let laneLabelFloor: CGFloat = 44
-
     /// Every column a track row draws, in order, at the width it never goes below. A column drawn
     /// but left out of this overflows the pane in silence, which is how the destination picker did.
     static let trackColumnWidths: [CGFloat] = [
