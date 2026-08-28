@@ -297,6 +297,7 @@ struct DropView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: staged.id) { await model.summarise() }
+        .task(id: model.segmentationKey) { await model.segment() }
     }
 
     @ViewBuilder
@@ -316,8 +317,98 @@ struct DropView: View {
                     repeatCount: model.settings.repeatCount,
                     isSplit: model.settings.splitPerPattern))
         case .song(let summary):
-            trackList(SourceTrackList(summary), selection: staged.sourceSelection)
+            VStack(alignment: .leading, spacing: 12) {
+                trackList(SourceTrackList(summary), selection: staged.sourceSelection)
+                Divider()
+                segmentation(staged.segmentation)
+            }
         }
+    }
+
+    /// Read-only, and redrawn whenever the ticks or a setting move it: what the planner says the
+    /// import would lay down, rather than what the file holds.
+    @ViewBuilder
+    private func segmentation(_ state: SegmentationState) -> some View {
+        switch state {
+        case .loading:
+            ProgressView("Planning the import…").controlSize(.small)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle")
+                .font(.caption).foregroundStyle(.orange).textSelection(.enabled)
+        case .ready(let summary):
+            segmentationGrid(SegmentationGrid(summary))
+        }
+    }
+
+    private func segmentationGrid(_ grid: SegmentationGrid) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("What the import will lay down").font(.caption).fontWeight(.medium)
+            Text(grid.header).font(.caption).foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: AppLayout.gridOrigin, height: 1)
+                    HStack(spacing: AppLayout.cellSpacing) {
+                        ForEach(grid.columns, id: \.self) { column in
+                            Text("\(column)")
+                                .font(.caption2).monospacedDigit().foregroundStyle(.tertiary)
+                                .frame(width: AppLayout.cellWidth)
+                        }
+                    }
+                }
+                ForEach(grid.rows, id: \.track) { segmentationRow($0) }
+            }
+
+            ForEach(grid.warnings, id: \.self) { warning in
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text(SegmentationGrid.legend).font(.caption2).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func segmentationRow(_ row: SegmentationGrid.Row) -> some View {
+        HStack(spacing: 0) {
+            Text(row.name)
+                .font(.caption).fontWeight(.medium).lineLimit(1).minimumScaleFactor(0.8)
+                .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.secondary : .primary)
+                .frame(width: AppLayout.labelWidth, alignment: .leading)
+                .help(row.detail)
+            Color.clear.frame(width: AppLayout.labelGap, height: 1)
+            HStack(spacing: AppLayout.cellSpacing) {
+                ForEach(row.cells, id: \.pattern) { segmentationSlot($0) }
+            }
+        }
+        .padding(.bottom, 4)
+        // Under the cells for the reason the Chain rail is: a rail behind them would band.
+        .overlay(alignment: .bottomLeading) { splitRails(row.runs) }
+    }
+
+    /// The bar under the patterns one run was split across, drawn as a Chain's is.
+    private func splitRails(_ runs: [SegmentationGrid.SplitRun]) -> some View {
+        ForEach(runs.indices, id: \.self) { index in
+            Capsule()
+                .fill(Color.accentColor)
+                .frame(width: runs[index].width, height: 2)
+                .offset(x: runs[index].x)
+        }
+    }
+
+    private func segmentationSlot(_ cell: SegmentationGrid.Cell) -> some View {
+        Text(cell.label)
+            .font(.caption2).monospacedDigit()
+            .foregroundStyle(cell.isEmpty ? HierarchicalShapeStyle.tertiary : .primary)
+            .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
+            .background(
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(
+                        cell.isEmpty
+                            ? Color.secondary.opacity(0.08) : Color.accentColor.opacity(0.22))
+            )
+            .help(cell.detail)
     }
 
     /// Unscrolled, like ``grid(_:selection:length:)``: the staged view already scrolls.

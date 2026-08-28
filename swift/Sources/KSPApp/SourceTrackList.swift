@@ -130,6 +130,6 @@ func sourceTrackName(_ track: SourceTrackSummary) -> String {
     track.name.isEmpty ? "Track \(track.number)" : track.name
 }
 
-private func counted(_ count: Int, _ noun: String) -> String {
+func counted(_ count: Int, _ noun: String) -> String {
     "\(count) \(noun)\(count == 1 ? "" : "s")"
 }

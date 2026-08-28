@@ -52,6 +52,13 @@ enum AppLayout {
     static func x(ofColumn index: Int) -> CGFloat {
         gridOrigin + CGFloat(index) * (cellWidth + cellSpacing)
     }
+
+    /// A rail spanning columns `from` through `to`, both 1-based. Shared so the export grid's
+    /// Chain and the import grid's split cannot be drawn to different widths.
+    static func rail(from: Int, to: Int) -> (x: CGFloat, width: CGFloat) {
+        let span = CGFloat(to - from + 1)
+        return (x(ofColumn: from - 1), span * cellWidth + (span - 1) * cellSpacing)
+    }
 }
 
 /// The preview grid: four tracks down, sixteen pattern slots across.
@@ -159,12 +166,8 @@ struct PatternGrid: Equatable {
                 }
                 var last = pattern
                 while links.contains(last) { last += 1 }
-                let span = CGFloat(last - pattern + 1)
-                runs.append(
-                    ChainRun(
-                        x: AppLayout.x(ofColumn: pattern - 1),
-                        width: span * AppLayout.cellWidth
-                            + (span - 1) * AppLayout.cellSpacing))
+                let rail = AppLayout.rail(from: pattern, to: last)
+                runs.append(ChainRun(x: rail.x, width: rail.width))
                 pattern = last + 1
             }
             return runs

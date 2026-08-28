@@ -20,6 +20,8 @@ final class AppModel {
         /// What a dry run said, if one has been made since the name last changed.
         var preview: Outcome?
         var summary: SummaryState = .loading
+        /// What the import would lay down, replanned whenever the selection or a setting moves.
+        var segmentation: SegmentationState = .loading
         var selection = GridSelection()
         var sourceSelection = SourceTrackSelection()
         /// Identity, not path: dropping the same file again is a new drop and needs a new read.
@@ -126,6 +128,30 @@ final class AppModel {
         case .song(let summary): current.sourceSelection = SourceTrackSelection(summary)
         case .loading, .failed: break
         }
+        phase = .staged(current)
+    }
+
+    /// The file and the options the runner will be handed. Keyed on the whole of ``Settings``
+    /// rather than the fields a plan reads, so a setting added later cannot be forgotten here.
+    struct SegmentationKey: Equatable {
+        let drop: UUID
+        let settings: Settings
+    }
+
+    var segmentationKey: SegmentationKey? {
+        guard let staged, case .toProject = staged.job else { return nil }
+        return SegmentationKey(
+            drop: staged.id, settings: settings.selecting(staged.sourceSelection))
+    }
+
+    func segment() async {
+        guard let staged, let key = segmentationKey else { return }
+        let state = await Conversion.segment(staged.job, settings: key.settings)
+
+        // A late answer must not overwrite a view whose drop or selection has since moved on --
+        // figures for the wrong set of tracks are the one thing a preview must never show.
+        guard segmentationKey == key, case .staged(var current) = phase else { return }
+        current.segmentation = state
         phase = .staged(current)
     }
 

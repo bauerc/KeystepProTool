@@ -74,19 +74,48 @@ public enum ConvertRunner {
         Bundle.module.url(forResource: "Default", withExtension: "KeyStepPro")
     }
 
+    /// Shared with the preview, so it plans under the options the conversion will run under.
+    static func importOptions(_ options: Options) throws -> ImportOptions {
+        try ImportOptions(
+            stepsPerBeat: options.stepsPerBeat,
+            midiTracks: try resolveMidiTracks(options.midiTrack, options.midiTracksSpec),
+            drumTrack: options.drumTrack,
+            drumMap: try resolveImportDrumMap(options.drumMapSpec, configPath: options.configPath),
+            carryTempo: options.carryTempo, fitSwing: options.fitSwing,
+            fitTimeShift: options.fitTimeShift, routes: try parseRoutes(options.routeSpec),
+            segments: try resolveSegments(options.midiTrack, options.segmentBarsSpec),
+            flatVelocity: try parseFlatVelocity(options.flatVelocitySpec))
+    }
+
+    /// Carries the wording a read failure reports with, so moving the loop out of ``run`` left the
+    /// two messages it can produce exactly where they were.
+    struct ReadFailure: Error {
+        let message: String
+    }
+
+    /// Every file is read before any of them is converted, so one unreadable late in the list
+    /// fails the run rather than half-filling a project.
+    static func readSources(_ options: Options) throws(ReadFailure) -> [Source] {
+        var sources: [Source] = []
+        for path in options.paths {
+            do {
+                sources.append(
+                    Source(
+                        path.lastPathComponent, try MusicalMIDI1File(data: Data(contentsOf: path))))
+            } catch let error as CocoaError where error.code == .fileNoSuchFile {
+                throw ReadFailure(message: "\(error.localizedDescription)")
+            } catch {
+                throw ReadFailure(
+                    message: "\(path.relativePath): not a readable MIDI file: \(error)")
+            }
+        }
+        return sources
+    }
+
     public static func run(_ options: Options) -> RunResult {
         let importOptions: ImportOptions
         do {
-            importOptions = try ImportOptions(
-                stepsPerBeat: options.stepsPerBeat,
-                midiTracks: try resolveMidiTracks(options.midiTrack, options.midiTracksSpec),
-                drumTrack: options.drumTrack,
-                drumMap: try resolveImportDrumMap(
-                    options.drumMapSpec, configPath: options.configPath),
-                carryTempo: options.carryTempo, fitSwing: options.fitSwing,
-                fitTimeShift: options.fitTimeShift, routes: try parseRoutes(options.routeSpec),
-                segments: try resolveSegments(options.midiTrack, options.segmentBarsSpec),
-                flatVelocity: try parseFlatVelocity(options.flatVelocitySpec))
+            importOptions = try Self.importOptions(options)
         } catch {
             return fail("\(error)", code: 2)
         }
@@ -104,19 +133,11 @@ public enum ConvertRunner {
                 "\(destination.relativePath) already exists (use --force to overwrite)", code: 1)
         }
 
-        // Every file is read before any of them is converted, so one unreadable late in the
-        // list fails the run rather than half-filling a project.
-        var sources: [Source] = []
-        for path in options.paths {
-            do {
-                sources.append(
-                    Source(
-                        path.lastPathComponent, try MusicalMIDI1File(data: Data(contentsOf: path))))
-            } catch let error as CocoaError where error.code == .fileNoSuchFile {
-                return fail("\(error.localizedDescription)", code: 1)
-            } catch {
-                return fail("\(path.relativePath): not a readable MIDI file: \(error)", code: 1)
-            }
+        let sources: [Source]
+        do {
+            sources = try readSources(options)
+        } catch {
+            return fail(error.message, code: 1)
         }
 
         do {

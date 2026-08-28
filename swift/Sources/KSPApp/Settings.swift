@@ -81,7 +81,8 @@ struct Settings: Sendable, Equatable {
         return copy
     }
 
-    func convertOptions(source: URL, output: URL) -> ConvertRunner.Options {
+    /// `output` is `nil` for a preview, which resolves no destination because it writes nothing.
+    func convertOptions(source: URL, output: URL?) -> ConvertRunner.Options {
         // `force` stays false: `Naming.vacant` found a free path, so the guard is a backstop.
         // The three ignores are the runner's own defaults inverted.
         ConvertRunner.Options(

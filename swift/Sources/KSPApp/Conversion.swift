@@ -67,6 +67,13 @@ enum SummaryState: Equatable {
     case failed(String)
 }
 
+/// What the import would lay down. Import-only, so a staged project leaves it at ``loading``.
+enum SegmentationState: Equatable {
+    case loading
+    case ready(SegmentationSummary)
+    case failed(String)
+}
+
 enum Conversion {
     struct Plan: Sendable, Hashable {
         let job: Job
@@ -141,6 +148,19 @@ enum Conversion {
             if let summary = result.summary { return .song(summary) }
             return .failed(result.message ?? "That MIDI file could not be read.")
         }
+    }
+
+    /// Detached for the reason ``summarise`` is. It plans and writes nothing, so no destination is
+    /// resolved and none is needed.
+    static func segment(_ job: Job, settings: Settings) async -> SegmentationState {
+        guard case .toProject(let source) = job else { return .loading }
+        let outcome = await Task.detached(priority: .userInitiated) {
+            SegmentationRunner.run(settings.convertOptions(source: source, output: nil))
+        }.value
+        guard let summary = outcome.summary else {
+            return .failed(outcome.message ?? "That MIDI file could not be read.")
+        }
+        return .ready(summary)
     }
 
     static func outcome(
