@@ -96,6 +96,23 @@ private func segmented(
         #expect(grid.warnings[1].contains("Source track 6"))
     }
 
+    /// A track that gave up one channel and kept another is not a track that fitted.
+    @Test func asourceThatOnlyPartlyFitsSaysWhichPartDidNot() {
+        let grid = SegmentationGrid(
+            SegmentationSummary(
+                tracks: (1...4).map { segmented($0, source: $0, patterns: [(1, 16)]) },
+                unplaced: [
+                    UnplacedSource(sourceTrack: 3, droppedParts: 1, placedParts: 2, noteCount: 9)
+                ]))
+
+        #expect(grid.warnings.count == 1)
+        #expect(grid.warnings[0].contains("Source track 3"))
+        #expect(grid.warnings[0].contains("3 channels"))
+        #expect(grid.warnings[0].contains("1 channel would be dropped"))
+        // The note count belongs to the whole track, so a partial drop must not claim it.
+        #expect(!grid.warnings[0].contains("9"))
+    }
+
     @Test func adroppedTailIsWarnedAboutRatherThanLeftToBeNoticed() {
         let grid = SegmentationGrid(
             SegmentationSummary(

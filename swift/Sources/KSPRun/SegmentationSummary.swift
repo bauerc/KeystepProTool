@@ -92,17 +92,32 @@ public struct Segment: Sendable, Hashable {
     public var lastStep: Int { firstStep + stepCount - 1 }
 }
 
-/// A source track the import will read and then have nowhere to put.
+/// A source track the import will read and then have nowhere to put, in whole or in the part of
+/// it one channel makes.
 public struct UnplacedSource: Sendable, Hashable {
     public let sourceTrack: Int
     public let sourceFile: String
+    /// Counted in parts, one per channel: a source track carrying several becomes a device track
+    /// apiece, and the device can run out between them.
+    public let droppedParts: Int
+    public let placedParts: Int
+    /// Notes across the whole source track, which is what it loses only where none of it landed.
     public let noteCount: Int
 
-    public init(sourceTrack: Int, sourceFile: String = "", noteCount: Int = 0) {
+    public init(
+        sourceTrack: Int, sourceFile: String = "", droppedParts: Int = 1, placedParts: Int = 0,
+        noteCount: Int = 0
+    ) {
         self.sourceTrack = sourceTrack
         self.sourceFile = sourceFile
+        self.droppedParts = droppedParts
+        self.placedParts = placedParts
         self.noteCount = noteCount
     }
+
+    public var isWhole: Bool { placedParts == 0 }
+
+    public var parts: Int { placedParts + droppedParts }
 }
 
 private func droppedPatterns(_ report: Report) -> [Int: Int] {
@@ -116,23 +131,35 @@ private func droppedPatterns(_ report: Report) -> [Int: Int] {
     return dropped
 }
 
-/// The clips the planner read, minus the source tracks it gave a device track. Taking that
-/// difference rather than repeating `assign`'s rule is what keeps this from being a second one.
+/// The parts the planner read against the parts it gave a device track. Counted per part rather
+/// than per source track, or a track that gave up one channel and kept another would read as whole.
 private func unplacedSources(_ song: Song, _ plan: SongPlan) -> [UnplacedSource] {
-    let placed = Set(plan.tracks.compactMap(\.sourceTrack))
+    var placed: [Int: Int] = [:]
+    for track in plan.tracks {
+        guard let source = track.sourceTrack else { continue }
+        placed[source, default: 0] += 1
+    }
+
     var order: [Int] = []
+    var parts: [Int: Int] = [:]
     var notes: [Int: Int] = [:]
     var files: [Int: String] = [:]
     for clip in song.clips {
-        guard let source = clip.sourceTracks.first, !placed.contains(source) else { continue }
-        if notes[source] == nil {
+        guard let source = clip.sourceTracks.first else { continue }
+        if parts[source] == nil {
             order.append(source)
             files[source] = clip.sourceFile
         }
+        parts[source, default: 0] += 1
         notes[source, default: 0] += clip.notes.count
     }
-    return order.map {
-        UnplacedSource(
-            sourceTrack: $0, sourceFile: files[$0] ?? "", noteCount: notes[$0] ?? 0)
+
+    return order.compactMap { source in
+        let landed = placed[source] ?? 0
+        let dropped = (parts[source] ?? 0) - landed
+        guard dropped > 0 else { return nil }
+        return UnplacedSource(
+            sourceTrack: source, sourceFile: files[source] ?? "", droppedParts: dropped,
+            placedParts: landed, noteCount: notes[source] ?? 0)
     }
 }

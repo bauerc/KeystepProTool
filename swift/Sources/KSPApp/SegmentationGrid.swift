@@ -104,10 +104,16 @@ struct SegmentationGrid: Equatable {
     }
 
     private static func warnings(_ summary: SegmentationSummary) -> [String] {
-        var warnings = summary.unplaced.map {
-            "Source track \($0.sourceTrack) will not fit; the device has "
+        var warnings = summary.unplaced.map { source -> String in
+            guard source.isWhole else {
+                // Which channel goes is the planner's to say, not this view's to guess.
+                return "Source track \(source.sourceTrack) carries "
+                    + "\(counted(source.parts, "channel")) and only \(source.placedParts) fit; "
+                    + "\(counted(source.droppedParts, "channel")) would be dropped."
+            }
+            return "Source track \(source.sourceTrack) will not fit; the device has "
                 + "\(Constants.trackItemIDs.count) tracks, so its "
-                + "\(counted($0.noteCount, "note")) would be dropped."
+                + "\(counted(source.noteCount, "note")) would be dropped."
         }
         for track in summary.tracks where track.droppedPatterns > 0 {
             warnings.append(

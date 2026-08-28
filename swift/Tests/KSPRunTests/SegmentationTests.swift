@@ -103,6 +103,35 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(summary.unplaced.map(\.noteCount) == [4, 4])
     }
 
+    /// A source track carrying several channels becomes a device track apiece, so part of one can
+    /// fail to fit while the rest of it lands -- and the part that did not must still be said.
+    @Test func achannelOfAsourceTrackThatDoesNotFitIsStillReported() throws {
+        let multi = song([
+            clip(source: 1, notes: 1, channel: 0),
+            clip(source: 2, notes: 1, channel: 1),
+            clip(source: 3, notes: 1, channel: 2),
+            clip(source: 3, notes: 1, channel: 3),
+            clip(source: 3, notes: 1, channel: 4),
+        ])
+
+        let summary = try summarise(multi)
+
+        #expect(summary.tracks.count == Constants.trackItemIDs.count)
+        let short = try #require(summary.unplaced.first { $0.sourceTrack == 3 })
+        #expect(short.droppedParts == 1)
+        #expect(short.placedParts == 2)
+        #expect(!short.isWhole)
+    }
+
+    @Test func asourceTrackDroppedWholeSaysSoRatherThanInParts() throws {
+        let six = song((1...6).map { clip(source: $0, notes: 4, channel: $0 - 1) })
+
+        let summary = try summarise(six)
+
+        #expect(summary.unplaced.allSatisfy { $0.isWhole })
+        #expect(summary.unplaced.map(\.placedParts) == [0, 0])
+    }
+
     @Test func anunplacedSourceCarriesTheFileItWasReadFrom() throws {
         let six = song((1...6).map { clip(source: $0, notes: 4, channel: $0 - 1, file: "six.mid") })
 
