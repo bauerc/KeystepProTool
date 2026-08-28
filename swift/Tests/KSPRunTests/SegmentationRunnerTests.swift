@@ -8,11 +8,11 @@ import Testing
 
 private func options(
     _ name: String, midiTracksSpec: String? = nil, midiTrack: Int? = nil, track: Int = 1,
-    pattern: Int = 1, segmentBarsSpec: String? = nil
+    pattern: Int = 1
 ) -> ConvertRunner.Options {
     ConvertRunner.Options(
         paths: [RepoData.projectFiles.appending(path: name)], track: track, pattern: pattern,
-        segmentBarsSpec: segmentBarsSpec, midiTrack: midiTrack, midiTracksSpec: midiTracksSpec,
+        midiTrack: midiTrack, midiTracksSpec: midiTracksSpec,
         configPath: noPersonalConfig)
 }
 

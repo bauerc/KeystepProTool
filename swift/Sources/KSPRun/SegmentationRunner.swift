@@ -20,7 +20,7 @@ public enum SegmentationRunner {
         // The single-target path quantises to the length of the template pattern it is aimed at,
         // so a preview that reads no template has nothing to work from.
         if options.midiTrack != nil {
-            return Outcome(message: "a single-target import has no segmentation to preview")
+            return Outcome(message: "a single-target import has nothing to preview")
         }
 
         do {
@@ -32,8 +32,6 @@ public enum SegmentationRunner {
                 song, options: importOptions, firstPattern: options.pattern,
                 firstTrack: options.track)
             return Outcome(summary: SegmentationSummary(song: song, plan: plan))
-        } catch KSPError.segment(let message) {
-            return Outcome(message: message)
         } catch let error as ConvertRunner.ReadFailure {
             return Outcome(message: error.message)
         } catch {

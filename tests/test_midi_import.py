@@ -11,7 +11,7 @@ from ksp import constants, midi_export, midi_import, mutate, reader
 from ksp.diagnostics import Code
 from ksp.drum_map import DrumMap
 from ksp.keys import key
-from ksp.midi_import import ImportOptions, TrackRoute, TrackSegments
+from ksp.midi_import import ImportOptions, TrackRoute
 from ksp.model import NoteKind
 from test_mutate import PLACEMENT_RECIPE, TRACK_2_ITEM, changed
 
@@ -520,215 +520,14 @@ def test_a_note_past_the_first_pool_chunk_still_plays_on_every_pass(
     assert all(note.skip == constants.SKIP_SEQUENCES for note in notes)
 
 
-#: Every fault the segmentation grammar refuses, with the wording both ports use.
-SEGMENT_ILLEGAL = [
-    pytest.param(
-        (TrackSegments(1, (1,)),),
-        "segment bar 1 of source track 1 is not a boundary; bar 1 begins the first pattern",
-        id="bar-one-is-not-a-boundary",
-    ),
-    pytest.param(
-        (TrackSegments(1, (5, 3)),),
-        "segment bars of source track 1 must ascend, and 3 does not follow 5",
-        id="descending",
-    ),
-    pytest.param(
-        (TrackSegments(1, (5, 5)),),
-        "segment bars of source track 1 must ascend, and 5 does not follow 5",
-        id="repeated",
-    ),
-    pytest.param(
-        (TrackSegments(0, (2,)),),
-        "segment counts source tracks from 1, so 0 is not one",
-        id="source-below-one",
-    ),
-    pytest.param(
-        (TrackSegments(1, (2,)), TrackSegments(1, (3,))),
-        "segment names source track 1 twice",
-        id="source-named-twice",
-    ),
-]
-
-
-def test_explicit_bar_boundaries_cut_a_track_where_they_are_asked_for(
+def test_a_track_longer_than_the_device_plays_is_split_automatically(
     load_sample: Loader,
 ) -> None:
-    """Six bars cut at bar 4 is 48 and 48, where the automatic split gives 64 and 32."""
+    """The automatic split is untouched, track by track."""
     events = [(step * TICKS_PER_STEP, 60, 100) for step in range(96)]
-    options = ImportOptions(segments=(TrackSegments(source=1, bars=(4,)),))
-    result = midi_import.convert_song(
-        song_of([events]), load_sample("Default.KeyStepPro"), options=options
-    )
+    result = midi_import.convert_song(song_of([events, events]), load_sample("Default.KeyStepPro"))
 
-    plan = result.plan.tracks[0]
-    assert plan.patterns == (1, 2)
-    assert [placement.step_count for placement in plan.placements] == [48, 48]
-    assert [len(placement.notes) for placement in plan.placements] == [48, 48]
-    # The second pattern restarts at step 1 rather than continuing to count.
-    assert plan.placements[1].notes[0].step == 1
-    segmented = [d for d in result.diagnostics if d.code == Code.PATTERN_SEGMENTED]
-    assert [d.detail for d in segmented] == [
-        "track 1 was cut at bar(s) 4 across patterns 1-2 and chained"
-    ]
-    assert Code.PATTERN_SPLIT not in {d.code for d in result.diagnostics}
-
-    project = reader.read_project(result.raw, source_name="segmented")
-    assert project.scenes[0].chains[0].patterns == (1, 2)
-
-
-def test_boundaries_that_land_on_the_track_end_exactly_fill_their_patterns(
-    load_sample: Loader,
-) -> None:
-    """Eight bars cut at bar 5 is two full patterns with nothing left over."""
-    events = [(step * TICKS_PER_STEP, 60, 100) for step in range(128)]
-    options = ImportOptions(segments=(TrackSegments(source=1, bars=(5,)),))
-    result = midi_import.convert_song(
-        song_of([events]), load_sample("Default.KeyStepPro"), options=options
-    )
-
-    plan = result.plan.tracks[0]
-    assert [placement.step_count for placement in plan.placements] == [64, 64]
-    assert plan.patterns == (1, 2)
-
-
-def test_a_single_bar_segment_is_a_pattern_of_its_own(load_sample: Loader) -> None:
-    """The smallest cut the device can chain, and three patterns is still one sequence."""
-    events = [(step * TICKS_PER_STEP, 60, 100) for step in range(48)]
-    options = ImportOptions(segments=(TrackSegments(source=1, bars=(2, 3)),))
-    result = midi_import.convert_song(
-        song_of([events]), load_sample("Default.KeyStepPro"), options=options
-    )
-
-    plan = result.plan.tracks[0]
-    assert [placement.step_count for placement in plan.placements] == [16, 16, 16]
-    assert plan.patterns == (1, 2, 3)
-
-    project = reader.read_project(result.raw, source_name="segmented")
-    assert project.scenes[0].chains[0].patterns == (1, 2, 3)
-
-
-def test_a_segment_longer_than_the_device_plays_is_refused(load_sample: Loader) -> None:
-    """Cutting eight bars at bar 6 leaves 80 steps in front of it, past the device's 64."""
-    events = [(step * TICKS_PER_STEP, 60, 100) for step in range(128)]
-    options = ImportOptions(segments=(TrackSegments(source=1, bars=(6,)),))
-
-    with pytest.raises(ValueError) as caught:
-        midi_import.convert_song(
-            song_of([events]), load_sample("Default.KeyStepPro"), options=options
-        )
-    assert str(caught.value) == (
-        "segmenting source track 1 makes a pattern of 80 steps from bar 1, past the "
-        "device's 64; cut "
-        "it again before the tail runs over"
-    )
-
-
-def test_a_boundary_past_the_tracks_content_is_refused(load_sample: Loader) -> None:
-    """A pattern beginning after the last bar would be an empty link in the chain."""
-    events = [(step * TICKS_PER_STEP, 60, 100) for step in range(48)]
-    options = ImportOptions(segments=(TrackSegments(source=1, bars=(9,)),))
-
-    with pytest.raises(ValueError) as caught:
-        midi_import.convert_song(
-            song_of([events]), load_sample("Default.KeyStepPro"), options=options
-        )
-    assert str(caught.value) == (
-        "segment bar 9 of source track 1 is past the track's 3 bar(s); a boundary is where "
-        "a pattern "
-        "begins, so it has to fall inside the track"
-    )
-
-
-def test_a_bar_too_large_to_multiply_out_is_refused_not_crashed(load_sample: Loader) -> None:
-    """The Swift port traps where Python widens, so the bar is counted, never multiplied."""
-    events = [(step * TICKS_PER_STEP, 60, 100) for step in range(48)]
-    options = ImportOptions(segments=(TrackSegments(source=1, bars=(2**62,)),))
-
-    with pytest.raises(ValueError) as caught:
-        midi_import.convert_song(
-            song_of([events]), load_sample("Default.KeyStepPro"), options=options
-        )
-    assert "is past the track's 3 bar(s)" in str(caught.value)
-
-
-def test_segments_that_outrun_the_free_patterns_are_refused(load_sample: Loader) -> None:
-    """Three patterns cannot be chained from pattern 15; the automatic split drops a
-    tail here, but a boundary that was asked for is refused instead."""
-    events = [(step * TICKS_PER_STEP, 60, 100) for step in range(48)]
-    options = ImportOptions(segments=(TrackSegments(source=1, bars=(2, 3)),))
-
-    with pytest.raises(ValueError) as caught:
-        midi_import.convert_song(
-            song_of([events]),
-            load_sample("Default.KeyStepPro"),
-            options=options,
-            first_pattern=15,
-        )
-    assert str(caught.value) == (
-        "segmenting source track 1 makes 3 patterns but only 2 are free from pattern 15; a "
-        "chain runs "
-        "to pattern 16 at most"
-    )
-
-
-@pytest.mark.parametrize(("segments", "message"), SEGMENT_ILLEGAL)
-def test_illegal_boundaries_are_refused_before_a_file_is_read(
-    segments: tuple[TrackSegments, ...], message: str
-) -> None:
-    """Faults a segmentation has without knowing the song are refused as options.
-    Compared whole: the Swift port has to refuse in the very same words."""
-    with pytest.raises(ValueError) as caught:
-        ImportOptions(segments=segments)
-    assert str(caught.value) == message
-
-
-def test_a_segmentation_naming_a_track_the_run_never_reads_is_refused(
-    load_sample: Loader,
-) -> None:
-    """Silent, deselected or past the end of the file all land here, so the wording
-    says what the conversion saw rather than guessing why."""
-    events = [(step * TICKS_PER_STEP, 60, 100) for step in range(48)]
-    options = ImportOptions(segments=(TrackSegments(source=3, bars=(2,)),))
-
-    with pytest.raises(ValueError) as caught:
-        midi_import.convert_song(
-            song_of([events]), load_sample("Default.KeyStepPro"), options=options
-        )
-    assert str(caught.value) == (
-        "track 3 of the source carries nothing to segment; a segmentation names a source track "
-        "the conversion reads, counting every track of the file from 1"
-    )
-
-
-def test_a_source_track_split_by_channel_is_segmented_on_every_part(
-    load_sample: Loader,
-) -> None:
-    """The option names a source track, and both channels of one are that track."""
-    midi = mixed_of(
-        [(step * TICKS_PER_STEP, 60, 0) for step in range(48)]
-        + [(step * TICKS_PER_STEP, 72, 1) for step in range(48)]
-    )
-    options = ImportOptions(segments=(TrackSegments(source=1, bars=(2,)),))
-
-    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
-
-    assert [[p.step_count for p in plan.placements] for plan in result.plan.tracks] == [
-        [16, 32],
-        [16, 32],
-    ]
-
-
-def test_a_track_no_segmentation_names_is_still_split_automatically(
-    load_sample: Loader,
-) -> None:
-    """Absent boundaries the automatic split is untouched, track by track."""
-    events = [(step * TICKS_PER_STEP, 60, 100) for step in range(96)]
-    options = ImportOptions(segments=(TrackSegments(source=1, bars=(4,)),))
-    result = midi_import.convert_song(
-        song_of([events, events]), load_sample("Default.KeyStepPro"), options=options
-    )
-
-    assert [p.step_count for p in result.plan.tracks[0].placements] == [48, 48]
+    assert [p.step_count for p in result.plan.tracks[0].placements] == [64, 32]
     assert [p.step_count for p in result.plan.tracks[1].placements] == [64, 32]
     assert Code.PATTERN_SPLIT in {d.code for d in result.diagnostics}
 
