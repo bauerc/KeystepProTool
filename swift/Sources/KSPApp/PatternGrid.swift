@@ -2,11 +2,16 @@ import Foundation
 import KSPKit
 import KSPRun
 
-/// Every dimension the staged view is laid out from. Its pane scrolls vertically only, so a grid
-/// wider than ``contentWidth`` is silently clipped; a test holds ``gridWidth`` under it.
+/// Every dimension the staged view is laid out from. The window resizes freely above a floor and
+/// its pane scrolls vertically only, so a row wider than ``minimumContentWidth`` is clipped at the
+/// smallest window; a test holds each row under it.
 enum AppLayout {
-    static let windowWidth: CGFloat = 860
-    static let windowHeight: CGFloat = 440
+    /// The window's floor, not its size: it resizes above this, and the width goes to a track name.
+    static let minimumWindowWidth: CGFloat = 1020
+    static let minimumWindowHeight: CGFloat = 440
+    /// What a first launch opens at; afterwards the window restores the size it was left at.
+    static let defaultWindowWidth: CGFloat = 1120
+    static let defaultWindowHeight: CGFloat = 600
     static let sidebarWidth: CGFloat = 220
     static let dividerWidth: CGFloat = 1
     static let mainPadding: CGFloat = 24
@@ -23,26 +28,19 @@ enum AppLayout {
     /// The source-track list a dropped MIDI file previews as, column by column.
     static let trackTickWidth: CGFloat = 18
     static let trackNumberWidth: CGFloat = 22
-    static let trackNameWidth: CGFloat = 150
+    /// The one column that stretches with the window; this is all it keeps at the floor.
+    static let trackNameMinWidth: CGFloat = 150
     static let trackBadgeWidth: CGFloat = 78
-    static let trackChannelsWidth: CGFloat = 70
-    static let trackCountsWidth: CGFloat = 130
+    static let trackChannelsWidth: CGFloat = 88
+    static let trackCountsWidth: CGFloat = 150
     /// "Automatic — Tracks 2, 3" is the longest a destination reads.
     static let trackDestinationWidth: CGFloat = 170
     static let trackColumnGap: CGFloat = 8
 
-    /// The boundary lane under the import grid, as wide as the grid's own pattern axis so the
-    /// two line up and one width budget holds both.
-    static var laneWidth: CGFloat { gridWidth - gridOrigin }
-    static let laneHeight: CGFloat = 22
-    /// The drawn boundary, and the wider strip that catches the pointer reaching for it.
-    static let laneBoundaryWidth: CGFloat = 2
-    static let laneGrabWidth: CGFloat = 11
-    /// Narrower than this and a region's label only smears, so it is left off.
-    static let laneLabelFloor: CGFloat = 44
-
-    static var contentWidth: CGFloat {
-        windowWidth - sidebarWidth - dividerWidth - 2 * mainPadding - scrollerAllowance
+    /// The staged pane at ``minimumWindowWidth`` -- the narrowest it ever gets, and so the only
+    /// width at which a row being clipped cannot be resized away.
+    static var minimumContentWidth: CGFloat {
+        minimumWindowWidth - sidebarWidth - dividerWidth - 2 * mainPadding - scrollerAllowance
     }
 
     /// Where the pattern axis starts, measured from a row's leading edge.
@@ -52,12 +50,26 @@ enum AppLayout {
         gridOrigin + CGFloat(columnCount) * cellWidth + CGFloat(columnCount - 1) * cellSpacing
     }
 
-    static var trackListWidth: CGFloat {
-        let columns = [
-            trackTickWidth, trackNumberWidth, trackNameWidth, trackBadgeWidth, trackChannelsWidth,
-            trackCountsWidth,
-        ]
-        return columns.reduce(0, +) + CGFloat(columns.count - 1) * trackColumnGap
+    /// The boundary lane under the import grid, on the grid's own pattern axis so the two line up.
+    /// Fixed with the grid it sits under: a stretching axis would put a bar under the pointer at
+    /// one window width and not at another.
+    static var laneWidth: CGFloat { gridWidth - gridOrigin }
+    static let laneHeight: CGFloat = 22
+    /// The drawn boundary, and the wider strip that catches the pointer reaching for it.
+    static let laneBoundaryWidth: CGFloat = 2
+    static let laneGrabWidth: CGFloat = 11
+    /// Narrower than this and a region's label only smears, so it is left off.
+    static let laneLabelFloor: CGFloat = 44
+
+    /// Every column a track row draws, in order, at the width it never goes below. A column drawn
+    /// but left out of this overflows the pane in silence, which is how the destination picker did.
+    static let trackColumnWidths: [CGFloat] = [
+        trackTickWidth, trackNumberWidth, trackNameMinWidth, trackBadgeWidth, trackChannelsWidth,
+        trackCountsWidth, trackDestinationWidth,
+    ]
+
+    static var trackRowWidth: CGFloat {
+        trackColumnWidths.reduce(0, +) + CGFloat(trackColumnWidths.count - 1) * trackColumnGap
     }
 
     /// The leading edge of a column, 0-based, in its row's own coordinates.

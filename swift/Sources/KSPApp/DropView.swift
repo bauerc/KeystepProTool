@@ -28,7 +28,10 @@ struct DropView: View {
             Divider()
             options
         }
-        .frame(width: AppLayout.windowWidth, height: AppLayout.windowHeight)
+        .frame(
+            minWidth: AppLayout.minimumWindowWidth, maxWidth: .infinity,
+            minHeight: AppLayout.minimumWindowHeight, maxHeight: .infinity
+        )
         .dropDestination(for: URL.self) { urls, _ in
             // One file at a time in v1: a second would need its own name field and its own result.
             guard let first = urls.first else { return false }
@@ -40,7 +43,7 @@ struct DropView: View {
         .background(targeted ? Color.accentColor.opacity(0.12) : Color.clear)
     }
 
-    /// Scrolls because the window is fixed-size: a control added below must push, not clip.
+    /// A fixed-width column, so a control added below must push, not widen or clip.
     private var options: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -186,8 +189,8 @@ struct DropView: View {
 
             Text(model.folders.description(of: kind))
                 .font(.caption).foregroundStyle(.secondary)
-                .lineLimit(2).truncationMode(.middle)
-                // Abbreviated to fit the sidebar, so the full path has to be reachable somewhere.
+                .fixedSize(horizontal: false, vertical: true)
+                // `description(of:)` tildes the path, so the full one has to be reachable.
                 .help(model.folders[kind]?.path ?? kind.defaultDescription)
 
             HStack(spacing: 8) {
@@ -239,7 +242,7 @@ struct DropView: View {
 
     private func staged(_ staged: AppModel.Staged) -> some View {
         let plan = model.plan(for: staged.job)
-        // The window cannot be resized, so everything above the buttons scrolls and they stay put.
+        // Cancel and Convert sit outside the scroll view, so they stay reachable at any height.
         return VStack(alignment: .leading, spacing: 12) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -574,15 +577,19 @@ struct DropView: View {
                 .font(.caption).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
                 .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.secondary : .primary)
                 .strikethrough(!ticked)
-                .frame(width: AppLayout.trackNameWidth, alignment: .leading)
+                .frame(
+                    minWidth: AppLayout.trackNameMinWidth, maxWidth: .infinity,
+                    alignment: .leading)
             badge(row.badge)
                 .frame(width: AppLayout.trackBadgeWidth, alignment: .leading)
+            // Kept where counts drops it: a track can carry all sixteen channels, and no fixed
+            // width holds that. The whole list is in the row's help.
             Text(row.channels)
                 .font(.caption).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(.secondary)
                 .frame(width: AppLayout.trackChannelsWidth, alignment: .leading)
             Text(row.counts)
-                .font(.caption).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                .font(.caption).monospacedDigit().lineLimit(1)
                 .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.tertiary : .secondary)
                 .frame(width: AppLayout.trackCountsWidth, alignment: .leading)
             destinationPicker(row, destination: destination, placement: placement)

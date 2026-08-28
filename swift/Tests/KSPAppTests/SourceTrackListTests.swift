@@ -142,8 +142,21 @@ import Testing
     }
 
     /// The staged pane scrolls vertically only, so anything wider than it is silently clipped.
+    /// Measured at the window's floor, which is the one width the user cannot resize away from.
     @Test func thelistFitsTheStagedPaneWithoutTruncatingARow() {
-        #expect(AppLayout.trackListWidth <= AppLayout.contentWidth)
+        #expect(AppLayout.trackRowWidth <= AppLayout.minimumContentWidth)
+    }
+
+    /// A column drawn but left out of ``AppLayout/trackColumnWidths`` leaves the fit above
+    /// asserting nothing, which is how the destination picker came to hang 110 pt off the pane.
+    @Test func everyColumnTheRowDrawsIsInTheWidthItIsHeldTo() {
+        #expect(AppLayout.trackColumnWidths.count == 7)
+        #expect(AppLayout.trackColumnWidths.contains(AppLayout.trackDestinationWidth))
+    }
+
+    @Test func thewindowNeverOpensSmallerThanItCanBeDraggedTo() {
+        #expect(AppLayout.minimumWindowWidth <= AppLayout.defaultWindowWidth)
+        #expect(AppLayout.minimumWindowHeight <= AppLayout.defaultWindowHeight)
     }
 
     @Test func areadFileListsEveryTrackItHoldsWhetherOrNotItHoldsNotes() throws {

@@ -157,16 +157,18 @@ import Testing
         #expect(grid.rows[0].chainDetail == nil)
     }
 
-    /// A grid wider than the pane is clipped in silence, so the fit is asserted as arithmetic.
+    /// A grid wider than the pane is clipped in silence, so the fit is asserted as arithmetic,
+    /// at the window's floor because that is the narrowest the pane ever gets.
     @Test func thegridFitsTheStagedPaneWithoutTruncatingThePatternAxis() {
-        #expect(AppLayout.gridWidth <= AppLayout.contentWidth)
+        #expect(AppLayout.gridWidth <= AppLayout.minimumContentWidth)
         #expect(AppLayout.columnCount == 16)
     }
 
     /// The lane sits under the grid's pattern axis and is dragged along it, so a lane wider than
-    /// the pane would put its last bars somewhere the pointer cannot reach.
+    /// the pane would put its last bars somewhere the pointer cannot reach -- asserted at the
+    /// window's floor, where a clipped row cannot be resized away.
     @Test func theboundaryLaneFitsTheSameStagedPaneTheGridDoes() {
-        #expect(AppLayout.gridOrigin + AppLayout.laneWidth <= AppLayout.contentWidth)
+        #expect(AppLayout.gridOrigin + AppLayout.laneWidth <= AppLayout.minimumContentWidth)
         #expect(AppLayout.laneWidth == AppLayout.gridWidth - AppLayout.gridOrigin)
         #expect(AppLayout.laneGrabWidth > AppLayout.laneBoundaryWidth)
     }
