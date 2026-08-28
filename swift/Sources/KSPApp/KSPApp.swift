@@ -9,7 +9,10 @@ struct KSPApp: App {
         WindowGroup("Key Step Pro Plus") {
             DropView(model: .shared)
         }
-        .windowResizability(.contentSize)
+        .defaultSize(
+            width: AppLayout.defaultWindowWidth, height: AppLayout.defaultWindowHeight
+        )
+        .windowResizability(.contentMinSize)
     }
 }
 

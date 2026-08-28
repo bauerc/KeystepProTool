@@ -329,8 +329,14 @@ reasons one might not play.
 The preview is a track × pattern grid, and **what it decides lives in `PatternGrid.swift`**, not in
 `DropView`: what a cell prints, which chained cells are joined, and — in `AppLayout` — every
 dimension the window and the grid are both built from. That one enum is why the pattern axis fits.
-The staged pane scrolls vertically only, so a grid too wide for it is *silently clipped*; a test
-holds the grid under a budget subtracted from the window. Change the sidebar and the test says so.
+The window resizes freely above a floor `AppLayout` names, and the extra width goes to the source
+track's name — the 16-column grid stays fixed, because its chain rails are drawn at absolute offsets
+and a stretching axis would slide them off their cells. The staged pane still scrolls vertically
+only, so a row too wide for it is *silently clipped*; the fit tests are asserted against
+`minimumContentWidth`, the pane at the narrowest the window goes, which is the one width a user
+cannot resize their way out of. Change the sidebar and the test says so. **Every column a track row
+draws is in `trackColumnWidths`** — the destination picker was drawn for a release without being
+counted there, and hung 110 pt off the pane in silence until a test counted the columns.
 
 `KSPSwiftCLI` has no `main.swift`. That is a choice, not a requirement: SwiftPM will happily let
 `KSPSwiftCLITests` `@testable import` an executable target that uses top-level code, and the suite
