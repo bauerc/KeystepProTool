@@ -24,6 +24,12 @@ final class AppModel {
         var segmentation: SegmentationState = .loading
         var selection = GridSelection()
         var sourceSelection = SourceTrackSelection()
+        /// Where the hand has broken a source track, empty meaning the automatic split.
+        var boundaries = SegmentBoundaries()
+        /// What they were before the drag now in flight, to put back should the planner refuse it.
+        var boundariesBeforeDrag: SegmentBoundaries?
+        /// The planner's words for the last boundary it would not cut at.
+        var segmentationRefusal: String?
         /// Identity, not path: dropping the same file again is a new drop and needs a new read.
         let id = UUID()
 
@@ -141,19 +147,77 @@ final class AppModel {
     var segmentationKey: SegmentationKey? {
         guard let staged, case .toProject = staged.job else { return nil }
         return SegmentationKey(
-            drop: staged.id, settings: settings.selecting(staged.sourceSelection))
+            drop: staged.id,
+            settings: settings.selecting(staged.sourceSelection).segmenting(staged.boundaries))
     }
 
     func segment() async {
         guard let staged, let key = segmentationKey else { return }
-        let state = await Conversion.segment(staged.job, settings: key.settings)
+        let answer = await Conversion.segment(staged.job, settings: key.settings)
 
         // A late answer must not overwrite a view whose drop or selection has since moved on --
         // figures for the wrong set of tracks are the one thing a preview must never show.
         guard segmentationKey == key, case .staged(var current) = phase else { return }
-        current.segmentation = state
+        // A refused boundary goes back where it was and says why, leaving the last plan drawn:
+        // the reason is the answer, and a preview that blanked would take the question with it.
+        if let refusal = answer.refusal {
+            current.boundaries = current.boundariesBeforeDrag ?? current.boundaries
+            current.boundariesBeforeDrag = nil
+            current.segmentationRefusal = refusal
+            phase = .staged(current)
+            return
+        }
+        current.boundariesBeforeDrag = nil
+        current.segmentation = answer.state
         phase = .staged(current)
     }
+
+    /// A boundary let go of, at `x` in its lane's own coordinates. The lane holds it between its
+    /// neighbours; the planner is left to refuse what geometry cannot see.
+    func move(sourceTrack: Int, handle: Int, toX x: CGFloat) {
+        guard case .staged(var current) = phase,
+            case .ready(let summary) = current.segmentation,
+            let lane = SegmentLane(source: sourceTrack, summary: summary),
+            lane.bars.indices.contains(handle)
+        else { return }
+        let bar = lane.bar(forHandle: handle, atX: x)
+        guard lane.bars[handle] != bar else { return }
+
+        if current.boundariesBeforeDrag == nil {
+            current.boundariesBeforeDrag = current.boundaries
+        }
+        // A spec entry replaces its track's automatic cut outright, so every boundary comes down
+        // with the one being moved.
+        current.boundaries.seed(source: sourceTrack, bars: lane.bars)
+        current.boundaries.move(source: sourceTrack, handle: handle, to: bar)
+        current.segmentationRefusal = nil
+        phase = .staged(current)
+        discardPreview()
+    }
+
+    var isSegmentationEdited: Bool { staged?.boundaries.isEdited ?? false }
+
+    var segmentationRefusal: String? { staged?.segmentationRefusal }
+
+    func resetSegmentation() {
+        guard case .staged(var current) = phase else { return }
+        current.boundaries.reset()
+        current.boundariesBeforeDrag = nil
+        current.segmentationRefusal = nil
+        phase = .staged(current)
+        discardPreview()
+    }
+
+    /// Both selections and the boundaries. A drop is one kind or the other, so the selection it
+    /// did not seed is inert and leaves its option at the runner's own default. Takes the drop
+    /// rather than reading ``staged``, because ``convert()`` has left the staged phase by the
+    /// time it needs this.
+    func conversionSettings(_ staged: Staged) -> Settings {
+        settings.selecting(staged.selection).selecting(staged.sourceSelection)
+            .segmenting(staged.boundaries)
+    }
+
+    var conversionSettings: Settings { staged.map(conversionSettings) ?? settings }
 
     func plan(for job: Job) -> Conversion.Plan {
         Conversion.plan(
@@ -198,11 +262,8 @@ final class AppModel {
         let plan = plan(for: staged.job)
         phase = .working(plan.source.lastPathComponent)
 
-        // Both are applied: a drop is one kind or the other, so the selection it did not seed is
-        // inert and leaves its option at the runner's own default.
         let outcome = await Conversion.run(
-            plan, settings: settings.selecting(staged.selection).selecting(staged.sourceSelection),
-            excluded: staged.exclusionNote)
+            plan, settings: conversionSettings(staged), excluded: staged.exclusionNote)
 
         guard !outcome.dryRun else {
             var current = staged

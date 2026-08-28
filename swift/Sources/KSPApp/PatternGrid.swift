@@ -31,6 +31,16 @@ enum AppLayout {
     static let trackDestinationWidth: CGFloat = 170
     static let trackColumnGap: CGFloat = 8
 
+    /// The boundary lane under the import grid, as wide as the grid's own pattern axis so the
+    /// two line up and one width budget holds both.
+    static var laneWidth: CGFloat { gridWidth - gridOrigin }
+    static let laneHeight: CGFloat = 22
+    /// The drawn boundary, and the wider strip that catches the pointer reaching for it.
+    static let laneBoundaryWidth: CGFloat = 2
+    static let laneGrabWidth: CGFloat = 11
+    /// Narrower than this and a region's label only smears, so it is left off.
+    static let laneLabelFloor: CGFloat = 44
+
     static var contentWidth: CGFloat {
         windowWidth - sidebarWidth - dividerWidth - 2 * mainPadding - scrollerAllowance
     }

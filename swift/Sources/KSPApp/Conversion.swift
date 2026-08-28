@@ -150,17 +150,29 @@ enum Conversion {
         }
     }
 
+    /// A plan, and the reason it was not one. A refused boundary is told apart from a file that
+    /// could not be read because only one of the two is something the hand that asked can undo.
+    struct Segmentation {
+        let state: SegmentationState
+        /// The planner's own words for a boundary it would not cut at; `nil` for anything else.
+        let refusal: String?
+    }
+
     /// Detached for the reason ``summarise`` is. It plans and writes nothing, so no destination is
     /// resolved and none is needed.
-    static func segment(_ job: Job, settings: Settings) async -> SegmentationState {
-        guard case .toProject(let source) = job else { return .loading }
+    static func segment(_ job: Job, settings: Settings) async -> Segmentation {
+        guard case .toProject(let source) = job else {
+            return Segmentation(state: .loading, refusal: nil)
+        }
         let outcome = await Task.detached(priority: .userInitiated) {
             SegmentationRunner.run(settings.convertOptions(source: source, output: nil))
         }.value
         guard let summary = outcome.summary else {
-            return .failed(outcome.message ?? "That MIDI file could not be read.")
+            let message = outcome.message ?? "That MIDI file could not be read."
+            return Segmentation(
+                state: .failed(message), refusal: outcome.isRefusal ? message : nil)
         }
-        return .ready(summary)
+        return Segmentation(state: .ready(summary), refusal: nil)
     }
 
     static func outcome(

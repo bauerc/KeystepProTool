@@ -9,21 +9,28 @@ public struct SegmentationSummary: Sendable, Hashable {
     public let tracks: [SegmentedTrack]
     /// Source tracks holding notes that the plan gave no device track.
     public let unplaced: [UnplacedSource]
+    /// The song's own bar, in steps, which is what turns a step count into the bars a boundary
+    /// may be named at.
+    public let stepsPerBar: Int
 
-    public init(tracks: [SegmentedTrack], unplaced: [UnplacedSource] = []) {
+    public init(
+        tracks: [SegmentedTrack], unplaced: [UnplacedSource] = [],
+        stepsPerBar: Int = Constants.defaultStepsPerBeat * 4
+    ) {
         self.tracks = tracks
         self.unplaced = unplaced
+        self.stepsPerBar = stepsPerBar
     }
 
     public var isEmpty: Bool { tracks.isEmpty }
 
     /// Every figure is read off the plan the conversion would run on. Nothing here re-decides what
     /// `planTrack` decided, because a preview that disagrees with the conversion is worse than none.
-    init(song: Song, plan: SongPlan) {
+    init(song: Song, plan: SongPlan, stepsPerBar: Int) {
         let dropped = droppedPatterns(plan.diagnostics)
         self.init(
             tracks: plan.tracks.map { SegmentedTrack($0, droppedPatterns: dropped[$0.track] ?? 0) },
-            unplaced: unplacedSources(song, plan))
+            unplaced: unplacedSources(song, plan), stepsPerBar: stepsPerBar)
     }
 }
 
@@ -74,6 +81,11 @@ public struct SegmentedTrack: Sendable, Hashable {
     public var stepCount: Int { segments.reduce(0) { $0 + $1.stepCount } }
 
     public var isSplit: Bool { segments.count > 1 }
+
+    /// The run's length in bars, which is the span a boundary may fall inside.
+    public func barCount(stepsPerBar: Int) -> Int {
+        max(1, Arithmetic.ceilDiv(stepCount, max(1, stepsPerBar)))
+    }
 }
 
 /// One pattern of a run, and where in the run it picks up.
@@ -90,6 +102,13 @@ public struct Segment: Sendable, Hashable {
     }
 
     public var lastStep: Int { firstStep + stepCount - 1 }
+
+    /// The bar this pattern begins at, counted from 1 as `--segment-bars` counts. The automatic
+    /// split cuts every 64 steps, which is a whole number of bars only where the bar divides 64,
+    /// so a cut that falls mid-bar reports the bar it falls in.
+    public func firstBar(stepsPerBar: Int) -> Int {
+        Arithmetic.floorDiv(firstStep - 1, max(1, stepsPerBar)) + 1
+    }
 }
 
 /// A source track the import will read and then have nowhere to put, in whole or in the part of

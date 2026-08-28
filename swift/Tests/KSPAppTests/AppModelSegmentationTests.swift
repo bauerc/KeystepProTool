@@ -1,9 +1,28 @@
 import Foundation
 import KSPKit
+import KSPMIDI
 import KSPRun
+import SwiftMIDIFile
 import Testing
 
 @testable import KSPApp
+
+/// Six bars of quarter notes: long enough that the automatic split cuts it once, at 64 steps and
+/// then 32, and short enough that the cut has somewhere legal to go on either side of that.
+private func sixBarFile(in directory: URL) throws -> URL {
+    var track = MusicalMIDI1File.Track()
+    for _ in 0..<24 {
+        track.events.append(.noteOn(note: 60, velocity: .midi1(100)))
+        track.events.append(.noteOff(delta: .noteQuarter, note: 60, velocity: .midi1(0)))
+    }
+    let path = directory.appending(path: "six-bars.mid")
+    try MusicalMIDI1File(
+        format: .multipleTracksSynchronous,
+        timebase: .init(ticksPerQuarterNote: KSPMIDI.defaultTicksPerQuarterNote),
+        tracks: [track]
+    ).rawData().write(to: path)
+    return path
+}
 
 @MainActor
 @Suite struct AppModelSegmentationTests {
@@ -115,6 +134,90 @@ import Testing
             Issue.record("a project drop has no import to segment")
             return
         }
+    }
+
+    /// A drop of the six-bar file, planned once, with the lane its one boundary sits in.
+    private func dragged(_ directory: URL) async throws -> (model: AppModel, lane: SegmentLane) {
+        let model = model()
+        model.accept(try sixBarFile(in: directory))
+        await model.summarise()
+        await model.segment()
+        let lane = try #require(SegmentLane(source: 1, summary: try segmentation(of: model)))
+        #expect(lane.barCount == 6)
+        #expect(lane.bars == [5])
+        return (model, lane)
+    }
+
+    @Test func adraggedBoundaryCutsTheTrackWhereItWasPut() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (model, lane) = try await dragged(directory)
+
+        model.move(sourceTrack: 1, handle: 0, toX: lane.x(ofBar: 4))
+        await model.segment()
+
+        let steps = try segmentation(of: model).tracks[0].segments.map(\.stepCount)
+        #expect(steps == [48, 48])
+        #expect(model.segmentationRefusal == nil)
+        #expect(model.isSegmentationEdited)
+    }
+
+    /// The criterion that the boundaries reach the conversion through the CLI's own option
+    /// rather than a second mechanism.
+    @Test func thedraggedBoundariesAreWhatTheConversionRunsOn() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (model, lane) = try await dragged(directory)
+        #expect(model.conversionSettings.segmentBarsSpec == nil)
+
+        model.move(sourceTrack: 1, handle: 0, toX: lane.x(ofBar: 3))
+
+        #expect(model.conversionSettings.segmentBarsSpec == "1:3")
+    }
+
+    /// Refused as it is made, in the planner's own words, with the last plan that worked still
+    /// drawn: a preview that blanked on a bad drag would take the question away with the answer.
+    @Test func aboundaryPastTheStepLimitIsRefusedAndPutBack() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (model, lane) = try await dragged(directory)
+
+        model.move(sourceTrack: 1, handle: 0, toX: lane.x(ofBar: 6))
+        #expect(model.conversionSettings.segmentBarsSpec == "1:6")
+        await model.segment()
+
+        #expect(model.segmentationRefusal?.contains("past the device's 64") == true)
+        #expect(model.conversionSettings.segmentBarsSpec == nil)
+        #expect(model.isSegmentationEdited == false)
+        #expect(try segmentation(of: model).tracks[0].segments.map(\.stepCount) == [64, 32])
+    }
+
+    @Test func resetReturnsTheSegmentationToTheAutomaticSplit() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (model, lane) = try await dragged(directory)
+        model.move(sourceTrack: 1, handle: 0, toX: lane.x(ofBar: 4))
+        await model.segment()
+        #expect(try segmentation(of: model).tracks[0].segments.map(\.stepCount) == [48, 48])
+
+        model.resetSegmentation()
+        await model.segment()
+
+        #expect(try segmentation(of: model).tracks[0].segments.map(\.stepCount) == [64, 32])
+        #expect(model.isSegmentationEdited == false)
+        #expect(model.conversionSettings.segmentBarsSpec == nil)
+    }
+
+    /// Untouched, the run is the one that ran before: no spec at all, not a spec of the split the
+    /// planner would have made anyway.
+    @Test func anuntouchedPreviewNamesNoSegmentation() async throws {
+        let model = model()
+        model.accept(midiFixture)
+        await model.summarise()
+        await model.segment()
+
+        #expect(model.conversionSettings.segmentBarsSpec == nil)
+        #expect(model.isSegmentationEdited == false)
     }
 
     @Test func afileThatCannotBePlannedShowsTheFailure() async throws {

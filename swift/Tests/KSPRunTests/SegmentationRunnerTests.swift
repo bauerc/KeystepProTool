@@ -8,11 +8,12 @@ import Testing
 
 private func options(
     _ name: String, midiTracksSpec: String? = nil, midiTrack: Int? = nil, track: Int = 1,
-    pattern: Int = 1
+    pattern: Int = 1, segmentBarsSpec: String? = nil
 ) -> ConvertRunner.Options {
     ConvertRunner.Options(
         paths: [RepoData.projectFiles.appending(path: name)], track: track, pattern: pattern,
-        midiTrack: midiTrack, midiTracksSpec: midiTracksSpec, configPath: noPersonalConfig)
+        segmentBarsSpec: segmentBarsSpec, midiTrack: midiTrack, midiTracksSpec: midiTracksSpec,
+        configPath: noPersonalConfig)
 }
 
 @Suite struct SegmentationRunnerTests {
@@ -40,6 +41,33 @@ private func options(
         #expect(
             summary.tracks.map { $0.segments.map(\.stepCount) }
                 == plan.tracks.map { $0.placements.map(\.stepCount) })
+    }
+
+    /// A caller offering boundaries can put its own back where they were; it can do nothing at
+    /// all about a file that will not read, so the two failures are told apart rather than
+    /// flattened into one string.
+    @Test func arefusedBoundaryIsToldApartFromAfileThatWillNotRead() throws {
+        let refused = SegmentationRunner.run(
+            options("m6-test-file.mid", segmentBarsSpec: "6:3"))
+
+        #expect(refused.summary == nil)
+        #expect(refused.isRefusal)
+        #expect(refused.message?.contains("past the device's \(Constants.maxSteps)") == true)
+
+        let unreadable = SegmentationRunner.run(options("no-such-file.mid"))
+
+        #expect(unreadable.summary == nil)
+        #expect(unreadable.isRefusal == false)
+    }
+
+    /// The bars a boundary may be named at come from the song's own meter, not from a count the
+    /// preview keeps of its own.
+    @Test func thesummarySaysTheBarTheSongCountsIn() throws {
+        let summary = try #require(SegmentationRunner.run(options("m6-test-file.mid")).summary)
+
+        #expect(summary.stepsPerBar == 16)
+        #expect(summary.tracks[3].barCount(stepsPerBar: summary.stepsPerBar) == 8)
+        #expect(summary.tracks[3].segments.map { $0.firstBar(stepsPerBar: 16) } == [1, 5])
     }
 
     /// The selection criterion: unticking a source track changes what the preview says.
