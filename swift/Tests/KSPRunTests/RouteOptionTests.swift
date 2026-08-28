@@ -9,7 +9,7 @@ import Testing
     /// The message from a refusal, or `nil` if it was accepted.
     private func refusal(_ text: String) -> String? {
         do {
-            _ = try parseRoutes(text)
+            _ = try resolveRoutes(nil, text)
             return nil
         } catch {
             return "\(error)"
@@ -17,31 +17,31 @@ import Testing
     }
 
     @Test func unsetRoutesNothing() throws {
-        #expect(try parseRoutes(nil).isEmpty)
+        #expect(try resolveRoutes(nil, nil).isEmpty)
     }
 
     @Test func onePair() throws {
-        #expect(try parseRoutes("3:1") == [TrackRoute(source: 3, device: 1)])
+        #expect(try resolveRoutes(nil, "3:1") == [TrackRoute(source: 3, device: 1)])
     }
 
     @Test func aCommaListKeepsItsOrder() throws {
         // Ordered, not a mapping: Swift's Dictionary iteration is nondeterministic.
         #expect(
-            try parseRoutes("3:1,1:2") == [
+            try resolveRoutes(nil, "3:1,1:2") == [
                 TrackRoute(source: 3, device: 1), TrackRoute(source: 1, device: 2),
             ])
     }
 
     @Test func whitespaceAroundItemsIsIgnored() throws {
         #expect(
-            try parseRoutes(" 3 : 1 , 1 : 2 ") == [
+            try resolveRoutes(nil, " 3 : 1 , 1 : 2 ") == [
                 TrackRoute(source: 3, device: 1), TrackRoute(source: 1, device: 2),
             ])
     }
 
     @Test func aSignSurvivesToBeRefusedByRange() throws {
         // Out of range is ImportOptions' refusal to word, not the grammar's.
-        #expect(try parseRoutes("-1:2") == [TrackRoute(source: -1, device: 2)])
+        #expect(try resolveRoutes(nil, "-1:2") == [TrackRoute(source: -1, device: 2)])
     }
 
     @Test(arguments: ["3", "", "3:", ":1", "3:x", "x:3", "1:2:3", "1_0:2", "2:1,", "1:2,3"])
@@ -80,5 +80,13 @@ import Testing
         ])
     func aNumberTooLargeToBeATrack(text: String) {
         #expect(refusal(text) == "--route: '\(text)' names a track number too large to be one")
+    }
+
+    @Test func aSingleTargetAndARouteContradictEachOther() {
+        let thrown = #expect(throws: KSPError.self) { _ = try resolveRoutes(1, "1:2") }
+        #expect(
+            "\(thrown!)" == "--midi-track and --route contradict each other; --midi-track "
+                + "converts one source track into the one pattern the target names, and a route "
+                + "says which device track a source track fills")
     }
 }

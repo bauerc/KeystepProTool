@@ -5,8 +5,8 @@ import KSPRun
 /// The preview list: one row per source track of a dropped MIDI file, in the file's own order.
 struct SourceTrackList: Equatable {
     static let legend =
-        "Untick a source track to leave it out. Counts are the notes in the file. Hover a "
-        + "track for what it becomes."
+        "Untick a source track to leave it out, or send it to a device track of your own "
+        + "choosing. Counts are the notes in the file. Hover a track for what it becomes."
 
     enum Badge: Equatable {
         case drums

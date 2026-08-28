@@ -58,6 +58,20 @@ import Testing
         #expect(try segmentation(of: model).tracks.map(\.sourceTrack) == [4, 5, 6])
     }
 
+    /// The criterion's other half: the view follows the routing as it follows the ticks.
+    @Test func sendingAsourceTrackElsewhereChangesWhatTheSegmentationSays() async throws {
+        let model = model()
+        model.accept(midiFixture)
+        await model.summarise()
+        await model.segment()
+        #expect(try segmentation(of: model).tracks.map(\.sourceTrack) == [3, 4, 5, 6])
+
+        model.send(sourceTrack: 6, to: .track(1))
+        await model.segment()
+
+        #expect(try segmentation(of: model).tracks.map(\.sourceTrack) == [6, 3, 4, 5])
+    }
+
     @Test func asegmentationArrivingAfterAcancelIsDropped() async throws {
         let model = model()
         model.accept(midiFixture)

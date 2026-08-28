@@ -171,6 +171,10 @@ final class AppModel {
 
     func toggle(sourceTrack: Int) { mutate { $0.sourceSelection.toggle(sourceTrack) } }
 
+    func send(sourceTrack: Int, to destination: SourceTrackSelection.Destination) {
+        mutate { $0.sourceSelection.send(sourceTrack, to: destination) }
+    }
+
     private func mutate(_ change: (inout Staged) -> Void) {
         guard case .staged(var staged) = phase else { return }
         change(&staged)

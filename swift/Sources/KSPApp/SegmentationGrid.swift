@@ -103,6 +103,27 @@ struct SegmentationGrid: Equatable {
         self.warnings = Self.warnings(summary)
     }
 
+    /// Where the planner put each source track, keyed by source track, for the destination pickers
+    /// to show as their automatic answer rather than working one out of their own.
+    static func placements(_ summary: SegmentationSummary) -> [Int: String] {
+        var devices: [Int: [Int]] = [:]
+        for track in summary.tracks {
+            guard let source = track.sourceTrack else { continue }
+            devices[source, default: []].append(track.deviceTrack)
+        }
+        var placements = devices.mapValues { tracks -> String in
+            let sorted = tracks.sorted()
+            return sorted.count == 1
+                ? "Track \(sorted[0])"
+                : "Tracks " + sorted.map(String.init).joined(separator: ", ")
+        }
+        // A source track that only partly fits keeps the answer for the part that did.
+        for source in summary.unplaced where placements[source.sourceTrack] == nil {
+            placements[source.sourceTrack] = "dropped"
+        }
+        return placements
+    }
+
     private static func warnings(_ summary: SegmentationSummary) -> [String] {
         var warnings = summary.unplaced.map { source -> String in
             guard source.isWhole else {

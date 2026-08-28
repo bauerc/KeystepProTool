@@ -27,6 +27,8 @@ enum AppLayout {
     static let trackBadgeWidth: CGFloat = 78
     static let trackChannelsWidth: CGFloat = 70
     static let trackCountsWidth: CGFloat = 130
+    /// "Automatic — Tracks 2, 3" is the longest a destination reads.
+    static let trackDestinationWidth: CGFloat = 170
     static let trackColumnGap: CGFloat = 8
 
     static var contentWidth: CGFloat {

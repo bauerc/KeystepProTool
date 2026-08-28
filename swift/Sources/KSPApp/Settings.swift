@@ -30,6 +30,11 @@ struct Settings: Sendable, Equatable {
     /// The source tracks the import reads, `nil` meaning all. Import-only, as ``cells`` is
     /// export-only.
     var midiTracksSpec: String?
+    /// Where the import sends the source tracks placed by hand, `nil` leaving the planner's own
+    /// fill-upwards rule alone. Import-only, as ``midiTracksSpec`` is.
+    var routeSpec: String?
+    /// The source track written as drums, `nil` leaving the reader's channel 10 detection standing.
+    var drumTrack: Int?
     var splitPerPattern = false
 
     /// Export every event at the measured fresh-note velocity instead of the one it stores.
@@ -74,10 +79,12 @@ struct Settings: Sendable, Equatable {
         return copy
     }
 
-    /// The spec rather than the set, so the app hands the runner what the CLI hands it.
+    /// The specs rather than the sets, so the app hands the runner what the CLI hands it.
     func selecting(_ selection: SourceTrackSelection) -> Settings {
         var copy = self
         copy.midiTracksSpec = selection.spec
+        copy.routeSpec = selection.routeSpec
+        copy.drumTrack = selection.drumTrack
         return copy
     }
 
@@ -86,8 +93,8 @@ struct Settings: Sendable, Equatable {
         // `force` stays false: `Naming.vacant` found a free path, so the guard is a backstop.
         // The three ignores are the runner's own defaults inverted.
         ConvertRunner.Options(
-            paths: [source], output: output, fitSwing: !ignoreSwing,
-            fitTimeShift: !ignoreTimeShift,
+            paths: [source], output: output, drumTrack: drumTrack, routeSpec: routeSpec,
+            fitSwing: !ignoreSwing, fitTimeShift: !ignoreTimeShift,
             midiTracksSpec: midiTracksSpec,
             flatVelocitySpec: ignoreVelocity ? freshVelocitySpec : nil,
             dryRun: dryRun, verbose: verbose, configPath: drumMapConfigPath)

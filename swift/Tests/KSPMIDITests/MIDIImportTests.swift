@@ -1228,13 +1228,20 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(try ImportOptions(midiTracks: [2, 5], drumTrack: 5).drumTrack == 5)
     }
 
-    @Test func aRouteWithASourceTrackSelectionIsRefused() {
+    @Test func aRouteInsideTheSelectionIsAllowed() throws {
+        let options = try ImportOptions(
+            midiTracks: [1, 3], routes: [TrackRoute(source: 3, device: 1)])
+
+        #expect(options.routes == [TrackRoute(source: 3, device: 1)])
+    }
+
+    @Test func aRouteOutsideTheSelectionIsRefused() {
         let thrown = #expect(throws: KSPError.self) {
-            _ = try ImportOptions(midiTracks: [1], routes: [TrackRoute(source: 1, device: 2)])
+            _ = try ImportOptions(midiTracks: [1, 3], routes: [TrackRoute(source: 2, device: 1)])
         }
         #expect(
             thrown?.description.contains(
-                "routes and a source-track selection contradict each other") == true)
+                "route 2:1 names source track 2, which is not in the selection") == true)
     }
 
     @Test func twoSourcesOnOneDeviceTrackAreRefused() {

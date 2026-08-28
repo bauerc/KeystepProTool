@@ -94,6 +94,18 @@ would be dropped" — because what competes for those four is a channel, not a t
 carrying two of them asks for two and a track holding nothing asks for none. Untick everything and
 Convert says so rather than writing an empty project, and the result names what was left out.
 
+**Saying where a source track goes.** Beside each source track holding notes sits a destination —
+device track 1 to 4, **Drums**, **Skip**, or **Automatic**, which is where it starts. Automatic
+reads as the assignment the planner actually made, "Automatic — Track 2", taken from the same dry
+run the grid below is drawn from, so the default costs nothing and any change is deliberate. Choose
+a device track and the grid replans as you watch; choose Drums and it goes to track 1, the only one
+carrying a drum set; choose Skip and it is simply unticked. The choices are `--route` and
+`--drum-track` as the CLI spells them, not a mechanism of the app's own, and only the tracks you
+place by hand are named — a route merges a source track's channels onto its one device track, so
+routing the ones you never touched would move them. Send two tracks to one device track, or send
+anything but the drums to track 1, and Convert says which two clash rather than letting the run
+refuse it.
+
 **Ticking what is exported.** Every slot starts ticked, and the export follows the ticks. Click a
 slot to leave that one out, a track name to leave out the whole track, a slot number to leave that
 slot out on every track. Any set of cells will do — a slot dropped on one track alone is kept on the
@@ -366,8 +378,8 @@ it appears in the Project Browser ready to send to the device.
 | `--pattern N` | First pattern 1–16 to write to (default 1). Every target must be empty |
 | `--template PATH` | Project to write into (default: MCC's factory default) |
 | `--midi-track N` | Convert only track N of the source, into the one `--track`/`--pattern` names. One source file only. Not usable with `--segment-bars` |
-| `--midi-tracks LIST` | Convert only these tracks of the source, as a song — comma-separated numbers and `N-M` ranges (`1,2,5`, `1-3`). Not usable with `--midi-track` or `--route` |
-| `--route SPEC` | Send named source tracks to named device tracks: `source:device` pairs, comma-separated (`3:1,1:2`). Tracks no pair names fill whatever is left |
+| `--midi-tracks LIST` | Convert only these tracks of the source, as a song — comma-separated numbers and `N-M` ranges (`1,2,5`, `1-3`). Not usable with `--midi-track` |
+| `--route SPEC` | Send named source tracks to named device tracks: `source:device` pairs, comma-separated (`3:1,1:2`). Tracks no pair names fill whatever is left, and a pair may only name a track `--midi-tracks` reads. Not usable with `--midi-track` |
 | `--segment-bars SPEC` | Break named source tracks into patterns at named bars: `source:bar` pairs, comma-separated (`2:5,2:9,3:3`). Tracks no pair names are still cut at the device's 64 steps. Not usable with `--midi-track` |
 | `--drum-track N` | Write source track N as drums, onto KeyStep Pro track 1 |
 | `--drum-map SPEC` | `chromatic:N` or `custom:a,b,c,…` (default: fitted to the source) |
@@ -401,7 +413,9 @@ interleave two takes.
   alone; `--midi-track` is the different, older thing, converting one track into the single pattern
   the target names. `--route` replaces that rule for the tracks it names — `--route 3:1,1:2` puts source
   track 3 on device track 1 and source track 1 on device track 2, and whatever is left still fills
-  the tracks no pair claimed. The source side counts from 1 over **every** track of the file,
+  the tracks no pair claimed. The two are read together: `--midi-tracks` says which source tracks
+  are read and `--route` says where the read ones go, so a pair naming a track the selection leaves
+  out is refused. The source side counts from 1 over **every** track of the file,
   including ones carrying only tempo or a name; the device side is one of the KeyStep Pro's four.
   Only device track 1 carries a drum set, so a `--drum-track` may only be routed there and nothing
   else may be routed onto it; contradictions are refused rather than resolved. When a route is given the summary names each track's source, so what was

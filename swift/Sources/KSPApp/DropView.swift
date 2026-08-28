@@ -318,7 +318,9 @@ struct DropView: View {
                     isSplit: model.settings.splitPerPattern))
         case .song(let summary):
             VStack(alignment: .leading, spacing: 12) {
-                trackList(SourceTrackList(summary), selection: staged.sourceSelection)
+                trackList(
+                    SourceTrackList(summary), selection: staged.sourceSelection,
+                    placements: placements(staged.segmentation))
                 Divider()
                 segmentation(staged.segmentation)
             }
@@ -401,14 +403,26 @@ struct DropView: View {
             .help(cell.detail)
     }
 
+    /// Where the planner put each source track, for the pickers to show as their automatic answer.
+    /// Empty while a plan is in flight, which leaves a picker reading "Automatic" on its own.
+    private func placements(_ state: SegmentationState) -> [Int: String] {
+        guard case .ready(let summary) = state else { return [:] }
+        return SegmentationGrid.placements(summary)
+    }
+
     /// Unscrolled, like ``grid(_:selection:length:)``: the staged view already scrolls.
-    private func trackList(_ list: SourceTrackList, selection: SourceTrackSelection) -> some View {
+    private func trackList(
+        _ list: SourceTrackList, selection: SourceTrackSelection, placements: [Int: String]
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(list.header).font(.caption).foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(list.rows, id: \.number) {
-                    trackRow($0, ticked: selection.isTicked($0.number))
+                    trackRow(
+                        $0, ticked: selection.isTicked($0.number),
+                        destination: selection.destination($0.number),
+                        placement: placements[$0.number])
                 }
             }
 
@@ -434,7 +448,10 @@ struct DropView: View {
 
     /// One source track. Dimmed where it holds nothing and struck through where it is unticked,
     /// which are the two meanings the grid beside it gives the same marks.
-    private func trackRow(_ row: SourceTrackList.Row, ticked: Bool) -> some View {
+    private func trackRow(
+        _ row: SourceTrackList.Row, ticked: Bool,
+        destination: SourceTrackSelection.Destination, placement: String?
+    ) -> some View {
         HStack(spacing: AppLayout.trackColumnGap) {
             Toggle(
                 "",
@@ -462,10 +479,47 @@ struct DropView: View {
                 .font(.caption).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.tertiary : .secondary)
                 .frame(width: AppLayout.trackCountsWidth, alignment: .leading)
+            destinationPicker(row, destination: destination, placement: placement)
+                .frame(width: AppLayout.trackDestinationWidth, alignment: .leading)
         }
         .opacity(row.isEmpty ? 0.6 : 1)
         .contentShape(Rectangle())
         .help(row.detail + (ticked ? "" : " · unticked, so it will not be imported"))
+    }
+
+    /// A track holding nothing gets no picker: a route naming one is refused, and there is nothing
+    /// of it to send anywhere.
+    @ViewBuilder
+    private func destinationPicker(
+        _ row: SourceTrackList.Row, destination: SourceTrackSelection.Destination,
+        placement: String?
+    ) -> some View {
+        if row.isEmpty {
+            Color.clear.frame(height: 1)
+        } else {
+            Picker(
+                "",
+                selection: Binding(
+                    get: { destination },
+                    set: { model.send(sourceTrack: row.number, to: $0) })
+            ) {
+                ForEach(SourceTrackSelection.destinations) {
+                    Text(destinationLabel($0, placement: placement)).tag($0)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .controlSize(.small)
+        }
+    }
+
+    /// The automatic choice reads as where the planner actually put the track, so the default is
+    /// the assignment rather than a promise about it.
+    private func destinationLabel(
+        _ destination: SourceTrackSelection.Destination, placement: String?
+    ) -> String {
+        guard destination == .automatic, let placement else { return destination.label }
+        return "\(destination.label) — \(placement)"
     }
 
     @ViewBuilder

@@ -122,11 +122,6 @@ class ImportOptions:
 
     def _check_routes(self) -> None:
         """The faults a route has without knowing the song: range and clashes."""
-        if self.routes and self.midi_tracks:
-            raise ValueError(
-                "routes and a source-track selection contradict each other; name the source "
-                "tracks with one or the other"
-            )
         tracks = len(constants.TRACK_ITEM_IDS)
         sources: set[int] = set()
         devices: dict[int, TrackRoute] = {}
@@ -140,6 +135,12 @@ class ImportOptions:
                 raise ValueError(
                     f"route {route.source}:{route.device} names device track {route.device}; "
                     f"the device has {tracks} tracks"
+                )
+            if self.midi_tracks and route.source not in self.midi_tracks:
+                raise ValueError(
+                    f"route {route.source}:{route.device} names source track {route.source}, "
+                    "which is not in the selection; a route must name one of the source tracks "
+                    "read"
                 )
             if route.source in sources:
                 raise ValueError(f"route names source track {route.source} twice")
