@@ -32,7 +32,8 @@ private func summarise(
 ) throws -> SegmentationSummary {
     let plan = try MIDIImport.planSong(
         song, firstPattern: firstPattern, firstTrack: firstTrack)
-    return SegmentationSummary(song: song, plan: plan)
+    return SegmentationSummary(
+        song: song, plan: plan, stepsPerBar: song.stepsPerBar(Constants.defaultStepsPerBeat))
 }
 
 private func m6() throws -> (song: Song, plan: SongPlan) {
@@ -48,7 +49,8 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
     @Test func everyFigureIsThePlannersOwn() throws {
         let (song, plan) = try m6()
 
-        let summary = SegmentationSummary(song: song, plan: plan)
+        let summary = SegmentationSummary(
+            song: song, plan: plan, stepsPerBar: song.stepsPerBar(Constants.defaultStepsPerBeat))
 
         #expect(summary.tracks.count == plan.tracks.count)
         for (track, planned) in zip(summary.tracks, plan.tracks) {
@@ -64,7 +66,8 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
     @Test func thefixtureLaysFourSourceTracksOntoTheFourDeviceTracks() throws {
         let (song, plan) = try m6()
 
-        let summary = SegmentationSummary(song: song, plan: plan)
+        let summary = SegmentationSummary(
+            song: song, plan: plan, stepsPerBar: song.stepsPerBar(Constants.defaultStepsPerBeat))
 
         #expect(summary.tracks.map(\.deviceTrack) == [1, 2, 3, 4])
         #expect(summary.tracks.map(\.sourceTrack) == [3, 4, 5, 6])
@@ -75,7 +78,8 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
     @Test func arunPastTheDevicesMaximumSplitsAndTheNextPatternSaysWhereItResumes() throws {
         let (song, plan) = try m6()
 
-        let summary = SegmentationSummary(song: song, plan: plan)
+        let summary = SegmentationSummary(
+            song: song, plan: plan, stepsPerBar: song.stepsPerBar(Constants.defaultStepsPerBeat))
 
         let split = try #require(summary.tracks.first { $0.segments.count > 1 })
         #expect(split.deviceTrack == 4)
@@ -183,7 +187,8 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         let six = song((1...6).map { clip(source: $0, notes: 4, channel: $0 - 1) })
         let plan = try MIDIImport.planSong(six)
 
-        let summary = SegmentationSummary(song: six, plan: plan)
+        let summary = SegmentationSummary(
+            song: six, plan: plan, stepsPerBar: six.stepsPerBar(Constants.defaultStepsPerBeat))
 
         let counted = plan.diagnostics.first { $0.code == .tracksDropped }?.subjects
         #expect(summary.unplaced.count == counted)

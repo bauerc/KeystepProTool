@@ -4,9 +4,18 @@ import KSPMIDI
 import KSPRun
 import SwiftUI
 
+/// The boundary under the hand, drawn where the hand has it rather than where the planner last
+/// put it, so a drag shows the bar it is snapping to before it is let go of.
+private struct Dragging: Equatable {
+    let source: Int
+    let handle: Int
+    let x: CGFloat
+}
+
 struct DropView: View {
     @Bindable var model: AppModel
     @State private var targeted = false
+    @State private var dragging: Dragging?
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -341,8 +350,105 @@ struct DropView: View {
             Label(message, systemImage: "exclamationmark.triangle")
                 .font(.caption).foregroundStyle(.orange).textSelection(.enabled)
         case .ready(let summary):
-            segmentationGrid(SegmentationGrid(summary))
+            VStack(alignment: .leading, spacing: 12) {
+                segmentationGrid(SegmentationGrid(summary))
+                boundaryLanes(summary)
+            }
         }
+    }
+
+    /// The one thing in the staged view that changes what the planner is asked; the grid above
+    /// only draws what it answered.
+    @ViewBuilder
+    private func boundaryLanes(_ summary: SegmentationSummary) -> some View {
+        let lanes = SegmentLane.lanes(in: summary)
+        if !lanes.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text("Where each source track breaks").font(.caption).fontWeight(.medium)
+                    Spacer()
+                    if model.isSegmentationEdited {
+                        Button("Reset to the automatic split") { model.resetSegmentation() }
+                            .buttonStyle(.link).font(.caption)
+                    }
+                }
+                ForEach(lanes) { boundaryLane($0) }
+                if let refusal = model.segmentationRefusal {
+                    Label(refusal, systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(SegmentLane.legend).font(.caption2).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func boundaryLane(_ lane: SegmentLane) -> some View {
+        HStack(spacing: 0) {
+            Text(lane.name)
+                .font(.caption).fontWeight(.medium).lineLimit(1).minimumScaleFactor(0.8)
+                .frame(width: AppLayout.labelWidth, alignment: .leading)
+                .help(lane.detail)
+            Color.clear.frame(width: AppLayout.labelGap, height: 1)
+            ZStack(alignment: .leading) {
+                ForEach(lane.regions.indices, id: \.self) { laneRegion(lane.regions[$0]) }
+                ForEach(lane.handles) { laneBoundary(lane, handle: $0) }
+            }
+            .frame(width: AppLayout.laneWidth, height: AppLayout.laneHeight, alignment: .leading)
+            .coordinateSpace(name: laneSpace(lane))
+        }
+        .padding(.bottom, 4)
+        if let note = lane.note {
+            Label(note, systemImage: "info.circle")
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 4)
+        }
+    }
+
+    private func laneSpace(_ lane: SegmentLane) -> String { "lane-\(lane.sourceTrack)" }
+
+    private func laneRegion(_ region: SegmentLane.Region) -> some View {
+        RoundedRectangle(cornerRadius: 3)
+            .fill(Color.accentColor.opacity(0.22))
+            // A point short of its span, so two regions read as two rather than one long one.
+            .frame(width: max(0, region.width - 1), height: AppLayout.laneHeight)
+            .overlay {
+                if region.showsLabel {
+                    Text(region.label).font(.caption2).lineLimit(1)
+                }
+            }
+            .offset(x: region.x)
+            .help(region.detail)
+    }
+
+    private func laneBoundary(_ lane: SegmentLane, handle: SegmentLane.Handle) -> some View {
+        let held = dragging.flatMap {
+            $0.source == lane.sourceTrack && $0.handle == handle.index ? $0.x : nil
+        }
+        let x = held.map { lane.x(forHandle: handle.index, atX: $0) } ?? handle.x
+        return Capsule()
+            .fill(Color.accentColor)
+            .frame(width: AppLayout.laneBoundaryWidth, height: AppLayout.laneHeight)
+            .frame(width: AppLayout.laneGrabWidth, height: AppLayout.laneHeight)
+            .contentShape(Rectangle())
+            .offset(x: x - AppLayout.laneGrabWidth / 2)
+            .onHover { $0 ? NSCursor.resizeLeftRight.push() : NSCursor.pop() }
+            .help("Drag to move where this pattern begins")
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .named(laneSpace(lane)))
+                    .onChanged {
+                        dragging = Dragging(
+                            source: lane.sourceTrack, handle: handle.index, x: $0.location.x)
+                    }
+                    .onEnded { value in
+                        dragging = nil
+                        model.move(
+                            sourceTrack: lane.sourceTrack, handle: handle.index,
+                            toX: value.location.x)
+                    })
     }
 
     private func segmentationGrid(_ grid: SegmentationGrid) -> some View {

@@ -35,6 +35,9 @@ struct Settings: Sendable, Equatable {
     var routeSpec: String?
     /// The source track written as drums, `nil` leaving the reader's channel 10 detection standing.
     var drumTrack: Int?
+    /// Where the import cuts the source tracks a hand has broken, `nil` leaving the automatic
+    /// split alone. Import-only, as ``midiTracksSpec`` is.
+    var segmentBarsSpec: String?
     var splitPerPattern = false
 
     /// Export every event at the measured fresh-note velocity instead of the one it stores.
@@ -88,14 +91,21 @@ struct Settings: Sendable, Equatable {
         return copy
     }
 
+    /// Untouched boundaries name no spec at all, which is what leaves the run the automatic one.
+    func segmenting(_ boundaries: SegmentBoundaries) -> Settings {
+        var copy = self
+        copy.segmentBarsSpec = boundaries.spec
+        return copy
+    }
+
     /// `output` is `nil` for a preview, which resolves no destination because it writes nothing.
     func convertOptions(source: URL, output: URL?) -> ConvertRunner.Options {
         // `force` stays false: `Naming.vacant` found a free path, so the guard is a backstop.
         // The three ignores are the runner's own defaults inverted.
         ConvertRunner.Options(
             paths: [source], output: output, drumTrack: drumTrack, routeSpec: routeSpec,
-            fitSwing: !ignoreSwing, fitTimeShift: !ignoreTimeShift,
-            midiTracksSpec: midiTracksSpec,
+            segmentBarsSpec: segmentBarsSpec, fitSwing: !ignoreSwing,
+            fitTimeShift: !ignoreTimeShift, midiTracksSpec: midiTracksSpec,
             flatVelocitySpec: ignoreVelocity ? freshVelocitySpec : nil,
             dryRun: dryRun, verbose: verbose, configPath: drumMapConfigPath)
     }

@@ -164,6 +164,15 @@ import Testing
         #expect(AppLayout.columnCount == 16)
     }
 
+    /// The lane sits under the grid's pattern axis and is dragged along it, so a lane wider than
+    /// the pane would put its last bars somewhere the pointer cannot reach -- asserted at the
+    /// window's floor, where a clipped row cannot be resized away.
+    @Test func theboundaryLaneFitsTheSameStagedPaneTheGridDoes() {
+        #expect(AppLayout.gridOrigin + AppLayout.laneWidth <= AppLayout.minimumContentWidth)
+        #expect(AppLayout.laneWidth == AppLayout.gridWidth - AppLayout.gridOrigin)
+        #expect(AppLayout.laneGrabWidth > AppLayout.laneBoundaryWidth)
+    }
+
     @Test func arealProjectSummarisesStraightIntoAGrid() throws {
         let grid = PatternGrid(try summarise("project_5.KeyStepPro"))
 
