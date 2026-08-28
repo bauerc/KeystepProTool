@@ -150,28 +150,19 @@ enum Conversion {
         }
     }
 
-    /// A plan, or the reason it is not one.
-    struct Segmentation {
-        let state: SegmentationState
-        /// The planner's own words for a boundary it would not cut at; `nil` for anything else.
-        let refusal: String?
-    }
-
     /// Detached for the reason ``summarise`` is. It plans and writes nothing, so no destination is
     /// resolved and none is needed.
-    static func segment(_ job: Job, settings: Settings) async -> Segmentation {
+    static func segment(_ job: Job, settings: Settings) async -> SegmentationState {
         guard case .toProject(let source) = job else {
-            return Segmentation(state: .loading, refusal: nil)
+            return .loading
         }
         let outcome = await Task.detached(priority: .userInitiated) {
             SegmentationRunner.run(settings.convertOptions(source: source, output: nil))
         }.value
         guard let summary = outcome.summary else {
-            let message = outcome.message ?? "That MIDI file could not be read."
-            return Segmentation(
-                state: .failed(message), refusal: outcome.isRefusal ? message : nil)
+            return .failed(outcome.message ?? "That MIDI file could not be read.")
         }
-        return Segmentation(state: .ready(summary), refusal: nil)
+        return .ready(summary)
     }
 
     static func outcome(

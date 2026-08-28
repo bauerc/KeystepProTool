@@ -593,9 +593,9 @@ port, and it is the one step no script can do.
 confirmed 2026-08-07); drop a `.KeyStepPro` and a `.mid` lands beside it.
 
 **v1 is drag-and-drop only** — one window, one file, no options. The larger app in
-`project_requirements/project_requirements.md` (preview, per-track routing, segmentation, loop
-counts) needs its own specs. Sandbox off, since a sandbox cannot write into another app's directory
-and Developer ID distribution permits it.
+`project_requirements/project_requirements.md` (preview, per-track routing, loop counts) needs its
+own specs. Sandbox off, since a sandbox cannot write into another app's directory and Developer ID
+distribution permits it.
 
 **Split in two: M13.1 the seam, M13.2 the app.** SwiftPM forbids a non-test target from depending
 on an executable one, so the command bodies inside `KSPSwiftCLI` were reachable only from the CLI
@@ -635,8 +635,8 @@ number is not reused. The application's own remaining work is M15.
 ### M15 — The full application
 
 **Artifact:** *Key Step Pro Plus* as `project_requirements/project_requirements.md` describes it,
-rather than the deliberate one-window v1 M13 shipped. Preview, per-track routing, segmentation,
-loop counts, metadata control and multi-file import.
+rather than the deliberate one-window v1 M13 shipped. Preview, per-track routing, loop counts,
+metadata control and multi-file import.
 
 **Spec of record is the epic, issue #115**, which holds the requirement-coverage table and the
 frontier. Forty issues, each a vertical slice sized to a PR a human can read in one sitting.

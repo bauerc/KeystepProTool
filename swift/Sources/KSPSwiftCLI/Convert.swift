@@ -53,10 +53,6 @@ struct Convert: ParsableCommand {
     @Option(name: .customLong("route"), help: ArgumentHelp(routeHelp, valueName: "SPEC"))
     var route: String?
 
-    @Option(
-        name: .customLong("segment-bars"), help: ArgumentHelp(segmentBarsHelp, valueName: "SPEC"))
-    var segmentBars: String?
-
     @Option(name: .customLong("drum-map"), help: ArgumentHelp(drumMapHelp, valueName: "SPEC"))
     var drumMapSpec: String?
 
@@ -142,7 +138,7 @@ struct Convert: ParsableCommand {
                 paths: paths.map { URL(filePath: $0) },
                 output: output.map { URL(filePath: $0) },
                 track: track, pattern: pattern, drumTrack: drumTrack, routeSpec: route,
-                segmentBarsSpec: segmentBars, drumMapSpec: drumMapSpec,
+                drumMapSpec: drumMapSpec,
                 carryTempo: !noTempo, fitSwing: !noSwingFit, fitTimeShift: !noTimeShift,
                 template: template.map { URL(filePath: $0) },
                 midiTrack: midiTrack, midiTracksSpec: midiTracks,

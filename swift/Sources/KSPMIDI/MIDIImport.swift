@@ -24,18 +24,6 @@ public struct TrackRoute: Sendable, Hashable {
     }
 }
 
-/// Where one source track breaks into patterns: the bars a pattern begins at, counting from 1.
-/// Bar 1 is not listed, and no bars at all is the automatic split.
-public struct TrackSegments: Sendable, Hashable {
-    public var source: Int
-    public var bars: [Int]
-
-    public init(source: Int, bars: [Int]) {
-        self.source = source
-        self.bars = bars
-    }
-}
-
 public struct ImportOptions: Sendable, Hashable {
     public let stepsPerBeat: Int
 
@@ -51,10 +39,6 @@ public struct ImportOptions: Sendable, Hashable {
 
     public let routes: [TrackRoute]
 
-    /// Where named source tracks break into patterns, overriding the automatic split.
-    /// Tracks no entry names are still cut at the device's step limit as before.
-    public let segments: [TrackSegments]
-
     /// Write every note and trigger at this velocity instead of the source's; `nil`
     /// keeps the file's own. Written content: existence is never velocity.
     public let flatVelocity: Int?
@@ -68,7 +52,6 @@ public struct ImportOptions: Sendable, Hashable {
         fitSwing: Bool = true,
         fitTimeShift: Bool = true,
         routes: [TrackRoute] = [],
-        segments: [TrackSegments] = [],
         flatVelocity: Int? = nil
     ) throws {
         try Constants.checkStepsPerBeat(stepsPerBeat)
@@ -84,7 +67,6 @@ public struct ImportOptions: Sendable, Hashable {
                     + "the source tracks read")
         }
         try ImportOptions.checkRoutes(routes, drumTrack: drumTrack, midiTracks: midiTracks)
-        try ImportOptions.checkSegments(segments)
         try MIDIExport.checkFlatVelocity(flatVelocity)
         self.stepsPerBeat = stepsPerBeat
         self.midiTracks = midiTracks
@@ -94,7 +76,6 @@ public struct ImportOptions: Sendable, Hashable {
         self.fitSwing = fitSwing
         self.fitTimeShift = fitTimeShift
         self.routes = routes
-        self.segments = segments
         self.flatVelocity = flatVelocity
     }
 
@@ -142,35 +123,6 @@ public struct ImportOptions: Sendable, Hashable {
             }
             sources.insert(route.source)
             devices[route.device] = route
-        }
-    }
-
-    /// The faults a segmentation has without knowing the song: range and order.
-    private static func checkSegments(_ segments: [TrackSegments]) throws {
-        var named: Set<Int> = []
-        for entry in segments {
-            if entry.source < 1 {
-                throw KSPError.segment(
-                    "segment counts source tracks from 1, so \(entry.source) is not one")
-            }
-            if named.contains(entry.source) {
-                throw KSPError.segment("segment names source track \(entry.source) twice")
-            }
-            named.insert(entry.source)
-            var previous = 1
-            for bar in entry.bars {
-                if bar < 2 {
-                    throw KSPError.segment(
-                        "segment bar \(bar) of source track \(entry.source) is not a boundary; "
-                            + "bar 1 begins the first pattern")
-                }
-                if bar <= previous {
-                    throw KSPError.segment(
-                        "segment bars of source track \(entry.source) must ascend, and \(bar) "
-                            + "does not follow \(previous)")
-                }
-                previous = bar
-            }
         }
     }
 }
@@ -863,46 +815,11 @@ extension MIDIImport {
             swingPercent: placement.swingPercent, diagnostics: collector.report())
     }
 
-    /// Explicit bar boundaries into one `(offset, steps)` pair per pattern.
-    /// Refused rather than adjusted: a boundary the device cannot play is not a boundary.
-    static func cutAtBars(
-        _ bars: [Int], total: Int, stepsPerBar: Int, source: Int, firstPattern: Int,
-        available: Int
-    ) throws -> [(offset: Int, steps: Int)] {
-        let length = max(1, Arithmetic.floorDiv(total, stepsPerBar))
-        // Counted, not multiplied out: an outsized bar would trap on the multiplication,
-        // where Python's unbounded ints simply refuse it.
-        for bar in bars where bar - 1 >= length {
-            throw KSPError.segment(
-                "segment bar \(bar) of source track \(source) is past the track's "
-                    + "\(length) bar(s); a boundary is where a pattern begins, so it has to "
-                    + "fall inside the track")
-        }
-
-        let edges = [0] + bars.map { ($0 - 1) * stepsPerBar } + [total]
-        let cuts = zip(edges, edges.dropFirst()).map {
-            (offset: $0, steps: $1 - $0)
-        }
-        for (cut, bar) in zip(cuts, [1] + bars) where cut.steps > Constants.maxSteps {
-            throw KSPError.segment(
-                "segmenting source track \(source) makes a pattern of \(cut.steps) steps "
-                    + "from bar \(bar), past the device's \(Constants.maxSteps); cut it again "
-                    + "before the tail runs over")
-        }
-        if cuts.count > available {
-            throw KSPError.segment(
-                "segmenting source track \(source) makes \(cuts.count) patterns but only "
-                    + "\(available) are free from pattern \(firstPattern); a chain runs to "
-                    + "pattern \(Constants.patternsPerTrack) at most")
-        }
-        return cuts
-    }
-
     /// Lengths are per track, never padded: the device loops each track's chain on its own.
     public static func planTrack(
         _ clip: Clip, track: Int, collector: Collector, options: ImportOptions? = nil,
         isDrum: Bool = false, drumMap: DrumMap? = nil, firstPattern: Int = 1,
-        stepsPerBar: Int = 16, segmentBars: [Int] = [], origin: Double
+        stepsPerBar: Int = 16, origin: Double
     ) throws -> TrackPlan {
         let options = try options ?? ImportOptions()
         let ticksPerStep = Double(clip.ticksPerBeat) / Double(options.stepsPerBeat)
@@ -927,26 +844,18 @@ extension MIDIImport {
         }
 
         let available = Constants.patternsPerTrack - firstPattern + 1
-        var cuts: [(offset: Int, steps: Int)] = []
-        if segmentBars.isEmpty {
-            var count = Arithmetic.ceilDiv(total, Constants.maxSteps)
-            if count > available {
-                collector.add(
-                    .pastPatternEnd,
-                    "track \(track) needs \(count) patterns but only \(available) are free "
-                        + "from pattern \(firstPattern); the tail was dropped",
-                    site: site, subjects: count - available)
-                count = available
-            }
-            cuts = (0..<max(0, count)).map {
-                let offset = $0 * Constants.maxSteps
-                return (offset: offset, steps: min(Constants.maxSteps, total - offset))
-            }
-        } else {
-            cuts = try cutAtBars(
-                segmentBars, total: total, stepsPerBar: stepsPerBar,
-                source: clip.sourceTracks[0], firstPattern: firstPattern,
-                available: available)
+        var count = Arithmetic.ceilDiv(total, Constants.maxSteps)
+        if count > available {
+            collector.add(
+                .pastPatternEnd,
+                "track \(track) needs \(count) patterns but only \(available) are free "
+                    + "from pattern \(firstPattern); the tail was dropped",
+                site: site, subjects: count - available)
+            count = available
+        }
+        let cuts = (0..<max(0, count)).map {
+            let offset = $0 * Constants.maxSteps
+            return (offset: offset, steps: min(Constants.maxSteps, total - offset))
         }
 
         var placements: [Placement] = []
@@ -964,20 +873,12 @@ extension MIDIImport {
 
         if cuts.count > 1 {
             let last = firstPattern + cuts.count - 1
-            if segmentBars.isEmpty {
-                collector.add(
-                    .patternSplit,
-                    "track \(track) runs \(total) steps, past the device's "
-                        + "\(Constants.maxSteps); it was split across patterns "
-                        + "\(firstPattern)-\(last) and chained",
-                    site: site)
-            } else {
-                collector.add(
-                    .patternSegmented,
-                    "track \(track) was cut at bar(s) \(listed(segmentBars)) across patterns "
-                        + "\(firstPattern)-\(last) and chained",
-                    site: site)
-            }
+            collector.add(
+                .patternSplit,
+                "track \(track) runs \(total) steps, past the device's "
+                    + "\(Constants.maxSteps); it was split across patterns "
+                    + "\(firstPattern)-\(last) and chained",
+                site: site)
         }
 
         return TrackPlan(
@@ -1107,14 +1008,6 @@ extension MIDIImport {
                 subjects: song.controllersDropped)
         }
 
-        for entry in options.segments
-        where !song.clips.contains(where: { $0.sourceTracks == [entry.source] }) {
-            throw KSPError.segment(
-                "track \(entry.source) of the source carries nothing to segment; a "
-                    + "segmentation names a source track the conversion reads, counting every "
-                    + "track of the file from 1")
-        }
-
         let assigned = try assign(song, options, collector, firstTrack)
 
         var drumMap = options.drumMap
@@ -1128,8 +1021,6 @@ extension MIDIImport {
                     + "The real map is a device setting the project file does not carry")
         }
 
-        let segments = Dictionary(
-            options.segments.map { ($0.source, $0.bars) }, uniquingKeysWith: { _, last in last })
         let stepsPerBar = song.stepsPerBar(options.stepsPerBeat)
         let ticksPerStep = Double(song.ticksPerBeat) / Double(options.stepsPerBeat)
         let origin = anchor(assigned.map(\.clip), ticksPerStep)
@@ -1146,7 +1037,6 @@ extension MIDIImport {
                 $0.clip, track: $0.track, collector: collector, options: options,
                 isDrum: $0.isDrum, drumMap: drumMap, firstPattern: firstPattern,
                 stepsPerBar: stepsPerBar,
-                segmentBars: $0.clip.sourceTracks.first.flatMap { segments[$0] } ?? [],
                 origin: origin)
         }
 

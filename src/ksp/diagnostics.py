@@ -50,7 +50,6 @@ class Code(StrEnum):
     PAST_PATTERN_END = "past-pattern-end"
     MULTIPLE_SOURCES = "multiple-sources"
     PATTERN_SPLIT = "pattern-split"
-    PATTERN_SEGMENTED = "pattern-segmented"
     POOL_OVERFLOW = "pool-overflow"
     TRACKS_DROPPED = "tracks-dropped"
     GATE_APPROXIMATED = "gate-approximated"
@@ -206,11 +205,6 @@ SUMMARIES: Mapping[Code, Summary] = {
     Code.PATTERN_SPLIT: Summary(
         "{sites} run longer than the device's 64-step maximum and were split across consecutive "
         "patterns, chained in the current scene so they play as one sequence",
-        site="track",
-    ),
-    Code.PATTERN_SEGMENTED: Summary(
-        "{sites} were cut at the bars asked for and laid across consecutive patterns, chained "
-        "in the current scene so they play as one sequence",
         site="track",
     ),
     Code.POOL_OVERFLOW: Summary(
