@@ -94,6 +94,18 @@ would be dropped" — because what competes for those four is a channel, not a t
 carrying two of them asks for two and a track holding nothing asks for none. Untick everything and
 Convert says so rather than writing an empty project, and the result names what was left out.
 
+**Saying where a source track goes.** Beside each source track holding notes sits a destination —
+device track 1 to 4, **Drums**, **Skip**, or **Automatic**, which is where it starts. Automatic
+reads as the assignment the planner actually made, "Automatic — Track 2", taken from the same dry
+run the grid below is drawn from, so the default costs nothing and any change is deliberate. Choose
+a device track and the grid replans as you watch; choose Drums and it goes to track 1, the only one
+carrying a drum set; choose Skip and it is simply unticked. The choices are `--route` and
+`--drum-track` as the CLI spells them, not a mechanism of the app's own, and only the tracks you
+place by hand are named — a route merges a source track's channels onto its one device track, so
+routing the ones you never touched would move them. Send two tracks to one device track, or send
+anything but the drums to track 1, and Convert says which two clash rather than letting the run
+refuse it.
+
 **Ticking what is exported.** Every slot starts ticked, and the export follows the ticks. Click a
 slot to leave that one out, a track name to leave out the whole track, a slot number to leave that
 slot out on every track. Any set of cells will do — a slot dropped on one track alone is kept on the

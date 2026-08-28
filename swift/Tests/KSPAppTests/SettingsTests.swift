@@ -85,6 +85,7 @@ import Testing
         #expect(mapped.template == defaults.template)
         #expect(mapped.midiTrack == defaults.midiTrack)
         #expect(mapped.midiTracksSpec == defaults.midiTracksSpec)
+        #expect(mapped.routeSpec == defaults.routeSpec)
         #expect(mapped.stepsPerBeat == defaults.stepsPerBeat)
     }
 
@@ -171,6 +172,29 @@ import Testing
         let mapped = Settings().selecting(selection).convertOptions(source: source, output: output)
 
         #expect(mapped.midiTracksSpec == "2,3,4")
+    }
+
+    @Test func adestinationReachesTheRunnerAsTheRouteAndTheDrumTrack() {
+        var selection = SourceTrackSelection(syntheticSong(tracks: (1...4).map { sourceTrack($0) }))
+        selection.send(3, to: .track(2))
+        selection.send(4, to: .drums)
+
+        let mapped = Settings().selecting(selection).convertOptions(source: source, output: output)
+
+        #expect(mapped.routeSpec == "3:2")
+        #expect(mapped.drumTrack == 4)
+    }
+
+    /// A route and a selection are read together, so the app hands over both rather than choosing.
+    @Test func aroutedTrackAndAnUntickedOneReachTheRunnerTogether() {
+        var selection = SourceTrackSelection(syntheticSong(tracks: (1...5).map { sourceTrack($0) }))
+        selection.send(2, to: .skip)
+        selection.send(3, to: .track(4))
+
+        let mapped = Settings().selecting(selection).convertOptions(source: source, output: output)
+
+        #expect(mapped.midiTracksSpec == "1,3,4")
+        #expect(mapped.routeSpec == "3:4")
     }
 
     @Test func atickOnEverySourceTrackHoldingNotesAsksForNothing() {
