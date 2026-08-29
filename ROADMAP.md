@@ -654,6 +654,37 @@ no Python mirror and runs no parity gate, so both summaries live in `KSPRun` com
 **Test:** convert the same file through the app on defaults and through `ksp-swift-cli` on defaults,
 and get the same bytes — the check that the options surface did not change what conversion means.
 
+### M16 — The app's visual language
+
+**Artifact:** the app wearing the KeyStep Pro's own documented visual system, and a bundle icon
+where there was none. Look only — no conversion behaviour, no CLI change, no new option.
+
+**Spec of record is [ADR 0002](docs/adr/0002-the-app-wears-the-devices-visual-language.md) and
+[the visual language](docs/design/visual-language.md).** Six issues, #221–#226, all labelled `app`.
+
+**Why it is not an M15 child.** M15 is the application's remaining *function* — routing, loop
+counts, multi-file import. This changes nothing about what the app does, so it does not belong on
+that epic's requirement-coverage table.
+
+**The spine is the four track colours.** Manual 2.5.2 §1.4 — *"Green for Track 1, Orange for Track
+2, Yellow for Track 3 and Red for Track 4"* — painted on the panel and lit on the step buttons, and
+the pattern map is four rows. Light mode is the standard unit, dark is the Chroma; both are real
+products and neither palette is derived from the other.
+
+**Three rules bind any later edit**, and are the ones an unwary change breaks: hue never carries
+text contrast (Track 3 is `#FACC00`); status never relies on hue (Track 2 is orange and Track 4 is
+red); the numerals are the device's, so **`C3` is MIDI 60 and is not a bug**.
+
+**The parity contract is untouched by design.** The preview grids emit no CLI text and were already
+exempt. `Report` and its `render()` are not — both CLIs print them, and `ConversionTests` asserts
+on `resultLine`, `previewLine` and finding fragments. This milestone changes how findings look,
+never what they say. **The CLI's own output stays uncoloured, permanently.**
+
+**Test:** launch the app in both appearances and walk idle → drop → staged → converting → done for
+each direction. There is no UI test in this repo, so each issue is reviewed as a screenshot. The
+deliberately hard cases are Track 3's yellow on the light ground, a finding row beside a Track 2
+row, the icon at 16pt, and `reduce-motion` during a conversion.
+
 ---
 
 ## Release track — off the ladder

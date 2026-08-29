@@ -96,3 +96,32 @@ A Note's offset from the step it sits on.
 
 **Step skip**:
 Which repeats of a Pattern a Note plays on.
+
+## The app's surfaces
+
+What the app draws has no name on the device — the KeyStep Pro has no screen that shows any of it.
+These are therefore coined, and coined from the device's nouns rather than from their shape, so a
+UI word can never collide with a format word. See
+[the visual language](docs/design/visual-language.md) for how each one looks.
+
+**Pattern map**:
+The app's view of a Project as four tracks down by sixteen Pattern slots across. It maps Patterns
+to Pattern slots, which is why it is not named after its shape.
+_Avoid_: grid, pattern grid, matrix, timeline
+
+**Slot cell**:
+One Pattern slot within the Pattern map, and whatever Pattern occupies it.
+_Avoid_: grid cell, tile, square
+
+**Chain rail**:
+The bar drawn beneath a Pattern map row showing the span its Chain covers.
+_Avoid_: chain bar, chain line
+
+**Limit meter**:
+One gauge of how close a conversion sits to one of the device's hard limits.
+_Avoid_: gauge, limit bar
+
+**Control band**:
+The dark strip across the top of the app's content area, after the panel's own matte black band —
+the one carrying the display, the knobs and the four track displays above the coloured track zones.
+_Avoid_: header, toolbar, title bar
