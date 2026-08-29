@@ -9,6 +9,9 @@ enum AppLayout {
     /// The window's floor, not its size: it resizes above this, and the width goes to a track name.
     static let minimumWindowWidth: CGFloat = 1020
     static let minimumWindowHeight: CGFloat = 440
+    /// Simple's floor: no sidebar and no grid row to hold open, so the card is all it must fit.
+    static let simpleWindowWidth: CGFloat = 460
+    static let simpleWindowHeight: CGFloat = 340
     /// What a first launch opens at; afterwards the window restores the size it was left at.
     static let defaultWindowWidth: CGFloat = 1120
     static let defaultWindowHeight: CGFloat = 600

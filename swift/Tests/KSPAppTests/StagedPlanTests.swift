@@ -10,6 +10,7 @@ import Testing
     private func model(writingInto directory: URL) -> AppModel {
         AppModel(
             store: FolderStore(defaults: volatileDefaults()),
+            settingsStore: advancedSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
             reveal: { _ in }, chooseFolder: { _ in nil })
     }

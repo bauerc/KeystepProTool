@@ -11,17 +11,20 @@ struct DropView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             VStack(spacing: 16) {
+                modeSwitch
                 content
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(AppLayout.mainPadding)
 
-            Divider()
-            options
+            if model.mode == .advanced {
+                Divider()
+                options
+            }
         }
         .frame(
-            minWidth: AppLayout.minimumWindowWidth, maxWidth: .infinity,
-            minHeight: AppLayout.minimumWindowHeight, maxHeight: .infinity
+            minWidth: floor.width, maxWidth: .infinity,
+            minHeight: floor.height, maxHeight: .infinity
         )
         .dropDestination(for: URL.self) { urls, _ in
             // One file at a time in v1: a second would need its own name field and its own result.
@@ -32,6 +35,25 @@ struct DropView: View {
             targeted = $0
         }
         .background(targeted ? Color.accentColor.opacity(0.12) : Color.clear)
+    }
+
+    /// Simple has no grid to hold open, so it keeps the window the size the app first shipped at.
+    private var floor: (width: CGFloat, height: CGFloat) {
+        model.mode == .simple
+            ? (AppLayout.simpleWindowWidth, AppLayout.simpleWindowHeight)
+            : (AppLayout.minimumWindowWidth, AppLayout.minimumWindowHeight)
+    }
+
+    /// The one control Simple shows outside the card: without it there is no way back.
+    private var modeSwitch: some View {
+        Picker("", selection: $model.mode) {
+            ForEach(Mode.allCases) { Text($0.label).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.small)
+        .fixedSize()
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     /// A fixed-width column, so a control added below must push, not widen or clip.
@@ -184,6 +206,15 @@ struct DropView: View {
                 // `description(of:)` tildes the path, so the full one has to be reachable.
                 .help(model.folders[kind]?.path ?? kind.defaultDescription)
 
+            folderControls(kind)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The choice alone, without the heading and path the sidebar sets above it: Simple puts this
+    /// under the target the plan has already named.
+    private func folderControls(_ kind: FolderKind) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Button("Choose…") { model.choose(kind) }
                 if model.folders[kind] != nil {
@@ -196,6 +227,7 @@ struct DropView: View {
             if kind == .project, let warning = model.mccWarning {
                 Label(warning, systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -221,14 +253,19 @@ struct DropView: View {
                 .font(.system(size: 44))
                 .foregroundStyle(.secondary)
             Text("Drop a MIDI file here").font(.title3)
-            Text(
-                "Drop a .KeyStepPro instead to get a MIDI file back. "
-                    + "Where each one lands is on the right."
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
+            Text(idleNote)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
+    }
+
+    /// Advanced can point at the sidebar; Simple has none, and says where the choice turns up.
+    private var idleNote: String {
+        "Drop a .KeyStepPro instead to get a MIDI file back. "
+            + (model.mode == .advanced
+                ? "Where each one lands is on the right."
+                : "Where it lands is shown before you convert.")
     }
 
     private func staged(_ staged: AppModel.Staged) -> some View {
@@ -259,25 +296,32 @@ struct DropView: View {
                         Text(note).font(.caption).foregroundStyle(.secondary)
                     }
 
-                    Divider()
-                    summary(staged)
-
-                    if let excluded = model.exclusionNote {
-                        Text(excluded).font(.caption).foregroundStyle(.secondary)
+                    // Simple hides the sidebar row this would otherwise repeat.
+                    if model.mode == .simple {
+                        folderControls(staged.job.folderKind)
                     }
 
-                    // Only on the way out: these three mean something else on an import.
-                    if staged.job.writesMIDI, let replaced = model.settings.replacementNote {
-                        Text(replaced).font(.caption).foregroundStyle(.secondary)
-                    }
-
-                    if !staged.job.writesMIDI, let ignored = model.settings.ignoredNote {
-                        Text(ignored).font(.caption).foregroundStyle(.secondary)
-                    }
-
-                    if let preview = staged.preview {
+                    if model.mode == .advanced {
                         Divider()
-                        dryRunPreview(preview)
+                        summary(staged)
+
+                        if let excluded = model.exclusionNote {
+                            Text(excluded).font(.caption).foregroundStyle(.secondary)
+                        }
+
+                        // Only on the way out: these three mean something else on an import.
+                        if staged.job.writesMIDI, let replaced = model.settings.replacementNote {
+                            Text(replaced).font(.caption).foregroundStyle(.secondary)
+                        }
+
+                        if !staged.job.writesMIDI, let ignored = model.settings.ignoredNote {
+                            Text(ignored).font(.caption).foregroundStyle(.secondary)
+                        }
+
+                        if let preview = staged.preview {
+                            Divider()
+                            dryRunPreview(preview)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

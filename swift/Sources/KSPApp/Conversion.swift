@@ -210,6 +210,28 @@ enum Conversion {
 }
 
 extension Job {
+    /// A ``Job`` without its file: what a remembered ``Settings`` is keyed on. Not "direction",
+    /// which the device already spends on a pattern's playback order (ADR 0001).
+    enum Kind: String, CaseIterable, Sendable {
+        case toProject
+        case toMIDI
+    }
+
+    var kind: Kind {
+        switch self {
+        case .toProject: return .toProject
+        case .toMIDI: return .toMIDI
+        }
+    }
+
+    /// Which of the two remembered folders this job's result lands in.
+    var folderKind: FolderKind {
+        switch self {
+        case .toProject: return .project
+        case .toMIDI: return .midi
+        }
+    }
+
     var writesMIDI: Bool {
         if case .toMIDI = self { return true }
         return false

@@ -2,12 +2,12 @@ import Foundation
 import KSPMIDI
 import KSPRun
 
-struct Settings: Sendable, Equatable {
+struct Settings: Sendable, Equatable, Codable {
     /// A deliberate twin of `MIDIExport.maxRepeat`; a test pins the two together.
     static let repeatRange = 1...10
 
     /// Auto, or a fixed count of the device's four 16/32/48/64 sequences.
-    enum StepSkip: String, CaseIterable, Identifiable, Sendable {
+    enum StepSkip: String, CaseIterable, Identifiable, Codable, Sendable {
         case auto
         case one = "1"
         case two = "2"
@@ -109,5 +109,21 @@ struct Settings: Sendable, Equatable {
             flatVelocity: replaceVelocity ? MIDIExport.defaultFlatVelocity : nil,
             applySwing: !replaceSwing, applyTimeShift: !replaceTimeShift, dryRun: dryRun,
             verbose: verbose, configPath: drumMapConfigPath)
+    }
+
+    /// What survives a launch. ``cells``, ``midiTracksSpec``, ``routeSpec`` and ``drumTrack``
+    /// belong to a drop rather than to a preference, so they are left out and come back as-new.
+    private enum CodingKeys: String, CodingKey {
+        case dryRun
+        case verbose
+        case stepSkip
+        case repeatCount
+        case splitPerPattern
+        case replaceVelocity
+        case replaceSwing
+        case replaceTimeShift
+        case ignoreVelocity
+        case ignoreSwing
+        case ignoreTimeShift
     }
 }

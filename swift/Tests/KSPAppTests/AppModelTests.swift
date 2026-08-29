@@ -16,6 +16,7 @@ import Testing
     {
         AppModel(
             store: FolderStore(defaults: volatileDefaults()),
+            settingsStore: advancedSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
             reveal: { log.revealed.append($0) }, chooseFolder: { _ in nil })
     }
@@ -227,7 +228,9 @@ import Testing
     /// A chosen folder is exactly what keeps `forProjects` away from MCC's Templates folder.
     private func model(picking picked: URL?, over defaults: UserDefaults) -> AppModel {
         AppModel(
-            store: FolderStore(defaults: defaults), reveal: { _ in }, chooseFolder: { _ in picked })
+            store: FolderStore(defaults: defaults),
+            settingsStore: SettingsStore(defaults: defaults), reveal: { _ in },
+            chooseFolder: { _ in picked })
     }
 
     private func withFolder(_ body: (UserDefaults, URL) throws -> Void) throws {
@@ -326,6 +329,7 @@ import Testing
     private func model() -> AppModel {
         AppModel(
             store: FolderStore(defaults: volatileDefaults()),
+            settingsStore: advancedSettings(),
             destination: { _, _ in
                 Destination(directory: FileManager.default.temporaryDirectory, note: nil)
             },
@@ -526,8 +530,8 @@ import Testing
 
     @Test func adryRunKeepsTheSummaryItAlreadyHas() async throws {
         let model = model()
-        model.settings.dryRun = true
         model.accept(projectFixture)
+        model.settings.dryRun = true
         await model.summarise()
         let staged = try #require(model.staged)
 
@@ -577,8 +581,8 @@ import Testing
 
     @Test func untickingSomethingDiscardsAdryRunPreview() async throws {
         let model = model()
-        model.settings.dryRun = true
         model.accept(projectFixture)
+        model.settings.dryRun = true
         await model.summarise()
         await model.convert()
         #expect(try #require(model.staged).preview != nil)
@@ -609,6 +613,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = AppModel(
             store: FolderStore(defaults: volatileDefaults()),
+            settingsStore: advancedSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
             reveal: { _ in }, chooseFolder: { _ in nil })
         model.accept(projectFixture)
@@ -637,6 +642,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = AppModel(
             store: FolderStore(defaults: volatileDefaults()),
+            settingsStore: advancedSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
             reveal: { _ in }, chooseFolder: { _ in nil })
         model.accept(projectFixture)
@@ -660,6 +666,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = AppModel(
             store: FolderStore(defaults: volatileDefaults()),
+            settingsStore: advancedSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
             reveal: { _ in }, chooseFolder: { _ in nil })
         model.accept(projectFixture)

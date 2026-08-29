@@ -3,6 +3,8 @@ import KSPKit
 import KSPRun
 import Testing
 
+@testable import KSPApp
+
 /// A twin per target: SwiftPM cannot share a source file between two test targets.
 enum RepoData {
     static let root = URL(filePath: #filePath)
@@ -32,6 +34,14 @@ private func volatileSuite() -> (name: String, defaults: UserDefaults) {
 }
 
 func volatileDefaults() -> UserDefaults { volatileSuite().defaults }
+
+/// A store of this test's own, already switched to Advanced: Simple hides every option, so a
+/// suite that exercises one needs the face that shows it.
+func advancedSettings() -> SettingsStore {
+    let store = SettingsStore(defaults: volatileDefaults())
+    store.save(.advanced)
+    return store
+}
 
 func withVolatileDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
     let suite = volatileSuite()
