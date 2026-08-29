@@ -45,7 +45,8 @@ import Testing
 
         #expect(
             limits.gauges.map(\.figure) == ["4 / 4", "2 / 16", "64 / 64", "160 / 192", "4 / 16"])
-        #expect(limits.gauges.map(\.status) == [.near, .within, .near, .near, .within])
+        // Four of four tracks and 64 of 64 steps are the device's capability, not a wall neared.
+        #expect(limits.gauges.map(\.status) == [.within, .within, .within, .near, .within])
         #expect(
             limits.gauges.map(\.site) == [
                 nil, "Track 4", "Track 1, pattern 1", "Track 2, pattern 1", "Track 2, pattern 1",

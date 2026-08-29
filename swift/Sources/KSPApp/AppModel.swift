@@ -99,16 +99,28 @@ final class AppModel {
     /// The direction whose remembered settings the panel is editing.
     var kind: Job.Kind { staged?.job.kind ?? lastKind }
 
-    /// Simple reads as the defaults whatever Advanced holds, which is what keeps a switch to it
-    /// from quietly applying options chosen under the other face.
+    /// Simple reads as the defaults whatever Advanced holds, but for the dry run: that is the one
+    /// option Simple shows, so it is the one field either face can write.
     var settings: Settings {
-        get { mode == .simple ? Settings() : slots[kind] ?? Settings() }
+        get {
+            let stored = slots[kind] ?? Settings()
+            guard mode == .simple else { return stored }
+            var plain = Settings()
+            plain.dryRun = stored.dryRun
+            return plain
+        }
         set {
-            // Discarded under Simple, which shows no control to write through, and written to
-            // whichever slot ``kind`` names now: a write before a drop lands in the other one.
-            guard mode == .advanced else { return }
-            slots[kind] = newValue
-            settingsStore.save(newValue, for: kind)
+            // Written to whichever slot ``kind`` names now: a write before a drop lands in the
+            // other one. Under Simple only the dry run survives, so the rest of a Simple write --
+            // which is the defaults it just read -- cannot overwrite what Advanced holds.
+            var kept = slots[kind] ?? Settings()
+            if mode == .advanced {
+                kept = newValue
+            } else {
+                kept.dryRun = newValue.dryRun
+            }
+            slots[kind] = kept
+            settingsStore.save(kept, for: kind)
         }
     }
 
@@ -186,10 +198,9 @@ final class AppModel {
         let settings: Settings
     }
 
-    /// `nil` under Simple, which draws no plan: the key is what the view waits on, so the read
-    /// starts of its own accord the moment Advanced is chosen.
+    /// `nil` over a project, which is planned by the grid it draws rather than by the importer.
     var segmentationKey: SegmentationKey? {
-        guard mode == .advanced, let staged, case .toProject = staged.job else { return nil }
+        guard let staged, case .toProject = staged.job else { return nil }
         return SegmentationKey(
             drop: staged.id,
             settings: settings.selecting(staged.sourceSelection))
@@ -206,11 +217,11 @@ final class AppModel {
         phase = .staged(current)
     }
 
-    /// Both selections, or under Simple neither, which is what makes its bytes the CLI's own.
+    /// Both selections whichever face is showing: a tick belongs to the drop, not to a preference,
+    /// and ``settings`` has already held Advanced's options back from Simple.
     /// Takes the drop because ``convert()`` has left the staged phase by the time it needs this.
     func conversionSettings(_ staged: Staged) -> Settings {
-        guard mode == .advanced else { return Settings() }
-        return settings.selecting(staged.selection).selecting(staged.sourceSelection)
+        settings.selecting(staged.selection).selecting(staged.sourceSelection)
     }
 
     var conversionSettings: Settings { staged.map(conversionSettings) ?? settings }

@@ -25,8 +25,8 @@ struct DropView: View {
             }
         }
         .frame(
-            minWidth: windowFloor.width, maxWidth: .infinity,
-            minHeight: windowFloor.height, maxHeight: .infinity
+            minWidth: AppLayout.minimumWindowWidth, maxWidth: .infinity,
+            minHeight: AppLayout.minimumWindowHeight, maxHeight: .infinity
         )
         .background(palette.ground)
         .foregroundStyle(palette.ink)
@@ -114,8 +114,6 @@ struct DropView: View {
         }
     }
 
-    private var windowFloor: CGSize { AppLayout.windowFloor(for: model.mode) }
-
     /// In the titlebar, where a view switch belongs and where nothing the pane does can move it.
     private var modeSwitch: some View {
         Picker("", selection: $model.mode) {
@@ -127,7 +125,8 @@ struct DropView: View {
     }
 
     /// A fixed-width column, so a control added below must push, not widen or clip. Simple keeps
-    /// the destinations and drops the rest: where a file lands is the least a user configures.
+    /// the destinations, the appearance and the dry run, and drops the groups that reshape a
+    /// conversion: what those do is the part worth choosing a face for.
     private var options: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -157,17 +156,21 @@ struct DropView: View {
                     // One group, never both: the panel writes to the slot ``kind`` names, so a
                     // control from the other direction would take an edit that slot never reads.
                     if model.kind == .toMIDI { exportGroup } else { importGroup }
+                }
 
-                    Divider()
+                Divider()
 
-                    sectionHeader("Options")
+                sectionHeader("Options")
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Toggle("Dry run", isOn: $model.settings.dryRun)
-                        Text("Report what would be written, and write nothing.")
-                            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                    }
+                // Shown under Simple too: writing nothing is not an advanced thing to ask for, and
+                // Convert reads "Dry run" while it is on, so it cannot be left set unnoticed.
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Dry run", isOn: $model.settings.dryRun)
+                    Text("Report what would be written, and write nothing.")
+                        .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                }
 
+                if model.mode == .advanced {
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("Show every finding", isOn: $model.settings.verbose)
                         Text("List each finding instead of one line per kind.")
@@ -385,27 +388,26 @@ struct DropView: View {
                         Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
                     }
 
-                    if model.mode == .advanced {
+                    Divider()
+                    summary(staged)
+
+                    if let excluded = model.exclusionNote {
+                        Text(excluded).font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                    }
+
+                    // Only on the way out: these three mean something else on an import. Both notes
+                    // are nil on the defaults, so Simple drops them without a face of its own.
+                    if staged.job.writesMIDI, let replaced = model.settings.replacementNote {
+                        Text(replaced).font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                    }
+
+                    if !staged.job.writesMIDI, let ignored = model.settings.ignoredNote {
+                        Text(ignored).font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                    }
+
+                    if let preview = staged.preview {
                         Divider()
-                        summary(staged)
-
-                        if let excluded = model.exclusionNote {
-                            Text(excluded).font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                        }
-
-                        // Only on the way out: these three mean something else on an import.
-                        if staged.job.writesMIDI, let replaced = model.settings.replacementNote {
-                            Text(replaced).font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                        }
-
-                        if !staged.job.writesMIDI, let ignored = model.settings.ignoredNote {
-                            Text(ignored).font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                        }
-
-                        if let preview = staged.preview {
-                            Divider()
-                            dryRunPreview(preview)
-                        }
+                        dryRunPreview(preview)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -466,9 +468,29 @@ struct DropView: View {
         }
     }
 
+    /// The gauges are Advanced's question: how close a figure sits to a wall it has not hit. What
+    /// the planner refused is nobody's option, so the refusals outlive the block they sit under
+    /// and are said on either face -- a note that would be dropped is not a detail to opt into.
+    @ViewBuilder
+    private func limits(_ limits: Limits) -> some View {
+        let refusals = limits.exceeded.flatMap(\.warnings)
+        if model.mode == .advanced || !refusals.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                if model.mode == .advanced { gauges(limits) }
+
+                ForEach(refusals, id: \.self) { warning in
+                    Label(warning, systemImage: "exclamationmark.triangle")
+                        .font(TypeScale.label).foregroundStyle(palette.error)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     /// Five rows, whatever the plan holds: a limit left out reads as a limit there is no need to
     /// think about. Amber and red differ by symbol as well as colour.
-    private func limits(_ limits: Limits) -> some View {
+    private func gauges(_ limits: Limits) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(Limits.heading).font(.caption).fontWeight(.medium)
 
@@ -490,12 +512,6 @@ struct DropView: View {
                     }
                     .foregroundStyle(style(gauge.status).colour)
                 }
-            }
-
-            ForEach(limits.exceeded.flatMap(\.warnings), id: \.self) { warning in
-                Label(warning, systemImage: "exclamationmark.triangle")
-                    .font(TypeScale.label).foregroundStyle(palette.error)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

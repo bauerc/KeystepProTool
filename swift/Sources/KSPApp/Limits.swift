@@ -6,7 +6,8 @@ import KSPRun
 /// conversion would run on and the refusals the planner raised against it.
 struct Limits: Equatable {
     static let heading = "Against the device's limits"
-    /// Amber from three quarters of the way to the wall, on all five alike.
+    /// Amber from three quarters of the way to the wall up to but not including the wall itself,
+    /// on all five alike.
     static let nearThreshold = 0.75
 
     enum Status: Equatable {
@@ -40,10 +41,13 @@ struct Limits: Equatable {
         }
 
         /// The planner truncates to the limit, so a figure at the wall has not passed it: only a
-        /// refusal says a limit was exceeded.
+        /// refusal says a limit was exceeded. Nor is a figure *on* the wall approaching one -- 64
+        /// of 64 steps is the device's stated capability being used, and amber over what the
+        /// device is for reads as a fault where there is none.
         private static func status(used: Int, limit: Int, refused: Bool) -> Status {
             if refused { return .over }
-            guard limit > 0, Double(used) / Double(limit) >= Limits.nearThreshold else {
+            guard limit > 0, used < limit, Double(used) / Double(limit) >= Limits.nearThreshold
+            else {
                 return .within
             }
             return .near

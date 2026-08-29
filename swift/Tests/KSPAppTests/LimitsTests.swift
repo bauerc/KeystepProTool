@@ -126,29 +126,38 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
 
     /// The whole point of reading the refusals rather than the figures: the planner truncates to
     /// the limit, so a pattern filled to the brim and a pattern that overflowed both read 192.
-    @Test func apatternFilledToTheBrimIsApproachingRatherThanExceeding() throws {
+    /// The brim is not amber -- pooling every note the device pools is the device working.
+    @Test func apatternFilledToTheBrimIsWithinRatherThanApproaching() throws {
         let limits = Limits(modest(steps: 64, notes: Constants.poolCapacity, perStep: 3))
 
         let notesPerPattern = try gauge(limits, "Notes per pattern")
         #expect(notesPerPattern.used == Constants.poolCapacity)
-        #expect(notesPerPattern.status == .near)
+        #expect(notesPerPattern.status == .within)
         #expect(notesPerPattern.warnings.isEmpty)
     }
 
-    @Test func afullTrackOfStepsIsApproachingRatherThanExceeding() throws {
+    /// 64 of 64 steps is the length the device runs a pattern at, not a wall being approached.
+    @Test func afullTrackOfStepsIsWithinRatherThanApproaching() throws {
         let limits = Limits(modest(steps: Constants.maxSteps, notes: 32, perStep: 2))
 
         #expect(try gauge(limits, "Steps per pattern").used == Constants.maxSteps)
-        #expect(try gauge(limits, "Steps per pattern").status == .near)
+        #expect(try gauge(limits, "Steps per pattern").status == .within)
     }
 
     /// Every device track filled, and the planner refused none of them.
-    @Test func afullDeviceIsApproachingRatherThanExceeding() throws {
+    @Test func afullDeviceIsWithinRatherThanApproaching() throws {
         let limits = Limits(full())
 
         #expect(try gauge(limits, "Tracks").used == Constants.trackItemIDs.count)
-        #expect(try gauge(limits, "Tracks").status == .near)
+        #expect(try gauge(limits, "Tracks").status == .within)
         #expect(limits.exceeded.isEmpty)
+    }
+
+    /// The step below the wall is still amber: what changed is the wall itself, not the band.
+    @Test func theStepBelowTheWallIsStillApproaching() throws {
+        let limits = Limits(modest(steps: Constants.maxSteps - 1, notes: 32, perStep: 2))
+
+        #expect(try gauge(limits, "Steps per pattern").status == .near)
     }
 
     // MARK: What the planner refused
