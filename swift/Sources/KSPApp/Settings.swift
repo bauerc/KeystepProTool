@@ -2,12 +2,12 @@ import Foundation
 import KSPMIDI
 import KSPRun
 
-struct Settings: Sendable, Equatable {
+struct Settings: Sendable, Equatable, Codable {
     /// A deliberate twin of `MIDIExport.maxRepeat`; a test pins the two together.
     static let repeatRange = 1...10
 
     /// Auto, or a fixed count of the device's four 16/32/48/64 sequences.
-    enum StepSkip: String, CaseIterable, Identifiable, Sendable {
+    enum StepSkip: String, CaseIterable, Identifiable, Codable, Sendable {
         case auto
         case one = "1"
         case two = "2"
@@ -109,5 +109,45 @@ struct Settings: Sendable, Equatable {
             flatVelocity: replaceVelocity ? MIDIExport.defaultFlatVelocity : nil,
             applySwing: !replaceSwing, applyTimeShift: !replaceTimeShift, dryRun: dryRun,
             verbose: verbose, configPath: drumMapConfigPath)
+    }
+
+    /// What survives a launch. ``cells``, ``midiTracksSpec``, ``routeSpec`` and ``drumTrack``
+    /// belong to a drop rather than to a preference, so they are left out and come back as-new.
+    private enum CodingKeys: String, CodingKey {
+        case dryRun
+        case verbose
+        case stepSkip
+        case repeatCount
+        case splitPerPattern
+        case replaceVelocity
+        case replaceSwing
+        case replaceTimeShift
+        case ignoreVelocity
+        case ignoreSwing
+        case ignoreTimeShift
+    }
+}
+
+/// In an extension so the memberwise initialiser survives. Every key is optional on the way in: a
+/// field added later must cost the reader that one setting, not the whole remembered set.
+extension Settings {
+    init(from decoder: Decoder) throws {
+        let blob = try decoder.container(keyedBy: CodingKeys.self)
+        let fresh = Settings()
+        func read<T: Decodable>(_ key: CodingKeys, _ fallback: T) throws -> T {
+            try blob.decodeIfPresent(T.self, forKey: key) ?? fallback
+        }
+        self.init()
+        dryRun = try read(.dryRun, fresh.dryRun)
+        verbose = try read(.verbose, fresh.verbose)
+        stepSkip = try read(.stepSkip, fresh.stepSkip)
+        repeatCount = try read(.repeatCount, fresh.repeatCount)
+        splitPerPattern = try read(.splitPerPattern, fresh.splitPerPattern)
+        replaceVelocity = try read(.replaceVelocity, fresh.replaceVelocity)
+        replaceSwing = try read(.replaceSwing, fresh.replaceSwing)
+        replaceTimeShift = try read(.replaceTimeShift, fresh.replaceTimeShift)
+        ignoreVelocity = try read(.ignoreVelocity, fresh.ignoreVelocity)
+        ignoreSwing = try read(.ignoreSwing, fresh.ignoreSwing)
+        ignoreTimeShift = try read(.ignoreTimeShift, fresh.ignoreTimeShift)
     }
 }

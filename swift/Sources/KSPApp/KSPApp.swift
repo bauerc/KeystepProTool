@@ -13,6 +13,7 @@ struct KSPApp: App {
             width: AppLayout.defaultWindowWidth, height: AppLayout.defaultWindowHeight
         )
         .windowResizability(.contentMinSize)
+        .windowToolbarStyle(.unified)
     }
 }
 

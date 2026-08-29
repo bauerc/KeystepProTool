@@ -20,9 +20,10 @@ struct DropView: View {
             options
         }
         .frame(
-            minWidth: AppLayout.minimumWindowWidth, maxWidth: .infinity,
-            minHeight: AppLayout.minimumWindowHeight, maxHeight: .infinity
+            minWidth: windowFloor.width, maxWidth: .infinity,
+            minHeight: windowFloor.height, maxHeight: .infinity
         )
+        .toolbar { ToolbarItem(placement: .principal) { modeSwitch } }
         .dropDestination(for: URL.self) { urls, _ in
             // One file at a time in v1: a second would need its own name field and its own result.
             guard let first = urls.first else { return false }
@@ -34,7 +35,20 @@ struct DropView: View {
         .background(targeted ? Color.accentColor.opacity(0.12) : Color.clear)
     }
 
-    /// A fixed-width column, so a control added below must push, not widen or clip.
+    private var windowFloor: CGSize { AppLayout.windowFloor(for: model.mode) }
+
+    /// In the titlebar, where a view switch belongs and where nothing the pane does can move it.
+    private var modeSwitch: some View {
+        Picker("", selection: $model.mode) {
+            ForEach(Mode.allCases) { Text($0.label).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+    }
+
+    /// A fixed-width column, so a control added below must push, not widen or clip. Simple keeps
+    /// the destinations and drops the rest: where a file lands is the least a user configures.
     private var options: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -42,87 +56,96 @@ struct DropView: View {
                 folderRow(.project)
                 folderRow(.midi)
 
-                Divider()
+                if model.mode == .advanced {
+                    Divider()
 
-                Text("MIDI export").font(.headline)
+                    // One group, never both: the panel writes to the slot ``kind`` names, so a
+                    // control from the other direction would take an edit that slot never reads.
+                    if model.kind == .toMIDI { exportGroup } else { importGroup }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Picker("", selection: $model.settings.splitPerPattern) {
-                        Text("One file for everything").tag(false)
-                        Text("One file per pattern slot").tag(true)
+                    Divider()
+
+                    Text("Options").font(.headline)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Dry run", isOn: $model.settings.dryRun)
+                        Text("Report what would be written, and write nothing.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
-                    .pickerStyle(.radioGroup)
-                    .labelsHidden()
-                    .onChange(of: model.settings.splitPerPattern) { model.discardPreview() }
-                    Text("Each file holds one pattern slot and starts at its own bar 1.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Step Skip").font(.subheadline)
-
-                    Picker("Step Skip", selection: $model.settings.stepSkip) {
-                        ForEach(Settings.StepSkip.allCases) { Text($0.label).tag($0) }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Show every finding", isOn: $model.settings.verbose)
+                        Text("List each finding instead of one line per kind.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .controlSize(.small)
-                    .onChange(of: model.settings.stepSkip) { model.discardPreview() }
-
-                    Text(
-                        "Auto expands the device's 16/32/48/64 cycle to four passes when a note "
-                            + "skips part of it; 1 flattens the cycle to a single pass that plays "
-                            + "every note whatever its mask. This is the device's own cycle, not "
-                            + "copies of the export."
-                    )
-                    .font(.caption).foregroundStyle(.secondary)
                 }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Stepper(value: $model.settings.repeatCount, in: Settings.repeatRange) {
-                        Text("Repeat ×\(model.settings.repeatCount)").font(.subheadline)
-                    }
-                    .controlSize(.small)
-                    .onChange(of: model.settings.repeatCount) { model.discardPreview() }
-
-                    Text(
-                        "Lay the whole export down this many times end to end. This one is not the "
-                            + "cycle above: it exists only in the .mid, and the device stores no "
-                            + "such count, so no repeat of it can be written back to a project."
-                    )
-                    .font(.caption).foregroundStyle(.secondary)
-                }
-
-                replacements
-
-                Divider()
-
-                Text("MIDI import").font(.headline)
-
-                ignores
-
-                Divider()
-
-                Text("Options").font(.headline)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Dry run", isOn: $model.settings.dryRun)
-                    Text("Report what would be written, and write nothing.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Show every finding", isOn: $model.settings.verbose)
-                    Text("List each finding instead of one line per kind.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
         }
         .toggleStyle(.checkbox)
         .frame(width: AppLayout.sidebarWidth)
+    }
+
+    @ViewBuilder
+    private var exportGroup: some View {
+        Text("MIDI export").font(.headline)
+
+        VStack(alignment: .leading, spacing: 4) {
+            Picker("", selection: $model.settings.splitPerPattern) {
+                Text("One file for everything").tag(false)
+                Text("One file per pattern slot").tag(true)
+            }
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+            .onChange(of: model.settings.splitPerPattern) { model.discardPreview() }
+            Text("Each file holds one pattern slot and starts at its own bar 1.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Step Skip").font(.subheadline)
+
+            Picker("Step Skip", selection: $model.settings.stepSkip) {
+                ForEach(Settings.StepSkip.allCases) { Text($0.label).tag($0) }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .controlSize(.small)
+            .onChange(of: model.settings.stepSkip) { model.discardPreview() }
+
+            Text(
+                "Auto expands the device's 16/32/48/64 cycle to four passes when a note "
+                    + "skips part of it; 1 flattens the cycle to a single pass that plays "
+                    + "every note whatever its mask. This is the device's own cycle, not "
+                    + "copies of the export."
+            )
+            .font(.caption).foregroundStyle(.secondary)
+        }
+
+        VStack(alignment: .leading, spacing: 4) {
+            Stepper(value: $model.settings.repeatCount, in: Settings.repeatRange) {
+                Text("Repeat ×\(model.settings.repeatCount)").font(.subheadline)
+            }
+            .controlSize(.small)
+            .onChange(of: model.settings.repeatCount) { model.discardPreview() }
+
+            Text(
+                "Lay the whole export down this many times end to end. This one is not the "
+                    + "cycle above: it exists only in the .mid, and the device stores no "
+                    + "such count, so no repeat of it can be written back to a project."
+            )
+            .font(.caption).foregroundStyle(.secondary)
+        }
+
+        replacements
+    }
+
+    @ViewBuilder
+    private var importGroup: some View {
+        Text("MIDI import").font(.headline)
+
+        ignores
     }
 
     /// Swing here is the export's sense: flattening the grid, not declining to fit one to a source.
@@ -259,25 +282,27 @@ struct DropView: View {
                         Text(note).font(.caption).foregroundStyle(.secondary)
                     }
 
-                    Divider()
-                    summary(staged)
-
-                    if let excluded = model.exclusionNote {
-                        Text(excluded).font(.caption).foregroundStyle(.secondary)
-                    }
-
-                    // Only on the way out: these three mean something else on an import.
-                    if staged.job.writesMIDI, let replaced = model.settings.replacementNote {
-                        Text(replaced).font(.caption).foregroundStyle(.secondary)
-                    }
-
-                    if !staged.job.writesMIDI, let ignored = model.settings.ignoredNote {
-                        Text(ignored).font(.caption).foregroundStyle(.secondary)
-                    }
-
-                    if let preview = staged.preview {
+                    if model.mode == .advanced {
                         Divider()
-                        dryRunPreview(preview)
+                        summary(staged)
+
+                        if let excluded = model.exclusionNote {
+                            Text(excluded).font(.caption).foregroundStyle(.secondary)
+                        }
+
+                        // Only on the way out: these three mean something else on an import.
+                        if staged.job.writesMIDI, let replaced = model.settings.replacementNote {
+                            Text(replaced).font(.caption).foregroundStyle(.secondary)
+                        }
+
+                        if !staged.job.writesMIDI, let ignored = model.settings.ignoredNote {
+                            Text(ignored).font(.caption).foregroundStyle(.secondary)
+                        }
+
+                        if let preview = staged.preview {
+                            Divider()
+                            dryRunPreview(preview)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

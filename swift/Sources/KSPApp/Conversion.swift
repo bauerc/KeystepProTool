@@ -210,6 +210,20 @@ enum Conversion {
 }
 
 extension Job {
+    /// A ``Job`` without its file: what a remembered ``Settings`` is keyed on. `Direction` is
+    /// spoken for twice over -- by ``direction`` below and by `PlaybackDirection` (ADR 0001).
+    enum Kind: String, CaseIterable, Sendable {
+        case toProject
+        case toMIDI
+    }
+
+    var kind: Kind {
+        switch self {
+        case .toProject: return .toProject
+        case .toMIDI: return .toMIDI
+        }
+    }
+
     var writesMIDI: Bool {
         if case .toMIDI = self { return true }
         return false

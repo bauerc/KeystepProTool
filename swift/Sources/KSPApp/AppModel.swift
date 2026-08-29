@@ -43,26 +43,62 @@ final class AppModel {
 
     var phase: Phase = .idle
     var name: String = ""
-    var settings = Settings()
+    /// A preview drawn under the options is stale the moment they are hidden or brought back.
+    var mode: Mode {
+        get { chosenMode }
+        set {
+            chosenMode = newValue
+            settingsStore.save(newValue)
+            discardPreview()
+        }
+    }
     /// Set through ``choose(_:)`` and ``useDefault(for:)`` alone, so every change is saved.
     private(set) var folders: Folders
 
+    private var chosenMode: Mode
+    private var slots: [Job.Kind: Settings]
+    /// The direction the panel is showing while nothing is staged, so cancelling a drop does not
+    /// snap it to the other one. Within a session only: a launch starts at the import.
+    private var lastKind: Job.Kind = .toProject
+
     private let store: FolderStore
+    private let settingsStore: SettingsStore
     private let destination: (Job, Folders) -> Destination
     private let reveal: ([URL]) -> Void
     private let chooseFolder: @MainActor (URL?) -> URL?
 
     init(
         store: FolderStore = FolderStore(),
+        settingsStore: SettingsStore = SettingsStore(),
         destination: @escaping (Job, Folders) -> Destination = AppModel.destination(for:folders:),
         reveal: @escaping ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) },
         chooseFolder: @escaping @MainActor (URL?) -> URL? = AppModel.chooseFolder(startingAt:)
     ) {
         self.store = store
+        self.settingsStore = settingsStore
         self.destination = destination
         self.reveal = reveal
         self.chooseFolder = chooseFolder
         self.folders = store.load()
+        self.chosenMode = settingsStore.loadMode()
+        self.slots = Dictionary(
+            uniqueKeysWithValues: Job.Kind.allCases.map { ($0, settingsStore.load($0)) })
+    }
+
+    /// The direction whose remembered settings the panel is editing.
+    var kind: Job.Kind { staged?.job.kind ?? lastKind }
+
+    /// Simple reads as the defaults whatever Advanced holds, which is what keeps a switch to it
+    /// from quietly applying options chosen under the other face.
+    var settings: Settings {
+        get { mode == .simple ? Settings() : slots[kind] ?? Settings() }
+        set {
+            // Discarded under Simple, which shows no control to write through, and written to
+            // whichever slot ``kind`` names now: a write before a drop lands in the other one.
+            guard mode == .advanced else { return }
+            slots[kind] = newValue
+            settingsStore.save(newValue, for: kind)
+        }
     }
 
     nonisolated static func destination(for job: Job, folders: Folders) -> Destination {
@@ -112,6 +148,7 @@ final class AppModel {
             return
         }
         name = Naming.stem(of: url)
+        lastKind = job.kind
         phase = .staged(Staged(job: job))
     }
 
@@ -138,8 +175,10 @@ final class AppModel {
         let settings: Settings
     }
 
+    /// `nil` under Simple, which draws no plan: the key is what the view waits on, so the read
+    /// starts of its own accord the moment Advanced is chosen.
     var segmentationKey: SegmentationKey? {
-        guard let staged, case .toProject = staged.job else { return nil }
+        guard mode == .advanced, let staged, case .toProject = staged.job else { return nil }
         return SegmentationKey(
             drop: staged.id,
             settings: settings.selecting(staged.sourceSelection))
@@ -156,10 +195,11 @@ final class AppModel {
         phase = .staged(current)
     }
 
-    /// Both selections; the one a drop did not seed is inert. Takes the drop
-    /// because ``convert()`` has left the staged phase by the time it needs this.
+    /// Both selections, or under Simple neither, which is what makes its bytes the CLI's own.
+    /// Takes the drop because ``convert()`` has left the staged phase by the time it needs this.
     func conversionSettings(_ staged: Staged) -> Settings {
-        settings.selecting(staged.selection).selecting(staged.sourceSelection)
+        guard mode == .advanced else { return Settings() }
+        return settings.selecting(staged.selection).selecting(staged.sourceSelection)
     }
 
     var conversionSettings: Settings { staged.map(conversionSettings) ?? settings }
