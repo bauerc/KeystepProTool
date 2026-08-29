@@ -201,7 +201,9 @@ enum AppLayout {
     static let defaultWindowHeight: CGFloat = 600
     static let sidebarWidth: CGFloat = 220
     static let dividerWidth: CGFloat = 1
-    static let mainPadding: CGFloat = 24
+    /// The band above the pane carries what the pane used to hold at its top, so the pane
+    /// needs less room around it; a narrower gutter also widens ``minimumContentWidth``.
+    static let mainPadding: CGFloat = 18
     /// "Show scroll bars: Always" gives the staged view's `ScrollView` a scroller that takes width.
     static let scrollerAllowance: CGFloat = 15
 

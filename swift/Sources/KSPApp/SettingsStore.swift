@@ -1,6 +1,7 @@
 import Foundation
 
-/// The face the app opens on and one ``Settings`` per direction, remembered between launches.
+/// The face the app opens on, the unit it dresses as, and one ``Settings`` per direction, all
+/// remembered between launches.
 struct SettingsStore {
     private let defaults: UserDefaults
 
@@ -16,6 +17,14 @@ struct SettingsStore {
         defaults.set(mode.rawValue, forKey: Self.modeKey)
     }
 
+    func loadAppearance() -> Appearance {
+        defaults.string(forKey: Self.appearanceKey).flatMap(Appearance.init(rawValue:)) ?? .system
+    }
+
+    func save(_ appearance: Appearance) {
+        defaults.set(appearance.rawValue, forKey: Self.appearanceKey)
+    }
+
     /// A blob an earlier build wrote differently reads as the defaults rather than throwing.
     func load(_ kind: Job.Kind) -> Settings {
         guard let data = defaults.data(forKey: Self.key(kind)) else { return Settings() }
@@ -28,6 +37,7 @@ struct SettingsStore {
     }
 
     private static let modeKey = "mode"
+    private static let appearanceKey = "appearance"
 
     private static func key(_ kind: Job.Kind) -> String { "settings.\(kind.rawValue)" }
 }
