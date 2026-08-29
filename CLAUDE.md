@@ -18,6 +18,10 @@ Guidance for Claude Code working in this repository.
 - On pull requests: read the comments and act on them, leave the replies to the User.
 - A Claude plan file committed here is deleted by the task that implements it.
 
+[The app's visual language](docs/design/visual-language.md) — **read it before touching
+`KSPApp` styling.** Colours and metrics come from `DesignTokens.swift`, never a literal in a
+view; hue never carries text contrast, status never relies on hue, and `C3` is MIDI 60.
+
 ## What this is
 
 Converts Standard MIDI files ↔ Arturia KeyStep Pro `.KeyStepPro` project files. MIDI Control
