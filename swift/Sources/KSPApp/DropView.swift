@@ -468,9 +468,29 @@ struct DropView: View {
         }
     }
 
+    /// The gauges are Advanced's question: how close a figure sits to a wall it has not hit. What
+    /// the planner refused is nobody's option, so the refusals outlive the block they sit under
+    /// and are said on either face -- a note that would be dropped is not a detail to opt into.
+    @ViewBuilder
+    private func limits(_ limits: Limits) -> some View {
+        let refusals = limits.exceeded.flatMap(\.warnings)
+        if model.mode == .advanced || !refusals.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                if model.mode == .advanced { gauges(limits) }
+
+                ForEach(refusals, id: \.self) { warning in
+                    Label(warning, systemImage: "exclamationmark.triangle")
+                        .font(TypeScale.label).foregroundStyle(palette.error)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     /// Five rows, whatever the plan holds: a limit left out reads as a limit there is no need to
     /// think about. Amber and red differ by symbol as well as colour.
-    private func limits(_ limits: Limits) -> some View {
+    private func gauges(_ limits: Limits) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(Limits.heading).font(.caption).fontWeight(.medium)
 
@@ -492,12 +512,6 @@ struct DropView: View {
                     }
                     .foregroundStyle(style(gauge.status).colour)
                 }
-            }
-
-            ForEach(limits.exceeded.flatMap(\.warnings), id: \.self) { warning in
-                Label(warning, systemImage: "exclamationmark.triangle")
-                    .font(TypeScale.label).foregroundStyle(palette.error)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
