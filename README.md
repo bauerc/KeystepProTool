@@ -65,14 +65,17 @@ you get a `.mid` beside it. **Cancel** drops it again without writing anything. 
 everything else is the CLI's job.
 
 **Simple and Advanced.** A switch in the titlebar picks between the two, and the choice is
-remembered. *Simple* is what a fresh install opens on and is the app as it first shipped: the file,
-its name, where it will land, and **Convert**. It converts on the defaults throughout, reaching
-nothing set under Advanced, so what it writes is byte for byte what the CLI writes on its own
-defaults. It keeps the **Destinations** at the top of the sidebar — where a file lands is the least
-anyone configures — and drops everything below them. That rest is the Advanced face, and it
-remembers its settings separately for each direction, showing the group belonging to whichever way
-the staged file is going: **Repeat** and **Step Skip** over a `.KeyStepPro`, the import's own
-toggles over a `.mid`.
+remembered. *Simple* is what a fresh install opens on, and it keeps everything that says what is in
+the file and what becomes of it: the file, its name, where it will land, the pattern grid over a
+`.KeyStepPro` and the source track list over a `.mid`, both tickable, with the destination beside
+each source track and the import's own preview and limits beneath. It converts on the defaults plus
+whatever you ticked, so an untouched drop is byte for byte what the CLI writes on its own defaults,
+and nothing set under Advanced reaches it. It keeps the **Destinations** and the **Appearance** at
+the top of the sidebar, and **Dry run** below them — writing nothing is not an advanced thing to
+ask for. What Advanced adds is the rest of that sidebar: the groups that reshape a conversion, and
+**Show every finding**. It remembers those separately for each direction, showing the group
+belonging to whichever way the staged file is going — **Repeat** and **Step Skip** over a
+`.KeyStepPro`, the import's own toggles over a `.mid`.
 
 **What is in it.** A dropped `.KeyStepPro` is read while it sits there, and the staged view lists
 all four tracks against all sixteen of each one's pattern slots. A slot that holds nothing is dimmed
@@ -123,9 +126,9 @@ others — and the result names what was left out. Untick everything and Convert
 writing an empty file.
 
 **Options.** The sidebar carries **Dry run** — report what would be written and write nothing,
-which is worth having against a 3.5 MB project — and **Show every finding**, which lists each
-finding rather than one line per kind. A dry run leaves the file where it is, so switching the
-toggle off and pressing Convert writes it for real.
+which is worth having against a 3.5 MB project, and the one option both faces show — and, under
+Advanced, **Show every finding**, which lists each finding rather than one line per kind. A dry run
+leaves the file where it is, so switching the toggle off and pressing Convert writes it for real.
 
 Above those, under **MIDI export**, sits **Step Skip**. The device runs a pattern over a cycle of
 four sequences — 16, 32, 48 and 64 — and each note carries a mask saying which of them it plays on.

@@ -96,7 +96,7 @@ import Testing
     }
 }
 
-/// Simple is the app as it shipped: it converts on the defaults and reaches nothing Advanced set.
+/// Simple converts on the defaults plus this drop's ticks, and reaches nothing else Advanced set.
 @MainActor
 @Suite struct AppModelModeTests {
     private var midiFixture: URL { RepoData.projectFiles.appending(path: "m6-test-file.mid") }
@@ -138,8 +138,8 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = model(writingInto: directory)
         model.mode = .advanced
-        model.settings.dryRun = true
         model.settings.repeatCount = 6
+        model.settings.verbose = true
         model.settings.splitPerPattern = true
 
         model.mode = .simple
@@ -147,9 +147,28 @@ import Testing
         #expect(model.settings == Settings())
         model.accept(projectFixture)
         let staged = try #require(model.staged)
+        // Nothing has been unticked, so the selections come to the defaults as well.
         #expect(model.conversionSettings(staged) == Settings())
         // The one setting that reaches the plan rather than the runner.
         #expect(!model.plan(for: staged.job).intoFolder)
+    }
+
+    /// The one option both faces show, so it is the one field that crosses between them.
+    @Test func thedryRunIsTheOneSettingSimpleWritesThrough() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.mode = .advanced
+        model.settings.repeatCount = 6
+
+        model.mode = .simple
+        model.settings.dryRun = true
+
+        #expect(model.settings.dryRun)
+        // Simple wrote the dry run without taking the defaults it read down with it.
+        model.mode = .advanced
+        #expect(model.settings.dryRun)
+        #expect(model.settings.repeatCount == 6)
     }
 
     @Test func whatAdvancedHeldIsStillThereOnTheWayBack() throws {
@@ -211,16 +230,70 @@ import Testing
         #expect(model.settings.dryRun)
     }
 
-    @Test func simplePlansNoImport() throws {
+    /// Both faces draw the segmentation grid and the limits, so both wait on the same plan.
+    @Test(arguments: Mode.allCases)
+    func eitherFacePlansTheImport(mode: Mode) throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.mode = mode
+
+        model.accept(midiFixture)
+
+        #expect(model.segmentationKey != nil)
+    }
+
+    /// A project is planned by the grid it draws, not by the importer.
+    @Test func aprojectPlansNoImport() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = model(writingInto: directory)
 
-        model.accept(midiFixture)
-        #expect(model.segmentationKey == nil)
+        model.accept(projectFixture)
 
-        model.mode = .advanced
-        #expect(model.segmentationKey != nil)
+        #expect(model.segmentationKey == nil)
+    }
+
+    /// The point of the whole face: a tick drawn under Simple has to reach the conversion.
+    @Test func simplefollowsTheExportTicks() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.accept(projectFixture)
+        await model.summarise()
+
+        model.toggle(track: 1, pattern: 1)
+
+        let staged = try #require(model.staged)
+        let settings = model.conversionSettings(staged)
+        #expect(!settings.cells.isEmpty)
+        #expect(settings.cells[1]?.contains(1) == false)
+        // The ticks alone: no option Advanced holds came with them.
+        #expect(settings.repeatCount == Settings().repeatCount)
+        #expect(!settings.verbose)
+    }
+
+    @Test func simplefollowsTheImportTicksAndRoutes() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.accept(midiFixture)
+        await model.summarise()
+        let ticked = try #require(model.staged).sourceSelection
+
+        // Two of the four the read ticked: one dropped, one sent somewhere by hand.
+        let numbers = (1...6).filter(ticked.isTicked)
+        let dropped = try #require(numbers.first)
+        let routed = try #require(numbers.last)
+        model.toggle(sourceTrack: dropped)
+        model.send(sourceTrack: routed, to: .track(4))
+
+        let staged = try #require(model.staged)
+        let settings = model.conversionSettings(staged)
+        #expect(settings.midiTracksSpec != nil)
+        #expect(settings.midiTracksSpec?.contains("\(dropped)") == false)
+        #expect(settings.routeSpec == "\(routed):4")
+        #expect(!settings.ignoreVelocity)
     }
 
     @Test func switchingFaceDiscardsAdryRunPreview() async throws {
