@@ -9,10 +9,17 @@ public enum SegmentationRunner {
         public let summary: SegmentationSummary?
         /// Why there is no summary, in the words the runner would have failed with.
         public let message: String?
+        /// The planner's own findings, so what an import would lose is said before it runs rather
+        /// than after.
+        public let diagnostics: Report
 
-        public init(summary: SegmentationSummary? = nil, message: String? = nil) {
+        public init(
+            summary: SegmentationSummary? = nil, message: String? = nil,
+            diagnostics: Report = Report()
+        ) {
             self.summary = summary
             self.message = message
+            self.diagnostics = diagnostics
         }
     }
 
@@ -31,7 +38,9 @@ public enum SegmentationRunner {
             let plan = try MIDIImport.planSong(
                 song, options: importOptions, firstPattern: options.pattern,
                 firstTrack: options.track)
-            return Outcome(summary: SegmentationSummary(song: song, plan: plan))
+            return Outcome(
+                summary: SegmentationSummary(song: song, plan: plan),
+                diagnostics: plan.diagnostics)
         } catch let error as ConvertRunner.ReadFailure {
             return Outcome(message: error.message)
         } catch {

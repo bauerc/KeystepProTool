@@ -88,8 +88,6 @@ struct SegmentationGrid: Equatable {
     let header: String
     let columns: [Int]
     let rows: [Row]
-    /// What will not survive the import, said before it runs.
-    let warnings: [String]
 
     init(_ summary: SegmentationSummary) {
         let byTrack = Dictionary(
@@ -100,7 +98,6 @@ struct SegmentationGrid: Equatable {
             + counted(filled.reduce(0) { $0 + $1.segments.count }, "pattern")
         self.columns = Array(1...AppLayout.columnCount)
         self.rows = (1...Constants.trackItemIDs.count).map { Row(track: $0, plan: byTrack[$0]) }
-        self.warnings = Self.warnings(summary)
     }
 
     /// Where the planner put each source track, keyed by source track, for the destination pickers
@@ -122,25 +119,5 @@ struct SegmentationGrid: Equatable {
             placements[source.sourceTrack] = "dropped"
         }
         return placements
-    }
-
-    private static func warnings(_ summary: SegmentationSummary) -> [String] {
-        var warnings = summary.unplaced.map { source -> String in
-            guard source.isWhole else {
-                // Which channel goes is the planner's to say, not this view's to guess.
-                return "Source track \(source.sourceTrack) carries "
-                    + "\(counted(source.parts, "channel")) and only \(source.placedParts) fit; "
-                    + "\(counted(source.droppedParts, "channel")) would be dropped."
-            }
-            return "Source track \(source.sourceTrack) will not fit; the device has "
-                + "\(Constants.trackItemIDs.count) tracks, so its "
-                + "\(counted(source.noteCount, "note")) would be dropped."
-        }
-        for track in summary.tracks where track.droppedPatterns > 0 {
-            warnings.append(
-                "Track \(track.deviceTrack) runs past pattern \(Constants.patternsPerTrack); "
-                    + "\(counted(track.droppedPatterns, "pattern")) of its tail would be dropped.")
-        }
-        return warnings
     }
 }

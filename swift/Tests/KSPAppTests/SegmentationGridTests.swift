@@ -80,58 +80,6 @@ private func segmented(
         #expect(grid.rows[0].runs.isEmpty)
     }
 
-    /// The acceptance criterion: shown as such rather than omitted.
-    @Test func asourceThatWillNotFitIsNamedInItsOwnRight() {
-        let grid = SegmentationGrid(
-            SegmentationSummary(
-                tracks: (1...4).map { segmented($0, source: $0, patterns: [(1, 16)]) },
-                unplaced: [
-                    UnplacedSource(sourceTrack: 5, noteCount: 12),
-                    UnplacedSource(sourceTrack: 6, noteCount: 3),
-                ]))
-
-        #expect(grid.warnings.count == 2)
-        #expect(grid.warnings[0].contains("Source track 5"))
-        #expect(grid.warnings[0].contains("will not fit"))
-        #expect(grid.warnings[1].contains("Source track 6"))
-    }
-
-    /// A track that gave up one channel and kept another is not a track that fitted.
-    @Test func asourceThatOnlyPartlyFitsSaysWhichPartDidNot() {
-        let grid = SegmentationGrid(
-            SegmentationSummary(
-                tracks: (1...4).map { segmented($0, source: $0, patterns: [(1, 16)]) },
-                unplaced: [
-                    UnplacedSource(sourceTrack: 3, droppedParts: 1, placedParts: 2, noteCount: 9)
-                ]))
-
-        #expect(grid.warnings.count == 1)
-        #expect(grid.warnings[0].contains("Source track 3"))
-        #expect(grid.warnings[0].contains("3 channels"))
-        #expect(grid.warnings[0].contains("1 channel would be dropped"))
-        // The note count belongs to the whole track, so a partial drop must not claim it.
-        #expect(!grid.warnings[0].contains("9"))
-    }
-
-    @Test func adroppedTailIsWarnedAboutRatherThanLeftToBeNoticed() {
-        let grid = SegmentationGrid(
-            SegmentationSummary(
-                tracks: [segmented(1, source: 3, patterns: [(1, 64)], droppedPatterns: 2)]))
-
-        #expect(grid.warnings.count == 1)
-        #expect(grid.warnings[0].contains("Track 1"))
-        #expect(grid.warnings[0].contains("2 patterns"))
-        // The device's own count, not the grid's column count, which only happens to match.
-        #expect(grid.warnings[0].contains("pattern \(Constants.patternsPerTrack)"))
-    }
-
-    @Test func anemptyPlanWarnsAboutNothing() {
-        let grid = SegmentationGrid(
-            SegmentationSummary(tracks: [segmented(1, source: 3, patterns: [(1, 16)])]))
-
-        #expect(grid.warnings.isEmpty)
-    }
-
     @Test func arowSaysWhereItsNotesCameFromAndWhatTheyFill() {
         let grid = SegmentationGrid(
             SegmentationSummary(

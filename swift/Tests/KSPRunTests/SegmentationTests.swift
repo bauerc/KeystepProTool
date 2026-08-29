@@ -22,6 +22,15 @@ private func clip(source: Int, notes count: Int, channel: Int = 0, file: String 
         ticksPerBeat: ticksPerBeat, tempoBPM: 120, sourceTracks: [source], sourceFile: file)
 }
 
+/// `pitches` notes on each of `steps` steps, so both pool figures can be aimed at exactly.
+private func chords(source: Int, steps: Int, pitches: Int) -> Clip {
+    let notes = (0..<steps).flatMap { step in
+        (0..<pitches).map { note(step * ticksPerStep, pitch: 60 + $0) }
+    }
+    return Clip(
+        notes: notes, ticksPerBeat: ticksPerBeat, tempoBPM: 120, sourceTracks: [source])
+}
+
 private func song(_ clips: [Clip]) -> Song {
     Song(clips: clips, ticksPerBeat: ticksPerBeat, tempoBPM: 120, beatsPerBar: 4)
 }
@@ -180,6 +189,93 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         let drum = try #require(summary.tracks.first { $0.isDrum })
         #expect(drum.deviceTrack == 1)
         #expect(drum.sourceTrack == 1)
+    }
+
+    /// The pool limits are counted per pattern, so the split has to carry them: a run's total says
+    /// nothing about whether either of its halves fits.
+    @Test func everySegmentCountsItsOwnNotesRatherThanTheRuns() throws {
+        let (song, plan) = try m6()
+
+        let summary = SegmentationSummary(song: song, plan: plan)
+
+        for (track, planned) in zip(summary.tracks, plan.tracks) {
+            #expect(track.segments.map(\.noteCount) == planned.placements.map(\.notes.count))
+        }
+        let split = try #require(summary.tracks.first { $0.segments.count > 1 })
+        #expect(split.segments.reduce(0) { $0 + $1.noteCount } == split.noteCount)
+    }
+
+    @Test func themostNotesOnAStepIsTheMostNotesOnAnyOneOfThemNotAnAverage() throws {
+        let chord = song([chords(source: 1, steps: 4, pitches: 3)])
+
+        let summary = try summarise(chord)
+
+        #expect(summary.tracks[0].segments.map(\.mostNotesOnAStep) == [3])
+    }
+
+    @Test func anemptyPatternHasNoBusiestStep() throws {
+        let summary = try summarise(song([clip(source: 1, notes: 0)]))
+
+        #expect(summary.tracks[0].segments.allSatisfy { $0.mostNotesOnAStep == 0 })
+    }
+
+    /// 256 notes over 64 steps, four to a step: past the 192 a pattern pools, and nowhere near the
+    /// 16 a step holds, so it is the pool alone that refuses them.
+    @Test func apatternPastThePoolCountsWhatWouldNotFit() throws {
+        let full = song([chords(source: 1, steps: Constants.maxSteps, pitches: 4)])
+
+        let summary = try summarise(full)
+
+        let segment = try #require(summary.tracks.first?.segments.first)
+        #expect(segment.noteCount == Constants.poolCapacity)
+        #expect(segment.droppedNotes == Constants.maxSteps * 4 - Constants.poolCapacity)
+    }
+
+    /// A pattern filled to the brim has dropped nothing, and must not read as though it had.
+    @Test func apatternExactlyAtThePoolDropsNothing() throws {
+        let brim = song([chords(source: 1, steps: Constants.maxSteps, pitches: 3)])
+
+        let summary = try summarise(brim)
+
+        let segment = try #require(summary.tracks.first?.segments.first)
+        #expect(segment.noteCount == Constants.poolCapacity)
+        #expect(segment.droppedNotes == 0)
+    }
+
+    /// Counted per pattern, not per track: the planner names both in the site it raises.
+    @Test func whatOverflowedIsChargedToThePatternItOverflowed() throws {
+        let full = song([chords(source: 1, steps: Constants.maxSteps, pitches: 4)])
+        let plan = try MIDIImport.planSong(full)
+
+        let summary = SegmentationSummary(song: full, plan: plan)
+
+        let counted = plan.diagnostics.filter { $0.code == .poolOverflow }
+            .reduce(0) { $0 + $1.subjects }
+        #expect(
+            summary.tracks.flatMap { $0.segments }.reduce(0) { $0 + $1.droppedNotes } == counted)
+    }
+
+    /// The one limit the planner refuses outright rather than truncating to, so it leaves no plan
+    /// for a gauge to read. Its refusal has to name the limit and where on its own.
+    @Test func toomanyNotesOnAstepIsRefusedInWordsThatNameTheLimitAndWhere() throws {
+        let crowded = song([chords(source: 1, steps: 2, pitches: Constants.maxNotesPerStep + 1)])
+
+        let refusal = #expect(throws: KSPError.self) { try MIDIImport.planSong(crowded) }
+
+        let message = "\(try #require(refusal))"
+        #expect(message.contains("\(Constants.maxNotesPerStep + 1) notes"))
+        #expect(message.contains("\(Constants.maxNotesPerStep) per step"))
+        #expect(message.contains("track 1"))
+        #expect(message.contains("pattern 1"))
+    }
+
+    /// Exactly at the limit is not past it, so the same shape plans rather than being refused.
+    @Test func exactlySixteenNotesOnAstepIsPlannedRatherThanRefused() throws {
+        let brim = song([chords(source: 1, steps: 2, pitches: Constants.maxNotesPerStep)])
+
+        let summary = try summarise(brim)
+
+        #expect(summary.tracks[0].segments[0].mostNotesOnAStep == Constants.maxNotesPerStep)
     }
 
     /// The planner counts what it dropped; the summary names which tracks they were.
