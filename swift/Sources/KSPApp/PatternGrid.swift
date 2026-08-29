@@ -6,12 +6,18 @@ import KSPRun
 /// its pane scrolls vertically only, so a row wider than ``minimumContentWidth`` is clipped at the
 /// smallest window; a test holds each row under it.
 enum AppLayout {
-    /// The window's floor, not its size: it resizes above this, and the width goes to a track name.
+    /// Advanced's floor, not its size: it resizes above this, and the width goes to a track name.
     static let minimumWindowWidth: CGFloat = 1020
     static let minimumWindowHeight: CGFloat = 440
     /// Simple's floor: no sidebar and no grid row to hold open, so the card is all it must fit.
     static let simpleWindowWidth: CGFloat = 460
     static let simpleWindowHeight: CGFloat = 340
+
+    static func windowFloor(for mode: Mode) -> CGSize {
+        mode == .simple
+            ? CGSize(width: simpleWindowWidth, height: simpleWindowHeight)
+            : CGSize(width: minimumWindowWidth, height: minimumWindowHeight)
+    }
     /// What a first launch opens at; afterwards the window restores the size it was left at.
     static let defaultWindowWidth: CGFloat = 1120
     static let defaultWindowHeight: CGFloat = 600
@@ -45,8 +51,9 @@ enum AppLayout {
     static let limitNameWidth: CGFloat = 128
     static let limitFigureWidth: CGFloat = 62
 
-    /// The staged pane at ``minimumWindowWidth`` -- the narrowest it ever gets, and so the only
-    /// width at which a row being clipped cannot be resized away.
+    /// The staged pane at ``minimumWindowWidth`` -- the narrowest it gets beside the sidebar, and
+    /// so the only width at which a row being clipped cannot be resized away. Simple's pane is
+    /// narrower still and draws none of these rows.
     static var minimumContentWidth: CGFloat {
         minimumWindowWidth - sidebarWidth - dividerWidth - 2 * mainPadding - scrollerAllowance
     }

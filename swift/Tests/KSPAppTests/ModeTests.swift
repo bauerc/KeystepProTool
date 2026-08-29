@@ -72,6 +72,21 @@ import Testing
         }
     }
 
+    /// A field added later costs the reader that one setting, not everything it had remembered.
+    @Test func ablobMissingAkeyKeepsTheKeysItHas() throws {
+        withVolatileDefaults { defaults in
+            defaults.set(
+                Data(#"{"repeatCount":9,"ignoreSwing":true}"#.utf8), forKey: "settings.toMIDI")
+
+            let loaded = SettingsStore(defaults: defaults).load(.toMIDI)
+
+            #expect(loaded.repeatCount == 9)
+            #expect(loaded.ignoreSwing)
+            #expect(loaded.stepSkip == .auto)
+            #expect(!loaded.dryRun)
+        }
+    }
+
     @Test func ablobThatNoLongerReadsFallsBackToTheDefaults() {
         withVolatileDefaults { defaults in
             defaults.set(Data("not settings".utf8), forKey: "settings.toMIDI")
@@ -150,6 +165,8 @@ import Testing
         #expect(model.settings.repeatCount == 6)
     }
 
+    /// ``AppModel/kind`` is also what picks the sidebar's one group, so each direction's controls
+    /// are reachable exactly while the slot they write to is the one being edited.
     @Test func eachDirectionIsEditedApartFromTheOther() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -157,10 +174,12 @@ import Testing
         model.mode = .advanced
 
         model.accept(midiFixture)
+        #expect(model.kind == .toProject)
         model.settings.ignoreSwing = true
         model.settings.dryRun = true
 
         model.accept(projectFixture)
+        #expect(model.kind == .toMIDI)
         #expect(!model.settings.ignoreSwing)
         // Shared by nothing but these two slots, which is why there are two.
         #expect(!model.settings.dryRun)
@@ -170,6 +189,10 @@ import Testing
         #expect(model.settings.ignoreSwing)
         #expect(model.settings.dryRun)
         #expect(model.settings.repeatCount == 1)
+
+        // The export group is reachable again, and kept what it was last given.
+        model.accept(projectFixture)
+        #expect(model.settings.repeatCount == 6)
     }
 
     /// With nothing staged the panel is editing the direction it last showed, so a drop the other

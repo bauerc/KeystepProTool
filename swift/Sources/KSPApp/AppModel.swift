@@ -93,6 +93,8 @@ final class AppModel {
     var settings: Settings {
         get { mode == .simple ? Settings() : slots[kind] ?? Settings() }
         set {
+            // Discarded under Simple, which shows no control to write through, and written to
+            // whichever slot ``kind`` names now: a write before a drop lands in the other one.
             guard mode == .advanced else { return }
             slots[kind] = newValue
             settingsStore.save(newValue, for: kind)
@@ -194,9 +196,8 @@ final class AppModel {
         phase = .staged(current)
     }
 
-    /// Both selections; the one a drop did not seed is inert. Takes the drop
-    /// because ``convert()`` has left the staged phase by the time it needs this.
-    /// Simple reaches neither, so what it writes is what the CLI writes on its own defaults.
+    /// Both selections, or under Simple neither, which is what makes its bytes the CLI's own.
+    /// Takes the drop because ``convert()`` has left the staged phase by the time it needs this.
     func conversionSettings(_ staged: Staged) -> Settings {
         guard mode == .advanced else { return Settings() }
         return settings.selecting(staged.selection).selecting(staged.sourceSelection)
