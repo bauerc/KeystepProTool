@@ -35,9 +35,8 @@ import Testing
         #expect(plan.findings(verbose: true) == plan.all)
     }
 
-    /// The acceptance criterion end to end: a real file through the runner the app calls, with
-    /// every figure the block will draw read back off it. Synthetic summaries prove the arithmetic;
-    /// only this proves the figures are the core's own.
+    /// A real file through the runner the app calls: synthetic summaries prove the arithmetic,
+    /// and only this proves the figures are the core's own.
     @Test func arealFileReadsAgainstAllFiveLimits() async throws {
         let state = await Conversion.segment(.toProject(midiFixture), settings: Settings())
 

@@ -205,18 +205,18 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(split.segments.reduce(0) { $0 + $1.noteCount } == split.noteCount)
     }
 
-    @Test func thebusiestStepIsTheMostNotesOnAnyOneOfThemNotAnAverage() throws {
+    @Test func themostNotesOnAStepIsTheMostNotesOnAnyOneOfThemNotAnAverage() throws {
         let chord = song([chords(source: 1, steps: 4, pitches: 3)])
 
         let summary = try summarise(chord)
 
-        #expect(summary.tracks[0].segments.map(\.busiestStep) == [3])
+        #expect(summary.tracks[0].segments.map(\.mostNotesOnAStep) == [3])
     }
 
     @Test func anemptyPatternHasNoBusiestStep() throws {
         let summary = try summarise(song([clip(source: 1, notes: 0)]))
 
-        #expect(summary.tracks[0].segments.allSatisfy { $0.busiestStep == 0 })
+        #expect(summary.tracks[0].segments.allSatisfy { $0.mostNotesOnAStep == 0 })
     }
 
     /// 256 notes over 64 steps, four to a step: past the 192 a pattern pools, and nowhere near the
@@ -253,6 +253,29 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
             .reduce(0) { $0 + $1.subjects }
         #expect(
             summary.tracks.flatMap { $0.segments }.reduce(0) { $0 + $1.droppedNotes } == counted)
+    }
+
+    /// The one limit the planner refuses outright rather than truncating to, so it leaves no plan
+    /// for a gauge to read. Its refusal has to name the limit and where on its own.
+    @Test func toomanyNotesOnAstepIsRefusedInWordsThatNameTheLimitAndWhere() throws {
+        let crowded = song([chords(source: 1, steps: 2, pitches: Constants.maxNotesPerStep + 1)])
+
+        let refusal = #expect(throws: KSPError.self) { try MIDIImport.planSong(crowded) }
+
+        let message = "\(try #require(refusal))"
+        #expect(message.contains("\(Constants.maxNotesPerStep + 1) notes"))
+        #expect(message.contains("\(Constants.maxNotesPerStep) per step"))
+        #expect(message.contains("track 1"))
+        #expect(message.contains("pattern 1"))
+    }
+
+    /// Exactly at the limit is not past it, so the same shape plans rather than being refused.
+    @Test func exactlySixteenNotesOnAstepIsPlannedRatherThanRefused() throws {
+        let brim = song([chords(source: 1, steps: 2, pitches: Constants.maxNotesPerStep)])
+
+        let summary = try summarise(brim)
+
+        #expect(summary.tracks[0].segments[0].mostNotesOnAStep == Constants.maxNotesPerStep)
     }
 
     /// The planner counts what it dropped; the summary names which tracks they were.

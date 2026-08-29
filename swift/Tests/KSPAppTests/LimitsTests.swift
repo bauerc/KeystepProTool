@@ -5,10 +5,10 @@ import Testing
 
 @testable import KSPApp
 
+private typealias Pattern = (pattern: Int, steps: Int, notes: Int, perStep: Int, dropped: Int)
+
 private func segmented(
-    _ deviceTrack: Int, source: Int? = nil,
-    patterns: [(pattern: Int, steps: Int, notes: Int, busiest: Int, dropped: Int)] = [],
-    droppedPatterns: Int = 0
+    _ deviceTrack: Int, source: Int? = nil, patterns: [Pattern] = [], droppedPatterns: Int = 0
 ) -> SegmentedTrack {
     var step = 1
     var segments: [Segment] = []
@@ -16,7 +16,8 @@ private func segmented(
         segments.append(
             Segment(
                 pattern: entry.pattern, stepCount: entry.steps, firstStep: step,
-                noteCount: entry.notes, busiestStep: entry.busiest, droppedNotes: entry.dropped))
+                noteCount: entry.notes, mostNotesOnAStep: entry.perStep,
+                droppedNotes: entry.dropped))
         step += entry.steps
     }
     return SegmentedTrack(
@@ -27,7 +28,7 @@ private func segmented(
 
 /// One filled track, one pattern, with every figure a long way from every wall.
 private func modest(
-    steps: Int = 16, notes: Int = 8, busiest: Int = 1, dropped: Int = 0, pattern: Int = 1
+    steps: Int = 16, notes: Int = 8, perStep: Int = 1, dropped: Int = 0, pattern: Int = 1
 ) -> SegmentationSummary {
     SegmentationSummary(
         tracks: [
@@ -35,11 +36,22 @@ private func modest(
                 1, source: 1,
                 patterns: [
                     (
-                        pattern: pattern, steps: steps, notes: notes, busiest: busiest,
+                        pattern: pattern, steps: steps, notes: notes, perStep: perStep,
                         dropped: dropped
                     )
                 ])
         ])
+}
+
+/// Four filled tracks, so the track count is at the wall without anything having been refused.
+private func full(unplaced: [UnplacedSource] = []) -> SegmentationSummary {
+    SegmentationSummary(
+        tracks: (1...4).map {
+            segmented(
+                $0, source: $0,
+                patterns: [(pattern: 1, steps: 16, notes: 4, perStep: 1, dropped: 0)])
+        },
+        unplaced: unplaced)
 }
 
 private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
@@ -82,7 +94,7 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
     // MARK: The three quarters rule
 
     @Test func afigureWellShortOfTheWallIsWithinIt() throws {
-        let limits = Limits(modest(steps: 16, notes: 8, busiest: 2))
+        let limits = Limits(modest(steps: 16, notes: 8, perStep: 2))
 
         #expect(try gauge(limits, "Steps per pattern").status == .within)
         #expect(try gauge(limits, "Notes per pattern").status == .within)
@@ -91,7 +103,7 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
 
     /// Exactly three quarters of the way, which is where amber begins on all five.
     @Test func threeQuartersOfTheWayIsAlreadyApproaching() throws {
-        let limits = Limits(modest(steps: 48, notes: 144, busiest: 12, pattern: 12))
+        let limits = Limits(modest(steps: 48, notes: 144, perStep: 12, pattern: 12))
 
         #expect(try gauge(limits, "Patterns per track").status == .near)
         #expect(try gauge(limits, "Steps per pattern").status == .near)
@@ -105,7 +117,7 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
                 tracks: (1...3).map {
                     segmented(
                         $0, source: $0,
-                        patterns: [(pattern: 1, steps: 16, notes: 4, busiest: 1, dropped: 0)])
+                        patterns: [(pattern: 1, steps: 16, notes: 4, perStep: 1, dropped: 0)])
                 }))
 
         #expect(try gauge(limits, "Tracks").used == 3)
@@ -115,19 +127,28 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
     /// The whole point of reading the refusals rather than the figures: the planner truncates to
     /// the limit, so a pattern filled to the brim and a pattern that overflowed both read 192.
     @Test func apatternFilledToTheBrimIsApproachingRatherThanExceeding() throws {
-        let limits = Limits(modest(steps: 64, notes: Constants.poolCapacity, busiest: 3))
+        let limits = Limits(modest(steps: 64, notes: Constants.poolCapacity, perStep: 3))
 
-        let notes = try gauge(limits, "Notes per pattern")
-        #expect(notes.used == Constants.poolCapacity)
-        #expect(notes.status == .near)
-        #expect(notes.notes.isEmpty)
+        let notesPerPattern = try gauge(limits, "Notes per pattern")
+        #expect(notesPerPattern.used == Constants.poolCapacity)
+        #expect(notesPerPattern.status == .near)
+        #expect(notesPerPattern.warnings.isEmpty)
     }
 
     @Test func afullTrackOfStepsIsApproachingRatherThanExceeding() throws {
-        let limits = Limits(modest(steps: Constants.maxSteps, notes: 32, busiest: 2))
+        let limits = Limits(modest(steps: Constants.maxSteps, notes: 32, perStep: 2))
 
         #expect(try gauge(limits, "Steps per pattern").used == Constants.maxSteps)
         #expect(try gauge(limits, "Steps per pattern").status == .near)
+    }
+
+    /// Every device track filled, and the planner refused none of them.
+    @Test func afullDeviceIsApproachingRatherThanExceeding() throws {
+        let limits = Limits(full())
+
+        #expect(try gauge(limits, "Tracks").used == Constants.trackItemIDs.count)
+        #expect(try gauge(limits, "Tracks").status == .near)
+        #expect(limits.exceeded.isEmpty)
     }
 
     // MARK: What the planner refused
@@ -139,66 +160,54 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
                     segmented(
                         2, source: 4,
                         patterns: [
-                            (pattern: 1, steps: 64, notes: 32, busiest: 1, dropped: 0),
+                            (pattern: 1, steps: 64, notes: 32, perStep: 1, dropped: 0),
                             (
-                                pattern: 2, steps: 64, notes: Constants.poolCapacity, busiest: 4,
+                                pattern: 2, steps: 64, notes: Constants.poolCapacity, perStep: 4,
                                 dropped: 40
                             ),
                         ])
                 ]))
 
-        let notes = try gauge(limits, "Notes per pattern")
-        #expect(notes.status == .over)
-        #expect(notes.site == "Track 2, pattern 2")
-        #expect(notes.notes.count == 1)
-        #expect(notes.notes[0].contains("Track 2, pattern 2"))
-        #expect(notes.notes[0].contains("40 notes"))
-        #expect(notes.notes[0].contains("\(Constants.poolCapacity)"))
+        let notesPerPattern = try gauge(limits, "Notes per pattern")
+        #expect(notesPerPattern.status == .over)
+        #expect(notesPerPattern.site == "Track 2, pattern 2")
+        #expect(notesPerPattern.warnings.count == 1)
+        #expect(notesPerPattern.warnings[0].contains("Track 2, pattern 2"))
+        #expect(notesPerPattern.warnings[0].contains("40 notes"))
+        #expect(notesPerPattern.warnings[0].contains("\(Constants.poolCapacity)"))
     }
 
     /// The acceptance criterion, moved here from the grid so it is said once.
     @Test func asourceThatWillNotFitExceedsTheTrackCountAndIsNamed() throws {
         let limits = Limits(
-            SegmentationSummary(
-                tracks: (1...4).map {
-                    segmented(
-                        $0, source: $0,
-                        patterns: [(pattern: 1, steps: 16, notes: 4, busiest: 1, dropped: 0)])
-                },
-                unplaced: [
-                    UnplacedSource(sourceTrack: 5, noteCount: 12),
-                    UnplacedSource(sourceTrack: 6, noteCount: 3),
-                ]))
+            full(unplaced: [
+                UnplacedSource(sourceTrack: 5, noteCount: 12),
+                UnplacedSource(sourceTrack: 6, noteCount: 3),
+            ]))
 
         let tracks = try gauge(limits, "Tracks")
         #expect(tracks.used == Constants.trackItemIDs.count)
         #expect(tracks.status == .over)
-        #expect(tracks.notes.count == 2)
-        #expect(tracks.notes[0].contains("Source track 5"))
-        #expect(tracks.notes[0].contains("will not fit"))
-        #expect(tracks.notes[1].contains("Source track 6"))
+        #expect(tracks.warnings.count == 2)
+        #expect(tracks.warnings[0].contains("Source track 5"))
+        #expect(tracks.warnings[0].contains("will not fit"))
+        #expect(tracks.warnings[1].contains("Source track 6"))
     }
 
     /// A track that gave up one channel and kept another is not a track that fitted.
     @Test func asourceThatOnlyPartlyFitsSaysWhichPartDidNot() throws {
         let limits = Limits(
-            SegmentationSummary(
-                tracks: (1...4).map {
-                    segmented(
-                        $0, source: $0,
-                        patterns: [(pattern: 1, steps: 16, notes: 4, busiest: 1, dropped: 0)])
-                },
-                unplaced: [
-                    UnplacedSource(sourceTrack: 3, droppedParts: 1, placedParts: 2, noteCount: 9)
-                ]))
+            full(unplaced: [
+                UnplacedSource(sourceTrack: 3, droppedParts: 1, placedParts: 2, noteCount: 9)
+            ]))
 
         let tracks = try gauge(limits, "Tracks")
-        #expect(tracks.notes.count == 1)
-        #expect(tracks.notes[0].contains("Source track 3"))
-        #expect(tracks.notes[0].contains("3 channels"))
-        #expect(tracks.notes[0].contains("1 channel would be dropped"))
+        #expect(tracks.warnings.count == 1)
+        #expect(tracks.warnings[0].contains("Source track 3"))
+        #expect(tracks.warnings[0].contains("3 channels"))
+        #expect(tracks.warnings[0].contains("1 channel would be dropped"))
         // The note count belongs to the whole track, so a partial drop must not claim it.
-        #expect(!tracks.notes[0].contains("9"))
+        #expect(!tracks.warnings[0].contains("9"))
     }
 
     @Test func adroppedTailExceedsThePatternCountAndSaysHowMuchWent() throws {
@@ -207,18 +216,18 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
                 tracks: [
                     segmented(
                         1, source: 3,
-                        patterns: [(pattern: 16, steps: 64, notes: 8, busiest: 1, dropped: 0)],
+                        patterns: [(pattern: 16, steps: 64, notes: 8, perStep: 1, dropped: 0)],
                         droppedPatterns: 2)
                 ]))
 
         let patterns = try gauge(limits, "Patterns per track")
         #expect(patterns.used == Constants.patternsPerTrack)
         #expect(patterns.status == .over)
-        #expect(patterns.notes.count == 1)
-        #expect(patterns.notes[0].contains("Track 1"))
-        #expect(patterns.notes[0].contains("2 patterns"))
+        #expect(patterns.warnings.count == 1)
+        #expect(patterns.warnings[0].contains("Track 1"))
+        #expect(patterns.warnings[0].contains("2 patterns"))
         // The device's own count, not the grid's column count, which only happens to match.
-        #expect(patterns.notes[0].contains("pattern \(Constants.patternsPerTrack)"))
+        #expect(patterns.warnings[0].contains("pattern \(Constants.patternsPerTrack)"))
     }
 
     /// A run starting at pattern 14 has three slots left whatever it holds, so the gauge counts
@@ -230,8 +239,8 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
                     segmented(
                         1, source: 1,
                         patterns: [
-                            (pattern: 14, steps: 64, notes: 8, busiest: 1, dropped: 0),
-                            (pattern: 15, steps: 64, notes: 8, busiest: 1, dropped: 0),
+                            (pattern: 14, steps: 64, notes: 8, perStep: 1, dropped: 0),
+                            (pattern: 15, steps: 64, notes: 8, perStep: 1, dropped: 0),
                         ])
                 ]))
 
@@ -248,10 +257,10 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
                 tracks: [
                     segmented(
                         1, source: 1,
-                        patterns: [(pattern: 1, steps: 16, notes: 4, busiest: 1, dropped: 0)]),
+                        patterns: [(pattern: 1, steps: 16, notes: 4, perStep: 1, dropped: 0)]),
                     segmented(
                         3, source: 2,
-                        patterns: [(pattern: 5, steps: 64, notes: 90, busiest: 6, dropped: 0)]),
+                        patterns: [(pattern: 5, steps: 64, notes: 90, perStep: 6, dropped: 0)]),
                 ]))
 
         #expect(try gauge(limits, "Steps per pattern").site == "Track 3, pattern 5")
@@ -278,14 +287,7 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
     }
 
     @Test func exceededCollectsOnlyTheLimitsThatWereActuallyPassed() {
-        let limits = Limits(
-            SegmentationSummary(
-                tracks: (1...4).map {
-                    segmented(
-                        $0, source: $0,
-                        patterns: [(pattern: 1, steps: 64, notes: 4, busiest: 1, dropped: 0)])
-                },
-                unplaced: [UnplacedSource(sourceTrack: 5, noteCount: 12)]))
+        let limits = Limits(full(unplaced: [UnplacedSource(sourceTrack: 5, noteCount: 12)]))
 
         #expect(limits.exceeded.map(\.name) == ["Tracks"])
     }

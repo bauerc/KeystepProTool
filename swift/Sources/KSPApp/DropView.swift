@@ -338,15 +338,11 @@ struct DropView: View {
         case .loading:
             ProgressView("Planning the import…").controlSize(.small)
         case .failed(let message):
-            // A limit the planner refuses outright leaves no plan to draw, and the refusal already
-            // names the limit and where; it is the one exceeded limit shown without a gauge.
-            VStack(alignment: .leading, spacing: 6) {
-                Text(Limits.heading).font(.caption).fontWeight(.medium)
-                Label(message, systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.red).textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Not drawn as an exceeded limit: an unreadable file and a single-target import fail
+            // the same way, and only the planner's own words say which of the three this is.
+            Label(message, systemImage: "exclamationmark.triangle")
+                .font(.caption).foregroundStyle(.orange).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
         case .ready(let plan):
             VStack(alignment: .leading, spacing: 12) {
                 segmentationGrid(SegmentationGrid(plan.summary))
@@ -371,19 +367,19 @@ struct DropView: View {
                         Text(gauge.figure)
                             .font(.caption).monospacedDigit()
                             .frame(width: AppLayout.limitFigureWidth, alignment: .trailing)
-                        if let symbol = symbol(gauge.status) {
+                        if let symbol = style(gauge.status).symbol {
                             Image(systemName: symbol).font(.caption2)
                         }
                         if let site = gauge.site {
                             Text(site).font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    .foregroundStyle(colour(gauge.status))
+                    .foregroundStyle(style(gauge.status).colour)
                 }
             }
 
-            ForEach(limits.exceeded.flatMap(\.notes), id: \.self) { note in
-                Label(note, systemImage: "exclamationmark.triangle")
+            ForEach(limits.exceeded.flatMap(\.warnings), id: \.self) { warning in
+                Label(warning, systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -391,19 +387,13 @@ struct DropView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func symbol(_ status: Limits.Status) -> String? {
+    /// Approaching and exceeding differ by symbol as well as colour, so the two are told apart
+    /// without relying on colour alone.
+    private func style(_ status: Limits.Status) -> (colour: Color, symbol: String?) {
         switch status {
-        case .within: return nil
-        case .near: return "exclamationmark.circle"
-        case .over: return "exclamationmark.triangle"
-        }
-    }
-
-    private func colour(_ status: Limits.Status) -> Color {
-        switch status {
-        case .within: return .primary
-        case .near: return .orange
-        case .over: return .red
+        case .within: return (.primary, nil)
+        case .near: return (.orange, "exclamationmark.circle")
+        case .over: return (.red, "exclamationmark.triangle")
         }
     }
 

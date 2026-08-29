@@ -66,7 +66,8 @@ public struct SegmentedTrack: Sendable, Hashable {
             segments.append(
                 Segment(
                     pattern: placement.pattern, stepCount: placement.stepCount, firstStep: step,
-                    noteCount: placement.notes.count, busiestStep: busiest(placement.notes),
+                    noteCount: placement.notes.count,
+                    mostNotesOnAStep: mostNotesOnAStep(placement.notes),
                     droppedNotes: droppedNotes[placement.pattern] ?? 0))
             step += placement.stepCount
         }
@@ -92,19 +93,20 @@ public struct Segment: Sendable, Hashable {
     public let firstStep: Int
     public let noteCount: Int
     /// The most notes on any one step, which is what the 16-per-step limit is measured in.
-    public let busiestStep: Int
+    public let mostNotesOnAStep: Int
     /// Never part of ``noteCount``: the plan holds only what fit, so this is what would be lost.
     public let droppedNotes: Int
 
     public init(
-        pattern: Int, stepCount: Int, firstStep: Int = 1, noteCount: Int = 0, busiestStep: Int = 0,
+        pattern: Int, stepCount: Int, firstStep: Int = 1, noteCount: Int = 0,
+        mostNotesOnAStep: Int = 0,
         droppedNotes: Int = 0
     ) {
         self.pattern = pattern
         self.stepCount = stepCount
         self.firstStep = firstStep
         self.noteCount = noteCount
-        self.busiestStep = busiestStep
+        self.mostNotesOnAStep = mostNotesOnAStep
         self.droppedNotes = droppedNotes
     }
 
@@ -161,7 +163,7 @@ private func droppedNotes(_ report: Report) -> [Int: [Int: Int]] {
     return dropped
 }
 
-private func busiest(_ notes: [PlacedNote]) -> Int {
+private func mostNotesOnAStep(_ notes: [PlacedNote]) -> Int {
     var held: [Int: Int] = [:]
     for note in notes {
         held[note.step, default: 0] += 1
