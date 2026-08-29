@@ -11,21 +11,19 @@ struct DropView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             VStack(spacing: 16) {
-                modeSwitch
                 content
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(AppLayout.mainPadding)
 
-            if model.mode == .advanced {
-                Divider()
-                options
-            }
+            Divider()
+            options
         }
         .frame(
             minWidth: windowFloor.width, maxWidth: .infinity,
             minHeight: windowFloor.height, maxHeight: .infinity
         )
+        .toolbar { ToolbarItem(placement: .principal) { modeSwitch } }
         .dropDestination(for: URL.self) { urls, _ in
             // One file at a time in v1: a second would need its own name field and its own result.
             guard let first = urls.first else { return false }
@@ -39,19 +37,18 @@ struct DropView: View {
 
     private var windowFloor: CGSize { AppLayout.windowFloor(for: model.mode) }
 
-    /// The one control Simple shows outside the card: without it there is no way back.
+    /// In the titlebar, where a view switch belongs and where nothing the pane does can move it.
     private var modeSwitch: some View {
         Picker("", selection: $model.mode) {
             ForEach(Mode.allCases) { Text($0.label).tag($0) }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
-        .controlSize(.small)
         .fixedSize()
-        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
-    /// A fixed-width column, so a control added below must push, not widen or clip.
+    /// A fixed-width column, so a control added below must push, not widen or clip. Simple keeps
+    /// the destinations and drops the rest: where a file lands is the least a user configures.
     private var options: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -59,28 +56,29 @@ struct DropView: View {
                 folderRow(.project)
                 folderRow(.midi)
 
-                Divider()
+                if model.mode == .advanced {
+                    Divider()
 
-                // One group, never both: the panel writes to the slot ``kind`` names, so a
-                // control from the other direction would take an edit that slot never reads.
-                if model.kind == .toMIDI { exportGroup } else { importGroup }
+                    // One group, never both: the panel writes to the slot ``kind`` names, so a
+                    // control from the other direction would take an edit that slot never reads.
+                    if model.kind == .toMIDI { exportGroup } else { importGroup }
 
-                Divider()
+                    Divider()
 
-                Text("Options").font(.headline)
+                    Text("Options").font(.headline)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Dry run", isOn: $model.settings.dryRun)
-                    Text("Report what would be written, and write nothing.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Dry run", isOn: $model.settings.dryRun)
+                        Text("Report what would be written, and write nothing.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Show every finding", isOn: $model.settings.verbose)
+                        Text("List each finding instead of one line per kind.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Show every finding", isOn: $model.settings.verbose)
-                    Text("List each finding instead of one line per kind.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
@@ -209,15 +207,6 @@ struct DropView: View {
                 // `description(of:)` tildes the path, so the full one has to be reachable.
                 .help(model.folders[kind]?.path ?? kind.defaultDescription)
 
-            folderControls(kind)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// The choice alone, without the heading and path the sidebar sets above it: Simple puts this
-    /// under the target the plan has already named.
-    private func folderControls(_ kind: FolderKind) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Button("Choose…") { model.choose(kind) }
                 if model.folders[kind] != nil {
@@ -230,7 +219,6 @@ struct DropView: View {
             if kind == .project, let warning = model.mccWarning {
                 Label(warning, systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -256,19 +244,14 @@ struct DropView: View {
                 .font(.system(size: 44))
                 .foregroundStyle(.secondary)
             Text("Drop a MIDI file here").font(.title3)
-            Text(idleNote)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            Text(
+                "Drop a .KeyStepPro instead to get a MIDI file back. "
+                    + "Where each one lands is on the right."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
         }
-    }
-
-    /// Advanced can point at the sidebar; Simple has none, and says where the choice turns up.
-    private var idleNote: String {
-        "Drop a .KeyStepPro instead to get a MIDI file back. "
-            + (model.mode == .advanced
-                ? "Where each one lands is on the right."
-                : "Where it lands is shown before you convert.")
     }
 
     private func staged(_ staged: AppModel.Staged) -> some View {
@@ -297,11 +280,6 @@ struct DropView: View {
 
                     if let note = plan.note {
                         Text(note).font(.caption).foregroundStyle(.secondary)
-                    }
-
-                    // Simple hides the sidebar row this would otherwise repeat.
-                    if model.mode == .simple {
-                        folderControls(staged.job.folderKind)
                     }
 
                     if model.mode == .advanced {

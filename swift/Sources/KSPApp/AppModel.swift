@@ -103,9 +103,8 @@ final class AppModel {
 
     nonisolated static func destination(for job: Job, folders: Folders) -> Destination {
         switch job {
-        case .toProject: return Destinations.forProjects(chosen: folders[job.folderKind])
-        case .toMIDI:
-            return Destinations.forMIDI(source: job.source, chosen: folders[job.folderKind])
+        case .toProject: return Destinations.forProjects(chosen: folders.project)
+        case .toMIDI: return Destinations.forMIDI(source: job.source, chosen: folders.midi)
         }
     }
 

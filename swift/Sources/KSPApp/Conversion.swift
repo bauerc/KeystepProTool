@@ -224,14 +224,6 @@ extension Job {
         }
     }
 
-    /// Which of the two remembered folders this job's result lands in.
-    var folderKind: FolderKind {
-        switch self {
-        case .toProject: return .project
-        case .toMIDI: return .midi
-        }
-    }
-
     var writesMIDI: Bool {
         if case .toMIDI = self { return true }
         return false

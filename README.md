@@ -64,15 +64,15 @@ lands in MIDI Control Center's Templates folder, where the Project Browser will 
 you get a `.mid` beside it. **Cancel** drops it again without writing anything. One file at a time;
 everything else is the CLI's job.
 
-**Simple and Advanced.** A switch at the top of the window picks between the two, and the choice is
+**Simple and Advanced.** A switch in the titlebar picks between the two, and the choice is
 remembered. *Simple* is what a fresh install opens on and is the app as it first shipped: the file,
 its name, where it will land, and **Convert**. It converts on the defaults throughout, reaching
 nothing set under Advanced, so what it writes is byte for byte what the CLI writes on its own
-defaults. Everything below this paragraph is the Advanced face; the only thing Simple keeps of it
-is the destination choice, which sits under the path rather than in a sidebar. *Advanced* remembers
-its settings separately for each direction, and shows the group belonging to whichever way the
-staged file is going — so **Repeat** and **Step Skip** appear over a `.KeyStepPro`, and the import's
-own toggles over a `.mid`.
+defaults. It keeps the **Destinations** at the top of the sidebar — where a file lands is the least
+anyone configures — and drops everything below them. That rest is the Advanced face, and it
+remembers its settings separately for each direction, showing the group belonging to whichever way
+the staged file is going: **Repeat** and **Step Skip** over a `.KeyStepPro`, the import's own
+toggles over a `.mid`.
 
 **What is in it.** A dropped `.KeyStepPro` is read while it sits there, and the staged view lists
 all four tracks against all sixteen of each one's pattern slots. A slot that holds nothing is dimmed

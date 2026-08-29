@@ -9,9 +9,10 @@ enum AppLayout {
     /// Advanced's floor, not its size: it resizes above this, and the width goes to a track name.
     static let minimumWindowWidth: CGFloat = 1020
     static let minimumWindowHeight: CGFloat = 440
-    /// Simple's floor: no sidebar and no grid row to hold open, so the card is all it must fit.
-    static let simpleWindowWidth: CGFloat = 460
-    static let simpleWindowHeight: CGFloat = 340
+    /// Simple's floor: it keeps the destinations column but holds no grid row open, so it needs
+    /// the sidebar and the card and nothing wider.
+    static let simpleWindowWidth: CGFloat = 680
+    static let simpleWindowHeight: CGFloat = 380
 
     static func windowFloor(for mode: Mode) -> CGSize {
         mode == .simple
