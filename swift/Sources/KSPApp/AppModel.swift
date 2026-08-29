@@ -52,10 +52,20 @@ final class AppModel {
             discardPreview()
         }
     }
+    /// Which unit the app dresses as. Unlike ``mode`` it changes nothing the app would compute,
+    /// so it leaves a staged preview standing.
+    var appearance: Appearance {
+        get { chosenAppearance }
+        set {
+            chosenAppearance = newValue
+            settingsStore.save(newValue)
+        }
+    }
     /// Set through ``choose(_:)`` and ``useDefault(for:)`` alone, so every change is saved.
     private(set) var folders: Folders
 
     private var chosenMode: Mode
+    private var chosenAppearance: Appearance
     private var slots: [Job.Kind: Settings]
     /// The direction the panel is showing while nothing is staged, so cancelling a drop does not
     /// snap it to the other one. Within a session only: a launch starts at the import.
@@ -81,6 +91,7 @@ final class AppModel {
         self.chooseFolder = chooseFolder
         self.folders = store.load()
         self.chosenMode = settingsStore.loadMode()
+        self.chosenAppearance = settingsStore.loadAppearance()
         self.slots = Dictionary(
             uniqueKeysWithValues: Job.Kind.allCases.map { ($0, settingsStore.load($0)) })
     }

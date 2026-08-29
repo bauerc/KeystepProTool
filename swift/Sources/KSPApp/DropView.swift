@@ -7,22 +7,29 @@ import SwiftUI
 struct DropView: View {
     @Bindable var model: AppModel
     @State private var targeted = false
+    @Environment(\.colorScheme) private var systemScheme
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            VStack(spacing: 16) {
-                content
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(AppLayout.mainPadding)
+        VStack(spacing: 0) {
+            band
 
-            Divider()
-            options
+            HStack(alignment: .top, spacing: 0) {
+                VStack(spacing: 12) {
+                    content
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(AppLayout.mainPadding)
+
+                Divider()
+                options
+            }
         }
         .frame(
             minWidth: windowFloor.width, maxWidth: .infinity,
             minHeight: windowFloor.height, maxHeight: .infinity
         )
+        .background(palette.ground)
+        .foregroundStyle(palette.ink)
         .toolbar { ToolbarItem(placement: .principal) { modeSwitch } }
         .dropDestination(for: URL.self) { urls, _ in
             // One file at a time in v1: a second would need its own name field and its own result.
@@ -32,7 +39,79 @@ struct DropView: View {
         } isTargeted: {
             targeted = $0
         }
-        .background(targeted ? Color.accentColor.opacity(0.12) : Color.clear)
+        .overlay {
+            if targeted {
+                Rectangle()
+                    .strokeBorder(DeviceColor.track(1), lineWidth: 3)
+                    .allowsHitTesting(false)
+            }
+        }
+        .preferredColorScheme(model.appearance.colorScheme)
+    }
+
+    /// The window follows the system unless the user has named a unit, and the palette follows the
+    /// window: the two faces are the standard unit and the Chroma, not light and dark.
+    private var scheme: ColorScheme { model.appearance.colorScheme ?? systemScheme }
+    private var palette: Palette { Palette.resolved(for: scheme) }
+
+    /// After the panel's matte black band, which carries the display and the four track readouts
+    /// above the coloured track zones. It is what keeps the standard unit's face from being a
+    /// white void with four coloured rows floating in it.
+    private var band: some View {
+        HStack(spacing: 10) {
+            bandTitle
+            Spacer(minLength: 12)
+            bandAction
+        }
+        .padding(.horizontal, AppLayout.mainPadding)
+        .frame(height: AppLayout.bandHeight)
+        .frame(maxWidth: .infinity)
+        .background(palette.band)
+        .foregroundStyle(palette.bandInk)
+    }
+
+    @ViewBuilder
+    private var bandTitle: some View {
+        switch model.phase {
+        case .idle:
+            Text("Key Step Pro Plus").font(TypeScale.bandTitle)
+        case .staged(let staged):
+            Text(model.plan(for: staged.job).source.lastPathComponent)
+                .font(TypeScale.bandTitle).lineLimit(1).truncationMode(.middle)
+            Text(staged.job.direction)
+                .font(TypeScale.label).foregroundStyle(palette.bandInk.opacity(0.65))
+        case .working(let filename):
+            Text(filename).font(TypeScale.bandTitle).lineLimit(1).truncationMode(.middle)
+        case .done(let outcome):
+            // The glyph carries the outcome; the colour only agrees with it. Track 2 is orange and
+            // Track 4 is red, so a status hue is never enough on its own.
+            Image(systemName: outcome.failed ? "exclamationmark.triangle" : "checkmark.circle")
+                .foregroundStyle(outcome.failed ? palette.warning : palette.success)
+            Text(outcome.resultLine).font(TypeScale.bandTitle).lineLimit(1)
+        }
+    }
+
+    /// Convert lives in the band once the pane below it stops being the only place to put it.
+    @ViewBuilder
+    private var bandAction: some View {
+        switch model.phase {
+        case .staged:
+            if let reason = model.blockReason {
+                Label(reason, systemImage: "exclamationmark.triangle")
+                    .font(TypeScale.label).foregroundStyle(palette.warning)
+                    .lineLimit(1).truncationMode(.tail)
+            }
+            Button("Cancel") { model.cancel() }
+            Button(model.settings.dryRun ? "Dry run" : "Convert") {
+                Task { await model.convert() }
+            }
+            .disabled(model.blockReason != nil)
+            .keyboardShortcut(.defaultAction)
+        case .done:
+            Button("Convert another") { model.reset() }
+        default:
+            EmptyView()
+        }
     }
 
     private var windowFloor: CGSize { AppLayout.windowFloor(for: model.mode) }
@@ -52,9 +131,25 @@ struct DropView: View {
     private var options: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Destinations").font(.headline)
+                sectionHeader("Destinations")
                 folderRow(.project)
                 folderRow(.midi)
+
+                Divider()
+
+                // Shown under Simple too, unlike every other control here: it says which unit the
+                // app dresses as, not what a conversion does, so Simple's "defaults only" rule
+                // does not reach it.
+                sectionHeader("Appearance")
+                VStack(alignment: .leading, spacing: 4) {
+                    Picker("", selection: $model.appearance) {
+                        ForEach(Appearance.allCases) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.radioGroup)
+                    .labelsHidden()
+                    Text("Standard is the white unit, Chroma the dark one.")
+                        .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                }
 
                 if model.mode == .advanced {
                     Divider()
@@ -65,18 +160,18 @@ struct DropView: View {
 
                     Divider()
 
-                    Text("Options").font(.headline)
+                    sectionHeader("Options")
 
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("Dry run", isOn: $model.settings.dryRun)
                         Text("Report what would be written, and write nothing.")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("Show every finding", isOn: $model.settings.verbose)
                         Text("List each finding instead of one line per kind.")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
                     }
                 }
             }
@@ -87,9 +182,21 @@ struct DropView: View {
         .frame(width: AppLayout.sidebarWidth)
     }
 
+    /// Blue rules a secondary section, after the panel's 63 SHIFT functions in blue silkscreen. It
+    /// marks rather than letters: at #16B4E9 the hue cannot carry text on the standard unit's
+    /// ground, and no hue in this app is allowed to.
+    private func sectionHeader(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            Capsule()
+                .fill(DeviceColor.secondary)
+                .frame(width: 3, height: 13)
+            Text(title).font(TypeScale.bandTitle)
+        }
+    }
+
     @ViewBuilder
     private var exportGroup: some View {
-        Text("MIDI export").font(.headline)
+        sectionHeader("MIDI export")
 
         VStack(alignment: .leading, spacing: 4) {
             Picker("", selection: $model.settings.splitPerPattern) {
@@ -100,11 +207,11 @@ struct DropView: View {
             .labelsHidden()
             .onChange(of: model.settings.splitPerPattern) { model.discardPreview() }
             Text("Each file holds one pattern slot and starts at its own bar 1.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
         }
 
         VStack(alignment: .leading, spacing: 4) {
-            Text("Step Skip").font(.subheadline)
+            Text("Step Skip").font(TypeScale.sectionTitle)
 
             Picker("Step Skip", selection: $model.settings.stepSkip) {
                 ForEach(Settings.StepSkip.allCases) { Text($0.label).tag($0) }
@@ -120,12 +227,12 @@ struct DropView: View {
                     + "every note whatever its mask. This is the device's own cycle, not "
                     + "copies of the export."
             )
-            .font(.caption).foregroundStyle(.secondary)
+            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
         }
 
         VStack(alignment: .leading, spacing: 4) {
             Stepper(value: $model.settings.repeatCount, in: Settings.repeatRange) {
-                Text("Repeat ×\(model.settings.repeatCount)").font(.subheadline)
+                Text("Repeat ×\(model.settings.repeatCount)").font(TypeScale.sectionTitle)
             }
             .controlSize(.small)
             .onChange(of: model.settings.repeatCount) { model.discardPreview() }
@@ -135,7 +242,7 @@ struct DropView: View {
                     + "cycle above: it exists only in the .mid, and the device stores no "
                     + "such count, so no repeat of it can be written back to a project."
             )
-            .font(.caption).foregroundStyle(.secondary)
+            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
         }
 
         replacements
@@ -143,7 +250,7 @@ struct DropView: View {
 
     @ViewBuilder
     private var importGroup: some View {
-        Text("MIDI import").font(.headline)
+        sectionHeader("MIDI import")
 
         ignores
     }
@@ -151,7 +258,7 @@ struct DropView: View {
     /// Swing here is the export's sense: flattening the grid, not declining to fit one to a source.
     private var replacements: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Replace with defaults").font(.subheadline)
+            Text("Replace with defaults").font(TypeScale.sectionTitle)
 
             substitution(
                 "Velocity", isOn: $model.settings.replaceVelocity,
@@ -171,7 +278,7 @@ struct DropView: View {
     /// the project already stores.
     private var ignores: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Ignore in the source").font(.subheadline)
+            Text("Ignore in the source").font(TypeScale.sectionTitle)
 
             substitution(
                 "Velocity", isOn: $model.settings.ignoreVelocity,
@@ -193,16 +300,16 @@ struct DropView: View {
         VStack(alignment: .leading, spacing: 4) {
             Toggle(title, isOn: isOn)
                 .onChange(of: isOn.wrappedValue) { model.discardPreview() }
-            Text(note).font(.caption).foregroundStyle(.secondary)
+            Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
         }
     }
 
     private func folderRow(_ kind: FolderKind) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(kind.title).font(.subheadline)
+            Text(kind.title).font(TypeScale.sectionTitle)
 
             Text(model.folders.description(of: kind))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
                 .fixedSize(horizontal: false, vertical: true)
                 // `description(of:)` tildes the path, so the full one has to be reachable.
                 .help(model.folders[kind]?.path ?? kind.defaultDescription)
@@ -218,7 +325,7 @@ struct DropView: View {
 
             if kind == .project, let warning = model.mccWarning {
                 Label(warning, systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.orange)
+                    .font(TypeScale.label).foregroundStyle(palette.warning)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -242,14 +349,14 @@ struct DropView: View {
         VStack(spacing: 8) {
             Image(systemName: "arrow.down.doc")
                 .font(.system(size: 44))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(palette.mutedInk)
             Text("Drop a MIDI file here").font(.title3)
             Text(
                 "Drop a .KeyStepPro instead to get a MIDI file back. "
                     + "Where each one lands is on the right."
             )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .font(TypeScale.label)
+            .foregroundStyle(palette.mutedInk)
             .multilineTextAlignment(.center)
         }
     }
@@ -260,26 +367,22 @@ struct DropView: View {
         return VStack(alignment: .leading, spacing: 12) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Label(plan.source.lastPathComponent, systemImage: "doc")
-                        .font(.headline)
-                    Text(staged.job.direction).font(.callout).foregroundStyle(.secondary)
-
                     VStack(alignment: .leading, spacing: 4) {
                         TextField("Name", text: $model.name)
                             .textFieldStyle(.roundedBorder)
                             .onChange(of: model.name) { model.discardPreview() }
                         Text(nameNote(plan))
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(plan.intoFolder ? "Will be written into" : "Will be written to")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
                         Text(plan.target.path).font(.callout).textSelection(.enabled)
                     }
 
                     if let note = plan.note {
-                        Text(note).font(.caption).foregroundStyle(.secondary)
+                        Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
                     }
 
                     if model.mode == .advanced {
@@ -287,16 +390,16 @@ struct DropView: View {
                         summary(staged)
 
                         if let excluded = model.exclusionNote {
-                            Text(excluded).font(.caption).foregroundStyle(.secondary)
+                            Text(excluded).font(TypeScale.label).foregroundStyle(palette.mutedInk)
                         }
 
                         // Only on the way out: these three mean something else on an import.
                         if staged.job.writesMIDI, let replaced = model.settings.replacementNote {
-                            Text(replaced).font(.caption).foregroundStyle(.secondary)
+                            Text(replaced).font(TypeScale.label).foregroundStyle(palette.mutedInk)
                         }
 
                         if !staged.job.writesMIDI, let ignored = model.settings.ignoredNote {
-                            Text(ignored).font(.caption).foregroundStyle(.secondary)
+                            Text(ignored).font(TypeScale.label).foregroundStyle(palette.mutedInk)
                         }
 
                         if let preview = staged.preview {
@@ -308,20 +411,6 @@ struct DropView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            HStack(alignment: .firstTextBaseline) {
-                Button("Cancel") { model.cancel() }
-                Spacer()
-                if let reason = model.blockReason {
-                    Label(reason, systemImage: "exclamationmark.triangle")
-                        .font(.caption).foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Button(model.settings.dryRun ? "Dry run" : "Convert") {
-                    Task { await model.convert() }
-                }
-                .disabled(model.blockReason != nil)
-                .keyboardShortcut(.defaultAction)
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: staged.id) { await model.summarise() }
@@ -336,7 +425,7 @@ struct DropView: View {
                 .controlSize(.small)
         case .failed(let message):
             Label(message, systemImage: "exclamationmark.triangle")
-                .font(.caption).foregroundStyle(.orange).textSelection(.enabled)
+                .font(TypeScale.label).foregroundStyle(palette.warning).textSelection(.enabled)
         case .project(let summary):
             grid(
                 PatternGrid(summary), selection: staged.selection,
@@ -366,7 +455,7 @@ struct DropView: View {
             // Not drawn as an exceeded limit: an unreadable file and a single-target import fail
             // the same way, and only the planner's own words say which of the three this is.
             Label(message, systemImage: "exclamationmark.triangle")
-                .font(.caption).foregroundStyle(.orange).textSelection(.enabled)
+                .font(TypeScale.label).foregroundStyle(palette.warning).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         case .ready(let plan):
             VStack(alignment: .leading, spacing: 12) {
@@ -390,13 +479,13 @@ struct DropView: View {
                             .font(.caption)
                             .frame(width: AppLayout.limitNameWidth, alignment: .leading)
                         Text(gauge.figure)
-                            .font(.caption).monospacedDigit()
+                            .font(TypeScale.value)
                             .frame(width: AppLayout.limitFigureWidth, alignment: .trailing)
                         if let symbol = style(gauge.status).symbol {
                             Image(systemName: symbol).font(.caption2)
                         }
                         if let site = gauge.site {
-                            Text(site).font(.caption).foregroundStyle(.secondary)
+                            Text(site).font(TypeScale.label).foregroundStyle(palette.mutedInk)
                         }
                     }
                     .foregroundStyle(style(gauge.status).colour)
@@ -405,7 +494,7 @@ struct DropView: View {
 
             ForEach(limits.exceeded.flatMap(\.warnings), id: \.self) { warning in
                 Label(warning, systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.red)
+                    .font(TypeScale.label).foregroundStyle(palette.error)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -425,7 +514,7 @@ struct DropView: View {
     private func segmentationGrid(_ grid: SegmentationGrid) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("What the import will lay down").font(.caption).fontWeight(.medium)
-            Text(grid.header).font(.caption).foregroundStyle(.secondary)
+            Text(grid.header).font(TypeScale.label).foregroundStyle(palette.mutedInk)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 0) {
@@ -433,7 +522,7 @@ struct DropView: View {
                     HStack(spacing: AppLayout.cellSpacing) {
                         ForEach(grid.columns, id: \.self) { column in
                             Text("\(column)")
-                                .font(.caption2).monospacedDigit().foregroundStyle(.tertiary)
+                                .font(TypeScale.smallValue).foregroundStyle(.tertiary)
                                 .frame(width: AppLayout.cellWidth)
                         }
                     }
@@ -441,7 +530,8 @@ struct DropView: View {
                 ForEach(grid.rows, id: \.track) { segmentationRow($0) }
             }
 
-            Text(SegmentationGrid.legend).font(.caption2).foregroundStyle(.secondary)
+            Text(SegmentationGrid.legend).font(TypeScale.smallValue).foregroundStyle(
+                palette.mutedInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -465,7 +555,7 @@ struct DropView: View {
 
     private func segmentationSlot(_ cell: SegmentationGrid.Cell) -> some View {
         Text(cell.label)
-            .font(.caption2).monospacedDigit()
+            .font(TypeScale.smallValue)
             .foregroundStyle(cell.isEmpty ? HierarchicalShapeStyle.tertiary : .primary)
             .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
             .background(
@@ -489,7 +579,7 @@ struct DropView: View {
         _ list: SourceTrackList, selection: SourceTrackSelection, placements: [Int: String]
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(list.header).font(.caption).foregroundStyle(.secondary)
+            Text(list.header).font(TypeScale.label).foregroundStyle(palette.mutedInk)
 
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(list.rows, id: \.number) {
@@ -501,21 +591,22 @@ struct DropView: View {
             }
 
             if let count = selection.countLine {
-                Text(count).font(.caption).foregroundStyle(.secondary)
+                Text(count).font(TypeScale.label).foregroundStyle(palette.mutedInk)
             }
 
             // Ticking past the device's four is flagged, not refused, so Convert stays enabled.
             if let overflow = selection.overflowNote {
                 Label(overflow, systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.orange)
+                    .font(TypeScale.label).foregroundStyle(palette.warning)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if let note = list.note(verbose: model.settings.verbose) {
-                Text(note).font(.caption).foregroundStyle(.secondary)
+                Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
             }
 
-            Text(SourceTrackList.legend).font(.caption2).foregroundStyle(.secondary)
+            Text(SourceTrackList.legend).font(TypeScale.smallValue).foregroundStyle(
+                palette.mutedInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -536,7 +627,7 @@ struct DropView: View {
             .labelsHidden()
             .frame(width: AppLayout.trackTickWidth, alignment: .leading)
             Text("\(row.number)")
-                .font(.caption).monospacedDigit().foregroundStyle(.tertiary)
+                .font(TypeScale.value).foregroundStyle(.tertiary)
                 .frame(width: AppLayout.trackNumberWidth, alignment: .trailing)
             Text(row.name)
                 .font(.caption).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
@@ -550,11 +641,11 @@ struct DropView: View {
             // Kept where counts drops it: a track can carry all sixteen channels, and no fixed
             // width holds that. The whole list is in the row's help.
             Text(row.channels)
-                .font(.caption).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                .font(TypeScale.value).lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(.secondary)
                 .frame(width: AppLayout.trackChannelsWidth, alignment: .leading)
             Text(row.counts)
-                .font(.caption).monospacedDigit().lineLimit(1)
+                .font(TypeScale.value).lineLimit(1)
                 .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.tertiary : .secondary)
                 .frame(width: AppLayout.trackCountsWidth, alignment: .leading)
             destinationPicker(row, destination: destination, placement: placement)
@@ -621,7 +712,7 @@ struct DropView: View {
         -> some View
     {
         VStack(alignment: .leading, spacing: 6) {
-            Text(grid.header).font(.caption).foregroundStyle(.secondary)
+            Text(grid.header).font(TypeScale.label).foregroundStyle(palette.mutedInk)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 0) {
@@ -636,11 +727,11 @@ struct DropView: View {
             }
 
             if let line = length.line {
-                Text(line).font(.caption).foregroundStyle(.secondary)
+                Text(line).font(TypeScale.label).foregroundStyle(palette.mutedInk)
             }
 
-            Text(PatternGrid.legend).font(.caption2).foregroundStyle(.secondary)
-            Text(GridSelection.legend).font(.caption2).foregroundStyle(.secondary)
+            Text(PatternGrid.legend).font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
+            Text(GridSelection.legend).font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -650,7 +741,7 @@ struct DropView: View {
             model.toggle(pattern: column)
         } label: {
             Text("\(column)")
-                .font(.caption2).monospacedDigit()
+                .font(TypeScale.smallValue)
                 .foregroundStyle(state == .on ? HierarchicalShapeStyle.secondary : .tertiary)
                 .strikethrough(state == .off)
                 .frame(width: AppLayout.cellWidth)
@@ -697,7 +788,7 @@ struct DropView: View {
 
             if let chain = row.chainDetail {
                 Text(chain)
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
                     .padding(.leading, AppLayout.gridOrigin)
             }
         }
@@ -720,7 +811,7 @@ struct DropView: View {
             model.toggle(track: track, pattern: cell.pattern)
         } label: {
             Text(cell.label)
-                .font(.caption).monospacedDigit()
+                .font(TypeScale.value)
                 // Shrunk rather than truncated: a count reading "1…" would be worse than small.
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(cell.isEmpty || !ticked ? Color.secondary : Color.primary)
@@ -758,8 +849,8 @@ struct DropView: View {
                 preview.previewLine,
                 systemImage: preview.failed ? "exclamationmark.triangle" : "eye"
             )
-            .font(.subheadline)
-            .foregroundStyle(preview.failed ? Color.orange : Color.secondary)
+            .font(TypeScale.sectionTitle)
+            .foregroundStyle(preview.failed ? palette.warning : palette.mutedInk)
 
             if let folder = preview.folder { landedIn(folder) }
             if preview.written.count > 1 || preview.folder != nil {
@@ -777,14 +868,6 @@ struct DropView: View {
         VStack(alignment: .leading, spacing: 12) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Label(
-                        outcome.resultLine,
-                        systemImage: outcome.failed
-                            ? "exclamationmark.triangle" : "checkmark.circle"
-                    )
-                    .font(.headline)
-                    .foregroundStyle(outcome.failed ? Color.orange : Color.green)
-
                     if let folder = outcome.folder { landedIn(folder) }
                     if outcome.written.count > 1 || outcome.folder != nil {
                         writtenFiles(outcome.written)
@@ -793,15 +876,13 @@ struct DropView: View {
                     Text(outcome.headline).font(.callout).textSelection(.enabled)
 
                     if let note = outcome.note {
-                        Text(note).font(.caption).foregroundStyle(.secondary)
+                        Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
                     }
 
                     findings(outcome)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            Button("Convert another") { model.reset() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
