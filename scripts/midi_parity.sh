@@ -173,6 +173,11 @@ if has convert; then
         add import "$(basename "$clip") --drum-channel 3" "$clip" --drum-channel 3
         add import "$(basename "$clip") --drum-channel 1 --drum-track 1" "$clip" \
             --drum-channel 1 --drum-track 1
+        add import "$(basename "$clip") --no-drums" "$clip" --no-drums
+        add import "$(basename "$clip") --no-drums --drum-track 1" "$clip" --no-drums --drum-track 1
+        # No committed fixture puts a track on channel 10, so the search is moved to one that fires.
+        add import "$(basename "$clip") --drum-channel 3 --no-drums" "$clip" \
+            --drum-channel 3 --no-drums
         add import "$(basename "$clip") --midi-track 1" "$clip" --midi-track 1
         add import "$(basename "$clip") --route 1:2" "$clip" --route 1:2
         add import "$(basename "$clip") --route 3:1,4:2" "$clip" --route 3:1,4:2

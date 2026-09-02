@@ -59,6 +59,14 @@ struct Convert: ParsableCommand {
             """, valueName: "N"))
     var drumChannel = MIDIImport.drumChannel + 1
 
+    @Flag(
+        name: .customLong("no-drums"),
+        help: """
+            take no source track as drums; a track sitting wholly on --drum-channel comes in as \
+            ordinary notes instead of a kit
+            """)
+    var noDrums = false
+
     @Option(name: .customLong("route"), help: ArgumentHelp(routeHelp, valueName: "SPEC"))
     var route: String?
 
@@ -149,7 +157,7 @@ struct Convert: ParsableCommand {
             ConvertRunner.Options(
                 paths: paths.map { URL(filePath: $0) },
                 output: output.map { URL(filePath: $0) },
-                track: track, pattern: pattern, drumTrack: drumTrack,
+                track: track, pattern: pattern, drumTrack: drumTrack, noDrums: noDrums,
                 drumChannel: drumChannel - 1, routeSpec: route,
                 drumMapSpec: drumMapSpec,
                 carryTempo: !noTempo, fitSwing: !noSwingFit, fitTimeShift: !noTimeShift,
