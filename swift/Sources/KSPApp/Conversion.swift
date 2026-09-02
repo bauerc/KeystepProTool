@@ -24,8 +24,8 @@ struct Outcome: Sendable, Equatable {
     let dryRun: Bool
 
     /// Rendered once: SwiftUI re-evaluates a body far more often than a conversion happens.
-    let collapsed: [String]
-    let all: [String]
+    let collapsedRows: [Finding]
+    let allRows: [Finding]
 
     init(
         written: [URL], headline: String, report: Report, note: String?, folder: URL? = nil,
@@ -37,9 +37,12 @@ struct Outcome: Sendable, Equatable {
         self.folder = folder
         self.dryRun = dryRun
         // Not `Report.note(verbose:)`: its text names a CLI flag, not the sidebar's toggle.
-        self.collapsed = report.render(verbose: false)
-        self.all = report.render(verbose: true)
+        self.collapsedRows = report.rows(verbose: false)
+        self.allRows = report.rows(verbose: true)
     }
+
+    var collapsed: [String] { collapsedRows.map(\.text) }
+    var all: [String] { allRows.map(\.text) }
 
     var failed: Bool { written.isEmpty }
 
@@ -56,7 +59,9 @@ struct Outcome: Sendable, Equatable {
 
     var wroteFile: Bool { !failed && !dryRun }
 
-    func findings(verbose: Bool) -> [String] { verbose ? all : collapsed }
+    func rows(verbose: Bool) -> [Finding] { verbose ? allRows : collapsedRows }
+
+    func findings(verbose: Bool) -> [String] { rows(verbose: verbose).map(\.text) }
 }
 
 /// What a staged file turned out to hold. Both drop kinds are read; only the shape differs.
@@ -71,16 +76,21 @@ enum SummaryState: Equatable {
 struct StagedPlan: Equatable {
     let summary: SegmentationSummary
     /// Rendered once, for the reason ``Outcome`` renders its own once.
-    let collapsed: [String]
-    let all: [String]
+    let collapsedRows: [Finding]
+    let allRows: [Finding]
 
     init(summary: SegmentationSummary, diagnostics: Report) {
         self.summary = summary
-        self.collapsed = diagnostics.render(verbose: false)
-        self.all = diagnostics.render(verbose: true)
+        self.collapsedRows = diagnostics.rows(verbose: false)
+        self.allRows = diagnostics.rows(verbose: true)
     }
 
-    func findings(verbose: Bool) -> [String] { verbose ? all : collapsed }
+    var collapsed: [String] { collapsedRows.map(\.text) }
+    var all: [String] { allRows.map(\.text) }
+
+    func rows(verbose: Bool) -> [Finding] { verbose ? allRows : collapsedRows }
+
+    func findings(verbose: Bool) -> [String] { rows(verbose: verbose).map(\.text) }
 }
 
 /// What the import would lay down. Import-only, so a staged project leaves it at ``loading``.

@@ -163,6 +163,16 @@ enum TypeScale {
     static let smallValue = Font.system(.caption2, design: .monospaced)
     /// A row's pattern number, in its well.
     static let readout = Font.system(.caption, design: .monospaced).weight(.semibold)
+    /// A figure inside a headline, which is set a size above the rest of the chrome.
+    static let headlineValue = Font.system(.callout, design: .monospaced)
+}
+
+/// The SF Symbols status is marked with. Rule 2 of the visual language turns on the glyph rather
+/// than the hue, so a limit gauge, a finding row and the done band read from one vocabulary.
+enum StatusMark {
+    static let warning = "exclamationmark.circle"
+    static let error = "exclamationmark.triangle"
+    static let success = "checkmark.circle"
 }
 
 extension Color {
@@ -336,4 +346,36 @@ enum AppLayout {
     static let meterSegmentGap: CGFloat = 2
     static let meterHeight: CGFloat = 8
     static let meterSegmentCount = 24
+    static let meterSegmentRadius: CGFloat = 1
+    /// The ceiling the segments fill toward, and the space held clear before it.
+    static let meterCapWidth: CGFloat = 1.5
+    static let meterCapGap: CGFloat = 3
+
+    /// Summed rather than fixed, for the reason ``labelWidth`` is.
+    static var meterWidth: CGFloat {
+        CGFloat(meterSegmentCount) * meterSegmentWidth
+            + CGFloat(meterSegmentCount - 1) * meterSegmentGap + meterCapGap + meterCapWidth
+    }
+
+    /// How many segments are lit. Pure quantity: any figure at all lights one, the limit and
+    /// anything past it lights them all, and nothing between the two skips backwards. The last
+    /// segment is the wall itself, so a figure short of it never fills the meter -- rounding to
+    /// nearest would light 63 of 64 steps as full and leave the meter saying nothing.
+    static func meterFill(used: Int, limit: Int) -> Int {
+        guard used > 0, limit > 0 else { return 0 }
+        guard used < limit else { return meterSegmentCount }
+        let lit = (Double(used) / Double(limit) * Double(meterSegmentCount)).rounded()
+        return min(meterSegmentCount - 1, max(1, Int(lit)))
+    }
+
+    /// A severity glyph's column, wide enough that the text beside it starts on one edge.
+    static let findingGlyphWidth: CGFloat = 14
+    /// "Track 1, pattern 16" is the longest a gauge's site reads.
+    static let limitSiteWidth: CGFloat = 150
+
+    /// Every fixed column of a limit row, for the reason ``trackRowWidth`` sums its own.
+    static var limitRowWidth: CGFloat {
+        limitNameWidth + meterWidth + limitFigureWidth + findingGlyphWidth + limitSiteWidth
+            + 4 * labelGap
+    }
 }
