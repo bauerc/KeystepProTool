@@ -90,6 +90,13 @@ struct SourceTrackSelection: Sendable, Equatable {
         }
     }
 
+    /// Every track sent to Drums, not just the first: two is a state the picker allows and
+    /// ``clash(_:)`` reports, and a skipped one keeps its choice, so clearing must take them all
+    /// or the sidebar's row snaps back to the one left behind.
+    mutating func clearDrums() {
+        for (number, destination) in chosen where destination == .drums { chosen[number] = nil }
+    }
+
     var countLine: String? {
         guard !isInert else { return nil }
         return "\(ticked.count) of \(tracks.count) source track\(tracks.count == 1 ? "" : "s") "
@@ -148,7 +155,7 @@ struct SourceTrackSelection: Sendable, Equatable {
     /// ticked track on the searched channel rather than the reader's `isDrumTrack`, which names the
     /// first over the whole file: the assignment looks among the clips actually read, so skipping
     /// one promotes the next.
-    private func drumSource(_ drums: DrumSense) -> Int? {
+    func drumSource(_ drums: DrumSense) -> Int? {
         switch drums.designation {
         case .source(let number): return number
         case .none: return nil

@@ -478,7 +478,8 @@ struct DropView: View {
         case .song(let summary):
             VStack(alignment: .leading, spacing: 12) {
                 trackList(
-                    SourceTrackList(summary, drums: model.drumSense),
+                    SourceTrackList(
+                        summary, drums: model.drumSense, selection: staged.sourceSelection),
                     selection: staged.sourceSelection,
                     placements: placements(staged.segmentation))
                 Divider()

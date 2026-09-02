@@ -92,7 +92,12 @@ struct SourceTrackList: Equatable {
                 break
             }
             if track.channels.count > 1 {
-                detail += " Each channel becomes a device track of its own."
+                // `assign` merges every clip of a named track into the one drum clip, which is why
+                // `SourceTrackSelection.demand` counts it as one device track rather than as many.
+                detail +=
+                    badge == .drums && drums.designation.sourceTrack != nil
+                    ? " Its channels are merged onto that one device track."
+                    : " Each channel becomes a device track of its own."
             }
             return detail
         }
@@ -108,21 +113,20 @@ struct SourceTrackList: Equatable {
 
     func note(verbose: Bool) -> String? { verbose ? allNotes : collapsedNote }
 
-    init(_ summary: SongSummary, drums: DrumSense) {
+    init(_ summary: SongSummary, drums: DrumSense, selection: SourceTrackSelection) {
         self.header =
             "\(Arithmetic.general(summary.tempoBPM)) BPM · "
             + "\(Arithmetic.general(summary.beatsPerBar)) beats to the bar · "
             + counted(summary.tracks.count, "source track")
         // `isDrumTrack` and `isPercussion` are GM's reading of the file, so under any designation
-        // but the default they would badge a row the import will not touch. Derived off `channels`
-        // instead: the first track carrying the searched channel is the one `assign` reaches first.
-        let searched = summary.tracks.filter { $0.channels.contains(drums.channel) }.map(\.number)
-        let source =
-            drums.designation.sourceTrack ?? (drums.designation == .auto ? searched.first : nil)
+        // but the default they would badge a row the import will not touch. The selection's own
+        // `drumSource` rather than a second derivation of it: it looks among the ticked tracks, and
+        // a badge naming a track the block does not would contradict the reason on screen.
+        let source = selection.drumSource(drums)
         self.rows = summary.tracks.map { track in
             if track.number == source { return Row(track, badge: .drums, drums: drums) }
             if track.isConductor { return Row(track, badge: .tempo, drums: drums) }
-            let percussion = drums.designation == .auto && searched.contains(track.number)
+            let percussion = drums.designation == .auto && track.channels.contains(drums.channel)
             return Row(track, badge: percussion ? .percussion : nil, drums: drums)
         }
         self.collapsedNote = Self.note(summary.diagnostics.render(verbose: false))

@@ -429,9 +429,25 @@ import Testing
         #expect(model.drumChoice == choice)
     }
 
-    /// `ConvertRunner.run` fails `--drum-track` with `--no-drums` at exit 2, so the two must never
-    /// both be set: naming a track leaves None behind.
-    @Test func sendingASourceTrackToDrumsLeavesNoneBehind() async throws {
+    /// Two tracks on Drums is a state the picker allows and `clash` reports, so clearing the first
+    /// alone would let the sidebar's row snap back to the second.
+    @Test func choosingInTheSidebarClearsEveryDrumsDestination() async throws {
+        let model = model()
+        model.accept(midiFixture)
+        await model.summarise()
+        model.send(sourceTrack: 3, to: .drums)
+        model.send(sourceTrack: 4, to: .drums)
+
+        model.drumChoice = .none
+
+        #expect(model.drumChoice == .none)
+        #expect(try #require(model.staged).sourceSelection.drumTrack == nil)
+    }
+
+    /// `ConvertRunner.run` fails `--drum-track` with `--no-drums` at exit 2, so the named track
+    /// wins where the two meet -- but it must not spend None to do it: sending the track elsewhere
+    /// gives the answer the user chose back, rather than silently searching channel 10.
+    @Test func anamedDrumTrackWinsOverNoneWithoutDiscardingIt() async throws {
         let model = model()
         model.accept(midiFixture)
         await model.summarise()
@@ -439,10 +455,17 @@ import Testing
 
         model.send(sourceTrack: 3, to: .drums)
 
-        #expect(model.settings.drums == .automatic)
-        let mapped = model.conversionSettings.convertOptions(source: midiFixture, output: nil)
-        #expect(mapped.drumTrack == 3)
-        #expect(!mapped.noDrums)
+        #expect(model.drumChoice == .source(3))
+        let named = model.conversionSettings.convertOptions(source: midiFixture, output: nil)
+        #expect(named.drumTrack == 3)
+        #expect(!named.noDrums)
+
+        model.send(sourceTrack: 3, to: .track(2))
+
+        #expect(model.drumChoice == .none)
+        let cleared = model.conversionSettings.convertOptions(source: midiFixture, output: nil)
+        #expect(cleared.drumTrack == nil)
+        #expect(cleared.noDrums)
     }
 
     @Test func untickingAsourceTrackDiscardsAdryRunPreview() async throws {

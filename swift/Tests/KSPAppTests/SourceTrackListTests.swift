@@ -5,10 +5,13 @@ import Testing
 
 @testable import KSPApp
 
-/// Under the designation the app runs on unless the sidebar moves it, so a test about something
-/// else need not restate it.
-private func list(_ summary: SongSummary, drums: DrumSense = gmDrums) -> SourceTrackList {
-    SourceTrackList(summary, drums: drums)
+/// Under the designation and the ticks the app starts on, so a test about something else need not
+/// restate either.
+private func list(
+    _ summary: SongSummary, drums: DrumSense = gmDrums, selection: SourceTrackSelection? = nil
+) -> SourceTrackList {
+    SourceTrackList(
+        summary, drums: drums, selection: selection ?? SourceTrackSelection(summary))
 }
 
 @Suite struct SourceTrackListTests {
@@ -121,6 +124,39 @@ private func list(_ summary: SongSummary, drums: DrumSense = gmDrums) -> SourceT
         #expect(list.rows[1].badge == .drums)
         #expect(list.rows[1].detail.contains("sent to Drums, so it becomes the drum track"))
         #expect(!list.rows[1].detail.contains("looks for drums"))
+    }
+
+    /// The badge names the track ``SourceTrackSelection/drumSource(_:)`` names, which looks among
+    /// the ticked tracks: badging one the block does not name would contradict the reason on screen.
+    @Test func untickingTheFirstTrackOnTheChannelMovesTheDrumBadge() {
+        let summary = syntheticSong(tracks: [
+            sourceTrack(1, name: "Bass"),
+            sourceTrack(2, name: "Kit", channels: [10], isDrumTrack: true),
+            sourceTrack(3, name: "Shaker", channels: [10]),
+        ])
+        var selection = SourceTrackSelection(summary)
+        selection.send(2, to: .skip)
+
+        let list = list(summary, selection: selection)
+
+        #expect(selection.drumSource(gmDrums) == 3)
+        #expect(list.rows[1].badge == .percussion)
+        #expect(list.rows[2].badge == .drums)
+    }
+
+    /// `assign` merges every clip of a named track into the one drum clip, so the row must not
+    /// claim its channels each become a device track.
+    @Test func anamedDrumTrackOnSeveralChannelsIsMergedRatherThanSplit() {
+        let summary = syntheticSong(tracks: [sourceTrack(1, name: "Kit", channels: [1, 10])])
+        var selection = SourceTrackSelection(summary)
+        selection.send(1, to: .drums)
+
+        let list = list(
+            summary, drums: DrumSense(designation: .source(1), channel: 10), selection: selection)
+
+        #expect(list.rows[0].badge == .drums)
+        #expect(list.rows[0].detail.contains("merged onto that one device track"))
+        #expect(!list.rows[0].detail.contains("Each channel becomes a device track of its own."))
     }
 
     @Test func atrackOnSeveralChannelsNamesThemAllAndSaysItSplits() {

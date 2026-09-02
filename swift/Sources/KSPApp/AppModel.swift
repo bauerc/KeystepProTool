@@ -268,8 +268,6 @@ final class AppModel {
     func toggle(sourceTrack: Int) { mutate { $0.sourceSelection.toggle(sourceTrack) } }
 
     func send(sourceTrack: Int, to destination: SourceTrackSelection.Destination) {
-        // Naming a track and taking nothing as drums are the pair the runner fails with exit 2.
-        if destination == .drums { settings.drums = .automatic }
         mutate { $0.sourceSelection.send(sourceTrack, to: destination) }
     }
 
@@ -283,7 +281,9 @@ final class AppModel {
     }
 
     /// Two editors, one designation: the sidebar owns Automatic and None, the track list the named
-    /// track, and choosing either of the sidebar's clears the track list's so the pair never exists.
+    /// track, which wins over both. Choosing either of the sidebar's clears the track list's, so
+    /// only one row is ever selected -- but a named track leaves ``Settings/drums`` alone, so None
+    /// is still there when the track goes elsewhere rather than silently becoming Automatic.
     var drumChoice: DrumChoice {
         get {
             guard let named = staged?.sourceSelection.drumTrack else {
@@ -297,10 +297,7 @@ final class AppModel {
             case .source: break
             case .automatic, .none:
                 settings.drums = newValue == .none ? .none : .automatic
-                mutate { staged in
-                    guard let named = staged.sourceSelection.drumTrack else { return }
-                    staged.sourceSelection.send(named, to: .automatic)
-                }
+                mutate { $0.sourceSelection.clearDrums() }
             }
         }
     }
