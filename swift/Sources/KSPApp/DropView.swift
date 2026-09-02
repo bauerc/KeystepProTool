@@ -818,9 +818,10 @@ struct DropView: View {
     /// A chain that jumps gets no bar; the caption says the order instead. The rail is the only
     /// place Chain membership shows: inside a cell it would fight the content channel.
     private func rails(_ runs: [AppLayout.Rail], track: Int) -> some View {
-        ForEach(runs.indices, id: \.self) { index in
+        let color = DeviceColor.track(track)
+        return ForEach(runs.indices, id: \.self) { index in
             Capsule()
-                .fill(DeviceColor.track(track))
+                .fill(color)
                 .frame(width: runs[index].width, height: AppLayout.railHeight)
                 .offset(x: runs[index].x)
         }
