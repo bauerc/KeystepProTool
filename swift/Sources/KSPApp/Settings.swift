@@ -2,9 +2,27 @@ import Foundation
 import KSPMIDI
 import KSPRun
 
+/// The drum designation the import runs under and the channel it searches, counting from 1.
+struct DrumSense: Equatable, Sendable {
+    let designation: DrumDesignation
+    let channel: Int
+}
+
 struct Settings: Sendable, Equatable, Codable {
     /// A deliberate twin of `MIDIExport.maxRepeat`; a test pins the two together.
     static let repeatRange = 1...10
+
+    /// A deliberate twin of the CLI's own `--drum-channel` check; a test pins the two together.
+    static let drumChannelRange = 1...16
+
+    /// The two designations the sidebar owns. A source track is the track list's to name.
+    enum Drums: String, CaseIterable, Identifiable, Codable, Sendable {
+        case automatic
+        case none
+
+        var id: String { rawValue }
+        var label: String { self == .automatic ? "Automatic" : "None" }
+    }
 
     /// Auto, or a fixed count of the device's four 16/32/48/64 sequences.
     enum StepSkip: String, CaseIterable, Identifiable, Codable, Sendable {
@@ -33,8 +51,13 @@ struct Settings: Sendable, Equatable, Codable {
     /// Where the import sends the source tracks placed by hand, `nil` leaving the planner's own
     /// fill-upwards rule alone. Import-only, as ``midiTracksSpec`` is.
     var routeSpec: String?
-    /// The source track written as drums, `nil` leaving the reader's channel 10 detection standing.
+    /// The source track written as drums, `nil` leaving ``drums`` to decide. Import-only, and the
+    /// track list's to set, as ``midiTracksSpec`` is.
     var drumTrack: Int?
+    /// Whether the import searches a channel for a kit at all. Overridden by ``drumTrack``.
+    var drums: Drums = .automatic
+    /// Counting from 1 as the CLI counts it; the core takes it from 0.
+    var drumChannel = MIDIImport.drumChannel + 1
     var splitPerPattern = false
 
     /// Export every event at the measured fresh-note velocity instead of the one it stores.
@@ -88,12 +111,21 @@ struct Settings: Sendable, Equatable, Codable {
         return copy
     }
 
+    /// What the views draw under. A named track wins, as `--drum-track` wins over `--drum-channel`.
+    func drumSense(named track: Int?) -> DrumSense {
+        DrumSense(
+            designation: track.map(DrumDesignation.source) ?? (drums == .none ? .none : .auto),
+            channel: drumChannel)
+    }
+
     /// `output` is `nil` for a preview, which resolves no destination because it writes nothing.
     func convertOptions(source: URL, output: URL?) -> ConvertRunner.Options {
         // `force` stays false: `Naming.vacant` found a free path, so the guard is a backstop.
         // The three ignores are the runner's own defaults inverted.
         ConvertRunner.Options(
-            paths: [source], output: output, drumTrack: drumTrack, routeSpec: routeSpec,
+            paths: [source], output: output, drumTrack: drumTrack,
+            noDrums: drums == .none && drumTrack == nil, drumChannel: drumChannel - 1,
+            routeSpec: routeSpec,
             fitSwing: !ignoreSwing,
             fitTimeShift: !ignoreTimeShift, midiTracksSpec: midiTracksSpec,
             flatVelocitySpec: ignoreVelocity ? freshVelocitySpec : nil,
@@ -118,6 +150,8 @@ struct Settings: Sendable, Equatable, Codable {
         case verbose
         case stepSkip
         case repeatCount
+        case drums
+        case drumChannel
         case splitPerPattern
         case replaceVelocity
         case replaceSwing
@@ -142,6 +176,8 @@ extension Settings {
         verbose = try read(.verbose, fresh.verbose)
         stepSkip = try read(.stepSkip, fresh.stepSkip)
         repeatCount = try read(.repeatCount, fresh.repeatCount)
+        drums = try read(.drums, fresh.drums)
+        drumChannel = try read(.drumChannel, fresh.drumChannel)
         splitPerPattern = try read(.splitPerPattern, fresh.splitPerPattern)
         replaceVelocity = try read(.replaceVelocity, fresh.replaceVelocity)
         replaceSwing = try read(.replaceSwing, fresh.replaceSwing)

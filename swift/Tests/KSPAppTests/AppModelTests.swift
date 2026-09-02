@@ -400,6 +400,51 @@ import Testing
         #expect(selection.spec == nil)
     }
 
+    /// The middle row is the track list's, so the sidebar offers it only once a track fills it.
+    @Test func thenamedTrackRowIsOfferedOnlyWhileOneIsNamed() async throws {
+        let model = model()
+        model.accept(midiFixture)
+        await model.summarise()
+        #expect(model.drumChoices == [.automatic, .none])
+        #expect(model.drumChoice == .automatic)
+
+        model.send(sourceTrack: 3, to: .drums)
+
+        #expect(model.drumChoices == [.automatic, .source(3), .none])
+        #expect(model.drumChoice == .source(3))
+    }
+
+    /// The ambiguous pair never exists in the UI: the sidebar's two clear the track list's choice.
+    @Test(arguments: [AppModel.DrumChoice.automatic, .none])
+    func choosingInTheSidebarClearsTheDrumsDestination(choice: AppModel.DrumChoice) async throws {
+        let model = model()
+        model.accept(midiFixture)
+        await model.summarise()
+        model.send(sourceTrack: 3, to: .drums)
+
+        model.drumChoice = choice
+
+        #expect(try #require(model.staged).sourceSelection.drumTrack == nil)
+        #expect(try #require(model.staged).sourceSelection.destination(3) == .automatic)
+        #expect(model.drumChoice == choice)
+    }
+
+    /// `ConvertRunner.run` fails `--drum-track` with `--no-drums` at exit 2, so the two must never
+    /// both be set: naming a track leaves None behind.
+    @Test func sendingASourceTrackToDrumsLeavesNoneBehind() async throws {
+        let model = model()
+        model.accept(midiFixture)
+        await model.summarise()
+        model.drumChoice = .none
+
+        model.send(sourceTrack: 3, to: .drums)
+
+        #expect(model.settings.drums == .automatic)
+        let mapped = model.conversionSettings.convertOptions(source: midiFixture, output: nil)
+        #expect(mapped.drumTrack == 3)
+        #expect(!mapped.noDrums)
+    }
+
     @Test func untickingAsourceTrackDiscardsAdryRunPreview() async throws {
         let model = model()
         model.settings.dryRun = true

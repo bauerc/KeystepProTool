@@ -65,7 +65,8 @@ import Testing
         selection.toggle(1)
 
         #expect(
-            selection.blockReason == "Nothing is ticked. Tick at least one source track to convert."
+            selection.blockReason(drumSense(selection))
+                == "Nothing is ticked. Tick at least one source track to convert."
         )
     }
 
@@ -78,7 +79,7 @@ import Testing
         selection.toggle(2)
 
         #expect(
-            selection.blockReason
+            selection.blockReason(drumSense(selection))
                 == "No ticked source track holds notes, so nothing would be written.")
     }
 
@@ -86,7 +87,7 @@ import Testing
         let selection = SourceTrackSelection(syntheticSong(tracks: (1...4).map { sourceTrack($0) }))
 
         #expect(selection.overflowNote == nil)
-        #expect(selection.blockReason == nil)
+        #expect(selection.blockReason(drumSense(selection)) == nil)
         #expect(selection.exclusionNote == nil)
     }
 
@@ -97,7 +98,7 @@ import Testing
 
         #expect(selection.isTicked(5))
         #expect(selection.overflowNote == "That needs 5 device tracks, so 1 would be dropped.")
-        #expect(selection.blockReason == nil)
+        #expect(selection.blockReason(drumSense(selection)) == nil)
     }
 
     /// A source track carrying several channels becomes a device track per channel, so the ticks
@@ -151,7 +152,7 @@ import Testing
         selection.toggle(1)
 
         #expect(selection.spec == nil)
-        #expect(selection.blockReason != nil)
+        #expect(selection.blockReason(drumSense(selection)) != nil)
     }
 
     @Test func aselectionWithNothingToTickSaysNothingAtAll() {
@@ -159,7 +160,7 @@ import Testing
 
         #expect(selection.countLine == nil)
         #expect(selection.overflowNote == nil)
-        #expect(selection.blockReason == nil)
+        #expect(selection.blockReason(drumSense(selection)) == nil)
         #expect(selection.exclusionNote == nil)
         #expect(selection.spec == nil)
     }
@@ -271,7 +272,7 @@ import Testing
         selection.send(4, to: .track(3))
 
         #expect(
-            selection.blockReason
+            selection.blockReason(drumSense(selection))
                 == "Source tracks 2 and 4 are both sent to Track 3; one device track holds one "
                 + "source track.")
     }
@@ -283,7 +284,7 @@ import Testing
         selection.send(2, to: .drums)
 
         #expect(
-            selection.blockReason
+            selection.blockReason(drumSense(selection))
                 == "Source tracks 1 and 2 are both sent to Drums; one device track holds one "
                 + "source track.")
     }
@@ -300,12 +301,12 @@ import Testing
         selection.send(2, to: .track(3))
 
         #expect(
-            selection.blockReason
+            selection.blockReason(drumSense(selection))
                 == "Source track 2 is the drum track, so it can only go to Track 1; only device "
                 + "track 1 carries a drum set.")
 
         selection.send(2, to: .track(1))
-        #expect(selection.blockReason == nil)
+        #expect(selection.blockReason(drumSense(selection)) == nil)
     }
 
     /// The drum track the reader found, which the assignment uses when no option names one.
@@ -319,7 +320,7 @@ import Testing
         selection.send(3, to: .track(1))
 
         #expect(
-            selection.blockReason
+            selection.blockReason(drumSense(selection))
                 == "Source track 3 is sent to Track 1, which source track 1 holds as the drum "
                 + "track; only device track 1 carries a drum set.")
     }
@@ -337,7 +338,7 @@ import Testing
         selection.send(3, to: .track(1))
 
         #expect(
-            selection.blockReason
+            selection.blockReason(drumSense(selection))
                 == "Source track 3 is sent to Track 1, which source track 2 holds as the drum "
                 + "track; only device track 1 carries a drum set.")
     }
@@ -352,8 +353,63 @@ import Testing
         selection.send(1, to: .skip)
         selection.send(3, to: .track(1))
 
-        #expect(selection.blockReason == nil)
+        #expect(selection.blockReason(drumSense(selection)) == nil)
         #expect(selection.routeSpec == "3:1")
+    }
+
+    /// Under None nothing is taken as drums, so the two refusals that hold device track 1 for a
+    /// drum set do not apply and a legal conversion must not be blocked.
+    @Test func takingNothingAsDrumsLeavesDeviceTrackOneFree() {
+        var selection = SourceTrackSelection(
+            syntheticSong(tracks: [
+                sourceTrack(1, channels: [10], isDrumTrack: true), sourceTrack(2), sourceTrack(3),
+                sourceTrack(4),
+            ]))
+        selection.send(3, to: .track(1))
+        var settings = Settings()
+        settings.drums = .none
+
+        #expect(selection.blockReason(drumSense(selection)) != nil)
+        #expect(selection.blockReason(drumSense(selection, settings)) == nil)
+    }
+
+    /// Pinned against the core as the pair below is: `--no-drums` accepts the route the app has
+    /// just stopped refusing, so refusing it here would block a conversion the runner would make.
+    @Test func aroutingAllowedUnderNoneIsOneTheCoreAccepts() throws {
+        var selection = SourceTrackSelection(
+            syntheticSong(tracks: [
+                sourceTrack(1, channels: [10], isDrumTrack: true), sourceTrack(2), sourceTrack(3),
+                sourceTrack(4),
+            ]))
+        selection.send(3, to: .track(1))
+        var settings = Settings()
+        settings.drums = .none
+        #expect(selection.blockReason(drumSense(selection, settings)) == nil)
+
+        let options = try ImportOptions(
+            midiTracks: [1, 2, 3, 4], drumTrack: .none,
+            routes: try resolveRoutes(nil, selection.routeSpec))
+
+        #expect(options.drumTrack == .none)
+        #expect(options.routes == [TrackRoute(source: 3, device: 1)])
+    }
+
+    /// The fallback is the searched channel, not General MIDI's: a kit on 3 holds device track 1
+    /// and the channel 10 track no longer does.
+    @Test func thedrumFallbackFollowsTheChosenChannel() {
+        var selection = SourceTrackSelection(
+            syntheticSong(tracks: [
+                sourceTrack(1, channels: [10]), sourceTrack(2, channels: [3]), sourceTrack(3),
+                sourceTrack(4),
+            ]))
+        selection.send(3, to: .track(1))
+        var settings = Settings()
+        settings.drumChannel = 3
+
+        #expect(
+            selection.blockReason(drumSense(selection, settings))
+                == "Source track 3 is sent to Track 1, which source track 2 holds as the drum "
+                + "track; only device track 1 carries a drum set.")
     }
 
     /// Naming a track merges its channels onto the one device track, so it stops asking for two.
@@ -381,7 +437,7 @@ import Testing
     ) throws {
         var selection = SourceTrackSelection(syntheticSong(tracks: (1...4).map { sourceTrack($0) }))
         for entry in sent { selection.send(entry.source, to: entry.to) }
-        #expect(selection.blockReason != nil)
+        #expect(selection.blockReason(drumSense(selection)) != nil)
 
         #expect(throws: KSPError.self) {
             _ = try ImportOptions(
@@ -397,7 +453,7 @@ import Testing
         var selection = SourceTrackSelection(syntheticSong(tracks: (1...4).map { sourceTrack($0) }))
         selection.send(1, to: .drums)
         selection.send(2, to: .drums)
-        #expect(selection.blockReason != nil)
+        #expect(selection.blockReason(drumSense(selection)) != nil)
 
         let options = try ImportOptions(
             midiTracks: [1, 2, 3, 4],
@@ -411,7 +467,7 @@ import Testing
         var selection = SourceTrackSelection(syntheticSong(tracks: (1...4).map { sourceTrack($0) }))
         selection.send(3, to: .track(2))
         selection.send(4, to: .drums)
-        #expect(selection.blockReason == nil)
+        #expect(selection.blockReason(drumSense(selection)) == nil)
 
         let options = try ImportOptions(
             midiTracks: [1, 2, 3, 4],

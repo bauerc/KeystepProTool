@@ -36,7 +36,7 @@ struct SourceTrackList: Equatable {
         /// The row's tooltip.
         let detail: String
 
-        init(_ track: SourceTrackSummary, badge: Badge?) {
+        init(_ track: SourceTrackSummary, badge: Badge?, drums: DrumSense) {
             self.number = track.number
             self.name = sourceTrackName(track)
             self.badge = badge
@@ -48,10 +48,12 @@ struct SourceTrackList: Equatable {
                 ? "no notes"
                 : "\(counted(track.noteCount, "note")) · \(counted(track.bars, "bar"))"
             self.isEmpty = track.isEmpty
-            self.detail = Self.detail(track, badge: badge)
+            self.detail = Self.detail(track, badge: badge, drums: drums)
         }
 
-        private static func detail(_ track: SourceTrackSummary, badge: Badge?) -> String {
+        private static func detail(_ track: SourceTrackSummary, badge: Badge?, drums: DrumSense)
+            -> String
+        {
             guard !track.isEmpty else {
                 guard track.isConductor else {
                     return
@@ -70,19 +72,21 @@ struct SourceTrackList: Equatable {
                 "Source track \(track.number) — \(counted(track.noteCount, "note")) over "
                 + "\(counted(track.bars, "bar")) on \(channels)."
             switch badge {
+            case .drums where drums.designation.sourceTrack != nil:
+                detail += " This one is sent to Drums, so it becomes the drum track."
             case .drums:
-                // Only the channel 10 part of a split track is the drum track; the badge alone
-                // would claim the whole row.
+                // Only the searched channel's part of a split track is the drum track; the badge
+                // alone would claim the whole row.
                 detail +=
                     track.channels.count == 1
-                    ? " Channel 10 is where the import looks for drums, so this one becomes "
-                        + "the drum track."
-                    : " Channel 10 is where the import looks for drums, so that part of this "
-                        + "one becomes the drum track."
+                    ? " Channel \(drums.channel) is where the import looks for drums, so this one "
+                        + "becomes the drum track."
+                    : " Channel \(drums.channel) is where the import looks for drums, so that part "
+                        + "of this one becomes the drum track."
             case .percussion:
                 detail +=
-                    " Channel 10 is where the import looks for drums, but the device has "
-                    + "one drum track, so this one is imported melodically."
+                    " Channel \(drums.channel) is where the import looks for drums, but the device "
+                    + "has one drum track, so this one is imported melodically."
             // A conductor track holds no notes, so it returned above rather than reaching here.
             case .tempo, nil:
                 break
@@ -104,17 +108,22 @@ struct SourceTrackList: Equatable {
 
     func note(verbose: Bool) -> String? { verbose ? allNotes : collapsedNote }
 
-    init(_ summary: SongSummary) {
+    init(_ summary: SongSummary, drums: DrumSense) {
         self.header =
             "\(Arithmetic.general(summary.tempoBPM)) BPM · "
             + "\(Arithmetic.general(summary.beatsPerBar)) beats to the bar · "
             + counted(summary.tracks.count, "source track")
-        // The drum track is the reader's to name, not this view's to re-derive: it is decided over
-        // channels, where the import decides it, rather than over whole tracks.
+        // `isDrumTrack` and `isPercussion` are GM's reading of the file, so under any designation
+        // but the default they would badge a row the import will not touch. Derived off `channels`
+        // instead: the first track carrying the searched channel is the one `assign` reaches first.
+        let searched = summary.tracks.filter { $0.channels.contains(drums.channel) }.map(\.number)
+        let source =
+            drums.designation.sourceTrack ?? (drums.designation == .auto ? searched.first : nil)
         self.rows = summary.tracks.map { track in
-            if track.isDrumTrack { return Row(track, badge: .drums) }
-            if track.isConductor { return Row(track, badge: .tempo) }
-            return Row(track, badge: track.isPercussion ? .percussion : nil)
+            if track.number == source { return Row(track, badge: .drums, drums: drums) }
+            if track.isConductor { return Row(track, badge: .tempo, drums: drums) }
+            let percussion = drums.designation == .auto && searched.contains(track.number)
+            return Row(track, badge: percussion ? .percussion : nil, drums: drums)
         }
         self.collapsedNote = Self.note(summary.diagnostics.render(verbose: false))
         self.allNotes = Self.note(summary.diagnostics.render(verbose: true))

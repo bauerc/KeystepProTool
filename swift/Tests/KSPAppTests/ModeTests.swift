@@ -56,6 +56,33 @@ import Testing
         }
     }
 
+    /// Unlike the drum track below, which a drop names, both of these are preferences.
+    @Test(arguments: Settings.Drums.allCases)
+    func thedrumDesignationAndItsChannelSurviveTheNextLaunch(drums: Settings.Drums) {
+        withVolatileDefaults { defaults in
+            var settings = Settings()
+            settings.drums = drums
+            settings.drumChannel = 3
+            SettingsStore(defaults: defaults).save(settings, for: .toProject)
+
+            let loaded = SettingsStore(defaults: defaults).load(.toProject)
+            #expect(loaded.drums == drums)
+            #expect(loaded.drumChannel == 3)
+        }
+    }
+
+    @Test func ablobFromBeforeTheDrumChoiceReadsAsTheDefaults() {
+        withVolatileDefaults { defaults in
+            defaults.set(Data(#"{"ignoreSwing":true}"#.utf8), forKey: "settings.toProject")
+
+            let loaded = SettingsStore(defaults: defaults).load(.toProject)
+
+            #expect(loaded.ignoreSwing)
+            #expect(loaded.drums == Settings().drums)
+            #expect(loaded.drumChannel == Settings().drumChannel)
+        }
+    }
+
     /// What a drop chose is not a preference: it must not come back on the next file.
     @Test func adropsOwnSelectionIsNotRemembered() {
         withVolatileDefaults { defaults in

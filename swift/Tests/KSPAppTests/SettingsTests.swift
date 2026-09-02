@@ -78,6 +78,8 @@ import Testing
         #expect(mapped.track == defaults.track)
         #expect(mapped.pattern == defaults.pattern)
         #expect(mapped.drumTrack == defaults.drumTrack)
+        #expect(mapped.noDrums == defaults.noDrums)
+        #expect(mapped.drumChannel == defaults.drumChannel)
         #expect(mapped.drumMapSpec == defaults.drumMapSpec)
         #expect(mapped.carryTempo == defaults.carryTempo)
         #expect(mapped.fitSwing == defaults.fitSwing)
@@ -230,6 +232,60 @@ import Testing
 
         #expect(mapped.track == defaults.track)
         #expect(mapped.pattern == defaults.pattern)
+    }
+
+    @Test func freshSettingsLookForDrumsOnTheGeneralMIDIChannel() {
+        let settings = Settings()
+        #expect(settings.drums == .automatic)
+        #expect(settings.drumChannel == MIDIImport.drumChannel + 1)
+        #expect(settings.drumSense(named: nil) == DrumSense(designation: .auto, channel: 10))
+    }
+
+    @Test func takingNothingAsDrumsReachesTheRunnerAsTheOptionTheCLITakes() {
+        var settings = Settings()
+        settings.drums = .none
+        let mapped = settings.convertOptions(source: source, output: output)
+
+        #expect(mapped.noDrums)
+        #expect(mapped.drumTrack == nil)
+        #expect(settings.drumSense(named: nil).designation == .none)
+    }
+
+    @Test func achosenDrumChannelReachesTheRunnerCountingFromZero() {
+        var settings = Settings()
+        settings.drumChannel = 3
+        let mapped = settings.convertOptions(source: source, output: output)
+
+        #expect(mapped.drumChannel == 2)
+        #expect(!mapped.noDrums)
+    }
+
+    /// `ConvertRunner.run` fails the pair with exit 2, so a named track must win rather than join.
+    @Test func anamedDrumTrackWinsOverTakingNothingAsDrums() {
+        var selection = SourceTrackSelection(syntheticSong(tracks: (1...4).map { sourceTrack($0) }))
+        selection.send(2, to: .drums)
+        var settings = Settings()
+        settings.drums = .none
+
+        let mapped = settings.selecting(selection).convertOptions(source: source, output: output)
+
+        #expect(mapped.drumTrack == 2)
+        #expect(!mapped.noDrums)
+        #expect(settings.drumSense(named: 2).designation == .source(2))
+    }
+
+    /// Pinned against what the core accepts rather than against the CLI's literal, so the stepper
+    /// cannot offer a channel the import would refuse.
+    @Test func thestepperCannotOfferAChannelTheImportRefuses() throws {
+        for channel in Settings.drumChannelRange {
+            #expect(throws: Never.self) { try ImportOptions(drumChannel: channel - 1) }
+        }
+        #expect(throws: KSPError.self) {
+            try ImportOptions(drumChannel: Settings.drumChannelRange.lowerBound - 2)
+        }
+        #expect(throws: KSPError.self) {
+            try ImportOptions(drumChannel: Settings.drumChannelRange.upperBound)
+        }
     }
 
     @Test func freshSettingsReplaceNothing() {
