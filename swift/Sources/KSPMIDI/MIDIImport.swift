@@ -31,6 +31,10 @@ public struct ImportOptions: Sendable, Hashable {
 
     public let drumTrack: Int?
 
+    /// The channel drum detection listens to, counting from 0. Ignored when
+    /// `drumTrack` names a track outright.
+    public let drumChannel: Int
+
     public let drumMap: DrumMap?
 
     public let carryTempo: Bool
@@ -47,6 +51,7 @@ public struct ImportOptions: Sendable, Hashable {
         stepsPerBeat: Int = Constants.defaultStepsPerBeat,
         midiTracks: Set<Int> = [],
         drumTrack: Int? = nil,
+        drumChannel: Int = MIDIImport.drumChannel,
         drumMap: DrumMap? = nil,
         carryTempo: Bool = true,
         fitSwing: Bool = true,
@@ -61,6 +66,9 @@ public struct ImportOptions: Sendable, Hashable {
         if let drumTrack, drumTrack < 1 {
             throw KSPError.value("drum_track counts from 1")
         }
+        if !(0...15 ~= drumChannel) {
+            throw KSPError.value("drum_channel must be 0-15")
+        }
         if !midiTracks.isEmpty, let drumTrack, !midiTracks.contains(drumTrack) {
             throw KSPError.value(
                 "drum_track \(drumTrack) is not in the selection; a drum track must be one of "
@@ -71,6 +79,7 @@ public struct ImportOptions: Sendable, Hashable {
         self.stepsPerBeat = stepsPerBeat
         self.midiTracks = midiTracks
         self.drumTrack = drumTrack
+        self.drumChannel = drumChannel
         self.drumMap = drumMap
         self.carryTempo = carryTempo
         self.fitSwing = fitSwing
@@ -161,7 +170,10 @@ public struct Clip: Sendable, Hashable {
 
     public var channels: [Int] { Set(notes.map(\.channel)).sorted() }
 
-    public var isPercussion: Bool { !notes.isEmpty && channels == [MIDIImport.drumChannel] }
+    /// Whether every note sits on `channel`, counting from 0.
+    public func isPercussion(on channel: Int) -> Bool {
+        !notes.isEmpty && channels == [channel]
+    }
 }
 
 public struct Song: Sendable, Hashable {
@@ -919,7 +931,7 @@ extension MIDIImport {
             drum = merged(matching)
             melodic = song.clips.filter { $0.sourceTracks != [named] }
         } else {
-            let found = song.clips.firstIndex { $0.isPercussion }
+            let found = song.clips.firstIndex { $0.isPercussion(on: options.drumChannel) }
             drum = found.map { song.clips[$0] }
             melodic = song.clips.enumerated().filter { $0.offset != found }.map(\.element)
         }
@@ -1015,10 +1027,14 @@ extension MIDIImport {
         if let drumClip, drumMap == nil {
             let fitted = try fitDrumMap(drumClip)
             drumMap = fitted
+            let found =
+                options.drumTrack != nil
+                ? "" : ", found on channel \(options.drumChannel + 1)"
             collector.add(
                 .drumMapFitted,
-                "no drum map was given, so one was fitted to the source: \(fitted.describe()). "
-                    + "The real map is a device setting the project file does not carry")
+                "no drum map was given, so one was fitted to the source: \(fitted.describe())"
+                    + "\(found). The real map is a device setting the project file does not "
+                    + "carry")
         }
 
         let stepsPerBar = song.stepsPerBar(options.stepsPerBeat)

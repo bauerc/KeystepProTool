@@ -640,6 +640,63 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(result.diagnostics.entries.contains { $0.code == .drumMapFitted })
     }
 
+    /// A DAW that puts its kit anywhere but channel 10 still imports as drums.
+    @Test func drumDetectionListensToTheNamedChannel() throws {
+        let midi = songOf([[(0, 36, 100), (ticksPerStep, 38, 100)]], channels: [11])
+        let options = try ImportOptions(drumChannel: 11, drumMap: DrumMap.chromatic(36))
+        let result = try MIDIImport.convertSong(midi, template(), options: options)
+
+        let drum = try #require(result.plan.tracks.first { $0.isDrum })
+        #expect(drum.track == 1)
+        #expect(drum.notes.map(\.lane) == [0, 2])
+    }
+
+    /// The search is exact: naming one channel does not widen it to any other.
+    @Test func aTrackOffTheNamedChannelIsNotDrums() throws {
+        let midi = songOf([[(0, 36, 100)]], channels: [11])
+        let result = try MIDIImport.convertSong(midi, template())
+        #expect(!result.plan.tracks.contains { $0.isDrum })
+    }
+
+    /// --drum-track names a track outright, so the channel is not searched at all.
+    @Test func aNamedDrumTrackWinsOverTheDrumChannel() throws {
+        let midi = songOf([[(0, 60, 100)], [(0, 36, 100)]], channels: [0, 11])
+        let options = try ImportOptions(
+            drumTrack: 1, drumChannel: 11, drumMap: DrumMap.chromatic(36))
+        let result = try MIDIImport.convertSong(midi, template(), options: options)
+
+        let drum = try #require(result.plan.tracks.first { $0.isDrum })
+        #expect(drum.sourceTrack == 1)
+    }
+
+    /// The wording is the export option's, so the two directions read alike.
+    @Test(arguments: [-1, 16]) func aDrumChannelOutsideTheRangeIsRefused(_ channel: Int) {
+        let thrown = #expect(throws: KSPError.self) {
+            _ = try ImportOptions(drumChannel: channel)
+        }
+        #expect(thrown?.description.contains("drum_channel must be 0-15") == true)
+    }
+
+    /// A miss is otherwise silent, so the hit has to say where it looked.
+    @Test func theFittedMapNamesTheChannelItWasFoundOn() throws {
+        let midi = songOf([[(0, 31, 100)]], channels: [11])
+        let result = try MIDIImport.convertSong(
+            midi, template(), options: ImportOptions(drumChannel: 11))
+
+        let fitted = try #require(result.diagnostics.entries.first { $0.code == .drumMapFitted })
+        #expect(fitted.detail.contains("found on channel 12"))
+    }
+
+    /// No channel was searched, so claiming one would be a lie.
+    @Test func aNamedDrumTrackLeavesTheFittedMapNamingNoChannel() throws {
+        let midi = songOf([[(0, 31, 100)]])
+        let result = try MIDIImport.convertSong(
+            midi, template(), options: ImportOptions(drumTrack: 1))
+
+        let fitted = try #require(result.diagnostics.entries.first { $0.code == .drumMapFitted })
+        #expect(!fitted.detail.contains("found on channel"))
+    }
+
     @Test func theSourceTempoIsWritten() throws {
         let midi = withTempo(songOf([[(0, 60, 100)]]), bpm: 96)
         let result = try MIDIImport.convertSong(midi, template())

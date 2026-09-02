@@ -42,7 +42,10 @@ public struct SongSummary: Sendable, Hashable {
         // `apply`'s own `drumSource`, read the same way off the same clips, so the preview cannot
         // name a drum track the import would not. A clip is one channel of one track, which is why
         // a track carrying channel 10 among others still gives up its channel 10 part to this.
-        let drumSource = song.clips.first { $0.isPercussion }?.sourceTracks.first
+        // It takes no options, so `--drum-channel` cannot move this search or the badge below.
+        let drumSource = song.clips.first {
+            $0.isPercussion(on: MIDIImport.drumChannel)
+        }?.sourceTracks.first
         let tracks = midi.tracks.indices.map { index in
             SourceTrackSummary(
                 number: index + 1, name: trackName(midi.tracks[index]),

@@ -593,6 +593,69 @@ def test_an_unset_drum_map_is_fitted_to_the_source(load_sample: Loader) -> None:
     assert Code.DRUM_MAP_FITTED in {d.code for d in result.diagnostics}
 
 
+def test_drum_detection_listens_to_the_named_channel(load_sample: Loader) -> None:
+    """A DAW that puts its kit anywhere but channel 10 still imports as drums."""
+    midi = song_of([[(0, 36, 100), (TICKS_PER_STEP, 38, 100)]], channels=[11])
+    options = ImportOptions(drum_channel=11, drum_map=DrumMap.chromatic(36))
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    drum = next(plan for plan in result.plan.tracks if plan.is_drum)
+    assert drum.track == 1
+    assert [note.lane for note in drum.notes] == [0, 2]
+
+
+def test_a_track_off_the_named_channel_is_not_drums(load_sample: Loader) -> None:
+    """The search is exact: naming one channel does not widen it to any other."""
+    midi = song_of([[(0, 36, 100)]], channels=[11])
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
+
+    assert not any(plan.is_drum for plan in result.plan.tracks)
+
+
+def test_a_named_drum_track_wins_over_the_drum_channel(load_sample: Loader) -> None:
+    """--drum-track names a track outright, so the channel is not searched at all."""
+    midi = song_of([[(0, 60, 100)], [(0, 36, 100)]], channels=[0, 11])
+    options = ImportOptions(drum_track=1, drum_channel=11, drum_map=DrumMap.chromatic(36))
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    drum = next(plan for plan in result.plan.tracks if plan.is_drum)
+    assert drum.source_track == 1
+
+
+@pytest.mark.parametrize("channel", [-1, 16])
+def test_a_drum_channel_outside_the_range_is_refused(channel: int) -> None:
+    """The wording is the export option's, so the two directions read alike."""
+    with pytest.raises(ValueError, match=r"^drum_channel must be 0-15$"):
+        ImportOptions(drum_channel=channel)
+
+
+def test_the_fitted_map_names_the_channel_it_was_found_on(load_sample: Loader) -> None:
+    """A miss is otherwise silent, so the hit has to say where it looked."""
+    midi = song_of([[(0, 31, 100)]], channels=[11])
+
+    result = midi_import.convert_song(
+        midi, load_sample("Default.KeyStepPro"), options=ImportOptions(drum_channel=11)
+    )
+
+    fitted = next(d for d in result.diagnostics if d.code is Code.DRUM_MAP_FITTED)
+    assert "found on channel 12" in fitted.detail
+
+
+def test_a_named_drum_track_leaves_the_fitted_map_naming_no_channel(load_sample: Loader) -> None:
+    """No channel was searched, so claiming one would be a lie."""
+    midi = song_of([[(0, 31, 100)]])
+
+    result = midi_import.convert_song(
+        midi, load_sample("Default.KeyStepPro"), options=ImportOptions(drum_track=1)
+    )
+
+    fitted = next(d for d in result.diagnostics if d.code is Code.DRUM_MAP_FITTED)
+    assert "found on channel" not in fitted.detail
+
+
 @pytest.mark.parametrize("velocity", [1, 127])
 def test_the_flat_velocity_bounds_are_accepted(velocity: int) -> None:
     assert ImportOptions(flat_velocity=velocity).flat_velocity == velocity

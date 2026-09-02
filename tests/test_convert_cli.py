@@ -151,6 +151,22 @@ def test_verbose_lists_every_warning(
     assert "split across patterns" in err
 
 
+def test_the_drum_channel_is_the_one_searched(
+    m6_song: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """m6-test-file sits wholly on channel 1, so naming it finds a kit GM never would."""
+    destination = tmp_path / "out.KeyStepPro"
+    assert main([str(m6_song), "-o", str(destination), "--drum-channel", "1"]) == 0
+
+    assert reader.load(destination).track(1).drum_mode
+    assert "found on channel 1" in capsys.readouterr().err
+
+
+def test_a_drum_channel_outside_the_range_is_a_usage_error(m6_song: Path, tmp_path: Path) -> None:
+    argv = [str(m6_song), "-o", str(tmp_path / "out.KeyStepPro"), "--drum-channel", "17"]
+    assert main(argv) == 2
+
+
 def test_a_chord_keeps_every_note(
     chord_clip: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

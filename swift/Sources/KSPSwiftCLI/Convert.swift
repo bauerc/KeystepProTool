@@ -45,10 +45,19 @@ struct Convert: ParsableCommand {
         help: ArgumentHelp(
             """
             write track N of the source as drums, onto KeyStep Pro track 1 (the only one with a \
-            drum set). Counting from 1 over every track of the file. Without this, a track on the \
-            GM percussion channel is used, and many files have none
+            drum set). Counting from 1 over every track of the file. Without this, a track sitting \
+            wholly on --drum-channel is used, and many files have none
             """, valueName: "N"))
     var drumTrack: Int?
+
+    @Option(
+        name: .customLong("drum-channel"),
+        help: ArgumentHelp(
+            """
+            MIDI channel drum detection listens to, counting from 1. A --drum-track names a track \
+            outright and wins over this
+            """, valueName: "N"))
+    var drumChannel = MIDIImport.drumChannel + 1
 
     @Option(name: .customLong("route"), help: ArgumentHelp(routeHelp, valueName: "SPEC"))
     var route: String?
@@ -130,6 +139,9 @@ struct Convert: ParsableCommand {
         if !(1...Constants.patternsPerTrack ~= pattern) {
             throw ValidationError("'--pattern' must be in 1...\(Constants.patternsPerTrack)")
         }
+        if !(1...16 ~= drumChannel) {
+            throw ValidationError("'--drum-channel' must be in 1...16")
+        }
     }
 
     func run() throws {
@@ -137,7 +149,8 @@ struct Convert: ParsableCommand {
             ConvertRunner.Options(
                 paths: paths.map { URL(filePath: $0) },
                 output: output.map { URL(filePath: $0) },
-                track: track, pattern: pattern, drumTrack: drumTrack, routeSpec: route,
+                track: track, pattern: pattern, drumTrack: drumTrack,
+                drumChannel: drumChannel - 1, routeSpec: route,
                 drumMapSpec: drumMapSpec,
                 carryTempo: !noTempo, fitSwing: !noSwingFit, fitTimeShift: !noTimeShift,
                 template: template.map { URL(filePath: $0) },
