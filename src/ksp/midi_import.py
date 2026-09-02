@@ -66,7 +66,11 @@ class ImportOptions:
 
     drum_track: int | None = None
     """Which source track to write as drums, counting from 1. ``None`` looks for
-    a track on the GM percussion channel instead."""
+    a track sitting wholly on ``drum_channel`` instead."""
+
+    drum_channel: int = DRUM_CHANNEL
+    """The channel drum detection listens to, counting from 0. Ignored when
+    ``drum_track`` names a track outright."""
 
     drum_map: DrumMap | None = None
     """The lane-to-note map to invert. ``None`` fits a chromatic one to the source's
@@ -93,6 +97,8 @@ class ImportOptions:
             raise ValueError("midi_track counts from 1")
         if self.drum_track is not None and self.drum_track < 1:
             raise ValueError("drum_track counts from 1")
+        if not 0 <= self.drum_channel <= 15:
+            raise ValueError("drum_channel must be 0-15")
         if self.midi_tracks and self.drum_track not in (None, *self.midi_tracks):
             raise ValueError(
                 f"drum_track {self.drum_track} is not in the selection; a drum track must "
@@ -175,10 +181,9 @@ class Clip:
     def channels(self) -> tuple[int, ...]:
         return tuple(sorted({note.channel for note in self.notes}))
 
-    @property
-    def is_percussion(self) -> bool:
-        """Whether every note sits on the GM percussion channel."""
-        return bool(self.notes) and self.channels == (DRUM_CHANNEL,)
+    def is_percussion_on(self, channel: int) -> bool:
+        """Whether every note sits on *channel*, counting from 0."""
+        return bool(self.notes) and self.channels == (channel,)
 
 
 @dataclass(frozen=True)
@@ -946,7 +951,9 @@ def _assign(
         drum = _merged(named)
         melodic = [clip for clip in song.clips if clip.source_tracks != (options.drum_track,)]
     else:
-        drum = next((clip for clip in song.clips if clip.is_percussion), None)
+        drum = next(
+            (clip for clip in song.clips if clip.is_percussion_on(options.drum_channel)), None
+        )
         melodic = [clip for clip in song.clips if clip is not drum]
 
     drum_source = drum.source_tracks[0] if drum is not None and drum.source_tracks else None
@@ -1042,10 +1049,15 @@ def plan_song(
     drum_clip = next((clip for clip, _, is_drum in assigned if is_drum), None)
     if drum_clip is not None and drum_map is None:
         drum_map = fit_drum_map(drum_clip)
+        found = (
+            ""
+            if options.drum_track is not None
+            else f", found on channel {options.drum_channel + 1}"
+        )
         collector.add(
             Code.DRUM_MAP_FITTED,
-            f"no drum map was given, so one was fitted to the source: {drum_map.describe()}. "
-            "The real map is a device setting the project file does not carry",
+            f"no drum map was given, so one was fitted to the source: {drum_map.describe()}"
+            f"{found}. The real map is a device setting the project file does not carry",
         )
 
     steps_per_bar = song.steps_per_bar(options.steps_per_beat)

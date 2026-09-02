@@ -10,6 +10,7 @@ public enum ConvertRunner {
         public var track: Int
         public var pattern: Int
         public var drumTrack: Int?
+        public var drumChannel: Int
         public var routeSpec: String?
         public var drumMapSpec: String?
         public var carryTempo: Bool
@@ -30,7 +31,8 @@ public enum ConvertRunner {
         // live here only: repeating them on the properties would leave a copy that never runs.
         public init(
             paths: [URL], output: URL? = nil, track: Int = 1, pattern: Int = 1,
-            drumTrack: Int? = nil, routeSpec: String? = nil,
+            drumTrack: Int? = nil, drumChannel: Int = MIDIImport.drumChannel,
+            routeSpec: String? = nil,
             drumMapSpec: String? = nil, carryTempo: Bool = true, fitSwing: Bool = true,
             fitTimeShift: Bool = true, template: URL? = nil, midiTrack: Int? = nil,
             midiTracksSpec: String? = nil, flatVelocitySpec: String? = nil,
@@ -42,6 +44,7 @@ public enum ConvertRunner {
             self.track = track
             self.pattern = pattern
             self.drumTrack = drumTrack
+            self.drumChannel = drumChannel
             self.routeSpec = routeSpec
             self.drumMapSpec = drumMapSpec
             self.carryTempo = carryTempo
@@ -77,6 +80,7 @@ public enum ConvertRunner {
             stepsPerBeat: options.stepsPerBeat,
             midiTracks: try resolveMidiTracks(options.midiTrack, options.midiTracksSpec),
             drumTrack: options.drumTrack,
+            drumChannel: options.drumChannel,
             drumMap: try resolveImportDrumMap(options.drumMapSpec, configPath: options.configPath),
             carryTempo: options.carryTempo, fitSwing: options.fitSwing,
             fitTimeShift: options.fitTimeShift,

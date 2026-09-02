@@ -169,6 +169,10 @@ if has convert; then
         add import "$(basename "$clip") --no-time-shift" "$clip" --no-time-shift
         add import "$(basename "$clip") --steps-per-beat 8" "$clip" --steps-per-beat 8
         add import "$(basename "$clip") --drum-track 1" "$clip" --drum-track 1
+        add import "$(basename "$clip") --drum-channel 1" "$clip" --drum-channel 1
+        add import "$(basename "$clip") --drum-channel 3" "$clip" --drum-channel 3
+        add import "$(basename "$clip") --drum-channel 1 --drum-track 1" "$clip" \
+            --drum-channel 1 --drum-track 1
         add import "$(basename "$clip") --midi-track 1" "$clip" --midi-track 1
         add import "$(basename "$clip") --route 1:2" "$clip" --route 1:2
         add import "$(basename "$clip") --route 3:1,4:2" "$clip" --route 3:1,4:2

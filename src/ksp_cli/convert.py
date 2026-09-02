@@ -11,6 +11,7 @@ from ksp.constants import DEFAULT_STEPS_PER_BEAT
 from ksp.lenient_json import dump_path
 from ksp.midi_export import DEFAULT_FLAT_VELOCITY
 from ksp.midi_import import (
+    DRUM_CHANNEL,
     ImportOptions,
     ImportResult,
     Source,
@@ -150,10 +151,23 @@ def convert_command(
             help=(
                 "write track N of the source as drums, onto KeyStep Pro track 1 (the only one "
                 "with a drum set). Counting from 1 over every track of the file. Without this, "
-                "a track on the GM percussion channel is used, and many files have none"
+                "a track sitting wholly on --drum-channel is used, and many files have none"
             ),
         ),
     ] = None,
+    drum_channel: Annotated[
+        int,
+        typer.Option(
+            min=1,
+            max=16,
+            metavar="N",
+            rich_help_panel=_SOURCE_PANEL,
+            help=(
+                "MIDI channel drum detection listens to, counting from 1. A --drum-track names "
+                "a track outright and wins over this"
+            ),
+        ),
+    ] = DRUM_CHANNEL + 1,
     route: Annotated[
         str | None,
         typer.Option("--route", metavar="SPEC", rich_help_panel=_SOURCE_PANEL, help=ROUTE_HELP),
@@ -268,6 +282,7 @@ def convert_command(
             steps_per_beat=steps_per_beat,
             midi_tracks=resolve_midi_tracks(midi_track, midi_tracks),
             drum_track=drum_track,
+            drum_channel=drum_channel - 1,
             drum_map=resolve_import_drum_map(drum_map_spec),
             carry_tempo=not no_tempo,
             fit_swing=not no_swing_fit,

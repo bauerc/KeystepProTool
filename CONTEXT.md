@@ -23,9 +23,10 @@ a bare "track" is a sequencer track.
 _Avoid_: lane, drum lane
 
 **Percussion**:
-Of a source track being imported: it carries MIDI channel 10, where General MIDI puts drums. Says
-what the file holds, never what the device will do with it — only one percussion part becomes
-drums, so the app badges that one _Drums_ and any other _Percussion_.
+Of a source track being imported: every note sits on the channel drum detection is listening to —
+MIDI channel 10, where General MIDI puts drums, unless `--drum-channel` names another. Says what
+the file holds, never what the device will do with it — only one percussion part becomes drums,
+so the app badges that one _Drums_ and any other _Percussion_, reading channel 10 alone.
 _Avoid_: drum track for a source track that is not the one being imported as drums
 
 **Conductor track**:
