@@ -52,10 +52,20 @@ enum DeviceColor {
         track[(number - 1 + track.count) % track.count]
     }
 
+    /// The panel's own near-black legend colour, which is what stands in for black as an ink.
+    private static let darkInk = Color(hex: 0x0D_0D0D)
+
+    /// The luminance at which ``darkInk`` and white contrast equally against a fill, in WCAG's own
+    /// terms. Choosing by it holds every fill at 4.4:1 or better; a higher threshold leaves a band
+    /// of mid fills -- track 1's green over the standard ground among them -- wearing white ink at
+    /// under 3:1, which is the failure rule 1 of the visual language exists to prevent.
+    private static let inkCrossover =
+        ((0.05 + darkInk.relativeLuminance) * 1.05).squareRoot() - 0.05
+
     /// Black or white, whichever the eye can read on `fill`. Track hues run from a mid green to a
     /// dark red, so no single ink serves all four.
     static func ink(on fill: Color) -> Color {
-        fill.relativeLuminance > 0.35 ? Color(hex: 0x0D_0D0D) : .white
+        fill.relativeLuminance > inkCrossover ? darkInk : .white
     }
 }
 
@@ -177,6 +187,20 @@ extension Color {
         }
         return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
     }
+
+    /// `self` drawn at `alpha` over `ground`, resolved to one opaque colour so
+    /// ``DeviceColor/ink(on:)`` weighs what the eye sees rather than the hue alone.
+    func over(_ ground: Color, alpha: Double) -> Color {
+        guard let top = NSColor(self).usingColorSpace(.sRGB),
+            let base = NSColor(ground).usingColorSpace(.sRGB)
+        else { return self }
+        let mix = { (over: CGFloat, under: CGFloat) in under + (over - under) * CGFloat(alpha) }
+        return Color(
+            .sRGB,
+            red: mix(top.redComponent, base.redComponent),
+            green: mix(top.greenComponent, base.greenComponent),
+            blue: mix(top.blueComponent, base.blueComponent))
+    }
 }
 
 /// Every dimension the staged view is laid out from. The window resizes freely above a floor and
@@ -199,7 +223,13 @@ enum AppLayout {
     static let scrollerAllowance: CGFloat = 15
 
     static let columnCount = 16
-    static let labelWidth: CGFloat = 96
+    /// A row head, in order: the readout well, the track name, the drum badge. Summed rather than
+    /// fixed, so contents that grow cannot overflow the head in silence.
+    static var labelWidth: CGFloat {
+        wellWidth + labelGap + rowNameWidth + labelGap + rowBadgeWidth
+    }
+    static let rowNameWidth: CGFloat = 68
+    static let rowBadgeWidth: CGFloat = 34
     static let labelGap: CGFloat = 8
     static let cellWidth: CGFloat = 26
     static let cellSpacing: CGFloat = 3
@@ -290,6 +320,16 @@ enum AppLayout {
     /// The length rule under a slot cell, and the chain rail under a row.
     static let lengthRuleHeight: CGFloat = 2
     static let railHeight: CGFloat = 2
+    /// The longest a Pattern runs (spec §Pattern), so the rule is a fraction of the cell rather
+    /// than of the busiest pattern in the file: a length means the same thing in every project.
+    static let stepCeiling = 64
+
+    /// How much of a cell's width a pattern of `steps` claims: 6.5 / 13 / 19.5 / 26 at 16 / 32 /
+    /// 48 / 64.
+    static func lengthRuleWidth(steps: Int) -> CGFloat {
+        guard steps > 0 else { return 0 }
+        return cellWidth * CGFloat(min(steps, stepCeiling)) / CGFloat(stepCeiling)
+    }
     /// One segment of a limit meter, and the gap between two.
     static let meterSegmentWidth: CGFloat = 6
     static let meterSegmentGap: CGFloat = 2
