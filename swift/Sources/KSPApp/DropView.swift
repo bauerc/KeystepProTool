@@ -85,8 +85,8 @@ struct DropView: View {
         case .done(let outcome):
             // The glyph carries the outcome; the colour only agrees with it. Track 2 is orange and
             // Track 4 is red, so a status hue is never enough on its own.
-            Image(systemName: outcome.failed ? "exclamationmark.triangle" : "checkmark.circle")
-                .foregroundStyle(outcome.failed ? palette.warning : palette.success)
+            Image(systemName: outcome.failed ? StatusMark.error : StatusMark.success)
+                .foregroundStyle(outcome.failed ? palette.error : palette.success)
             Text(outcome.resultLine).font(TypeScale.bandTitle).lineLimit(1)
         }
     }
@@ -463,7 +463,8 @@ struct DropView: View {
             VStack(alignment: .leading, spacing: 12) {
                 segmentationGrid(SegmentationGrid(plan.summary))
                 limits(Limits(plan.summary))
-                findingList(plan.findings(verbose: model.settings.verbose), count: plan.all.count)
+                findingList(
+                    plan.rows(verbose: model.settings.verbose), count: plan.allRows.count)
             }
         }
     }
@@ -479,9 +480,13 @@ struct DropView: View {
                 if model.mode == .advanced { gauges(limits) }
 
                 ForEach(refusals, id: \.self) { warning in
-                    Label(warning, systemImage: "exclamationmark.triangle")
-                        .font(TypeScale.label).foregroundStyle(palette.error)
-                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(alignment: .firstTextBaseline, spacing: AppLayout.labelGap) {
+                        Image(systemName: StatusMark.error).font(.caption2)
+                            .frame(width: AppLayout.findingGlyphWidth, alignment: .leading)
+                        figured(warning, font: TypeScale.label)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .foregroundStyle(palette.error)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -489,7 +494,7 @@ struct DropView: View {
     }
 
     /// Five rows, whatever the plan holds: a limit left out reads as a limit there is no need to
-    /// think about. Amber and red differ by symbol as well as colour.
+    /// think about.
     private func gauges(_ limits: Limits) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(Limits.heading).font(.caption).fontWeight(.medium)
@@ -500,14 +505,20 @@ struct DropView: View {
                         Text(gauge.name)
                             .font(.caption)
                             .frame(width: AppLayout.limitNameWidth, alignment: .leading)
+                        meter(gauge)
                         Text(gauge.figure)
                             .font(TypeScale.value)
                             .frame(width: AppLayout.limitFigureWidth, alignment: .trailing)
-                        if let symbol = style(gauge.status).symbol {
-                            Image(systemName: symbol).font(.caption2)
+                        Group {
+                            if let symbol = style(gauge.status).symbol {
+                                Image(systemName: symbol).font(.caption2)
+                            }
                         }
+                        .frame(width: AppLayout.findingGlyphWidth, alignment: .leading)
                         if let site = gauge.site {
-                            Text(site).font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                            figured(site, font: TypeScale.label)
+                                .foregroundStyle(palette.mutedInk)
+                                .frame(width: AppLayout.limitSiteWidth, alignment: .leading)
                         }
                     }
                     .foregroundStyle(style(gauge.status).colour)
@@ -517,13 +528,61 @@ struct DropView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Approaching and exceeding differ by symbol as well as colour, so the two are told apart
-    /// without relying on colour alone.
+    /// Quantity only: how much of the wall this figure uses, so a lit segment means the same thing
+    /// on every row. The cap is the ceiling the segments fill toward, and it never moves.
+    private func meter(_ gauge: Limits.Gauge) -> some View {
+        let lit = AppLayout.meterFill(used: gauge.used, limit: gauge.limit)
+        return HStack(spacing: 0) {
+            HStack(spacing: AppLayout.meterSegmentGap) {
+                ForEach(0..<AppLayout.meterSegmentCount, id: \.self) { segment in
+                    RoundedRectangle(cornerRadius: AppLayout.meterSegmentRadius)
+                        .fill(segment < lit ? style(gauge.status).colour : palette.rule)
+                        .frame(
+                            width: AppLayout.meterSegmentWidth, height: AppLayout.meterHeight)
+                }
+            }
+            Spacer(minLength: AppLayout.meterCapGap)
+            RoundedRectangle(cornerRadius: AppLayout.meterSegmentRadius)
+                .fill(palette.mutedInk)
+                .frame(width: AppLayout.meterCapWidth, height: AppLayout.meterHeight)
+        }
+        .frame(width: AppLayout.meterWidth, alignment: .leading)
+    }
+
+    /// A refusal is the only one of the three marked: the meter already says how close a figure
+    /// sits, so approaching a wall is emphasis on a quantity rather than a status. Passing one is
+    /// a status, and it takes the colour and the glyph together -- rule 2.
     private func style(_ status: Limits.Status) -> (colour: Color, symbol: String?) {
         switch status {
-        case .within: return (.primary, nil)
-        case .near: return (.orange, "exclamationmark.circle")
-        case .over: return (.red, "exclamationmark.triangle")
+        case .within: return (palette.ink, nil)
+        case .near: return (palette.warning, nil)
+        case .over: return (palette.error, StatusMark.error)
+        }
+    }
+
+    /// Rule 2 again, on a finding rather than a gauge: the glyph and the order carry severity and
+    /// the colour only agrees with them.
+    private func style(_ severity: Severity) -> (colour: Color, symbol: String) {
+        severity == .error
+            ? (palette.error, StatusMark.error) : (palette.warning, StatusMark.warning)
+    }
+
+    /// A failure line names the file that failed, and a filename's digits are not figures: the
+    /// `2` of `Take2.wav` is part of a name, not a value the device shows.
+    @ViewBuilder
+    private func headline(_ outcome: Outcome, font: Font, figures: Font) -> some View {
+        if outcome.failed {
+            Text(outcome.headline).font(font)
+        } else {
+            figured(outcome.headline, font: font, figures: figures)
+        }
+    }
+
+    /// Rule 3, applied to prose the core wrote: every figure in it set in SF Mono. Concatenated
+    /// rather than laid out, so the line still wraps and still selects as one piece of text.
+    private func figured(_ text: String, font: Font, figures: Font = TypeScale.value) -> Text {
+        Figures.split(text).reduce(Text(verbatim: "")) { built, run in
+            built + Text(run.text).font(run.isFigure ? figures : font)
         }
     }
 
@@ -931,7 +990,8 @@ struct DropView: View {
                 writtenFiles(preview.written)
             }
 
-            Text(preview.headline).font(.caption).textSelection(.enabled)
+            headline(preview, font: .caption, figures: TypeScale.value)
+                .textSelection(.enabled)
             findings(preview)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -947,7 +1007,8 @@ struct DropView: View {
                         writtenFiles(outcome.written)
                     }
 
-                    Text(outcome.headline).font(.callout).textSelection(.enabled)
+                    headline(outcome, font: .callout, figures: TypeScale.headlineValue)
+                        .textSelection(.enabled)
 
                     if let note = outcome.note {
                         Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
@@ -984,17 +1045,26 @@ struct DropView: View {
 
     /// "Finding", not "note": a note is a melodic event (ADR 0001).
     private func findings(_ outcome: Outcome) -> some View {
-        findingList(outcome.findings(verbose: model.settings.verbose), count: outcome.all.count)
+        findingList(outcome.rows(verbose: model.settings.verbose), count: outcome.allRows.count)
     }
 
     /// Shared so a plan's findings and a run's read alike; the plan raises them first.
     @ViewBuilder
-    private func findingList(_ findings: [String], count: Int) -> some View {
+    private func findingList(_ findings: [Finding], count: Int) -> some View {
         if count > 0 {
             DisclosureGroup("\(count) finding(s)") {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(findings, id: \.self) { finding in
-                        Text(finding).font(.caption).textSelection(.enabled)
+                    ForEach(findings) { finding in
+                        HStack(alignment: .firstTextBaseline, spacing: AppLayout.labelGap) {
+                            Image(systemName: style(finding.severity).symbol)
+                                .font(.caption2)
+                                .foregroundStyle(style(finding.severity).colour)
+                                .frame(width: AppLayout.findingGlyphWidth, alignment: .leading)
+                            figured(finding.text, font: .caption)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

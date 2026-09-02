@@ -1,4 +1,5 @@
 import Foundation
+import KSPKit
 import SwiftUI
 import Testing
 
@@ -39,6 +40,34 @@ private func contrast(_ one: Color, _ other: Color) -> Double {
                 == AppLayout.wellWidth + AppLayout.labelGap + AppLayout.rowNameWidth
                 + AppLayout.labelGap + AppLayout.rowBadgeWidth)
         #expect(AppLayout.gridWidth <= AppLayout.minimumContentWidth)
+        #expect(AppLayout.limitRowWidth <= AppLayout.minimumContentWidth)
+    }
+
+    /// The meter is quantity and nothing else: a figure at all lights a segment, the wall lights
+    /// them all, and no step across the range goes backwards.
+    @Test func ameterFillsFromNothingUpToTheWall() {
+        let ramp = (0...Constants.poolCapacity).map {
+            AppLayout.meterFill(used: $0, limit: Constants.poolCapacity)
+        }
+
+        #expect(ramp.first == 0)
+        #expect(ramp.dropFirst().allSatisfy { $0 >= 1 })
+        #expect(ramp == ramp.sorted())
+        #expect(ramp.last == AppLayout.meterSegmentCount)
+    }
+
+    @Test func ameterHoldsAtTheWallRatherThanRunningPastIt() {
+        #expect(AppLayout.meterFill(used: 400, limit: 192) == AppLayout.meterSegmentCount)
+        #expect(AppLayout.meterFill(used: 8, limit: 0) == 0)
+        #expect(AppLayout.meterFill(used: -4, limit: 192) == 0)
+    }
+
+    /// The last segment is the wall: rounding to nearest lit it at 63 of 64 steps, which left a
+    /// figure short of a limit drawing the same meter as one that reached it.
+    @Test func ameterKeepsItsLastSegmentForTheWall() {
+        #expect(AppLayout.meterFill(used: 191, limit: 192) == AppLayout.meterSegmentCount - 1)
+        #expect(AppLayout.meterFill(used: 63, limit: 64) == AppLayout.meterSegmentCount - 1)
+        #expect(AppLayout.meterFill(used: 64, limit: 64) == AppLayout.meterSegmentCount)
     }
 
     @Test func densityRisesWithNotesPerStepAndStaysBetweenItsBounds() {

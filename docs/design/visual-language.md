@@ -159,7 +159,28 @@ Segmented, filling toward a marked ceiling, figure in SF Mono. The one place a l
 idiom is earned: the device's limits are genuinely hard ceilings, and metering against a ceiling is
 what segmented LED metering is for.
 
-Near (≥75%) and over shift colour **and** marker — rule 2.
+The meter itself is pure quantity: lit segments, unlit segments, and a static cap at the ceiling.
+
+**Only a refusal is marked.** Near (≥75%) takes `warning` and no glyph — the meter already says
+how close the figure sits, so approaching a wall is emphasis on a quantity, not a status. Over
+means the planner refused something, which *is* a status, and it takes `error` and
+`exclamationmark.triangle` together — rule 2.
+
+### Finding rows
+
+What the conversion found, one row each, under a disclosure that says how many there are.
+
+A leading severity glyph in a fixed-width column — `exclamationmark.circle` for a warning,
+`exclamationmark.triangle` for an error — so the text blocks align and severity survives the
+colour being removed. **Errors sort above warnings**, and inside one severity the report's own
+order holds: the planner walked the sites in it.
+
+Figures inside the prose are lifted into SF Mono (rule 3). A line that names a file is left
+alone — `M6-song.mid` has a digit in it that is not a figure — which is why the failure headline
+is the one headline set plainly.
+
+The order is the window's alone. `Report.render()` prints in the report's own order on both CLIs,
+which is the contract the section below closes on.
 
 ### The import side
 
