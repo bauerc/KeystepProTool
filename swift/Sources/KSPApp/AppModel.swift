@@ -27,6 +27,8 @@ final class AppModel {
         /// Identity, not path: dropping the same file again is a new drop and needs a new read.
         let id = UUID()
 
+        /// Both of these read the tick set this drop seeded, so a read that has not landed yet --
+        /// which seeded neither -- says nothing.
         func blockReason(_ settings: Settings) -> String? {
             switch summary {
             case .project: return selection.blockReason
@@ -37,7 +39,6 @@ final class AppModel {
             }
         }
 
-        /// The tick set this drop seeded; a read that has not landed yet seeded neither.
         var exclusionNote: String? {
             switch summary {
             case .project: return selection.exclusionNote
