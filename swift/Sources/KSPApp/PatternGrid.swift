@@ -66,7 +66,7 @@ struct PatternGrid: Equatable {
             let chain = track.chain
             let places = Self.places(in: chain)
             self.track = track.number
-            self.name = track.name.replacingOccurrences(of: " (drum)", with: "")
+            self.name = "Track \(track.number)"
             self.readout = patternReadout(
                 chain.first ?? track.patterns.first { !$0.isEmpty }?.number)
             self.isDrum = track.mode == .drum
