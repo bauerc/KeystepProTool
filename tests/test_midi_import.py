@@ -11,7 +11,7 @@ from ksp import constants, midi_export, midi_import, mutate, reader
 from ksp.diagnostics import Code
 from ksp.drum_map import DrumMap
 from ksp.keys import key
-from ksp.midi_import import ImportOptions, TrackRoute
+from ksp.midi_import import DrumDesignation, ImportOptions, TrackRoute
 from ksp.model import NoteKind
 from test_mutate import PLACEMENT_RECIPE, TRACK_2_ITEM, changed
 
@@ -568,6 +568,35 @@ def test_a_percussion_channel_track_is_found_without_being_named(load_sample: Lo
     result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"))
 
     assert result.plan.tracks[0].is_drum
+
+
+def test_no_drums_leaves_a_percussion_track_on_a_sequencer_track(load_sample: Loader) -> None:
+    """A DAW parking a melodic patch on channel 10 is not writing a kit."""
+    midi = song_of([[(0, 36, 100), (TICKS_PER_STEP, 38, 100)]], channels=[9])
+    options = ImportOptions(drum_track=DrumDesignation.NONE)
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    assert not any(plan.is_drum for plan in result.plan.tracks)
+    assert steps_of(result) == [(1, 36, 100), (2, 38, 100)]
+
+    project = reader.read_project(result.raw, source_name="no drums")
+    assert not project.track(1).drum_mode
+
+
+def test_no_drums_fits_no_drum_map(load_sample: Loader) -> None:
+    """Nothing was taken as drums, so there is no map to assume."""
+    midi = song_of([[(0, 36, 100)]], channels=[9])
+    options = ImportOptions(drum_track=DrumDesignation.NONE)
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    assert result.plan.drum_map is None
+    assert Code.DRUM_MAP_FITTED not in {d.code for d in result.diagnostics}
+
+
+def test_the_default_designation_looks_for_a_drum_track() -> None:
+    assert ImportOptions().drum_track is DrumDesignation.AUTO
 
 
 def test_a_drum_pitch_outside_the_map_is_dropped_and_counted(load_sample: Loader) -> None:
@@ -1166,6 +1195,17 @@ def test_routing_the_drum_track_to_device_track_one_is_allowed(load_sample: Load
 
     assert routed(result) == [(1, 2), (2, 1)]
     assert [plan.is_drum for plan in result.plan.tracks] == [True, False]
+
+
+def test_no_drums_lets_a_route_take_device_track_one(load_sample: Loader) -> None:
+    """Track 1 is an ordinary target once nothing claims it as a drum set."""
+    midi = song_of([[(0, 60, 100)], [(0, 36, 100)]], channels=[0, 9])
+    options = ImportOptions(drum_track=DrumDesignation.NONE, routes=(TrackRoute(2, 1),))
+
+    result = midi_import.convert_song(midi, load_sample("Default.KeyStepPro"), options=options)
+
+    assert {plan.track: plan.source_track for plan in result.plan.tracks} == {1: 2, 2: 1}
+    assert not any(plan.is_drum for plan in result.plan.tracks)
 
 
 def test_a_route_onto_device_track_one_is_refused_beside_a_named_drum_track() -> None:

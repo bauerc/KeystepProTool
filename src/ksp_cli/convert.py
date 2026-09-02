@@ -12,6 +12,7 @@ from ksp.lenient_json import dump_path
 from ksp.midi_export import DEFAULT_FLAT_VELOCITY
 from ksp.midi_import import (
     DRUM_CHANNEL,
+    DrumDesignation,
     ImportOptions,
     ImportResult,
     Source,
@@ -281,7 +282,7 @@ def convert_command(
         options = ImportOptions(
             steps_per_beat=steps_per_beat,
             midi_tracks=resolve_midi_tracks(midi_track, midi_tracks),
-            drum_track=drum_track,
+            drum_track=DrumDesignation.AUTO if drum_track is None else drum_track,
             drum_channel=drum_channel - 1,
             drum_map=resolve_import_drum_map(drum_map_spec),
             carry_tempo=not no_tempo,
