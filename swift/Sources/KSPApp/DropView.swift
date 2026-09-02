@@ -554,32 +554,29 @@ struct DropView: View {
 
     private func segmentationRow(_ row: SegmentationGrid.Row) -> some View {
         HStack(spacing: 0) {
-            Text(row.name)
-                .font(.caption).fontWeight(.medium).lineLimit(1).minimumScaleFactor(0.8)
-                .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.secondary : .primary)
-                .frame(width: AppLayout.labelWidth, alignment: .leading)
-                .help(row.detail)
+            rowHead(
+                readout: row.readout, name: row.name, isDrum: row.isDrum, dimmed: row.isEmpty
+            )
+            .help(row.detail)
             Color.clear.frame(width: AppLayout.labelGap, height: 1)
             HStack(spacing: AppLayout.cellSpacing) {
-                ForEach(row.cells, id: \.pattern) { segmentationSlot($0) }
+                ForEach(row.cells, id: \.pattern) { segmentationSlot($0, track: row.track) }
             }
         }
         .padding(.bottom, 4)
         // Under the cells for the reason the Chain rail is: a rail behind them would band.
-        .overlay(alignment: .bottomLeading) { rails(row.runs) }
+        .overlay(alignment: .bottomLeading) { rails(row.runs, track: row.track) }
     }
 
-    private func segmentationSlot(_ cell: SegmentationGrid.Cell) -> some View {
-        Text(cell.label)
+    private func segmentationSlot(_ cell: SegmentationGrid.Cell, track: Int) -> some View {
+        let fill = slotFill(
+            track: track, notes: cell.noteCount, steps: cell.stepCount, isEmpty: cell.isEmpty)
+        let ink = DeviceColor.ink(on: fill)
+        return Text(cell.label)
             .font(TypeScale.smallValue)
-            .foregroundStyle(cell.isEmpty ? HierarchicalShapeStyle.tertiary : .primary)
+            .foregroundStyle(cell.isEmpty ? palette.mutedInk : ink)
             .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
-            .background(
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(
-                        cell.isEmpty
-                            ? Color.secondary.opacity(0.08) : Color.accentColor.opacity(0.22))
-            )
+            .background(slotBackground(fill: fill, ink: ink, steps: cell.stepCount))
             .help(cell.detail)
     }
 
@@ -642,9 +639,7 @@ struct DropView: View {
             .toggleStyle(.checkbox)
             .labelsHidden()
             .frame(width: AppLayout.trackTickWidth, alignment: .leading)
-            Text("\(row.number)")
-                .font(TypeScale.value).foregroundStyle(.tertiary)
-                .frame(width: AppLayout.trackNumberWidth, alignment: .trailing)
+            numberChip(row.number, destination: destination)
             Text(row.name)
                 .font(.caption).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
                 .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.secondary : .primary)
@@ -670,6 +665,19 @@ struct DropView: View {
         .opacity(row.isEmpty ? 0.6 : 1)
         .contentShape(Rectangle())
         .help(row.detail + (ticked ? "" : " · unticked, so it will not be imported"))
+    }
+
+    /// Routing made visible at no added row width: the source row takes the colour of the device
+    /// row it lands in, and stays inert while it lands nowhere in particular.
+    private func numberChip(_ number: Int, destination: SourceTrackSelection.Destination)
+        -> some View
+    {
+        let fill = destination.device.map { DeviceColor.track($0) } ?? palette.inert
+        return Text("\(number)")
+            .font(TypeScale.smallValue)
+            .foregroundStyle(DeviceColor.ink(on: fill))
+            .frame(width: AppLayout.trackNumberWidth, height: AppLayout.cellHeight)
+            .background(RoundedRectangle(cornerRadius: AppLayout.cellRadius).fill(fill))
     }
 
     /// A track holding nothing gets no picker: a route naming one is refused, and there is nothing
@@ -710,14 +718,12 @@ struct DropView: View {
     @ViewBuilder
     private func badge(_ badge: SourceTrackList.Badge?) -> some View {
         if let badge {
+            // One neutral capsule for all three: the word says which, so no hue has to.
             Text(badge.text)
                 .font(.caption2).lineLimit(1)
+                .foregroundStyle(palette.mutedInk)
                 .padding(.horizontal, 6).padding(.vertical, 1)
-                .background(
-                    Capsule().fill(
-                        badge == .drums
-                            ? Color.accentColor.opacity(0.22) : Color.secondary.opacity(0.12))
-                )
+                .background(Capsule().fill(palette.inert))
         } else {
             Color.clear.frame(height: 1)
         }
@@ -778,12 +784,11 @@ struct DropView: View {
                 Button {
                     model.toggle(track: row.track)
                 } label: {
-                    Text(row.name)
-                        .font(.caption).fontWeight(.medium).lineLimit(1).minimumScaleFactor(0.8)
-                        .foregroundStyle(state == .on ? HierarchicalShapeStyle.primary : .secondary)
-                        .strikethrough(state == .off)
-                        .frame(width: AppLayout.labelWidth, alignment: .leading)
-                        .contentShape(Rectangle())
+                    rowHead(
+                        readout: row.readout, name: row.name, isDrum: row.isDrum,
+                        struck: state == .off, dimmed: state != .on
+                    )
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(
@@ -800,7 +805,7 @@ struct DropView: View {
             }
             .padding(.bottom, 4)
             // Under the cells, not behind them: a rail and a cell's tint would otherwise band.
-            .overlay(alignment: .bottomLeading) { rails(row.runs) }
+            .overlay(alignment: .bottomLeading) { rails(row.runs, track: row.track) }
 
             if let chain = row.chainDetail {
                 Text(chain)
@@ -810,19 +815,45 @@ struct DropView: View {
         }
     }
 
-    /// A chain that jumps gets no bar; its cells are still tinted, and the caption says the order.
-    private func rails(_ runs: [AppLayout.Rail]) -> some View {
+    /// A chain that jumps gets no bar; the caption says the order instead. The rail is the only
+    /// place Chain membership shows: inside a cell it would fight the content channel.
+    private func rails(_ runs: [AppLayout.Rail], track: Int) -> some View {
         ForEach(runs.indices, id: \.self) { index in
             Capsule()
-                .fill(Color.accentColor)
-                .frame(width: runs[index].width, height: 2)
+                .fill(DeviceColor.track(track))
+                .frame(width: runs[index].width, height: AppLayout.railHeight)
                 .offset(x: runs[index].x)
         }
+    }
+
+    /// The content channel. Blended over the ground rather than drawn translucent, so the ink can
+    /// be chosen from what the eye will actually see; a slot that holds anything keeps the floor,
+    /// which is what lets a held pattern with every step off still read as held.
+    private func slotFill(track: Int, notes: Int, steps: Int, isEmpty: Bool) -> Color {
+        guard !isEmpty else { return palette.inert }
+        let density = max(Density.opacity(notes: notes, steps: steps), Density.floor)
+        return DeviceColor.track(track).over(palette.ground, alpha: density)
+    }
+
+    /// The fill with the length rule on its bottom edge, clipped so the rule follows the corner.
+    private func slotBackground(fill: Color, ink: Color, steps: Int) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: AppLayout.cellRadius).fill(fill)
+            Rectangle()
+                .fill(ink)
+                .frame(
+                    width: AppLayout.lengthRuleWidth(steps: steps),
+                    height: AppLayout.lengthRuleHeight)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: AppLayout.cellRadius))
     }
 
     /// An em dash means the slot holds nothing; `0` means it holds notes with every step off.
     private func slot(_ cell: PatternGrid.Cell, track: Int, selection: GridSelection) -> some View {
         let ticked = selection.isTicked(track: track, pattern: cell.pattern)
+        let fill = slotFill(
+            track: track, notes: cell.noteCount, steps: cell.stepCount, isEmpty: cell.isEmpty)
+        let ink = DeviceColor.ink(on: fill)
         return Button {
             model.toggle(track: track, pattern: cell.pattern)
         } label: {
@@ -830,20 +861,23 @@ struct DropView: View {
                 .font(TypeScale.value)
                 // Shrunk rather than truncated: a count reading "1…" would be worse than small.
                 .lineLimit(1).minimumScaleFactor(0.7)
-                .foregroundStyle(cell.isEmpty || !ticked ? Color.secondary : Color.primary)
-                .opacity(ticked ? 1 : 0.5)
+                // An empty slot takes the muted ink rather than the fill's, so a grid of them
+                // cannot shout over the two cells that actually hold something.
+                .foregroundStyle(cell.isEmpty ? palette.mutedInk : ink)
                 .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
                 .background(
-                    RoundedRectangle(cornerRadius: 3).fill(ticked ? fill(cell) : .clear)
+                    slotBackground(
+                        fill: fill, ink: ink, steps: cell.isEmpty ? 0 : cell.stepCount)
                 )
-                // Dashed, not merely dimmer: an empty cell is already faint.
+                // The whole export channel: solid exports, dashed does not, and nothing else about
+                // the cell moves with the tick.
                 .overlay {
-                    if !ticked {
-                        RoundedRectangle(cornerRadius: 3)
-                            .strokeBorder(
-                                Color.secondary.opacity(0.7),
-                                style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
-                    }
+                    RoundedRectangle(cornerRadius: AppLayout.cellRadius)
+                        .strokeBorder(
+                            ink.opacity(0.35),
+                            style: ticked
+                                ? StrokeStyle(lineWidth: 1)
+                                : StrokeStyle(lineWidth: 1, dash: [2, 2]))
                 }
                 .contentShape(Rectangle())
         }
@@ -851,11 +885,34 @@ struct DropView: View {
         .help(cell.detail + (ticked ? "" : " · unticked, so it will not be exported"))
     }
 
-    /// Chained first: a Chain can name a slot that holds nothing and the device still plays it.
-    private func fill(_ cell: PatternGrid.Cell) -> Color {
-        if !cell.positions.isEmpty { return Color.accentColor.opacity(0.22) }
-        if cell.isEmpty { return .clear }
-        return Color.secondary.opacity(0.12)
+    /// The pattern readout in its well, the track name, and the drum badge. Both grids draw it, so
+    /// the two read as the same object seen in each direction.
+    private func rowHead(
+        readout: String, name: String, isDrum: Bool, struck: Bool = false, dimmed: Bool = false
+    ) -> some View {
+        HStack(spacing: AppLayout.labelGap) {
+            Text(readout)
+                .font(TypeScale.readout).foregroundStyle(palette.bandInk)
+                .frame(width: AppLayout.wellWidth, height: AppLayout.cellHeight)
+                .background(
+                    RoundedRectangle(cornerRadius: AppLayout.wellRadius).fill(palette.well))
+            Text(name)
+                .font(.caption).fontWeight(.medium).lineLimit(1).minimumScaleFactor(0.8)
+                .foregroundStyle(dimmed ? palette.mutedInk : palette.ink)
+                .strikethrough(struck)
+                .frame(width: AppLayout.rowNameWidth, alignment: .leading)
+            Group {
+                if isDrum {
+                    Text("Drum")
+                        .font(TypeScale.smallLabel).lineLimit(1)
+                        .foregroundStyle(palette.mutedInk)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Capsule().fill(palette.inert))
+                }
+            }
+            .frame(width: AppLayout.rowBadgeWidth, alignment: .leading)
+        }
+        .frame(width: AppLayout.labelWidth, alignment: .leading)
     }
 
     @ViewBuilder

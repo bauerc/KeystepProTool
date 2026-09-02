@@ -7,13 +7,15 @@ import Testing
 
 private func segmented(
     _ deviceTrack: Int, source: Int? = nil, patterns: [(pattern: Int, steps: Int)] = [],
-    notes: Int = 16, isDrum: Bool = false, droppedPatterns: Int = 0
+    notes: Int = 16, segmentNotes: Int = 0, isDrum: Bool = false, droppedPatterns: Int = 0
 ) -> SegmentedTrack {
     var step = 1
     var segments: [Segment] = []
     for entry in patterns {
         segments.append(
-            Segment(pattern: entry.pattern, stepCount: entry.steps, firstStep: step))
+            Segment(
+                pattern: entry.pattern, stepCount: entry.steps, firstStep: step,
+                noteCount: segmentNotes))
         step += entry.steps
     }
     return SegmentedTrack(
@@ -173,5 +175,39 @@ private func segmented(
             SegmentationSummary(tracks: [segmented(1, patterns: [(1, 64)])]))
 
         #expect(placements.isEmpty)
+    }
+
+    /// The import side reads the same way round: the well shows the first pattern the plan fills.
+    @Test func thereadoutIsTheFirstPatternThePlanFills() {
+        let grid = SegmentationGrid(
+            SegmentationSummary(tracks: [segmented(1, source: 3, patterns: [(3, 64), (4, 32)])]))
+
+        #expect(grid.rows[0].readout == "03")
+        #expect(grid.rows[1].readout == "--")
+    }
+
+    @Test func aplannedSlotKeepsWhatItWillHoldAndHowLongItRuns() {
+        let grid = SegmentationGrid(
+            SegmentationSummary(tracks: [
+                segmented(1, source: 3, patterns: [(1, 48)], segmentNotes: 30)
+            ]))
+        let cells = grid.rows[0].cells
+
+        #expect(cells[0].noteCount == 30)
+        #expect(cells[0].stepCount == 48)
+        #expect(cells[1].noteCount == 0)
+        #expect(cells[1].stepCount == 0)
+    }
+
+    @Test func adrumPlanBadgesItsRow() {
+        let grid = SegmentationGrid(
+            SegmentationSummary(tracks: [
+                segmented(1, source: 3, patterns: [(1, 16)], isDrum: true),
+                segmented(2, source: 4, patterns: [(1, 16)]),
+            ]))
+
+        #expect(grid.rows[0].isDrum)
+        #expect(!grid.rows[1].isDrum)
+        #expect(!grid.rows[2].isDrum)
     }
 }

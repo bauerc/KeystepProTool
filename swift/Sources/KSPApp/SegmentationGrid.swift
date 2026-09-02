@@ -12,12 +12,18 @@ struct SegmentationGrid: Equatable {
         let pattern: Int
         let label: String
         let isEmpty: Bool
+        /// What the slot will hold, which the fill's intensity is of.
+        let noteCount: Int
+        /// What it will run for, which the length rule is a fraction of.
+        let stepCount: Int
         let detail: String
 
         init(pattern: Int, segment: Segment?, track: SegmentedTrack?) {
             self.pattern = pattern
             self.label = segment.map { "\($0.stepCount)" } ?? "—"
             self.isEmpty = segment == nil
+            self.noteCount = segment?.noteCount ?? 0
+            self.stepCount = segment?.stepCount ?? 0
             self.detail = Self.detail(pattern, segment: segment, track: track)
         }
 
@@ -38,6 +44,9 @@ struct SegmentationGrid: Equatable {
         /// 1-4.
         let track: Int
         let name: String
+        /// The well: the first Pattern the plan fills, or `--` where it fills none.
+        let readout: String
+        let isDrum: Bool
         /// The row label's tooltip.
         let detail: String
         let cells: [Cell]
@@ -52,6 +61,8 @@ struct SegmentationGrid: Equatable {
                 })
             self.track = track
             self.name = "Track \(track)"
+            self.readout = patternReadout(plan?.segments.first?.pattern)
+            self.isDrum = plan?.isDrum ?? false
             self.detail = Self.detail(plan)
             self.cells = (1...AppLayout.columnCount).map {
                 Cell(pattern: $0, segment: byPattern[$0], track: plan)

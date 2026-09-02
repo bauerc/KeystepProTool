@@ -11,6 +11,11 @@ struct PatternGrid: Equatable {
         let pattern: Int
         let label: String
         let isEmpty: Bool
+        /// Everything the slot holds, which the fill's intensity is of. Not ``label``'s figure:
+        /// that is what is switched on, and a full pattern of switched-off steps is still full.
+        let noteCount: Int
+        /// The live set's declared step count, which the length rule is a fraction of.
+        let stepCount: Int
         /// Where this Pattern plays in its Chain, 1-based, in play order; empty when in none.
         let positions: [Int]
         let detail: String
@@ -19,6 +24,8 @@ struct PatternGrid: Equatable {
             self.pattern = pattern.number
             self.label = pattern.isEmpty ? "—" : "\(pattern.enabledNoteCount)"
             self.isEmpty = pattern.isEmpty
+            self.noteCount = pattern.noteCount
+            self.stepCount = pattern.stepCount
             self.positions = positions
             self.detail = Self.detail(pattern, mode: mode, positions: positions)
         }
@@ -43,7 +50,11 @@ struct PatternGrid: Equatable {
     struct Row: Equatable {
         /// 1-4.
         let track: Int
+        /// What the head prints, which is ``TrackSummary/name`` without the mode the badge carries.
         let name: String
+        /// The well: two digits, or `--` where the track is on no Pattern.
+        let readout: String
+        let isDrum: Bool
         /// The row label's tooltip.
         let detail: String
         /// The Chain in play order, or nil when the track is in none.
@@ -55,8 +66,11 @@ struct PatternGrid: Equatable {
             let chain = track.chain
             let places = Self.places(in: chain)
             self.track = track.number
-            self.name = track.name
-            self.detail = Self.detail(track)
+            self.name = track.name.replacingOccurrences(of: " (drum)", with: "")
+            self.readout = patternReadout(
+                chain.first ?? track.patterns.first { !$0.isEmpty }?.number)
+            self.isDrum = track.mode == .drum
+            self.detail = "\(track.name) · " + Self.detail(track)
             self.chainDetail =
                 chain.isEmpty ? nil : "Chain: " + chain.map(String.init).joined(separator: " → ")
             self.cells = track.patterns.map {

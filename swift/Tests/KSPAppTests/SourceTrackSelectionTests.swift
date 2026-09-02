@@ -418,4 +418,21 @@ import Testing
         #expect(options.routes == [TrackRoute(source: 3, device: 2)])
         #expect(options.drumTrack == 4)
     }
+
+    /// The source row takes the colour of the row it lands in, so the colour is a property of the
+    /// destination rather than something a view works out.
+    @Test func adestinationNamesTheDeviceTrackItsColourComesFrom() {
+        #expect(SourceTrackSelection.Destination.track(3).device == 3)
+        #expect(SourceTrackSelection.Destination.drums.device == 1)
+        #expect(SourceTrackSelection.Destination.automatic.device == nil)
+        #expect(SourceTrackSelection.Destination.skip.device == nil)
+    }
+
+    /// Automatic can land on several device tracks at once, so it has no one hue to wear.
+    @Test func everyDestinationInTheMenuNamesAtMostOneDeviceTrack() {
+        let named = SourceTrackSelection.destinations.compactMap(\.device)
+
+        #expect(named.allSatisfy { (1...Constants.trackItemIDs.count).contains($0) })
+        #expect(named.count == Constants.trackItemIDs.count + 1)
+    }
 }

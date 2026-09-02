@@ -62,7 +62,7 @@ typealias SlotCount = (held: Int, enabled: Int)
 func syntheticSummary(
     tempoBPM: Double = 120, globalSwingPercent: Int = 50, currentScene: Int = 1,
     drumTracks: Set<Int> = [], chains: [Int: [Int]] = [:],
-    notes: [Int: [Int: SlotCount]] = [:]
+    notes: [Int: [Int: SlotCount]] = [:], steps: [Int: [Int: Int]] = [:]
 ) -> ProjectSummary {
     ProjectSummary(
         sourceName: "synthetic.KeyStepPro", tempoBPM: tempoBPM,
@@ -77,7 +77,8 @@ func syntheticSummary(
                     let count = notes[track]?[pattern] ?? (held: 0, enabled: 0)
                     return PatternSummary(
                         number: pattern, mode: count.held == 0 ? .empty : (drum ? .drum : .seq),
-                        noteCount: count.held, enabledNoteCount: count.enabled, stepCount: 16,
+                        noteCount: count.held, enabledNoteCount: count.enabled,
+                        stepCount: steps[track]?[pattern] ?? 16,
                         hasData: count.held > 0, chain: chain.contains(pattern) ? chain : [])
                 })
         })

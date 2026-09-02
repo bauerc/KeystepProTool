@@ -63,16 +63,16 @@ import Testing
                 2: [1: (held: 2, enabled: 1)],
             ]))
 
-        #expect(grid.rows[0].detail == "2 patterns · 40 notes switched on")
-        #expect(grid.rows[1].detail == "1 pattern · 1 note switched on")
-        #expect(grid.rows[2].detail == "empty")
+        #expect(grid.rows[0].detail == "Track 1 · 2 patterns · 40 notes switched on")
+        #expect(grid.rows[1].detail == "Track 2 · 1 pattern · 1 note switched on")
+        #expect(grid.rows[2].detail == "Track 3 · empty")
     }
 
     @Test func adrumTrackIsCountedInTriggers() {
         let grid = PatternGrid(
             syntheticSummary(drumTracks: [3], notes: [3: [1: (held: 12, enabled: 9)]]))
 
-        #expect(grid.rows[2].detail == "1 pattern · 9 triggers switched on")
+        #expect(grid.rows[2].detail == "Track 3 (drum) · 1 pattern · 9 triggers switched on")
         #expect(
             grid.rows[2].cells[0].detail == "Pattern 1 — 12 triggers held, 9 switched on, 16 steps")
     }
@@ -170,5 +170,60 @@ import Testing
         #expect(grid.header.hasSuffix("scene 1"))
         #expect(grid.rows.contains { $0.cells.contains { !$0.isEmpty } })
         #expect(grid.rows.allSatisfy { $0.chainDetail == nil })
+    }
+
+    /// The well reads what the track would play first, which the Chain names outright.
+    @Test func thereadoutTakesTheChainsFirstPatternOverALowerHeldOne() {
+        let grid = PatternGrid(
+            syntheticSummary(
+                chains: [1: [7, 3]],
+                notes: [1: [3: (held: 4, enabled: 4), 7: (held: 9, enabled: 9)]]))
+
+        #expect(grid.rows[0].readout == "07")
+    }
+
+    @Test func thereadoutFallsBackToTheLowestPatternTheTrackHolds() {
+        let grid = PatternGrid(
+            syntheticSummary(notes: [2: [9: (held: 3, enabled: 3), 5: (held: 6, enabled: 6)]]))
+
+        #expect(grid.rows[1].readout == "05")
+    }
+
+    @Test func atrackHoldingNothingReadsOutAsDashes() {
+        #expect(PatternGrid(syntheticSummary()).rows[0].readout == "--")
+    }
+
+    /// Two digits, as the device's own displays show them.
+    @Test func thereadoutIsAlwaysTwoDigits() {
+        let grid = PatternGrid(syntheticSummary(notes: [1: [16: (held: 2, enabled: 2)]]))
+
+        #expect(grid.rows[0].readout == "16")
+        #expect(grid.rows[0].readout.count == 2)
+    }
+
+    /// The fill is of everything held and the length rule is of the declared steps, so a cell keeps
+    /// both rather than only the figure it prints.
+    @Test func aslotKeepsWhatItHoldsAndHowLongItRuns() {
+        let grid = PatternGrid(
+            syntheticSummary(notes: [1: [4: (held: 76, enabled: 8)]], steps: [1: [4: 48]]))
+        let cells = grid.rows[0].cells
+
+        #expect(cells[3].noteCount == 76)
+        #expect(cells[3].stepCount == 48)
+        #expect(cells[3].label == "8")
+        #expect(cells[0].noteCount == 0)
+    }
+
+    /// The badge carries the mode, so the head's name drops the suffix the `.mid` keeps; the
+    /// tooltip carries the full name so nothing is lost.
+    @Test func adrumRowIsBadgedRatherThanRenamed() {
+        let grid = PatternGrid(
+            syntheticSummary(drumTracks: [1], notes: [1: [1: (held: 12, enabled: 9)]]))
+
+        #expect(grid.rows[0].isDrum)
+        #expect(grid.rows[0].name == "Track 1")
+        #expect(grid.rows[0].detail.hasPrefix("Track 1 (drum) · "))
+        #expect(!grid.rows[1].isDrum)
+        #expect(grid.rows[1].name == "Track 2")
     }
 }
