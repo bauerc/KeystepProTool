@@ -229,7 +229,8 @@ enum AppLayout {
         wellWidth + labelGap + rowNameWidth + labelGap + rowBadgeWidth
     }
     static let rowNameWidth: CGFloat = 68
-    static let rowBadgeWidth: CGFloat = 34
+    /// "Drum" and its capsule padding; at 34 the word truncated to "Dr...".
+    static let rowBadgeWidth: CGFloat = 44
     static let labelGap: CGFloat = 8
     static let cellWidth: CGFloat = 26
     static let cellSpacing: CGFloat = 3

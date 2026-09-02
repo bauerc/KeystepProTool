@@ -574,8 +574,7 @@ struct DropView: View {
         let ink = DeviceColor.ink(on: fill)
         return Text(cell.label)
             .font(TypeScale.smallValue)
-            .foregroundStyle(ink)
-            .opacity(cell.isEmpty ? 0.55 : 1)
+            .foregroundStyle(cell.isEmpty ? palette.mutedInk : ink)
             .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
             .background(slotBackground(fill: fill, ink: ink, steps: cell.stepCount))
             .help(cell.detail)
@@ -862,8 +861,9 @@ struct DropView: View {
                 .font(TypeScale.value)
                 // Shrunk rather than truncated: a count reading "1…" would be worse than small.
                 .lineLimit(1).minimumScaleFactor(0.7)
-                .foregroundStyle(ink)
-                .opacity(cell.isEmpty ? 0.55 : 1)
+                // An empty slot takes the muted ink rather than the fill's, so a grid of them
+                // cannot shout over the two cells that actually hold something.
+                .foregroundStyle(cell.isEmpty ? palette.mutedInk : ink)
                 .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
                 .background(
                     slotBackground(
@@ -874,7 +874,7 @@ struct DropView: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: AppLayout.cellRadius)
                         .strokeBorder(
-                            ink.opacity(0.55),
+                            ink.opacity(0.35),
                             style: ticked
                                 ? StrokeStyle(lineWidth: 1)
                                 : StrokeStyle(lineWidth: 1, dash: [2, 2]))
