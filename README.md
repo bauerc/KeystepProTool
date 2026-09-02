@@ -394,6 +394,7 @@ it appears in the Project Browser ready to send to the device.
 | `--midi-tracks LIST` | Convert only these tracks of the source, as a song — comma-separated numbers and `N-M` ranges (`1,2,5`, `1-3`). Not usable with `--midi-track` |
 | `--route SPEC` | Send named source tracks to named device tracks: `source:device` pairs, comma-separated (`3:1,1:2`). Tracks no pair names fill whatever is left, and a pair may only name a track `--midi-tracks` reads. Not usable with `--midi-track` |
 | `--drum-track N` | Write source track N as drums, onto KeyStep Pro track 1 |
+| `--no-drums` | Take no source track as drums; a channel-10 part comes in as ordinary notes. Not usable with `--drum-track` |
 | `--drum-channel N` | MIDI channel drum detection listens to, 1–16 (default 10). `--drum-track` names a track outright and wins over it |
 | `--drum-map SPEC` | `chromatic:N` or `custom:a,b,c,…` (default: fitted to the source) |
 | `--flat-velocity VALUE` | Write every note and trigger at one velocity instead of the source's — `fresh` for the measured fresh-note velocity (100), or 1–127 |
@@ -466,7 +467,7 @@ interleave two takes.
   a kit on an ordinary channel, where nothing marks it as percussion and the whole set would
   come in as melodic pitches. `--drum-channel N` moves the search, and where a kit is found the
   drum-map warning names the channel it came from. `--drum-track` names a track outright,
-  searches nothing, and wins.
+  searches nothing, and wins; `--no-drums` stops the search the other way, and takes nothing.
 - **A track's length is its own content rounded up to the bar**, then cut into 64-step patterns —
   the device's maximum. A split track's patterns are **chained** in the current scene, which is
   what makes them play as one sequence. Tracks are not padded to a common length: the device loops
@@ -499,7 +500,8 @@ to the source's own pitches and reports which one it used. `--drum-map` override
 A drum track is found on MIDI channel 10, which is what General MIDI reserves. Only the first one
 is: track 1 is the only one carrying a drum set, so a second channel 10 part is imported
 melodically. Plenty of files put drums on an ordinary channel instead, and for those
-`--drum-track N` names it explicitly.
+`--drum-track N` names it explicitly. Where a file's percussion is not wanted as triggers at all,
+`--no-drums` takes nothing, so a channel 10 part comes in as ordinary notes on a sequencer track.
 
 **Name the output file what you want the project called.** MCC's Project Browser lists the
 *filename*, so `midi2ksp song.mid -o "Y Control.KeyStepPro"` appears as `Y Control`. The project

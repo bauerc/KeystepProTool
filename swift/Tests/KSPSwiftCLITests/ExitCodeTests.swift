@@ -111,6 +111,23 @@ import Testing
                 "ksp-swift-cli convert: --midi-track and --midi-tracks contradict each other"))
     }
 
+    @Test func noDrumsWithADrumTrackIsTwo() throws {
+        let result = try Self.run(["convert", Self.clip, "--no-drums", "--drum-track", "1"])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli convert: --drum-track and --no-drums contradict each other; "
+                + "--drum-track names a source track to write as drums, and --no-drums "
+                + "takes none\n")
+    }
+
+    @Test func noDrumsReachesTheSummary() throws {
+        // --dry-run: this runs against the real fixture, so nothing here may write beside it.
+        let result = try Self.run(["convert", Self.clip, "--no-drums", "--dry-run"])
+        #expect(result.code == 0)
+        #expect(result.stdout.hasSuffix("  no source track was taken as drums\n"))
+    }
+
     @Test func severalSourcesNameTheirFileInTheSummary() throws {
         // --dry-run: this runs against the real fixtures, so nothing here may write beside them.
         let result = try Self.run(["convert", Self.clip, Self.chords, "--dry-run"])

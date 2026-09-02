@@ -67,12 +67,19 @@ def _marks(plan: TrackPlan, show_sources: bool, show_files: bool) -> str:
     return f" [{', '.join(marks)}]" if marks else ""
 
 
+def _designation(drum_track: int | None, no_drums: bool) -> int | DrumDesignation:
+    if no_drums:
+        return DrumDesignation.NONE
+    return DrumDesignation.AUTO if drum_track is None else drum_track
+
+
 def _summary(
     result: ImportResult,
     destination: Path,
     dry_run: bool,
     show_sources: bool = False,
     show_files: bool = False,
+    no_drums: bool = False,
 ) -> str:
     verb = "would write" if dry_run else "wrote"
     lines = [f"{verb} {destination}"]
@@ -86,20 +93,22 @@ def _summary(
             f"{f' [{source}]' if source else ''}, "
             f"pattern {result.pattern} ({result.step_count} steps)"
         )
-        return "\n".join(lines)
+    else:
+        for plan in tracks:
+            patterns = plan.patterns
+            where = (
+                f"pattern {patterns[0]}"
+                if len(patterns) == 1
+                else f"patterns {patterns[0]}-{patterns[-1]}"
+            )
+            steps = ", ".join(str(p.step_count) for p in plan.placements)
+            lines.append(
+                f"  track {plan.track}{_marks(plan, show_sources, show_files)}: "
+                f"{len(plan.notes)} note(s), {where} ({steps} steps)"
+            )
 
-    for plan in tracks:
-        patterns = plan.patterns
-        where = (
-            f"pattern {patterns[0]}"
-            if len(patterns) == 1
-            else f"patterns {patterns[0]}-{patterns[-1]}"
-        )
-        steps = ", ".join(str(p.step_count) for p in plan.placements)
-        lines.append(
-            f"  track {plan.track}{_marks(plan, show_sources, show_files)}: "
-            f"{len(plan.notes)} note(s), {where} ({steps} steps)"
-        )
+    if no_drums:
+        lines.append("  no source track was taken as drums")
     return "\n".join(lines)
 
 
@@ -169,6 +178,17 @@ def convert_command(
             ),
         ),
     ] = DRUM_CHANNEL + 1,
+    no_drums: Annotated[
+        bool,
+        typer.Option(
+            "--no-drums",
+            rich_help_panel=_SOURCE_PANEL,
+            help=(
+                "take no source track as drums; a track sitting wholly on --drum-channel comes "
+                "in as ordinary notes instead of a kit"
+            ),
+        ),
+    ] = False,
     route: Annotated[
         str | None,
         typer.Option("--route", metavar="SPEC", rich_help_panel=_SOURCE_PANEL, help=ROUTE_HELP),
@@ -278,11 +298,19 @@ def convert_command(
     ] = False,
     verbose: VerboseInPanel = False,
 ) -> None:
+    if no_drums and drum_track is not None:
+        fail(
+            "--drum-track and --no-drums contradict each other; --drum-track names a source "
+            "track to write as drums, and --no-drums takes none",
+            prog=PROG,
+            code=2,
+        )
+
     try:
         options = ImportOptions(
             steps_per_beat=steps_per_beat,
             midi_tracks=resolve_midi_tracks(midi_track, midi_tracks),
-            drum_track=DrumDesignation.AUTO if drum_track is None else drum_track,
+            drum_track=_designation(drum_track, no_drums),
             drum_channel=drum_channel - 1,
             drum_map=resolve_import_drum_map(drum_map_spec),
             carry_tempo=not no_tempo,
@@ -361,6 +389,7 @@ def convert_command(
                 dry_run,
                 show_sources=route is not None or len(paths) > 1,
                 show_files=len(paths) > 1,
+                no_drums=no_drums,
             )
         )
 

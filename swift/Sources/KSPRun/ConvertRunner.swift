@@ -10,6 +10,7 @@ public enum ConvertRunner {
         public var track: Int
         public var pattern: Int
         public var drumTrack: Int?
+        public var noDrums: Bool
         public var drumChannel: Int
         public var routeSpec: String?
         public var drumMapSpec: String?
@@ -31,7 +32,8 @@ public enum ConvertRunner {
         // live here only: repeating them on the properties would leave a copy that never runs.
         public init(
             paths: [URL], output: URL? = nil, track: Int = 1, pattern: Int = 1,
-            drumTrack: Int? = nil, drumChannel: Int = MIDIImport.drumChannel,
+            drumTrack: Int? = nil, noDrums: Bool = false,
+            drumChannel: Int = MIDIImport.drumChannel,
             routeSpec: String? = nil,
             drumMapSpec: String? = nil, carryTempo: Bool = true, fitSwing: Bool = true,
             fitTimeShift: Bool = true, template: URL? = nil, midiTrack: Int? = nil,
@@ -44,6 +46,7 @@ public enum ConvertRunner {
             self.track = track
             self.pattern = pattern
             self.drumTrack = drumTrack
+            self.noDrums = noDrums
             self.drumChannel = drumChannel
             self.routeSpec = routeSpec
             self.drumMapSpec = drumMapSpec
@@ -79,7 +82,8 @@ public enum ConvertRunner {
         try ImportOptions(
             stepsPerBeat: options.stepsPerBeat,
             midiTracks: try resolveMidiTracks(options.midiTrack, options.midiTracksSpec),
-            drumTrack: options.drumTrack.map(DrumDesignation.source) ?? .auto,
+            drumTrack: options.noDrums
+                ? .none : (options.drumTrack.map(DrumDesignation.source) ?? .auto),
             drumChannel: options.drumChannel,
             drumMap: try resolveImportDrumMap(options.drumMapSpec, configPath: options.configPath),
             carryTempo: options.carryTempo, fitSwing: options.fitSwing,
@@ -113,6 +117,12 @@ public enum ConvertRunner {
     }
 
     public static func run(_ options: Options) -> RunResult {
+        if options.noDrums, options.drumTrack != nil {
+            return fail(
+                "--drum-track and --no-drums contradict each other; --drum-track names a source "
+                    + "track to write as drums, and --no-drums takes none", code: 2)
+        }
+
         let importOptions: ImportOptions
         do {
             importOptions = try Self.importOptions(options)
@@ -198,7 +208,7 @@ public enum ConvertRunner {
             output.stdout = summary(
                 result, destination: destination, dryRun: options.dryRun,
                 showSources: options.routeSpec != nil || options.paths.count > 1,
-                showFiles: options.paths.count > 1)
+                showFiles: options.paths.count > 1, noDrums: options.noDrums)
         }
         return output
     }
@@ -221,7 +231,7 @@ public enum ConvertRunner {
 
     static func summary(
         _ result: ImportResult, destination: URL, dryRun: Bool, showSources: Bool = false,
-        showFiles: Bool = false
+        showFiles: Bool = false, noDrums: Bool = false
     ) -> String {
         let verb = dryRun ? "would write" : "wrote"
         var lines = ["\(verb) \(destination.relativePath)"]
@@ -234,21 +244,22 @@ public enum ConvertRunner {
             lines.append(
                 "  \(result.noteCount) note(s) onto track \(result.track)\(bracket), "
                     + "pattern \(result.pattern) (\(result.stepCount) steps)")
-            return lines.joined(separator: "\n")
+        } else {
+            for plan in tracks {
+                let patterns = plan.patterns
+                let location =
+                    patterns.count == 1
+                    ? "pattern \(patterns[0])"
+                    : "patterns \(patterns[0])-\(patterns[patterns.count - 1])"
+                let steps = plan.placements.map { String($0.stepCount) }.joined(separator: ", ")
+                lines.append(
+                    "  track \(plan.track)\(marks(plan, showSources, showFiles)): "
+                        + "\(plan.notes.count) note(s), "
+                        + "\(location) (\(steps) steps)")
+            }
         }
 
-        for plan in tracks {
-            let patterns = plan.patterns
-            let location =
-                patterns.count == 1
-                ? "pattern \(patterns[0])"
-                : "patterns \(patterns[0])-\(patterns[patterns.count - 1])"
-            let steps = plan.placements.map { String($0.stepCount) }.joined(separator: ", ")
-            lines.append(
-                "  track \(plan.track)\(marks(plan, showSources, showFiles)): "
-                    + "\(plan.notes.count) note(s), "
-                    + "\(location) (\(steps) steps)")
-        }
+        if noDrums { lines.append("  no source track was taken as drums") }
         return lines.joined(separator: "\n")
     }
 }

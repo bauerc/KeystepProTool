@@ -167,6 +167,62 @@ def test_a_drum_channel_outside_the_range_is_a_usage_error(m6_song: Path, tmp_pa
     assert main(argv) == 2
 
 
+def test_no_drums_takes_nothing_as_drums(
+    m6_song: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--drum-channel 1 is what makes m6-test-file's kit findable, so a real one is suppressed."""
+    destination = tmp_path / "out.KeyStepPro"
+    argv = [str(m6_song), "-o", str(destination), "--drum-channel", "1", "--no-drums"]
+    assert main(argv) == 0
+
+    assert not reader.load(destination).track(1).drum_mode
+    captured = capsys.readouterr()
+    assert "  no source track was taken as drums" in captured.out
+    assert "[drum]" not in captured.out
+    assert "fitted to the source" not in captured.err
+
+
+def test_without_no_drums_the_drum_channel_is_still_searched(
+    m6_song: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The default output is unchanged, which is what keeps the parity corpus still."""
+    argv = [str(m6_song), "-o", str(tmp_path / "out.KeyStepPro"), "--drum-channel", "1"]
+    assert main(argv) == 0
+
+    out = capsys.readouterr().out
+    assert "[drum]" in out
+    assert "no source track was taken as drums" not in out
+
+
+def test_no_drums_reaches_the_single_target_summary(
+    simple_clip: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The single-target shape returned before the tail line existed."""
+    destination = tmp_path / "out.KeyStepPro"
+    argv = [str(simple_clip), "-o", str(destination), "--midi-track", "1", "--no-drums"]
+    assert main(argv) == 0
+
+    assert capsys.readouterr().out.endswith("  no source track was taken as drums\n")
+
+
+def test_no_drums_with_a_drum_track_is_a_usage_error(
+    m6_song: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = [str(m6_song), "-o", str(tmp_path / "out.KeyStepPro"), "--no-drums", "--drum-track", "1"]
+    assert main(argv) == 2
+
+    assert "--drum-track and --no-drums contradict each other" in capsys.readouterr().err
+
+
+def test_no_drums_says_nothing_under_quiet(
+    m6_song: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = [str(m6_song), "-o", str(tmp_path / "out.KeyStepPro"), "--no-drums", "--quiet"]
+    assert main(argv) == 0
+
+    assert capsys.readouterr().out == ""
+
+
 def test_a_chord_keeps_every_note(
     chord_clip: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
