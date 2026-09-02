@@ -5,6 +5,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, replace
+from enum import Enum, auto
 from typing import Final, NamedTuple
 
 import mido
@@ -53,6 +54,14 @@ class TrackRoute(NamedTuple):
     device: int
 
 
+class DrumDesignation(Enum):
+    """The two drum designations that name no source track: search the drum channel,
+    or take nothing as drums at all."""
+
+    AUTO = auto()
+    NONE = auto()
+
+
 @dataclass(frozen=True)
 class ImportOptions:
     """Everything the MIDI file cannot tell us about the target project."""
@@ -64,9 +73,9 @@ class ImportOptions:
     midi_tracks: AbstractSet[int] = frozenset()
     """Read only these tracks of the source file, counting from 1; empty reads all."""
 
-    drum_track: int | None = None
-    """Which source track to write as drums, counting from 1. ``None`` looks for
-    a track sitting wholly on ``drum_channel`` instead."""
+    drum_track: int | DrumDesignation = DrumDesignation.AUTO
+    """Which source track to write as drums, counting from 1. ``AUTO`` looks for a track
+    sitting wholly on ``drum_channel`` instead, and ``NONE`` takes no track as drums."""
 
     drum_channel: int = DRUM_CHANNEL
     """The channel drum detection listens to, counting from 0. Ignored when
@@ -95,11 +104,15 @@ class ImportOptions:
         object.__setattr__(self, "midi_tracks", frozenset(self.midi_tracks))
         if any(number < 1 for number in self.midi_tracks):
             raise ValueError("midi_track counts from 1")
-        if self.drum_track is not None and self.drum_track < 1:
+        if isinstance(self.drum_track, int) and self.drum_track < 1:
             raise ValueError("drum_track counts from 1")
         if not 0 <= self.drum_channel <= 15:
             raise ValueError("drum_channel must be 0-15")
-        if self.midi_tracks and self.drum_track not in (None, *self.midi_tracks):
+        if (
+            self.midi_tracks
+            and isinstance(self.drum_track, int)
+            and self.drum_track not in self.midi_tracks
+        ):
             raise ValueError(
                 f"drum_track {self.drum_track} is not in the selection; a drum track must "
                 "be one of the source tracks read"
@@ -144,7 +157,7 @@ class ImportOptions:
                     f"track {route.device}; only device track 1 carries a drum set"
                 )
             if (
-                self.drum_track is not None
+                isinstance(self.drum_track, int)
                 and self.drum_track != route.source
                 and route.device == 1
             ):
@@ -939,7 +952,8 @@ def _assign(
     """Which device track each source clip goes to, and which one is drums.
     A drum clip goes to Track 1: item 123 is the only one with a drum parameter set."""
     drum: Clip | None = None
-    if options.drum_track is not None:
+    melodic = list(song.clips)
+    if isinstance(options.drum_track, int):
         # --drum-track names a track of the file, so a track split across
         # channels is put back together rather than leaving half a kit behind.
         named = [clip for clip in song.clips if clip.source_tracks == (options.drum_track,)]
@@ -950,7 +964,7 @@ def _assign(
             )
         drum = _merged(named)
         melodic = [clip for clip in song.clips if clip.source_tracks != (options.drum_track,)]
-    else:
+    elif options.drum_track is DrumDesignation.AUTO:
         drum = next(
             (clip for clip in song.clips if clip.is_percussion_on(options.drum_channel)), None
         )
@@ -1051,7 +1065,7 @@ def plan_song(
         drum_map = fit_drum_map(drum_clip)
         found = (
             ""
-            if options.drum_track is not None
+            if isinstance(options.drum_track, int)
             else f", found on channel {options.drum_channel + 1}"
         )
         collector.add(

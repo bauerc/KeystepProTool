@@ -79,7 +79,7 @@ public enum ConvertRunner {
         try ImportOptions(
             stepsPerBeat: options.stepsPerBeat,
             midiTracks: try resolveMidiTracks(options.midiTrack, options.midiTracksSpec),
-            drumTrack: options.drumTrack,
+            drumTrack: options.drumTrack.map(DrumDesignation.source) ?? .auto,
             drumChannel: options.drumChannel,
             drumMap: try resolveImportDrumMap(options.drumMapSpec, configPath: options.configPath),
             carryTempo: options.carryTempo, fitSwing: options.fitSwing,

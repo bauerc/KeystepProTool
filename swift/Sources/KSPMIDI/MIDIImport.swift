@@ -24,12 +24,28 @@ public struct TrackRoute: Sendable, Hashable {
     }
 }
 
+/// The two drum designations that name no source track: search the drum channel,
+/// or take nothing as drums at all.
+public enum DrumDesignation: Sendable, Hashable {
+    case auto
+    case source(Int)
+    case none
+
+    /// The source track named, counting from 1, when one was named.
+    public var sourceTrack: Int? {
+        if case .source(let track) = self { return track }
+        return nil
+    }
+}
+
 public struct ImportOptions: Sendable, Hashable {
     public let stepsPerBeat: Int
 
     public let midiTracks: Set<Int>
 
-    public let drumTrack: Int?
+    /// Which source track to write as drums, counting from 1. `auto` looks for a track
+    /// sitting wholly on `drumChannel` instead, and `none` takes no track as drums.
+    public let drumTrack: DrumDesignation
 
     /// The channel drum detection listens to, counting from 0. Ignored when
     /// `drumTrack` names a track outright.
@@ -50,7 +66,7 @@ public struct ImportOptions: Sendable, Hashable {
     public init(
         stepsPerBeat: Int = Constants.defaultStepsPerBeat,
         midiTracks: Set<Int> = [],
-        drumTrack: Int? = nil,
+        drumTrack: DrumDesignation = .auto,
         drumChannel: Int = MIDIImport.drumChannel,
         drumMap: DrumMap? = nil,
         carryTempo: Bool = true,
@@ -63,15 +79,15 @@ public struct ImportOptions: Sendable, Hashable {
         if midiTracks.contains(where: { $0 < 1 }) {
             throw KSPError.value("midi_track counts from 1")
         }
-        if let drumTrack, drumTrack < 1 {
+        if let named = drumTrack.sourceTrack, named < 1 {
             throw KSPError.value("drum_track counts from 1")
         }
         if !(0...15 ~= drumChannel) {
             throw KSPError.value("drum_channel must be 0-15")
         }
-        if !midiTracks.isEmpty, let drumTrack, !midiTracks.contains(drumTrack) {
+        if !midiTracks.isEmpty, let named = drumTrack.sourceTrack, !midiTracks.contains(named) {
             throw KSPError.value(
-                "drum_track \(drumTrack) is not in the selection; a drum track must be one of "
+                "drum_track \(named) is not in the selection; a drum track must be one of "
                     + "the source tracks read")
         }
         try ImportOptions.checkRoutes(routes, drumTrack: drumTrack, midiTracks: midiTracks)
@@ -89,7 +105,7 @@ public struct ImportOptions: Sendable, Hashable {
     }
 
     private static func checkRoutes(
-        _ routes: [TrackRoute], drumTrack: Int?, midiTracks: Set<Int>
+        _ routes: [TrackRoute], drumTrack: DrumDesignation, midiTracks: Set<Int>
     ) throws {
         let tracks = Constants.trackItemIDs.count
         var sources: Set<Int> = []
@@ -120,12 +136,12 @@ public struct ImportOptions: Sendable, Hashable {
                         + "\(route.source):\(route.device) both name device track "
                         + "\(route.device); one device track holds one source track")
             }
-            if drumTrack == route.source && route.device != 1 {
+            if drumTrack.sourceTrack == route.source && route.device != 1 {
                 throw KSPError.value(
                     "route \(route.source):\(route.device) sends the drum track to device "
                         + "track \(route.device); only device track 1 carries a drum set")
             }
-            if let drumTrack, drumTrack != route.source && route.device == 1 {
+            if let named = drumTrack.sourceTrack, named != route.source && route.device == 1 {
                 throw KSPError.value(
                     "route \(route.source):1 collides with the drum track; only device track 1 "
                         + "carries a drum set")
@@ -920,8 +936,8 @@ extension MIDIImport {
         _ song: Song, _ options: ImportOptions, _ collector: Collector, _ firstTrack: Int = 1
     ) throws -> [(clip: Clip, track: Int, isDrum: Bool)] {
         var drum: Clip?
-        var melodic: [Clip]
-        if let named = options.drumTrack {
+        var melodic = song.clips
+        if let named = options.drumTrack.sourceTrack {
             let matching = song.clips.filter { $0.sourceTracks == [named] }
             if matching.isEmpty {
                 throw KSPError.value(
@@ -930,7 +946,7 @@ extension MIDIImport {
             }
             drum = merged(matching)
             melodic = song.clips.filter { $0.sourceTracks != [named] }
-        } else {
+        } else if options.drumTrack == .auto {
             let found = song.clips.firstIndex { $0.isPercussion(on: options.drumChannel) }
             drum = found.map { song.clips[$0] }
             melodic = song.clips.enumerated().filter { $0.offset != found }.map(\.element)
@@ -1028,7 +1044,7 @@ extension MIDIImport {
             let fitted = try fitDrumMap(drumClip)
             drumMap = fitted
             let found =
-                options.drumTrack != nil
+                options.drumTrack.sourceTrack != nil
                 ? "" : ", found on channel \(options.drumChannel + 1)"
             collector.add(
                 .drumMapFitted,

@@ -411,7 +411,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
             switch name {
             case "stepsPerBeat": _ = try ImportOptions(stepsPerBeat: value)
             case "midiTracks": _ = try ImportOptions(midiTracks: [value])
-            default: _ = try ImportOptions(drumTrack: value)
+            default: _ = try ImportOptions(drumTrack: .source(value))
             }
         }
     }
@@ -596,7 +596,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
 
     @Test func aDrumTrackIsWrittenToTrackOneInDrumMode() throws {
         let midi = songOf([[(0, 64, 100)], [(0, 36, 100), (ticksPerStep, 38, 100)]])
-        let options = try ImportOptions(drumTrack: 2, drumMap: DrumMap.chromatic(36))
+        let options = try ImportOptions(drumTrack: .source(2), drumMap: DrumMap.chromatic(36))
         let result = try MIDIImport.convertSong(midi, template(), options: options)
 
         let drum = try #require(result.plan.tracks.first { $0.isDrum })
@@ -618,9 +618,37 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(result.plan.tracks[0].isDrum)
     }
 
+    /// A DAW parking a melodic patch on channel 10 is not writing a kit.
+    @Test func noDrumsLeavesAPercussionTrackOnASequencerTrack() throws {
+        let midi = songOf([[(0, 36, 100), (ticksPerStep, 38, 100)]], channels: [9])
+        let options = try ImportOptions(drumTrack: .none)
+        let result = try MIDIImport.convertSong(midi, template(), options: options)
+
+        #expect(!result.plan.tracks.contains { $0.isDrum })
+        #expect(result.notes.map(\.step) == [1, 2])
+        #expect(result.notes.map(\.pitch) == [36, 38])
+
+        let project = try Reader.readProject(result.raw, sourceName: "no drums")
+        #expect(!project.track(1).drumMode)
+    }
+
+    /// Nothing was taken as drums, so there is no map to assume.
+    @Test func noDrumsFitsNoDrumMap() throws {
+        let midi = songOf([[(0, 36, 100)]], channels: [9])
+        let options = try ImportOptions(drumTrack: .none)
+        let result = try MIDIImport.convertSong(midi, template(), options: options)
+
+        #expect(result.plan.drumMap == nil)
+        #expect(!result.diagnostics.entries.contains { $0.code == .drumMapFitted })
+    }
+
+    @Test func theDefaultDesignationLooksForADrumTrack() throws {
+        #expect(try ImportOptions().drumTrack == .auto)
+    }
+
     @Test func aDrumPitchOutsideTheMapIsDroppedAndCounted() throws {
         let midi = songOf([[(0, 36, 100), (ticksPerStep, 120, 100)]])
-        let options = try ImportOptions(drumTrack: 1, drumMap: DrumMap.chromatic(36))
+        let options = try ImportOptions(drumTrack: .source(1), drumMap: DrumMap.chromatic(36))
         let result = try MIDIImport.convertSong(midi, template(), options: options)
 
         #expect(result.notes.map(\.lane) == [0])
@@ -631,7 +659,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
     @Test func anUnsetDrumMapIsFittedToTheSource() throws {
         let midi = songOf([[(0, 31, 100), (ticksPerStep, 34, 100)]])
         let result = try MIDIImport.convertSong(
-            midi, template(), options: ImportOptions(drumTrack: 1))
+            midi, template(), options: ImportOptions(drumTrack: .source(1)))
 
         let map = try #require(result.plan.drumMap)
         let lane0 = try map.noteForLane(0)
@@ -662,7 +690,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
     @Test func aNamedDrumTrackWinsOverTheDrumChannel() throws {
         let midi = songOf([[(0, 60, 100)], [(0, 36, 100)]], channels: [0, 11])
         let options = try ImportOptions(
-            drumTrack: 1, drumChannel: 11, drumMap: DrumMap.chromatic(36))
+            drumTrack: .source(1), drumChannel: 11, drumMap: DrumMap.chromatic(36))
         let result = try MIDIImport.convertSong(midi, template(), options: options)
 
         let drum = try #require(result.plan.tracks.first { $0.isDrum })
@@ -691,7 +719,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
     @Test func aNamedDrumTrackLeavesTheFittedMapNamingNoChannel() throws {
         let midi = songOf([[(0, 31, 100)]])
         let result = try MIDIImport.convertSong(
-            midi, template(), options: ImportOptions(drumTrack: 1))
+            midi, template(), options: ImportOptions(drumTrack: .source(1)))
 
         let fitted = try #require(result.diagnostics.entries.first { $0.code == .drumMapFitted })
         #expect(!fitted.detail.contains("found on channel"))
@@ -823,7 +851,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
 
     private func converted() throws -> ImportResult {
         try MIDIImport.convertSong(
-            m6(), Samples.raw("Default.KeyStepPro"), options: ImportOptions(drumTrack: 3))
+            m6(), Samples.raw("Default.KeyStepPro"), options: ImportOptions(drumTrack: .source(3)))
     }
 
     /// The acceptance file: four tracks, chords, tied notes and a split.
@@ -965,7 +993,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
 
     @Test func aNamedDrumTrackKeepsEveryChannelItHolds() throws {
         let midi = mixedOf([(0, 36, 0), (ticksPerStep, 38, 3)])
-        let options = try ImportOptions(drumTrack: 1, drumMap: DrumMap.chromatic(36))
+        let options = try ImportOptions(drumTrack: .source(1), drumMap: DrumMap.chromatic(36))
         let result = try MIDIImport.convertSong(midi, template(), options: options)
 
         #expect(result.plan.tracks.map(\.isDrum) == [true])
@@ -1058,7 +1086,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
 
     @Test func aRouteMayNotSendTheDrumTrackOffDeviceTrackOne() {
         let thrown = #expect(throws: KSPError.self) {
-            _ = try ImportOptions(drumTrack: 2, routes: [TrackRoute(source: 2, device: 3)])
+            _ = try ImportOptions(drumTrack: .source(2), routes: [TrackRoute(source: 2, device: 3)])
         }
         #expect(
             thrown?.description.contains("route 2:3 sends the drum track to device track 3")
@@ -1089,7 +1117,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
     @Test func routingTheDrumTrackToDeviceTrackOneIsAllowed() throws {
         let midi = songOf([[(0, 60, 100)], [(0, 36, 100)]])
         let options = try ImportOptions(
-            drumTrack: 2, drumMap: DrumMap.chromatic(36),
+            drumTrack: .source(2), drumMap: DrumMap.chromatic(36),
             routes: [TrackRoute(source: 2, device: 1)])
         let result = try MIDIImport.convertSong(midi, template(), options: options)
 
@@ -1097,9 +1125,20 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(result.plan.tracks.map(\.isDrum) == [true, false])
     }
 
+    /// Track 1 is an ordinary target once nothing claims it as a drum set.
+    @Test func noDrumsLetsARouteTakeDeviceTrackOne() throws {
+        let midi = songOf([[(0, 60, 100)], [(0, 36, 100)]], channels: [0, 9])
+        let options = try ImportOptions(
+            drumTrack: .none, routes: [TrackRoute(source: 2, device: 1)])
+        let result = try MIDIImport.convertSong(midi, template(), options: options)
+
+        #expect(routed(result) == [[1, 2], [2, 1]])
+        #expect(!result.plan.tracks.contains { $0.isDrum })
+    }
+
     @Test func aRouteOntoDeviceTrackOneIsRefusedBesideANamedDrumTrack() {
         let thrown = #expect(throws: KSPError.self) {
-            _ = try ImportOptions(drumTrack: 2, routes: [TrackRoute(source: 3, device: 1)])
+            _ = try ImportOptions(drumTrack: .source(2), routes: [TrackRoute(source: 3, device: 1)])
         }
         #expect(thrown?.description.contains("route 3:1 collides with the drum track") == true)
     }
@@ -1116,13 +1155,14 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
     /// Otherwise assign reports it as holding no notes, which sends the user to fix the file.
     @Test func aDrumTrackOutsideTheSelectionIsRefused() {
         let thrown = #expect(throws: KSPError.self) {
-            _ = try ImportOptions(midiTracks: [2, 3], drumTrack: 5)
+            _ = try ImportOptions(midiTracks: [2, 3], drumTrack: .source(5))
         }
         #expect(thrown?.description.contains("drum_track 5 is not in the selection") == true)
     }
 
     @Test func aDrumTrackInsideTheSelectionIsAllowed() throws {
-        #expect(try ImportOptions(midiTracks: [2, 5], drumTrack: 5).drumTrack == 5)
+        #expect(
+            try ImportOptions(midiTracks: [2, 5], drumTrack: .source(5)).drumTrack == .source(5))
     }
 
     @Test func aRouteInsideTheSelectionIsAllowed() throws {
@@ -1500,7 +1540,7 @@ private func codes(_ result: ImportResult) -> Set<Code> {
     @Test func aFlatVelocityReachesDrumTriggers() throws {
         let midi = songOf([[(0, 36, 20), (ticksPerStep, 37, 90)]])
         let options = try ImportOptions(
-            drumTrack: 1, drumMap: DrumMap.chromatic(36),
+            drumTrack: .source(1), drumMap: DrumMap.chromatic(36),
             flatVelocity: MIDIExport.defaultFlatVelocity)
         let result = try MIDIImport.convertSong(midi, template(), options: options)
 

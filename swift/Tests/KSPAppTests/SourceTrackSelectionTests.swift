@@ -385,7 +385,8 @@ import Testing
 
         #expect(throws: KSPError.self) {
             _ = try ImportOptions(
-                midiTracks: [1, 2, 3, 4], drumTrack: selection.drumTrack,
+                midiTracks: [1, 2, 3, 4],
+                drumTrack: selection.drumTrack.map(DrumDesignation.source) ?? .auto,
                 routes: try resolveRoutes(nil, selection.routeSpec))
         }
     }
@@ -399,10 +400,11 @@ import Testing
         #expect(selection.blockReason != nil)
 
         let options = try ImportOptions(
-            midiTracks: [1, 2, 3, 4], drumTrack: selection.drumTrack,
+            midiTracks: [1, 2, 3, 4],
+            drumTrack: selection.drumTrack.map(DrumDesignation.source) ?? .auto,
             routes: try resolveRoutes(nil, selection.routeSpec))
 
-        #expect(options.drumTrack == 1)
+        #expect(options.drumTrack == .source(1))
     }
 
     @Test func aroutingTheAppAllowsIsOneTheCoreAccepts() throws {
@@ -412,11 +414,12 @@ import Testing
         #expect(selection.blockReason == nil)
 
         let options = try ImportOptions(
-            midiTracks: [1, 2, 3, 4], drumTrack: selection.drumTrack,
+            midiTracks: [1, 2, 3, 4],
+            drumTrack: selection.drumTrack.map(DrumDesignation.source) ?? .auto,
             routes: try resolveRoutes(nil, selection.routeSpec))
 
         #expect(options.routes == [TrackRoute(source: 3, device: 2)])
-        #expect(options.drumTrack == 4)
+        #expect(options.drumTrack == .source(4))
     }
 
     /// The source row takes the colour of the row it lands in, so the colour is a property of the
