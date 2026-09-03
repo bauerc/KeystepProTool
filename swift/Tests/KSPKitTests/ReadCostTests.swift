@@ -30,6 +30,7 @@ struct ReadCostTests {
         let reps = environment["KSP_BENCH_REPS"].flatMap(Int.init) ?? Self.defaultReps
         let url = RepoData.projectFiles.appending(path: name)
 
+        Reader.cacheClear()  // so the warm-up is genuinely cold whatever ran before it
         _ = try Self.oneRep(url)  // discarded warm-up
         var samples: [Rep] = []
         for _ in 0..<reps { samples.append(try Self.oneRep(url)) }
@@ -45,8 +46,8 @@ struct ReadCostTests {
                 name: name, size: size, reps: reps, samples: samples, floor: floor, peak: peak))
     }
 
-    /// One read with nothing warm, then a second `Reader.load` of the same path -- which the
-    /// Swift core does not cache, so it is a full re-parse where Python's is an `lru_cache` hit.
+    /// One read with nothing warm, then a second `Reader.load` of the same path -- a `ReadCache`
+    /// hit since #238. The phases bypass it, so they still time the parser rather than the cache.
     private static func oneRep(_ url: URL) throws -> Rep {
         let start = ContinuousClock.now
         let data = try Data(contentsOf: url)
