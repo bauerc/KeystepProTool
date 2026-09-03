@@ -643,7 +643,8 @@ frontier. Forty issues, each a vertical slice sized to a PR a human can read in 
 
 **Requirement D1's evidence is [`analysis/Read_Cost.md`](analysis/Read_Cost.md)** — what a read
 costs in each core, where the cost goes, and the bytes held per byte of file, reproducible through
-`./scripts/bench_read.sh`.
+`./scripts/bench_read.sh`. Its §8 is the defect that measurement found and #238 fixed: one drop
+parsed the project once per reader, and `Reader.load` now caches.
 
 **Most of it is wiring, not format work.** `ExportRunner.Options` and `ConvertRunner.Options`
 already carry `split`, `track`, `pattern`, `passes`, `includeStale`, `includeDisabled`,

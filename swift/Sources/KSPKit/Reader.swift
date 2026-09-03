@@ -3,8 +3,17 @@ import Foundation
 /// The trailing index is a step for 48/49 but a note ordinal for 50/54 and 109-113 / 117-121;
 /// one index space for both decodes to values that look almost right (spec 4).
 public enum Reader {
+    static let cache = ReadCache(capacity: 16)
+
+    static var cacheStatistics: ReadCache.Statistics { cache.statistics }
+
+    /// A read never checks whether the file moved under it, so a writer of one must say so.
+    public static func clearCache() { cache.clear() }
+
     public static func load(contentsOf url: URL) throws -> Project {
-        try readProject(LenientJSON.load(contentsOf: url), sourceName: url.lastPathComponent)
+        try cache.project(at: url) {
+            try readProject(LenientJSON.load(contentsOf: $0), sourceName: $0.lastPathComponent)
+        }
     }
 
     public static func readProject(_ raw: RawProject, sourceName: String = "") throws -> Project {

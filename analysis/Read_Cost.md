@@ -20,8 +20,8 @@ M15 is what makes that matter. The app parses a whole project to draw the previe
 a person is standing in front of — so the question is no longer academic, and the answer turned
 out to name a real defect (§8).
 
-This document is measurement only. Nothing under `src/`, `swift/Sources/` or the parity scripts
-changed to produce it.
+The measurement changed nothing under `src/`, `swift/Sources/` or the parity scripts. It did name
+a defect, and §8 is the record of that being fixed.
 
 ## 1. The model: three phases
 
@@ -38,8 +38,11 @@ Three facts about the subject bind the harness:
 - **`src/ksp/reader.py:25` — `load` is `@lru_cache(maxsize=16)`.** A repeat measurement in one
   process measures the cache, not the parser, so the harness calls `cache_clear()` between reps
   and reports the cached call separately as its own figure.
-- **Swift's `Reader.load` has no equivalent.** That asymmetry is itself a finding, and §8 is what
-  came of it.
+- **Swift's `Reader.load` has the same cache since #238** — `ReadCache`, sixteen entries, keyed on
+  the path. It did not when this document was first written, and that asymmetry is the finding §8
+  came of. Its harness clears it once before the warm-up; unlike the Python one it needs no clear
+  between reps, because the Swift phases call `LenientJSON.parse` and `readProject` directly and
+  never reach the cache at all.
 - **`project_files/captures/` is gitignored**, so a worktree or CI sees only the six tracked
   samples. The bench measures what it finds and names on stderr anything it skipped; an absent
   sample is never a failure.
@@ -74,20 +77,27 @@ above it in Swift. **Two significant figures is all any of this supports**: quot
 Milliseconds, from one `./scripts/bench_read.sh` run. Phases and **total** are mins; the last two
 columns show what that run's median total and repeated-`load` figure were beside them.
 
+**The Swift `repeat` column is from a later run**, after #238 gave `Reader.load` its cache; every
+other figure is the original one. The two runs put the Swift totals within 5 % of each other, and
+§3.2's release row already mixes runs this way. Before #238 the column read 109–119 ms — a full
+re-parse, which is the whole of what #238 removed. Two runs, as §6 requires: a single-file run put
+`project_5` at 0.0061 ms against the 0.0055 ms tabled here, which for a four-orders-of-magnitude
+change is agreement.
+
 | file | core | bytes | json | decode | **total** | median total | repeat |
 |---|---|---:|---:|---:|---:|---:|---:|
 | `Default` | python | 0.30 | 7.6 | 14.5 | **22.5** | 22.7 | 0.000050 |
-| | swift | 0.44 | 82.8 | 26.1 | **109.8** | 110.3 | 112.1 |
+| | swift | 0.44 | 82.8 | 26.1 | **109.8** | 110.3 | 0.0062 |
 | `baseline` | python | 0.29 | 7.7 | 14.4 | **22.4** | 23.0 | 0.000048 |
-| | swift | 0.44 | 87.3 | 25.7 | **113.5** | 114.4 | 115.8 |
+| | swift | 0.44 | 87.3 | 25.7 | **113.5** | 114.4 | 0.0055 |
 | `initial_project` | python | 0.29 | 7.7 | 14.9 | **22.9** | 24.1 | 0.000050 |
-| | swift | 0.44 | 83.7 | 29.0 | **113.8** | 114.7 | 113.1 |
+| | swift | 0.44 | 83.7 | 29.0 | **113.8** | 114.7 | 0.0064 |
 | `project_5` | python | 0.29 | 7.7 | 14.6 | **22.7** | 22.8 | 0.000048 |
-| | swift | 0.46 | 80.0 | 26.1 | **107.1** | 108.9 | 109.1 |
+| | swift | 0.46 | 80.0 | 26.1 | **107.1** | 108.9 | 0.0055 |
 | `project_9` | python | 0.30 | 7.6 | 14.5 | **22.8** | 23.1 | 0.000048 |
-| | swift | 0.47 | 89.1 | 26.0 | **115.6** | 116.7 | 119.4 |
+| | swift | 0.47 | 89.1 | 26.0 | **115.6** | 116.7 | 0.0059 |
 | `user_empty_project` | python | 0.29 | 7.4 | 13.9 | **21.7** | 22.4 | 0.000050 |
-| | swift | 0.42 | 88.2 | 25.7 | **114.7** | 117.3 | 117.3 |
+| | swift | 0.42 | 88.2 | 25.7 | **114.7** | 117.3 | 0.0081 |
 
 The six samples land within a few percent of each other in both cores, and the spread that is
 there does not track the file — `project_5` is fastest in Swift on this run and mid-pack on the
@@ -190,9 +200,10 @@ memory-constrained caller has to budget for.
 - **"bytes off disk" is bytes out of the page cache.** Every rep reads a file the warm-up just
   read. A genuinely cold read is a different measurement and this harness does not make it.
 - **The `lru_cache` hit is timed in a batch of 1,000** — one hit is 48 ns, below
-  `perf_counter`'s resolution. Swift's repeat column is a single call, because there it is a full
-  re-parse and needs no batching. The two columns are the same question with different
-  arithmetic behind them.
+  `perf_counter`'s resolution. Swift's repeat column is still a single call: a `ReadCache` hit is
+  ~5 µs, three orders of magnitude above `ContinuousClock`'s resolution, so it needs no batching.
+  Both columns now measure a cache hit, but only one of them measures it usefully — the Swift
+  figure carries a dictionary lookup's worth of noise the Python one has averaged away.
 - **The Swift figures carry the test runner's process with them.** The RSS floor is subtracted,
   but a suite host is not an app.
 - **The §5 decomposition has no Swift counterpart.** The Swift harness has only `task_info`'s
@@ -236,16 +247,46 @@ memory after its timing reps and by then `keys.key` is warm. To see it, call
 the decoded project has four tracks — a real test that happens to time itself. §3.2's release row
 comes from adding `-c release` to that command.
 
-## 8. Follow-up
+## 8. What came of this: #238
 
-**[#238](https://github.com/bauerc/KeystepProTool/issues/238) — Swift parses the dropped project
-twice.** `SummaryRunner.run` (`swift/Sources/KSPRun/SummaryRunner.swift:29`) parses the file to
-build the preview grid, and `ExportRunner.run`
-(`swift/Sources/KSPRun/ExportRunner.swift:103`) parses the same file again, on the dry-run
-preview and again on the real convert. Nothing carries the parsed `Project` between them —
-`Conversion.summarise` and `Conversion.run` are separate detached tasks.
+**[#238](https://github.com/bauerc/KeystepProTool/issues/238) — the dropped project was parsed
+once per reader. Fixed.**
 
-At §3.2's release figure that is ~67 ms paid twice for one drop, and three times for a dry run
-followed by a convert. Python does not have the defect, because `ksp.reader.load` is
-`@lru_cache(maxsize=16)` and the repeat costs 48 ns. Filed rather than fixed: #161 changes no app
-code.
+Four call sites read the same dropped file, and each was a full re-parse:
+
+| call site | when it fired |
+|---|---|
+| `SummaryRunner.run` — `swift/Sources/KSPRun/SummaryRunner.swift:29` | on drop, for the preview grid |
+| `ArrangementRunner.run` — `swift/Sources/KSPRun/ArrangementRunner.swift:42` | on drop, and again on **every settings change** |
+| `ExportRunner.run` — `swift/Sources/KSPRun/ExportRunner.swift:103` | the dry-run preview, then the real convert |
+| `DumpRunner.run` — `swift/Sources/KSPRun/DumpRunner.swift:48` | `dump`, once per process |
+
+Nothing carried the parsed `Project` between them: `Conversion.summarise`, `Conversion.arrange`
+and `Conversion.run` are separate detached tasks. At §3.2's release figure a drop followed by a
+convert paid ~67 ms four times over. The arrangement re-parse was the worst of them and is not in
+the issue as filed — `AppModel.arrangementKey` is keyed on the whole of `Settings`, so every tick
+and every slider in the options panel bought another 67 ms parse of 3.5 MB.
+
+The fix is `ReadCache` (`swift/Sources/KSPKit/ReadCache.swift`), a sixteen-entry LRU of decoded
+`Project`s behind `Reader.load`, so all four sites share one parse without an API change.
+Parsing happens outside the lock: two callers racing the same cold path both parse, as they both
+did before, and every read after that hits.
+
+**The measured result, `project_5`, mins of five reps: a repeat read falls from a full re-parse to
+a dictionary lookup.** The first two columns are the pre-#238 measurement of §3.2 and of the issue;
+the third is this change.
+
+| configuration | one full read | a second `load` of the same path — before | after |
+|---|---:|---:|---:|
+| Swift, release | 67 ms | 68 ms | **0.0025 ms** |
+| Swift, debug | 107 ms | 109 ms | **0.0048 ms** |
+
+What the cache does *not* do is make the model cheaper to hold, and **what it retains is not
+measured in the core that retains it.** A full cache holds sixteen decoded projects for the life of
+the process. §5's 145 KB per project is the Python figure, and §6 is explicit that it has no Swift
+counterpart — so read ~2.3 MB as the order of magnitude it implies, not as a Swift measurement.
+Either way it sits against the 63 MB of transient headroom one parse already needs.
+
+**No invalidation.** The cache is keyed on the path and never checks whether the file moved
+underneath it. Nothing edits a project mid-session, so a `stat` on every read would buy nothing.
+A process that did rewrite a file it had already read would have to call `Reader.clearCache()`.
