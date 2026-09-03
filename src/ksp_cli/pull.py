@@ -2,16 +2,25 @@
 
 from pathlib import Path
 from time import monotonic
-from typing import Annotated
+from typing import Annotated, NamedTuple
 
 import typer
 
 from ksp import constants, sysex
 from ksp.bulk_read import DEFAULT_VERSION, Transport, read_raw
 from ksp.lenient_json import canonical, dump_path
+from ksp.midi_export import ExportOptions, export_project
 from ksp.reader import read_project
+from ksp_cli.drum_map_option import CONFIG_PATH, default_drum_map
+from ksp_cli.export import summary
 from ksp_cli.loading import load_template
-from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
+from ksp_cli.reporting import (
+    OUTPUT_PANEL,
+    VerboseInPanel,
+    fail,
+    print_report,
+    refuse_existing,
+)
 from ksp_cli.runner import standalone
 from ksp_cli.usb_transport import DEFAULT_TIMEOUT_MS, TransportError, UsbMidiTransport
 
@@ -52,6 +61,27 @@ def _version(transport: Transport) -> str:
         return sysex.parse_identity(reply)
     except ValueError as exc:
         raise ValueError(f"{exc}: {reply.hex()}") from exc
+
+
+class _MidiPlan(NamedTuple):
+    """Where --also-midi's export goes, and how it is rendered."""
+
+    path: Path
+    options: ExportOptions
+
+
+def _midi_plan(output: Path, *, prog: str) -> _MidiPlan:
+    """The sidecar for *output*, refusing a name whose .mid is *output* itself."""
+    path = output.with_suffix(".mid")
+    if path == output:
+        fail(
+            f"--also-midi cannot write {output}: the project and its MIDI would be the "
+            "same file; name the project .KeyStepPro",
+            prog=prog,
+            code=2,
+        )
+    # The map is a usage error, so the config file is read before the walk, not after.
+    return _MidiPlan(path, ExportOptions(drum_map=default_drum_map(CONFIG_PATH, prog=prog)))
 
 
 def pull_command(
@@ -108,6 +138,17 @@ def pull_command(
             ),
         ),
     ] = None,
+    also_midi: Annotated[
+        bool,
+        typer.Option(
+            "--also-midi",
+            rich_help_panel=OUTPUT_PANEL,
+            help=(
+                "also write the .mid beside it, the file ksp2midi with no options would "
+                "make from what was read"
+            ),
+        ),
+    ] = False,
     force: Annotated[
         bool,
         typer.Option(
@@ -128,10 +169,10 @@ def pull_command(
     # write of the same size are most of a run that is not at the device.
     began = monotonic()
 
-    # Before the device is touched: a read costs ten seconds of the operator's
-    # attention, and refusing it afterwards wastes them.
-    if output.exists() and not force:
-        fail(f"{output} already exists (use --force to overwrite)", prog=PROG, code=1)
+    # Everything that can refuse the run happens here: a read costs ten seconds
+    # of the operator's attention, and refusing it afterwards wastes them.
+    plan = _midi_plan(output, prog=PROG) if also_midi else None
+    refuse_existing([output] if plan is None else [output, plan.path], force=force, prog=PROG)
 
     template_keys = load_template(template, prog=PROG).keys()
 
@@ -152,7 +193,8 @@ def pull_command(
 
     # What was read has to parse as a project before it is worth writing.
     try:
-        project = read_project(raw, source_name=str(output))
+        # The bare name, as reader.load gives it: it becomes the MIDI track name.
+        project = read_project(raw, source_name=output.name)
     except ValueError as exc:
         fail(f"the device's answer is not a readable project: {exc}", prog=PROG, code=1)
 
@@ -162,13 +204,29 @@ def pull_command(
     except OSError as exc:
         fail(str(exc), prog=PROG, code=1)
 
-    print_report(project.diagnostics, prog=PROG, verbose=verbose)
+    report = project.diagnostics
+    midi_summary = None
+    if plan is not None:
+        exported = export_project(project, plan.options)
+        report = report.merge(exported.diagnostics)
+        if exported.is_empty:
+            print_report(report, prog=PROG, verbose=verbose)
+            fail(f"{output} was written, but no pattern holds notes to export", prog=PROG, code=1)
+        try:
+            exported.midi.save(plan.path)
+        except OSError as exc:
+            fail(str(exc), prog=PROG, code=1)
+        midi_summary = summary(exported, plan.path)
+
+    print_report(report, prog=PROG, verbose=verbose)
     if not quiet:
         notes = sum(len(pattern.notes) for track in project.tracks for pattern in track.patterns)
         total = monotonic() - began
         print(f"read slot {slot} in {reading:.1f} s, {transport.requests} requests")
         print(f"wrote {output}")
         print(f"  {notes} note(s), {project.tempo_bpm:g} BPM")
+        if midi_summary is not None:
+            print(midi_summary)
         print(f"  {total:.1f} s total, {reading:.1f} s of it at the device")
 
 

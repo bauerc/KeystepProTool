@@ -1,6 +1,8 @@
 """Printing diagnostics and failures, and the --verbose flag both tools share."""
 
 import sys
+from collections.abc import Iterable
+from pathlib import Path
 from typing import Annotated, NoReturn, TextIO
 
 import typer
@@ -24,6 +26,15 @@ def fail(message: str, *, prog: str, code: int) -> NoReturn:
     The codes are load-bearing: 1 for a file or format failure, 2 for a usage one."""
     print(f"{prog}: {message}", file=sys.stderr)
     raise typer.Exit(code)
+
+
+def refuse_existing(destinations: Iterable[Path], *, force: bool, prog: str) -> None:
+    """Stop before overwriting any of *destinations*, naming every one that is there."""
+    if force:
+        return
+    existing = [str(path) for path in destinations if path.exists()]
+    if existing:
+        fail(f"{', '.join(existing)} already exists (use --force to overwrite)", prog=prog, code=1)
 
 
 def print_report(

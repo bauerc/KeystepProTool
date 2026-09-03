@@ -545,8 +545,24 @@ The request count is the walk's own, so it can be compared against the figure in
 [spec 7.8](./analysis/format/SysEx_Direct_Transfer_Path.md). The gap between the two times is the
 3.5 MB template parse and the write, neither of which is the device's fault.
 
+`--also-midi` writes the `.mid` as well, from the same read:
+
+```sh
+sudo uv run ksp-pull my_project.KeyStepPro --slot 3 --also-midi
+```
+
+It goes beside the project, `my_project.mid`, and it is byte for byte the file
+`ksp2midi my_project.KeyStepPro` would have written — same defaults, same drum map, same warnings.
+It saves the second command; it does not export differently, so reach for `ksp2midi` whenever you
+want anything but the defaults. Both destinations are checked before the device is touched and
+`--force` covers both; naming the project itself `.mid` is refused, because the two files would be
+one and the export would land on the project. A project whose patterns hold no notes still writes
+the `.KeyStepPro` and then fails: a MIDI file with nothing in it would look like success.
+
 This is the one command that needs the USB extra from [Installation](#installation); the raw-USB
-dependency is optional because most people converting files have no reason to install libusb.
+dependency is optional because most people converting files have no reason to install libusb. That
+extra is also why `ksp-pull` alone has no Swift counterpart and stands outside the two CLIs'
+byte-for-byte contract — `--also-midi` inherits that exception rather than making a new one.
 
 Three things about the read:
 
@@ -561,6 +577,7 @@ Three things about the read:
 | option | what it does |
 | --- | --- |
 | `--slot N` | which of the sixteen projects to read (default 1) |
+| `--also-midi` | also write the `.mid` beside the project, as `ksp2midi` with no options would |
 | `--force` | overwrite an existing output file |
 | `--quiet`, `-v` | suppress the summary; list every diagnostic |
 | `--timeout MS` | how long to wait for each reply (default 1000) |
