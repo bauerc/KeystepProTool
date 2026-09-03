@@ -3,18 +3,8 @@ import Testing
 
 @testable import KSPKit
 
-/// The addresses one reply fills, in payload order. `bulk_read.keys_for`, which the port
-/// does not otherwise need yet: a plan is only worth checking by what it covers.
-private func keys(for request: ReadRequest) -> [String] {
-    guard let count = request.count, let last = request.indices.last else {
-        return [Keys.key(request.item, request.param)]
-    }
-    let head = Array(request.indices.dropLast())
-    return (0..<count).map { Keys.key(request.item, request.param, indices: head + [last + $0]) }
-}
-
-private func addresses(_ requests: [ReadRequest]) -> [String] {
-    requests.flatMap(keys(for:))
+private func addresses(_ requests: [ReadRequest]) throws -> [String] {
+    try requests.flatMap(BulkRead.keysFor)
 }
 
 /// The pattern a track key belongs to, read off the key itself.
@@ -71,7 +61,7 @@ private func number(_ field: Substring) throws -> Int {
 
     @Test func thePlanAddressesEveryKeyExactlyOnce() throws {
         // 117,783 is what MCC's own 8,951 requests cover. Fewer frames, not fewer addresses.
-        let covered = addresses(try BulkFast.iterRequests())
+        let covered = try addresses(try BulkFast.iterRequests())
 
         #expect(covered.count == 117_783)
         #expect(Set(covered).count == 117_783)
@@ -123,8 +113,9 @@ private func number(_ field: Substring) throws -> Int {
     func thePatternWalkCoversEveryKeyOfThatPattern(pattern: Int) throws {
         // H2.4 reads one pattern of one track, and must not quietly drop a key the full walk
         // would have filled for it.
-        let whole = addresses(try BulkFast.iterRequests())
-        let subset = Set(addresses(try BulkFast.iterPatternRequests(item: 123, pattern: pattern)))
+        let whole = try addresses(try BulkFast.iterRequests())
+        let subset = Set(
+            try addresses(try BulkFast.iterPatternRequests(item: 123, pattern: pattern)))
         let owed = Set(
             whole.filter { $0.hasPrefix("123_") && patternOf($0) == pattern })
 
@@ -141,7 +132,8 @@ private func number(_ field: Substring) throws -> Int {
     func thePatternWalkReadsTheScalarsThatMakeAPatternPlay(pattern: Int) throws {
         // Step count, swing, pattern bits and data state are per-pattern scalars coalesced
         // into one range at index 1.
-        let names = Set(addresses(try BulkFast.iterPatternRequests(item: 123, pattern: pattern)))
+        let names = Set(
+            try addresses(try BulkFast.iterPatternRequests(item: 123, pattern: pattern)))
         let owed: Set = [
             "123_40_\(pattern)", "123_97_\(pattern)", "123_98_\(pattern)",
             "123_99_\(pattern)", "123_100_\(pattern)",
@@ -153,7 +145,7 @@ private func number(_ field: Substring) throws -> Int {
     @Test func thePatternWalkCarriesTheIndexLessScalars() throws {
         // Tempo lives in 120_70/71/72 and has no pattern index, so a walk that kept only
         // indexed requests would export the pattern at the wrong speed.
-        let names = Set(addresses(try BulkFast.iterPatternRequests(item: 123, pattern: 1)))
+        let names = Set(try addresses(try BulkFast.iterPatternRequests(item: 123, pattern: 1)))
 
         #expect(Set(["120_70", "120_71", "120_72"]).isSubset(of: names))
         #expect(names.contains("123_40_1"))
@@ -186,7 +178,7 @@ private func number(_ field: Substring) throws -> Int {
         // often for exactly the addresses it asked for before.
         let split = try BulkFast.iterRequests(maxCount: 32)
 
-        #expect(addresses(split) == addresses(try BulkFast.iterRequests()))
+        #expect(try addresses(split) == addresses(try BulkFast.iterRequests()))
         #expect(split.map { $0.count ?? 0 }.max() == 32)
         #expect(split.count > BulkFast.requestCount)
     }

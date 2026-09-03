@@ -13,6 +13,7 @@ than against a reimplementation of the same expectations. See ROADMAP.md M1.
 | `recall_project_2_tape.txt` | The same exchange against **project 2**, so the slot byte is pinned against a second value |
 | `import_project_3_tape.txt` | MCC writing that data back into **project 3** — the write direction, 8,951 write/ack pairs |
 | `bulk_fast_requests.txt` | The 2,044 coalesced read requests, so both cores' plans are held to one sequence |
+| `bulk_read_walk.txt` | The 1,007 of those the gate leaves to ask over `recall_tape.txt`, so both cores skip the same addresses |
 
 The three tapes are distilled by `tools/make_recall_tape.py` from captures under
 `usb_midi_investigation/`, which are gitignored — the tapes are tracked so the
@@ -25,12 +26,15 @@ truncated `0xFF` write at `123_117_1` stalled the link and MCC recovered with a
 fresh identity request. Keeping it in the data rather than only in prose is why
 `test_capture_evidence.py` can assert it. See spec section 7.6.
 
-`bulk_fast_requests.txt` is the one file here that **is** regenerable, and the
-one that pins code rather than hardware: `uv run python
-tools/gen_bulk_fast_fixture.py` rewrites it from `ksp.bulk_fast`. It exists
-because `KSPKit` transcribes `bulk_plan`'s generated table separately, so
-nothing in Swift would notice a regenerated Python one. Each line is
-`<item> <param> <indices|-> <count|->`. See
+`bulk_fast_requests.txt` and `bulk_read_walk.txt` are the two files here that
+**are** regenerable, and the ones that pin code rather than hardware: `uv run
+python tools/gen_bulk_fast_fixture.py` rewrites the first from
+`ksp.bulk_fast`, `uv run python tools/gen_bulk_read_walk_fixture.py` the second
+from `ksp.bulk_read` over the recall tape. They exist because `KSPKit`
+transcribes `bulk_plan`'s generated table separately, so nothing in Swift would
+notice a regenerated Python one; the walk file adds which of those requests the
+pool gate settles without asking, which agreeing on a count cannot show. Each
+line of both is `<item> <param> <indices|-> <count|->`. See
 [ADR 0003](../../docs/adr/0003-the-swift-core-reads-the-fast-plan-only.md).
 
 ## Provenance, and why it matters

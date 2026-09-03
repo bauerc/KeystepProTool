@@ -14,6 +14,16 @@ public struct ReadRequest: Sendable, Hashable {
     }
 }
 
+extension ReadRequest: CustomStringConvertible {
+    /// Python's dataclass repr, so a desynchronised read reads the same out of either core.
+    public var description: String {
+        let joined = indices.map(String.init).joined(separator: ", ")
+        let tuple = indices.count == 1 ? "(\(joined),)" : "(\(joined))"
+        return "ReadRequest(item=\(item), param=\(param), indices=\(tuple), "
+            + "count=\(count.map(String.init) ?? "None"))"
+    }
+}
+
 /// The KeyStep Pro's SysEx read protocol as frames: pure encode and decode, no I/O (spec 7).
 public enum Sysex {
     public static let header: [UInt8] = [0xF0, 0x00, 0x20, 0x6B, 0x7F, 0x42]
@@ -168,7 +178,8 @@ public enum Sysex {
         return frame[start..<terminator].map(Int.init)
     }
 
-    private static func hexByte(_ value: UInt8) -> String {
+    /// Python's `{value:#04x}`, so a byte reads the same in either core's diagnostics.
+    static func hexByte(_ value: UInt8) -> String {
         "0x" + (value < 0x10 ? "0" : "") + String(value, radix: 16)
     }
 }
