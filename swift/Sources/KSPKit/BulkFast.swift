@@ -125,10 +125,9 @@ public enum BulkFast {
         var total = 0
         for request in ordered {
             guard request.indices.last == start + total else {
-                let broken = request.indices.last.map(String.init) ?? "none"
                 throw KSPError.value(
-                    "\(first.item)_\(first.param) run breaks at index \(broken), "
-                        + "expected \(start + total)")
+                    "\(first.item)_\(first.param) run breaks at \(request.indices), "
+                        + "expected index \(start + total)")
             }
             total += request.count ?? 0
         }

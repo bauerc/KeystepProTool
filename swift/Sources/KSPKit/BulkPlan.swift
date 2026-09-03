@@ -1,12 +1,5 @@
 /// Which addresses to ask the device for, and in what order (spec 7).
-///
-/// Transcribed from `src/ksp/bulk_plan.py`, which `tools/gen_bulk_plan.py` generates from
-/// Arturia's own `bulkOperation` descriptor. A firmware regeneration must reach both tables;
-/// `BulkFastTests` holds this one to the request sequence the Python plan produces.
-///
-/// A group is `(low, high, leaves)` and a leaf is `(item, params, dims, count)`. `idx` inside a
-/// dimension stands for the group's current index, and a nil `count` marks the index-less short
-/// form. Emission order is group, index, leaf, param, then the product of the dimensions.
+/// Transcribed from `src/ksp/bulk_plan.py`; regenerating that reaches this too (ADR 0003).
 enum BulkPlan {
     /// Stands in for the enclosing multibulk index inside a dimension.
     static let idx = -1
@@ -15,6 +8,7 @@ enum BulkPlan {
         let item: Int
         let params: [Int]
         let dims: [[Int]]
+        /// nil is the index-less short form.
         let count: Int?
 
         init(_ item: Int, _ params: [Int], _ dims: [[Int]], _ count: Int?) {
