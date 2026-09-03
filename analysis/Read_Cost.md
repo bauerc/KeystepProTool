@@ -40,7 +40,9 @@ Three facts about the subject bind the harness:
   and reports the cached call separately as its own figure.
 - **Swift's `Reader.load` has the same cache since #238** — `ReadCache`, sixteen entries, keyed on
   the path. It did not when this document was first written, and that asymmetry is the finding §8
-  came of. Its harness clears it between reps for the reason the Python one does.
+  came of. Its harness clears it once before the warm-up; unlike the Python one it needs no clear
+  between reps, because the Swift phases call `LenientJSON.parse` and `readProject` directly and
+  never reach the cache at all.
 - **`project_files/captures/` is gitignored**, so a worktree or CI sees only the six tracked
   samples. The bench measures what it finds and names on stderr anything it skipped; an absent
   sample is never a failure.
@@ -78,7 +80,9 @@ columns show what that run's median total and repeated-`load` figure were beside
 **The Swift `repeat` column is from a later run**, after #238 gave `Reader.load` its cache; every
 other figure is the original one. The two runs put the Swift totals within 5 % of each other, and
 §3.2's release row already mixes runs this way. Before #238 the column read 109–119 ms — a full
-re-parse, which is the whole of what #238 removed.
+re-parse, which is the whole of what #238 removed. Two runs, as §6 requires: a single-file run put
+`project_5` at 0.0061 ms against the 0.0055 ms tabled here, which for a four-orders-of-magnitude
+change is agreement.
 
 | file | core | bytes | json | decode | **total** | median total | repeat |
 |---|---|---:|---:|---:|---:|---:|---:|
@@ -268,16 +272,20 @@ The fix is `ReadCache` (`swift/Sources/KSPKit/ReadCache.swift`), a sixteen-entry
 Parsing happens outside the lock: two callers racing the same cold path both parse, as they both
 did before, and every read after that hits.
 
-**The measured result, `project_5`, min of five reps: a repeat read falls from a full re-parse to
-a dictionary lookup.**
+**The measured result, `project_5`, mins of five reps: a repeat read falls from a full re-parse to
+a dictionary lookup.** The first two columns are the pre-#238 measurement of §3.2 and of the issue;
+the third is this change.
 
 | configuration | one full read | a second `load` of the same path — before | after |
 |---|---:|---:|---:|
-| Swift, release | 68 ms | 67 ms | **0.0025 ms** |
-| Swift, debug | 108 ms | 109 ms | **0.0048 ms** |
+| Swift, release | 67 ms | 68 ms | **0.0025 ms** |
+| Swift, debug | 107 ms | 109 ms | **0.0048 ms** |
 
-What the cache does *not* do is make the model cheaper to hold: sixteen entries at §5's 145 KB is
-~2.3 MB, against the 63 MB of transient headroom one parse already needs.
+What the cache does *not* do is make the model cheaper to hold, and **what it retains is not
+measured in the core that retains it.** A full cache holds sixteen decoded projects for the life of
+the process. §5's 145 KB per project is the Python figure, and §6 is explicit that it has no Swift
+counterpart — so read ~2.3 MB as the order of magnitude it implies, not as a Swift measurement.
+Either way it sits against the 63 MB of transient headroom one parse already needs.
 
 **No invalidation.** The cache is keyed on the path and never checks whether the file moved
 underneath it. Nothing edits a project mid-session, so a `stat` on every read would buy nothing.
