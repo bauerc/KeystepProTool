@@ -82,12 +82,6 @@ struct SegmentationGrid: Equatable {
             return parts.joined(separator: " · ")
         }
 
-        /// Worded as `convert` words it, so the preview and the result read alike.
-        private static func located(_ patterns: [Int]) -> String {
-            guard let first = patterns.first, let last = patterns.last else { return "no pattern" }
-            return patterns.count == 1 ? "pattern \(first)" : "patterns \(first)-\(last)"
-        }
-
         /// Neighbouring columns only. The planner splits into consecutive patterns, but a rail
         /// drawn across a gap would claim a run that is not there.
         private static func runs(in patterns: [Int]) -> [AppLayout.Rail] {

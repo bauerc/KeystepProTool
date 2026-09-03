@@ -378,6 +378,54 @@ import Testing
         #expect(!summary.tracks.isEmpty)
     }
 
+    @Test func adroppedProjectIsLaidOutOnTheTimeAxis() async throws {
+        let model = model()
+
+        model.accept(projectFixture)
+
+        #expect(try #require(model.staged).arrangement == .loading)
+        #expect(model.arrangementKey != nil)
+
+        await model.arrange()
+
+        guard case .ready(let summary) = try #require(model.staged).arrangement else {
+            Issue.record("the staged project should have been arranged")
+            return
+        }
+        #expect(summary.slots.map(\.patternNumber) == [1])
+        #expect(summary.lengthTicks == 7680)
+    }
+
+    /// A MIDI file has no Pattern to lay out until it has been imported, so nothing is arranged.
+    @Test func adroppedMIDIFileIsNeverArranged() async throws {
+        let model = model()
+
+        model.accept(midiFixture)
+        await model.arrange()
+
+        #expect(model.arrangementKey == nil)
+        #expect(try #require(model.staged).arrangement == .loading)
+    }
+
+    /// The lanes follow the ticks, for the reason the import's plan follows its own: a preview of
+    /// a timeline the export will not produce is worse than none.
+    @Test func untickingASlotTakesItOffTheTimeAxis() async throws {
+        let model = model()
+        model.accept(projectFixture)
+        await model.summarise()
+        await model.arrange()
+
+        model.toggle(pattern: 1)
+        await model.arrange()
+
+        guard case .ready(let summary) = try #require(model.staged).arrangement else {
+            Issue.record("the staged project should have been arranged again")
+            return
+        }
+        #expect(summary.isEmpty)
+        #expect(summary.lengthTicks == 0)
+    }
+
     /// Four of its six tracks hold notes, so the default ticks them all and nothing is refused.
     @Test func asummarisedSongBlocksNothing() async throws {
         let model = model()

@@ -93,6 +93,14 @@ struct StagedPlan: Equatable {
     func findings(verbose: Bool) -> [String] { rows(verbose: verbose).map(\.text) }
 }
 
+/// Where the export would lay each Pattern on one timeline. Export-only, so a staged MIDI file
+/// leaves it at ``loading``, as ``SegmentationState`` is left by a staged project.
+enum ArrangementState: Equatable {
+    case loading
+    case ready(ArrangementSummary)
+    case failed(String)
+}
+
 /// What the import would lay down. Import-only, so a staged project leaves it at ``loading``.
 enum SegmentationState: Equatable {
     case loading
@@ -189,6 +197,21 @@ enum Conversion {
             return .failed(outcome.message ?? "That MIDI file could not be read.")
         }
         return .ready(StagedPlan(summary: summary, diagnostics: outcome.diagnostics))
+    }
+
+    /// Detached for the reason ``summarise`` is. It renders and arranges but writes nothing, so it
+    /// resolves no destination and needs none.
+    static func arrange(_ job: Job, settings: Settings) async -> ArrangementState {
+        guard case .toMIDI(let source) = job else {
+            return .loading
+        }
+        let outcome = await Task.detached(priority: .userInitiated) {
+            ArrangementRunner.run(settings.exportOptions(source: source, output: nil))
+        }.value
+        guard let summary = outcome.summary else {
+            return .failed(outcome.message ?? "That project could not be laid out.")
+        }
+        return .ready(summary)
     }
 
     static func outcome(

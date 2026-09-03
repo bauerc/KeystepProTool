@@ -341,6 +341,48 @@ enum AppLayout {
         guard steps > 0 else { return 0 }
         return cellWidth * CGFloat(min(steps, stepCeiling)) / CGFloat(stepCeiling)
     }
+    /// The arrange lanes, on the map's own origin so a lane sits under the row it belongs to. The
+    /// whole run scales into this, which is what keeps the pane scrolling vertically only.
+    static var axisWidth: CGFloat { gridWidth - gridOrigin }
+    static let laneHeight: CGFloat = 30
+    static let laneSpacing: CGFloat = 3
+    static let regionRadius: CGFloat = 3
+    static let boundaryWidth: CGFloat = 1
+    static let markHeight: CGFloat = 2
+    /// A sixteenth at the default division is under a point wide once a long run is scaled down.
+    static let markMinWidth: CGFloat = 1.5
+    /// The block's ink, held off full so a mark reads as content rather than as lettering.
+    static let markInkOpacity = 0.75
+    /// Narrower than this a region holds fewer points than it has events, where a sketch is noise
+    /// rather than rhythm; the block still carries the length.
+    static let marksMinimumWidth: CGFloat = 14
+    /// A single digit at ``TypeScale/smallValue``, which is the narrowest a number stays a number.
+    static let regionLabelMinimumWidth: CGFloat = 11
+    static let regionLabelInset: CGFloat = 2
+    /// Clamped into rather than scaled to the file's own range, for the reason ``Density`` clamps.
+    /// The device shows these as C1 to C6.
+    static let markPitchWindow = 36...96
+
+    /// Where a tick falls on the axis, and how wide a run of ticks draws. A run of no length
+    /// scales nothing, so the whole axis is left empty rather than divided by zero.
+    static func x(ofTick tick: Int, in totalTicks: Int) -> CGFloat {
+        guard totalTicks > 0 else { return 0 }
+        return axisWidth * CGFloat(tick) / CGFloat(totalTicks)
+    }
+
+    static func width(ofTicks ticks: Int, in totalTicks: Int) -> CGFloat {
+        guard totalTicks > 0, ticks > 0 else { return 0 }
+        return axisWidth * CGFloat(min(ticks, totalTicks)) / CGFloat(totalTicks)
+    }
+
+    /// A mark's height in its lane, high pitch at the top, clamped into ``markPitchWindow``.
+    static func y(ofPitch pitch: Int) -> CGFloat {
+        let clamped = min(max(pitch, markPitchWindow.lowerBound), markPitchWindow.upperBound)
+        let position =
+            CGFloat(clamped - markPitchWindow.lowerBound) / CGFloat(markPitchWindow.count - 1)
+        return (laneHeight - markHeight) * (1 - position)
+    }
+
     /// One segment of a limit meter, and the gap between two.
     static let meterSegmentWidth: CGFloat = 6
     static let meterSegmentGap: CGFloat = 2
