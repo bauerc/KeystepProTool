@@ -132,7 +132,8 @@ struct Settings: Sendable, Equatable, Codable {
             dryRun: dryRun, verbose: verbose, configPath: drumMapConfigPath)
     }
 
-    func exportOptions(source: URL, output: URL) -> ExportRunner.Options {
+    /// `output` is `nil` for a preview, which resolves no destination because it writes nothing.
+    func exportOptions(source: URL, output: URL?) -> ExportRunner.Options {
         // Splitting makes `output` the folder the runner fills, which is what `Conversion.plan`
         // hands over. The three replacements are the runner's own defaults inverted.
         ExportRunner.Options(

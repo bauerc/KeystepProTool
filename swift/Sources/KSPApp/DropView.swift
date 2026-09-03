@@ -457,6 +457,7 @@ struct DropView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: staged.id) { await model.summarise() }
         .task(id: model.segmentationKey) { await model.segment() }
+        .task(id: model.arrangementKey) { await model.arrange() }
     }
 
     @ViewBuilder
@@ -469,12 +470,16 @@ struct DropView: View {
             Label(message, systemImage: "exclamationmark.triangle")
                 .font(TypeScale.label).foregroundStyle(palette.warning).textSelection(.enabled)
         case .project(let summary):
-            grid(
-                PatternGrid(summary), selection: staged.selection,
-                length: ExportLength(
-                    summary, selection: staged.selection,
-                    repeatCount: model.settings.repeatCount,
-                    isSplit: model.settings.splitPerPattern))
+            VStack(alignment: .leading, spacing: 12) {
+                grid(
+                    PatternGrid(summary), selection: staged.selection,
+                    length: ExportLength(
+                        summary, selection: staged.selection,
+                        repeatCount: model.settings.repeatCount,
+                        isSplit: model.settings.splitPerPattern))
+                Divider()
+                arrangement(staged.arrangement)
+            }
         case .song(let summary):
             VStack(alignment: .leading, spacing: 12) {
                 trackList(
@@ -857,6 +862,95 @@ struct DropView: View {
             Text(GridSelection.legend).font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Read-only, and relaid whenever the ticks or a setting move it: where the export puts each
+    /// Pattern in time, which the map above cannot say because its columns are all one width.
+    @ViewBuilder
+    private func arrangement(_ state: ArrangementState) -> some View {
+        switch state {
+        case .loading:
+            ProgressView("Laying out the patterns…").controlSize(.small)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle")
+                .font(TypeScale.label).foregroundStyle(palette.warning).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        case .ready(let summary):
+            lanes(ArrangeLanes(summary))
+        }
+    }
+
+    private func lanes(_ lanes: ArrangeLanes) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(lanes.header).font(TypeScale.label).foregroundStyle(palette.mutedInk)
+
+            VStack(alignment: .leading, spacing: AppLayout.laneSpacing) {
+                ForEach(lanes.lanes, id: \.track) { lane($0, boundaries: lanes.boundaries) }
+            }
+
+            Text(ArrangeLanes.legend).font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The row head the map draws, so a lane and the row above it read as one track seen twice.
+    private func lane(_ lane: ArrangeLanes.Lane, boundaries: [ArrangeLanes.Boundary]) -> some View {
+        HStack(spacing: 0) {
+            rowHead(
+                readout: lane.readout, name: lane.name, isDrum: lane.isDrum, dimmed: lane.isEmpty
+            )
+            .help(lane.detail)
+            Color.clear.frame(width: AppLayout.labelGap, height: 1)
+            ZStack(alignment: .topLeading) {
+                Rectangle().fill(palette.surface)
+                ForEach(lane.regions, id: \.x) { region($0, track: lane.track) }
+                // Over the regions: a boundary is where one Pattern gives way to the next, and a
+                // region drawn short of it would otherwise hide the line that says so.
+                ForEach(boundaries, id: \.x) { boundary in
+                    Rectangle()
+                        .fill(palette.rule)
+                        .frame(width: AppLayout.boundaryWidth, height: AppLayout.laneHeight)
+                        .offset(x: boundary.x)
+                }
+            }
+            .frame(width: AppLayout.axisWidth, height: AppLayout.laneHeight, alignment: .topLeading)
+            .clipped()
+        }
+    }
+
+    /// Fill is identity and held-or-empty; the marks are the rhythm. Density stays in the map's
+    /// cells above, which is the one place a count per step is known.
+    private func region(_ region: ArrangeLanes.Region, track: Int) -> some View {
+        let fill =
+            region.isEmpty
+            ? palette.inert : DeviceColor.track(track).over(palette.ground, alpha: Density.floor)
+        let ink = DeviceColor.ink(on: fill)
+        return ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: AppLayout.regionRadius).fill(fill)
+            if region.showsMarks {
+                ForEach(region.marks.indices, id: \.self) { index in
+                    // Drawn in the ink rather than the hue: the block already says which track
+                    // this is, and a mark has to stay legible on either face.
+                    Rectangle()
+                        .fill(ink.opacity(0.75))
+                        .frame(
+                            width: max(region.marks[index].width, AppLayout.markMinWidth),
+                            height: AppLayout.markHeight
+                        )
+                        .offset(x: region.marks[index].x, y: region.marks[index].y)
+                }
+            }
+            if region.showsLabel {
+                Text(region.label)
+                    .font(TypeScale.smallValue)
+                    .foregroundStyle(region.isEmpty ? palette.mutedInk : ink)
+                    .padding(.leading, 2)
+            }
+        }
+        .frame(width: region.width, height: AppLayout.laneHeight, alignment: .topLeading)
+        .clipped()
+        .offset(x: region.x)
+        .help(region.detail)
     }
 
     private func columnHeader(_ column: Int, state: GridSelection.Tick) -> some View {

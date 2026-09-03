@@ -139,8 +139,37 @@ Three orthogonal channels, so no combination of states turns to mud:
 
 Chain membership lives on the **chain rail** beneath the row, never inside a cell.
 
-A slot cell **cannot show rhythm**. No per-step data reaches the summaries; density, length and
-kind are all that exist. Do not add per-step plumbing to make a cell prettier.
+A slot cell **cannot show rhythm**. The project summary carries density, length and kind and
+nothing finer, and a cell 26 points wide could not draw 64 steps if it did. Do not add per-step
+plumbing to make a cell prettier — where rhythm belongs is the arrange lanes below.
+
+### The arrange lanes
+
+Four lanes under the map, one per device track, on **one shared time axis** — the map's own origin
+and width, so a lane sits under the row it belongs to. It answers what a grid of equal columns
+cannot: how the four tracks sit against each other in real time.
+
+Everything positional comes from the export's own `Arrangement`; the view scales ticks into the
+axis and decides nothing about where a Pattern falls.
+
+| Channel | Means | Never means |
+|---|---|---|
+| **Position and width** | the geometry — a region starts at its slot's boundary and runs the length **its own track** plays | anything about export |
+| **Fill** | identity, and held versus empty — the track hue washed over the ground, `inert` where the Pattern renders no event | density |
+| **Marks** | rhythm — one bar per event, placed by tick and by pitch | a pitch a reader can name |
+| **The figure** | which Pattern the region is, SF Mono | |
+| **Boundary rules** | where one Pattern gives way to the next, drawn over the regions | |
+
+**A region is drawn at its own length inside the shared span, never stretched to fill it.** A track
+looping shorter than its neighbours is the instrument working, and the gap it leaves is the whole
+reason these lanes exist — the same thing the `track-lengths-differ` finding says in prose.
+
+The marks are a **sketch, not a piano roll**: pitch maps through a fixed window (MIDI 36–96, `C1`
+to `C6` in the device's numerals) and clamps at its edges, for the reason density clamps rather
+than scales — a region means the same thing in every project. They are drawn in the block's own
+ink, not the track hue, so they stay legible on either face, and they are **dropped entirely**
+below a width where they would outnumber the points available. Nothing here is editable, and no
+mark is ever labelled with a note name.
 
 ### Row heads
 

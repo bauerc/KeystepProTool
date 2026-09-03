@@ -270,7 +270,7 @@ import Testing
         #expect(model.segmentationKey != nil)
     }
 
-    /// A project is planned by the grid it draws, not by the importer.
+    /// A project is laid out by the exporter rather than planned by the importer.
     @Test func aprojectPlansNoImport() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -278,6 +278,21 @@ import Testing
 
         model.accept(projectFixture)
 
+        #expect(model.segmentationKey == nil)
+        #expect(model.arrangementKey != nil)
+    }
+
+    /// Both faces draw the lanes, so both wait on the same layout.
+    @Test(arguments: Mode.allCases)
+    func eitherFaceLaysOutTheExport(mode: Mode) throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.mode = mode
+
+        model.accept(projectFixture)
+
+        #expect(model.arrangementKey != nil)
         #expect(model.segmentationKey == nil)
     }
 

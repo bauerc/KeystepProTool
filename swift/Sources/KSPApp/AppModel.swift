@@ -22,6 +22,8 @@ final class AppModel {
         var summary: SummaryState = .loading
         /// What the import would lay down, replanned whenever the selection or a setting moves.
         var segmentation: SegmentationState = .loading
+        /// Where the export would lay each Pattern, rearranged on the same terms.
+        var arrangement: ArrangementState = .loading
         var selection = GridSelection()
         var sourceSelection = SourceTrackSelection()
         /// Identity, not path: dropping the same file again is a new drop and needs a new read.
@@ -218,15 +220,15 @@ final class AppModel {
 
     /// The file and the options the runner will be handed. Keyed on the whole of ``Settings``
     /// rather than the fields a plan reads, so a setting added later cannot be forgotten here.
-    struct SegmentationKey: Equatable {
+    struct PreviewKey: Equatable {
         let drop: UUID
         let settings: Settings
     }
 
     /// `nil` over a project, which is planned by the grid it draws rather than by the importer.
-    var segmentationKey: SegmentationKey? {
+    var segmentationKey: PreviewKey? {
         guard let staged, case .toProject = staged.job else { return nil }
-        return SegmentationKey(
+        return PreviewKey(
             drop: staged.id,
             settings: settings.selecting(staged.sourceSelection))
     }
@@ -239,6 +241,23 @@ final class AppModel {
         // figures for the wrong set of tracks are the one thing a preview must never show.
         guard segmentationKey == key, case .staged(var current) = phase else { return }
         current.segmentation = answer
+        phase = .staged(current)
+    }
+
+    /// `nil` over a MIDI file, which has no Pattern to lay out until it has been imported.
+    var arrangementKey: PreviewKey? {
+        guard let staged, case .toMIDI = staged.job else { return nil }
+        return PreviewKey(drop: staged.id, settings: settings.selecting(staged.selection))
+    }
+
+    func arrange() async {
+        guard let staged, let key = arrangementKey else { return }
+        let answer = await Conversion.arrange(staged.job, settings: key.settings)
+
+        // A late answer must not overwrite a view whose drop or ticks have since moved on, for the
+        // reason ``segment`` guards its own.
+        guard arrangementKey == key, case .staged(var current) = phase else { return }
+        current.arrangement = answer
         phase = .staged(current)
     }
 

@@ -93,13 +93,7 @@ public enum ExportRunner {
 
         let exportOptions: ExportOptions
         do {
-            exportOptions = try ExportOptions(
-                ticksPerBeat: options.ticksPerBeat, drumMap: drumMap,
-                drumChannel: options.drumChannel, defaultGate: options.defaultGate,
-                applySwing: options.applySwing, applyTimeShift: options.applyTimeShift,
-                includeStale: options.includeStale, includeDisabled: options.includeDisabled,
-                markers: options.markers, passes: options.passes,
-                flatVelocity: options.flatVelocity, repeatCount: options.repeatCount)
+            exportOptions = try Self.exportOptions(options, drumMap: drumMap)
         } catch {
             return fail("\(error)", code: 2)
         }
@@ -170,6 +164,18 @@ public enum ExportRunner {
                 .joined(separator: "\n")
         }
         return result
+    }
+
+    /// Shared with the arrangement preview, so the two cannot render under different options. The
+    /// wording of a refusal stays with each caller, which is what keeps this off the parity gate.
+    static func exportOptions(_ options: Options, drumMap: DrumMap) throws -> ExportOptions {
+        try ExportOptions(
+            ticksPerBeat: options.ticksPerBeat, drumMap: drumMap,
+            drumChannel: options.drumChannel, defaultGate: options.defaultGate,
+            applySwing: options.applySwing, applyTimeShift: options.applyTimeShift,
+            includeStale: options.includeStale, includeDisabled: options.includeDisabled,
+            markers: options.markers, passes: options.passes,
+            flatVelocity: options.flatVelocity, repeatCount: options.repeatCount)
     }
 
     /// Pair each rendered file with where it goes. Nothing is written yet.
