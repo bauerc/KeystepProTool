@@ -13,6 +13,7 @@ from ksp.sysex import ReadRequest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
 import gen_bulk_fast_fixture
+import gen_bulk_read_walk_fixture
 
 TAPES = ("recall_tape.txt", "recall_project_2_tape.txt")
 ADDRESSED = 117783
@@ -61,6 +62,15 @@ def test_the_swift_port_is_held_to_this_plan(fixtures_dir: Path) -> None:
     """KSPKit transcribes the table separately (ADR 0003), so the fixture is what binds the two
     cores. Regenerate it with ``uv run python tools/gen_bulk_fast_fixture.py``."""
     assert gen_bulk_fast_fixture.render() == (fixtures_dir / "bulk_fast_requests.txt").read_text()
+
+
+def test_the_swift_port_is_held_to_this_walk(fixtures_dir: Path) -> None:
+    """Agreeing on 1,007 requests is not agreeing on which 1,007, and only the gate decides that.
+    Regenerate it with ``uv run python tools/gen_bulk_read_walk_fixture.py``."""
+    walk = (fixtures_dir / "bulk_read_walk.txt").read_text()
+
+    assert gen_bulk_read_walk_fixture.render() == walk
+    assert len(walk.splitlines()) == EXPECTED_REQUESTS["recall_tape.txt"]
 
 
 def test_every_request_is_one_the_device_answers() -> None:
