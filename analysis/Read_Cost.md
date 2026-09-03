@@ -281,4 +281,4 @@ What the cache does *not* do is make the model cheaper to hold: sixteen entries 
 
 **No invalidation.** The cache is keyed on the path and never checks whether the file moved
 underneath it. Nothing edits a project mid-session, so a `stat` on every read would buy nothing.
-A process that did rewrite a file it had already read would have to call `Reader.cacheClear()`.
+A process that did rewrite a file it had already read would have to call `Reader.clearCache()`.

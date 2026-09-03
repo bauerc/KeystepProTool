@@ -30,7 +30,7 @@ struct ReadCostTests {
         let reps = environment["KSP_BENCH_REPS"].flatMap(Int.init) ?? Self.defaultReps
         let url = RepoData.projectFiles.appending(path: name)
 
-        Reader.cacheClear()  // so the warm-up is genuinely cold whatever ran before it
+        Reader.clearCache()  // so the warm-up is genuinely cold whatever ran before it
         _ = try Self.oneRep(url)  // discarded warm-up
         var samples: [Rep] = []
         for _ in 0..<reps { samples.append(try Self.oneRep(url)) }

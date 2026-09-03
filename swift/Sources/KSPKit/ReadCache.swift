@@ -1,15 +1,15 @@
 import Foundation
 
 /// Decoded projects, most recently used last, so the four reads one drop makes cost one parse.
-public final class ReadCache: @unchecked Sendable {
-    public struct Statistics: Sendable, Hashable {
-        public let hits: Int
-        public let misses: Int
-        public let count: Int
-        public let capacity: Int
+final class ReadCache: @unchecked Sendable {
+    struct Statistics: Sendable, Hashable {
+        let hits: Int
+        let misses: Int
+        let count: Int
+        let capacity: Int
     }
 
-    public let capacity: Int
+    let capacity: Int
 
     private let lock = NSLock()
     private var entries: [URL: Project] = [:]
@@ -21,13 +21,13 @@ public final class ReadCache: @unchecked Sendable {
         self.capacity = capacity
     }
 
-    public var statistics: Statistics {
+    var statistics: Statistics {
         lock.withLock {
             Statistics(hits: hits, misses: misses, count: entries.count, capacity: capacity)
         }
     }
 
-    public func clear() {
+    func clear() {
         lock.withLock {
             entries.removeAll()
             order.removeAll()
@@ -36,8 +36,8 @@ public final class ReadCache: @unchecked Sendable {
         }
     }
 
-    /// `parse` runs outside the lock, so a cold read of one file does not queue behind another's.
-    /// Two callers racing the same path both parse, as they both do today; every read after hits.
+    /// Two callers racing one cold path both parse: `parse` runs outside the lock deliberately,
+    /// so a cold read of one file never queues behind another file's.
     func project(at url: URL, parse: (URL) throws -> Project) throws -> Project {
         if let cached = lock.withLock({ recall(url) }) { return cached }
         let project = try parse(url)
