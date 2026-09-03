@@ -1,5 +1,6 @@
 """The efficient read plan against the addresses MCC's plan covers."""
 
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -8,6 +9,10 @@ import pytest
 from conftest import DeviceModel, tape_values
 from ksp import bulk_fast, bulk_plan, bulk_read, lenient_json, sysex
 from ksp.sysex import ReadRequest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+
+import gen_bulk_fast_fixture
 
 TAPES = ("recall_tape.txt", "recall_project_2_tape.txt")
 ADDRESSED = 117783
@@ -50,6 +55,12 @@ def test_the_fast_plan_covers_exactly_what_mcc_covers() -> None:
 
 def test_the_fast_plan_declares_its_own_length() -> None:
     assert len(list(bulk_fast.iter_requests())) == bulk_fast.REQUEST_COUNT == 2044
+
+
+def test_the_swift_port_is_held_to_this_plan(fixtures_dir: Path) -> None:
+    """KSPKit transcribes the table separately (ADR 0003), so the fixture is what binds the two
+    cores. Regenerate it with ``uv run python tools/gen_bulk_fast_fixture.py``."""
+    assert gen_bulk_fast_fixture.render() == (fixtures_dir / "bulk_fast_requests.txt").read_text()
 
 
 def test_every_request_is_one_the_device_answers() -> None:
