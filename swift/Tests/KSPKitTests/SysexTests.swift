@@ -1,4 +1,3 @@
-import Foundation
 import Testing
 
 @testable import KSPKit
@@ -7,23 +6,24 @@ import Testing
     @Test func aScalarRequestIsTheShortForm() throws {
         // Frame 13 of the capture: paramId 37, itemId 120, no indices.
         let request = ReadRequest(item: 120, param: 37)
-        #expect(try hex(Sysex.buildReadRequest(request)) == "f000206b7f4201012578f7")
+        #expect(try hexString(Sysex.buildReadRequest(request)) == "f000206b7f4201012578f7")
     }
 
     @Test func aThreeIndexRequestCarriesItsCount() throws {
         // 48 for track 1, pattern 1, slot 1, steps 17-32.
         let request = ReadRequest(item: 123, param: 48, indices: [1, 1, 17], count: 16)
-        #expect(try hex(Sysex.buildReadRequest(request)) == "f000206b7f420b0130037b01011110f7")
+        #expect(
+            try hexString(Sysex.buildReadRequest(request)) == "f000206b7f420b0130037b01011110f7")
     }
 
     @Test func aScalarReplyYieldsOneValue() throws {
-        let (request, values) = try Sysex.parseReply(bytes("f000206b7f420201257803f7"))
+        let (request, values) = try Sysex.parseReply(hexBytes("f000206b7f420201257803f7"))
         #expect(request == ReadRequest(item: 120, param: 37))
         #expect(values == [3])
     }
 
     @Test func aLongReplyYieldsExactlyCountValues() throws {
-        let frame = bytes("f000206b7f420c01540379010501107f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7ff7")
+        let frame = try hexBytes("f000206b7f420c01540379010501107f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7ff7")
         let (request, values) = try Sysex.parseReply(frame)
         #expect(request == ReadRequest(item: 121, param: 84, indices: [1, 5, 1], count: 16))
         #expect(values == Array(repeating: 127, count: 16))
@@ -46,22 +46,21 @@ import Testing
             "f000206b7f421c00f7",  // the ack, not a reply
             "f000206b7f420c01540379010501107f",  // truncated, no terminator
         ])
-    func aFrameThatIsNotAReplyIsRefused(frame: String) {
-        #expect(throws: KSPError.self) { try Sysex.parseReply(bytes(frame)) }
+    func aFrameThatIsNotAReplyIsRefused(frame: String) throws {
+        let bytes = try hexBytes(frame)
+        #expect(throws: KSPError.self) { try Sysex.parseReply(bytes) }
     }
 
-    @Test func aReplyThatUnderdeliversIsRefused() {
+    @Test func aReplyThatUnderdeliversIsRefused() throws {
         // The count byte is a promise.
-        let frame = bytes("f000206b7f420c0130037b0101111001020304f7")
+        let frame = try hexBytes("f000206b7f420c0130037b0101111001020304f7")
         let thrown = #expect(throws: KSPError.self) { try Sysex.parseReply(frame) }
         #expect(thrown == .value("reply carried 4 values, header promised 16"))
     }
 
-    @Test func aReplyTooShortForItsOwnHeaderIsRefused() {
-        // Python indexes past the end here and raises IndexError; the port refuses it as a value.
-        let thrown = #expect(throws: KSPError.self) {
-            try Sysex.parseReply(bytes("f000206b7f420cf7"))
-        }
+    @Test func aReplyTooShortForItsOwnHeaderIsRefused() throws {
+        let frame = try hexBytes("f000206b7f420cf7")
+        let thrown = #expect(throws: KSPError.self) { try Sysex.parseReply(frame) }
         #expect(thrown == .value("read reply ends inside its own header"))
     }
 
@@ -75,13 +74,14 @@ import Testing
     @Test func byte7CarriesTheSlotInTheShortForm() throws {
         // The same frame as the capture's 13, addressed at slot 2 instead.
         let request = ReadRequest(item: 120, param: 37)
-        #expect(try hex(Sysex.buildReadRequest(request, slot: 2)) == "f000206b7f4201022578f7")
+        #expect(try hexString(Sysex.buildReadRequest(request, slot: 2)) == "f000206b7f4201022578f7")
     }
 
     @Test func byte7CarriesTheSlotInTheLongForm() throws {
         let request = ReadRequest(item: 123, param: 48, indices: [1, 1, 17], count: 16)
         #expect(
-            try hex(Sysex.buildReadRequest(request, slot: 2)) == "f000206b7f420b0230037b01011110f7")
+            try hexString(Sysex.buildReadRequest(request, slot: 2))
+                == "f000206b7f420b0230037b01011110f7")
     }
 
     @Test func theSlotDefaultsToOne() throws {
@@ -108,7 +108,6 @@ import Testing
     }
 
     @Test func aRequestFieldWiderThanAByteIsRefused() {
-        // Python's bytes() is what refuses these; the port has to say so itself.
         #expect(throws: KSPError.self) {
             try Sysex.buildReadRequest(ReadRequest(item: 300, param: 37))
         }
@@ -136,32 +135,36 @@ import Testing
     }
 
     @Test func theSlotComesBackOffAReply() throws {
-        #expect(try Sysex.parseSlot(bytes("f000206b7f420201257803f7")) == 1)
-        #expect(try Sysex.parseSlot(bytes("f000206b7f420202257803f7")) == 2)
+        #expect(try Sysex.parseSlot(hexBytes("f000206b7f420201257803f7")) == 1)
+        #expect(try Sysex.parseSlot(hexBytes("f000206b7f420202257803f7")) == 2)
     }
 
-    @Test func aFrameThatIsTooShortHasNoSlot() {
-        #expect(throws: KSPError.self) { try Sysex.parseSlot(bytes("f000206b7f42")) }
+    @Test func aFrameThatIsTooShortHasNoSlot() throws {
+        let frame = try hexBytes("f000206b7f42")
+        #expect(throws: KSPError.self) { try Sysex.parseSlot(frame) }
     }
 
     @Test func thePrologueNamesItsSlot() throws {
         // Spec 7.5: `05 <slot>` is the first frame of a read.
-        #expect(try hex(Sysex.prologue()) == "f000206b7f420501f7")
-        #expect(try hex(Sysex.prologue(2)) == "f000206b7f420502f7")
+        #expect(try hexString(Sysex.prologue()) == "f000206b7f420501f7")
+        #expect(try hexString(Sysex.prologue(2)) == "f000206b7f420502f7")
     }
 
     @Test(arguments: 1...16)
     func everySlotGetsThePrologueItNames(slot: Int) throws {
-        #expect(try hex(Sysex.prologue(slot)) == "f000206b7f4205" + hex([UInt8(slot)]) + "f7")
+        #expect(
+            try hexString(Sysex.prologue(slot)) == "f000206b7f4205" + hexString([UInt8(slot)])
+                + "f7"
+        )
     }
 
     @Test func theAckIsTheOneFrameWithoutASlot() {
-        #expect(hex(Sysex.ack) == "f000206b7f421c00f7")
+        #expect(hexString(Sysex.ack) == "f000206b7f421c00f7")
     }
 
     @Test func theIdentityRequestIsTheUniversalEnvelope() {
         // Frame 7 of the capture.
-        #expect(hex(Sysex.identityRequest) == "f07e7f0601f7")
+        #expect(hexString(Sysex.identityRequest) == "f07e7f0601f7")
     }
 
     @Test func theIdentityReplyGivesTheFirmwareVersion() throws {
@@ -175,37 +178,8 @@ import Testing
             "f07e7f06020001610200090025140502f7",  // a different manufacturer
             "f07e7f060200206b02000900251405f7",  // a byte short
         ])
-    func aFrameThatIsNotAnIdentityReplyIsRefused(frame: String) {
-        #expect(throws: KSPError.self) { try Sysex.parseIdentity(bytes(frame)) }
+    func aFrameThatIsNotAnIdentityReplyIsRefused(frame: String) throws {
+        let bytes = try hexBytes(frame)
+        #expect(throws: KSPError.self) { try Sysex.parseIdentity(bytes) }
     }
-}
-
-/// Frame 9 of the capture, the device's answer to the identity request.
-private func identityReply() throws -> [UInt8] {
-    let capture = RepoData.root.appending(
-        path: "usb_midi_investigation/sysex_until_project_1_track_1_pattern_1.jsonl")
-    for line in try String(contentsOf: capture, encoding: .utf8).split(separator: "\n") {
-        guard
-            let frame = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
-            frame["frame_number"] as? Int == 9,
-            let sysex = frame["sysex_hex"] as? String
-        else { continue }
-        return bytes(sysex)
-    }
-    throw KSPError.value("no frame 9 in \(capture.path)")
-}
-
-private func bytes(_ hex: String) -> [UInt8] {
-    var frame: [UInt8] = []
-    var index = hex.startIndex
-    while index < hex.endIndex {
-        let next = hex.index(index, offsetBy: 2)
-        frame.append(UInt8(hex[index..<next], radix: 16) ?? 0)
-        index = next
-    }
-    return frame
-}
-
-private func hex(_ frame: [UInt8]) -> String {
-    frame.map { ($0 < 0x10 ? "0" : "") + String($0, radix: 16) }.joined()
 }

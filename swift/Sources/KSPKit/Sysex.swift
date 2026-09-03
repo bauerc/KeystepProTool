@@ -151,7 +151,7 @@ public enum Sysex {
         }
     }
 
-    /// Python's `bytes()` is what refuses an out-of-range field; nothing in Swift does.
+    /// Throwing rather than trapping: a field too wide for a byte is a bad request, not a crash.
     private static func bytes(_ values: [Int]) throws -> [UInt8] {
         try values.map { value in
             guard let byte = UInt8(exactly: value) else {
@@ -161,8 +161,7 @@ public enum Sysex {
         }
     }
 
-    /// Everything between `start` and the terminator, empty where the frame ends first --
-    /// Python's `frame[start:-1]`, which never raises.
+    /// Everything between `start` and the terminator, empty where the frame ends first.
     private static func payload(of frame: [UInt8], from start: Int) -> [Int] {
         let terminator = frame.count - 1
         guard start < terminator else { return [] }
