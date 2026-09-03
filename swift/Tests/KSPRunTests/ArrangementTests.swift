@@ -60,12 +60,14 @@ import Testing
         #expect(try Self.lane(summary, 1).isDrum)
         #expect(try !Self.lane(summary, 3).isDrum)
         #expect(try Self.lane(summary, 1).name == "Track 1 (drum)")
+        // A lane holding nothing plays no note of either kind, so it is not a drum lane.
+        #expect(try !Self.lane(summary, 2).isDrum)
+        #expect(try Self.lane(summary, 2).name == "Track 2")
     }
 
     @Test func itCarriesTheExportsOwnUnequalLengthsFinding() throws {
         let outcome = ArrangementRunner.run(Self.options("project_9.KeyStepPro"))
 
-        #expect(outcome.diagnostics.entries.contains { $0.code == .trackLengthsDiffer })
         #expect(
             outcome.summary?.diagnostics.entries.contains { $0.code == .trackLengthsDiffer } == true
         )

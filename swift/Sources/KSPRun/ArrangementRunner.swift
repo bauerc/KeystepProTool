@@ -5,20 +5,16 @@ import KSPMIDI
 /// A dry run of the export's own arithmetic: it reads, renders, arranges, and writes nothing. It
 /// runs the two calls `exportProject` runs, so the timeline it shows is the one the `.mid` gets.
 public enum ArrangementRunner {
+    /// No `diagnostics` beside the summary, as `SegmentationRunner.Outcome` carries: the findings
+    /// are on ``ArrangementSummary`` itself, where every other summary in this module keeps them.
     public struct Outcome: Sendable {
         public let summary: ArrangementSummary?
         /// Why there is no summary, in the words the runner would have failed with.
         public let message: String?
-        /// What the export already knows it will report, `track-lengths-differ` among it.
-        public let diagnostics: Report
 
-        public init(
-            summary: ArrangementSummary? = nil, message: String? = nil,
-            diagnostics: Report = Report()
-        ) {
+        public init(summary: ArrangementSummary? = nil, message: String? = nil) {
             self.summary = summary
             self.message = message
-            self.diagnostics = diagnostics
         }
     }
 
@@ -52,8 +48,7 @@ public enum ArrangementRunner {
             return Outcome(
                 summary: ArrangementSummary(
                     renderings: renderings, arrangement: arrangement,
-                    ticksPerBeat: options.ticksPerBeat),
-                diagnostics: arrangement.diagnostics)
+                    ticksPerBeat: options.ticksPerBeat))
         } catch let error as KSPError {
             return Outcome(message: "\(options.path.relativePath): \(error)")
         } catch {

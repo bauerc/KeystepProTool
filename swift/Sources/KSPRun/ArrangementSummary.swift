@@ -50,16 +50,19 @@ public struct ArrangementSummary: Sendable, Hashable {
         self.init(
             lengthTicks: arrangement.lengthTicks, ticksPerBeat: ticksPerBeat, slots: slots,
             tracks: (1...Constants.trackItemIDs.count).map { track in
-                ArrangedLane(
-                    trackNumber: track, isDrum: !melodic.contains(track),
-                    regions: slots.compactMap { slot in
-                        guard let length = lengths[track]?[slot.patternNumber] else { return nil }
-                        return ArrangedRegion(
-                            patternNumber: slot.patternNumber, startTick: slot.startTick,
-                            spanTicks: slot.lengthTicks, lengthTicks: length,
-                            noteCount: counts[track]?[slot.patternNumber] ?? 0,
-                            marks: marks[track]?[slot.patternNumber] ?? [])
-                    })
+                let regions = slots.compactMap { slot -> ArrangedRegion? in
+                    guard let length = lengths[track]?[slot.patternNumber] else { return nil }
+                    return ArrangedRegion(
+                        patternNumber: slot.patternNumber, startTick: slot.startTick,
+                        spanTicks: slot.lengthTicks, lengthTicks: length,
+                        noteCount: counts[track]?[slot.patternNumber] ?? 0,
+                        marks: marks[track]?[slot.patternNumber] ?? [])
+                }
+                // A track that renders nothing is not a drum track: it plays no note of either
+                // kind, and a lane badged Drum for holding nothing would say the opposite.
+                return ArrangedLane(
+                    trackNumber: track, isDrum: !regions.isEmpty && !melodic.contains(track),
+                    regions: regions)
             },
             diagnostics: arrangement.diagnostics)
     }

@@ -903,10 +903,10 @@ struct DropView: View {
             Color.clear.frame(width: AppLayout.labelGap, height: 1)
             ZStack(alignment: .topLeading) {
                 Rectangle().fill(palette.surface)
-                ForEach(lane.regions, id: \.x) { region($0, track: lane.track) }
+                ForEach(lane.regions, id: \.slot) { region($0, track: lane.track) }
                 // Over the regions: a boundary is where one Pattern gives way to the next, and a
                 // region drawn short of it would otherwise hide the line that says so.
-                ForEach(boundaries, id: \.x) { boundary in
+                ForEach(boundaries, id: \.slot) { boundary in
                     Rectangle()
                         .fill(palette.rule)
                         .frame(width: AppLayout.boundaryWidth, height: AppLayout.laneHeight)
@@ -930,13 +930,11 @@ struct DropView: View {
             if region.showsMarks {
                 ForEach(region.marks.indices, id: \.self) { index in
                     // Drawn in the ink rather than the hue: the block already says which track
-                    // this is, and a mark has to stay legible on either face.
+                    // this is, and a mark has to stay legible on either face. Its width is taken
+                    // as given -- widening one here would undo the hold at the region's edge.
                     Rectangle()
-                        .fill(ink.opacity(0.75))
-                        .frame(
-                            width: max(region.marks[index].width, AppLayout.markMinWidth),
-                            height: AppLayout.markHeight
-                        )
+                        .fill(ink.opacity(AppLayout.markInkOpacity))
+                        .frame(width: region.marks[index].width, height: AppLayout.markHeight)
                         .offset(x: region.marks[index].x, y: region.marks[index].y)
                 }
             }
@@ -944,7 +942,7 @@ struct DropView: View {
                 Text(region.label)
                     .font(TypeScale.smallValue)
                     .foregroundStyle(region.isEmpty ? palette.mutedInk : ink)
-                    .padding(.leading, 2)
+                    .padding(.leading, AppLayout.regionLabelInset)
             }
         }
         .frame(width: region.width, height: AppLayout.laneHeight, alignment: .topLeading)

@@ -45,7 +45,7 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
         let drawn = lanes.lanes[0].regions[0]
         #expect(drawn.x == 0)
         #expect(drawn.width == AppLayout.axisWidth)
-        #expect(drawn.spanWidth == AppLayout.axisWidth)
+        #expect(drawn.x + drawn.width == AppLayout.axisWidth)
     }
 
     @Test func eachSlotTakesItsShareOfTheAxisInOrder() {
@@ -73,8 +73,10 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
         let short = lanes.lanes[1].regions[0]
         #expect(full.width == AppLayout.axisWidth)
         #expect(short.width == AppLayout.axisWidth / 4)
-        #expect(short.spanWidth == AppLayout.axisWidth)
-        #expect(short.width < short.spanWidth)
+        // The span is what the boundaries delimit, so the gap is measured against those rather
+        // than against a second copy of the span carried on the region.
+        #expect(short.x == lanes.boundaries[0].x)
+        #expect(short.x + short.width < full.x + full.width)
         #expect(short.detail.contains("loops back"))
     }
 
@@ -140,6 +142,10 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
         #expect(!drawn.showsLabel)
         // The block still carries the geometry, which is what the view is for.
         #expect(drawn.width > 0)
+        // A repeated run plays one Pattern many times, so the number cannot be the identity.
+        let slots = lanes.lanes[0].regions.map(\.slot)
+        #expect(Set(slots).count == slots.count)
+        #expect(Set(lanes.boundaries.map(\.slot)).count == lanes.boundaries.count)
     }
 
     @Test func pitchIsClampedIntoTheWindowRatherThanScaledToTheFile() {
@@ -159,7 +165,7 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
                 lengthTicks: 0, slots: [],
                 tracks: (1...Constants.trackItemIDs.count).map { ArrangedLane(trackNumber: $0) }))
 
-        #expect(lanes.isEmpty)
+        #expect(lanes.boundaries.isEmpty)
         #expect(lanes.lanes.count == Constants.trackItemIDs.count)
         #expect(lanes.lanes.allSatisfy { $0.regions.isEmpty })
         #expect(lanes.header.hasPrefix("0 patterns"))

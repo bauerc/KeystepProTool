@@ -341,9 +341,8 @@ enum AppLayout {
         guard steps > 0 else { return 0 }
         return cellWidth * CGFloat(min(steps, stepCeiling)) / CGFloat(stepCeiling)
     }
-    /// The arrange lanes under the map, one per device track. They share ``gridOrigin``, so a lane
-    /// sits under the row it belongs to, and the axis is the sixteen columns wide -- the whole run
-    /// is scaled into it, which is what keeps the pane scrolling vertically only.
+    /// The arrange lanes, on the map's own origin so a lane sits under the row it belongs to. The
+    /// whole run scales into this, which is what keeps the pane scrolling vertically only.
     static var axisWidth: CGFloat { gridWidth - gridOrigin }
     static let laneHeight: CGFloat = 30
     static let laneSpacing: CGFloat = 3
@@ -352,14 +351,16 @@ enum AppLayout {
     static let markHeight: CGFloat = 2
     /// A sixteenth at the default division is under a point wide once a long run is scaled down.
     static let markMinWidth: CGFloat = 1.5
+    /// The block's ink, held off full so a mark reads as content rather than as lettering.
+    static let markInkOpacity = 0.75
     /// Narrower than this a region holds fewer points than it has events, where a sketch is noise
     /// rather than rhythm; the block still carries the length.
     static let marksMinimumWidth: CGFloat = 14
     /// A single digit at ``TypeScale/smallValue``, which is the narrowest a number stays a number.
     static let regionLabelMinimumWidth: CGFloat = 11
-    /// Pitch is placed in a fixed window and clamped to it, for the reason ``Density`` clamps
-    /// rather than scales: a region means the same thing in every project. The device shows these
-    /// as C1 to C6.
+    static let regionLabelInset: CGFloat = 2
+    /// Clamped into rather than scaled to the file's own range, for the reason ``Density`` clamps.
+    /// The device shows these as C1 to C6.
     static let markPitchWindow = 36...96
 
     /// Where a tick falls on the axis, and how wide a run of ticks draws. A run of no length

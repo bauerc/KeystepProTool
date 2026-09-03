@@ -16,32 +16,30 @@ struct ArrangeLanes: Equatable {
     }
 
     struct Region: Equatable {
+        /// Which slot of the run this is, counting from 0. A repeated Pattern is several slots.
+        let slot: Int
         /// 1-16.
         let pattern: Int
         let label: String
         /// From the axis's leading edge, and the width this track fills of its slot.
         let x: CGFloat
         let width: CGFloat
-        /// The slot every track shares, which ``width`` may fall short of.
-        let spanWidth: CGFloat
         /// Held, and every event in it switched off.
         let isEmpty: Bool
-        let noteCount: Int
         let showsLabel: Bool
         /// Dropped below a width where the marks would outnumber the points available.
         let showsMarks: Bool
         let marks: [Mark]
         let detail: String
 
-        init(_ region: ArrangedRegion, total: Int, ticksPerBeat: Int) {
+        init(_ region: ArrangedRegion, slot: Int, total: Int, ticksPerBeat: Int) {
             let width = AppLayout.width(ofTicks: region.lengthTicks, in: total)
+            self.slot = slot
             self.pattern = region.patternNumber
             self.label = "\(region.patternNumber)"
             self.x = AppLayout.x(ofTick: region.startTick, in: total)
             self.width = width
-            self.spanWidth = AppLayout.width(ofTicks: region.spanTicks, in: total)
             self.isEmpty = region.isEmpty
-            self.noteCount = region.noteCount
             self.showsLabel = width >= AppLayout.regionLabelMinimumWidth
             self.showsMarks = width >= AppLayout.marksMinimumWidth
             self.marks = Self.marks(region, total: total, width: width)
@@ -79,6 +77,8 @@ struct ArrangeLanes: Equatable {
     }
 
     struct Boundary: Equatable {
+        /// Counting from 0, so two boundaries falling on one tick stay distinct.
+        let slot: Int
         let pattern: Int
         let x: CGFloat
     }
@@ -101,8 +101,8 @@ struct ArrangeLanes: Equatable {
             self.isDrum = lane.isDrum
             self.isEmpty = lane.isEmpty
             self.detail = Self.detail(lane, ticksPerBeat: ticksPerBeat)
-            self.regions = lane.regions.map {
-                Region($0, total: total, ticksPerBeat: ticksPerBeat)
+            self.regions = lane.regions.enumerated().map {
+                Region($0.element, slot: $0.offset, total: total, ticksPerBeat: ticksPerBeat)
             }
         }
 
@@ -116,28 +116,21 @@ struct ArrangeLanes: Equatable {
             parts.append("\(beats(played, ticksPerBeat: ticksPerBeat)) in all")
             return parts.joined(separator: " · ")
         }
-
-        /// Worded as `convert` words it, so the preview and the result read alike.
-        private static func located(_ patterns: [Int]) -> String {
-            let ordered = Set(patterns).sorted()
-            guard let first = ordered.first, let last = ordered.last else { return "no pattern" }
-            return ordered.count == 1 ? "pattern \(first)" : "patterns \(first)-\(last)"
-        }
     }
 
     let header: String
     let boundaries: [Boundary]
     let lanes: [Lane]
 
-    var isEmpty: Bool { boundaries.isEmpty }
-
     init(_ summary: ArrangementSummary) {
         let total = summary.lengthTicks
         self.header =
             counted(summary.slots.count, "pattern") + " · "
             + beats(total, ticksPerBeat: summary.ticksPerBeat) + " end to end"
-        self.boundaries = summary.slots.map {
-            Boundary(pattern: $0.patternNumber, x: AppLayout.x(ofTick: $0.startTick, in: total))
+        self.boundaries = summary.slots.enumerated().map {
+            Boundary(
+                slot: $0.offset, pattern: $0.element.patternNumber,
+                x: AppLayout.x(ofTick: $0.element.startTick, in: total))
         }
         self.lanes = summary.tracks.map {
             Lane($0, total: total, ticksPerBeat: summary.ticksPerBeat)
