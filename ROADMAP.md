@@ -641,6 +641,10 @@ metadata control and multi-file import.
 **Spec of record is the epic, issue #115**, which holds the requirement-coverage table and the
 frontier. Forty issues, each a vertical slice sized to a PR a human can read in one sitting.
 
+**Requirement D1's evidence is [`analysis/Read_Cost.md`](analysis/Read_Cost.md)** — what a read
+costs in each core, where the cost goes, and the bytes held per byte of file, reproducible through
+`./scripts/bench_read.sh`.
+
 **Most of it is wiring, not format work.** `ExportRunner.Options` and `ConvertRunner.Options`
 already carry `split`, `track`, `pattern`, `passes`, `includeStale`, `includeDisabled`,
 `applySwing`, `applyTimeShift`, `dryRun`, `midiTrack`, `drumTrack`, `drumMapSpec` and
