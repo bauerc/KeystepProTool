@@ -24,7 +24,13 @@ from ksp.model import Project
 from ksp_cli.drum_map_option import CONFIG_PATH, DRUM_MAP_HELP, resolve_drum_map_or_fail
 from ksp_cli.flat_velocity import parse_flat_velocity
 from ksp_cli.loading import load_project
-from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
+from ksp_cli.reporting import (
+    OUTPUT_PANEL,
+    VerboseInPanel,
+    fail,
+    print_report,
+    refuse_existing,
+)
 from ksp_cli.runner import standalone
 from ksp_cli.selection import SELECTION_HELP, parse_selection
 
@@ -55,7 +61,6 @@ class Passes(enum.StrEnum):
 def summary(
     result: ExportResult, destination: Path, *, dry_run: bool = False, repeat: int = 1
 ) -> str:
-    """What was written, in the words ksp-pull --also-midi has to repeat."""
     patterns = ", ".join(str(n) for n in result.pattern_numbers)
     tracks = ", ".join(result.track_names)
     verb = "would write" if dry_run else "wrote"
@@ -324,9 +329,7 @@ def export(
         # Writing a MIDI file with no notes in it would look like success.
         fail(f"{path}: nothing to export (no selected pattern holds notes)", prog=PROG, code=1)
 
-    existing = [str(destination) for _, destination in planned if destination.exists()]
-    if existing and not force:
-        fail(f"{', '.join(existing)} already exists (use --force to overwrite)", prog=PROG, code=1)
+    refuse_existing((destination for _, destination in planned), force=force, prog=PROG)
 
     if not dry_run:
         try:

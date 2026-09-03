@@ -258,12 +258,13 @@ def test_also_midi_writes_the_project_and_its_midi_from_one_read(
     assert len(attached.slots[1].asked) == 1007
 
 
+@pytest.mark.parametrize("slot", [1, 2])
 def test_the_exported_midi_is_the_file_ksp2midi_would_have_written(
-    attached: FakeDevice, tmp_path: Path
+    attached: FakeDevice, tmp_path: Path, slot: int
 ) -> None:
     """--also-midi composes the two commands; it does not export differently."""
     composed = tmp_path / "composed.KeyStepPro"
-    assert main([str(composed), "--also-midi"]) == 0
+    assert main([str(composed), "--slot", str(slot), "--also-midi"]) == 0
 
     separate = tmp_path / "separate.mid"
     assert app.main(["ksp2midi", str(composed), "-o", str(separate)]) == 0
@@ -315,3 +316,16 @@ def test_a_project_with_no_notes_keeps_the_pull_and_refuses_the_midi(
     assert "no pattern holds notes" in capsys.readouterr().err
     assert written.exists()
     assert not written.with_suffix(".mid").exists()
+
+
+def test_also_midi_refuses_a_destination_that_is_its_own_midi_file(
+    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Naming the project .mid would have the export overwrite the project."""
+    written = tmp_path / "pulled.mid"
+
+    assert main([str(written), "--also-midi"]) == 2
+
+    assert "same file" in capsys.readouterr().err
+    assert not written.exists()
+    assert not attached.slots[1].asked

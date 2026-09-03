@@ -555,8 +555,9 @@ It goes beside the project, `my_project.mid`, and it is byte for byte the file
 `ksp2midi my_project.KeyStepPro` would have written — same defaults, same drum map, same warnings.
 It saves the second command; it does not export differently, so reach for `ksp2midi` whenever you
 want anything but the defaults. Both destinations are checked before the device is touched and
-`--force` covers both. A project whose patterns hold no notes still writes the `.KeyStepPro` and
-then fails: a MIDI file with nothing in it would look like success.
+`--force` covers both; naming the project itself `.mid` is refused, because the two files would be
+one and the export would land on the project. A project whose patterns hold no notes still writes
+the `.KeyStepPro` and then fails: a MIDI file with nothing in it would look like success.
 
 This is the one command that needs the USB extra from [Installation](#installation); the raw-USB
 dependency is optional because most people converting files have no reason to install libusb. That

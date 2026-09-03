@@ -80,5 +80,10 @@ def default_drum_map(config_path: Path, *, prog: str) -> DrumMap:
     """The map an export uses with no ``--drum-map``, for a command that has no such flag."""
     resolved = resolve_drum_map_or_fail(None, config_path, prog=prog)
     if resolved is None:  # pragma: no cover - only the literal "none" resolves to None
-        fail("drum map: a MIDI file has to name a note for every drum lane", prog=prog, code=2)
+        fail(
+            "--drum-map none cannot be exported: a MIDI file has to name a note "
+            "for every drum lane",
+            prog=prog,
+            code=2,
+        )
     return resolved
