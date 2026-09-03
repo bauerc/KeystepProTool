@@ -7,8 +7,15 @@ import pytest
 from conftest import DeviceModel, FakeDevice, tape_values, without_trailing_comma
 from ksp import lenient_json, reader, sysex
 from ksp_cli import app, pull
+from ksp_cli.loading import default_template
 from ksp_cli.pull import main
 from ksp_cli.usb_transport import TransportError
+
+
+def _template_values() -> dict[str, int]:
+    """The factory default's parameters -- a saved project that holds no notes."""
+    raw = lenient_json.load_path(default_template())
+    return {name: value for name, value in raw.items() if isinstance(value, int)}
 
 
 @pytest.fixture
@@ -237,3 +244,74 @@ def test_ksp_pull_is_the_same_command_either_way(attached: FakeDevice, tmp_path:
     assert app.main(["ksp-pull", str(umbrella)]) == 0
 
     assert direct.read_bytes() == umbrella.read_bytes()
+
+
+def test_also_midi_writes_the_project_and_its_midi_from_one_read(
+    attached: FakeDevice, tmp_path: Path
+) -> None:
+    written = tmp_path / "pulled.KeyStepPro"
+
+    assert main([str(written), "--also-midi"]) == 0
+
+    assert written.exists()
+    assert written.with_suffix(".mid").exists()
+    assert len(attached.slots[1].asked) == 1007
+
+
+def test_the_exported_midi_is_the_file_ksp2midi_would_have_written(
+    attached: FakeDevice, tmp_path: Path
+) -> None:
+    """--also-midi composes the two commands; it does not export differently."""
+    composed = tmp_path / "composed.KeyStepPro"
+    assert main([str(composed), "--also-midi"]) == 0
+
+    separate = tmp_path / "separate.mid"
+    assert app.main(["ksp2midi", str(composed), "-o", str(separate)]) == 0
+
+    assert composed.with_suffix(".mid").read_bytes() == separate.read_bytes()
+
+
+def test_also_midi_names_both_files_in_the_summary(
+    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    written = tmp_path / "pulled.KeyStepPro"
+    assert main([str(written), "--also-midi"]) == 0
+
+    out = capsys.readouterr().out
+    assert f"wrote {written}" in out
+    assert f"wrote {written.with_suffix('.mid')}" in out
+    assert "note(s) from pattern(s)" in out
+
+
+def test_an_existing_midi_stops_the_read_the_way_an_existing_project_does(
+    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Both destinations are checked before the device is touched, and --force covers both."""
+    written = tmp_path / "pulled.KeyStepPro"
+    midi = written.with_suffix(".mid")
+    midi.write_bytes(b"mine")
+
+    assert main([str(written), "--also-midi"]) == 1
+
+    assert str(midi) in capsys.readouterr().err
+    assert not written.exists()
+    assert midi.read_bytes() == b"mine"
+    assert not attached.slots[1].asked
+
+    assert main([str(written), "--also-midi", "--force"]) == 0
+    assert midi.read_bytes() != b"mine"
+
+
+def test_a_project_with_no_notes_keeps_the_pull_and_refuses_the_midi(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The read is worth keeping; a MIDI file with nothing in it would look like success."""
+    silent = FakeDevice({1: DeviceModel(_template_values())})
+    monkeypatch.setattr(pull, "UsbMidiTransport", lambda **_: silent)
+
+    written = tmp_path / "silent.KeyStepPro"
+    assert main([str(written), "--also-midi"]) == 1
+
+    assert "no pattern holds notes" in capsys.readouterr().err
+    assert written.exists()
+    assert not written.with_suffix(".mid").exists()

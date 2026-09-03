@@ -74,3 +74,11 @@ def resolve_import_drum_map(spec: str | None, config_path: Path | None = None) -
     if path.is_file():
         return DrumMap.from_dict(json.loads(path.read_text(encoding="utf-8")))
     return None
+
+
+def default_drum_map(config_path: Path, *, prog: str) -> DrumMap:
+    """The map an export uses with no ``--drum-map``, for a command that has no such flag."""
+    resolved = resolve_drum_map_or_fail(None, config_path, prog=prog)
+    if resolved is None:  # pragma: no cover - only the literal "none" resolves to None
+        fail("drum map: a MIDI file has to name a note for every drum lane", prog=prog, code=2)
+    return resolved

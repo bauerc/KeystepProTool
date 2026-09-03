@@ -9,7 +9,10 @@ import typer
 from ksp import constants, sysex
 from ksp.bulk_read import DEFAULT_VERSION, Transport, read_raw
 from ksp.lenient_json import canonical, dump_path
+from ksp.midi_export import ExportOptions, export_project
 from ksp.reader import read_project
+from ksp_cli.drum_map_option import CONFIG_PATH, default_drum_map
+from ksp_cli.export import summary
 from ksp_cli.loading import load_template
 from ksp_cli.reporting import OUTPUT_PANEL, VerboseInPanel, fail, print_report
 from ksp_cli.runner import standalone
@@ -108,6 +111,17 @@ def pull_command(
             ),
         ),
     ] = None,
+    also_midi: Annotated[
+        bool,
+        typer.Option(
+            "--also-midi",
+            rich_help_panel=OUTPUT_PANEL,
+            help=(
+                "also write the .mid beside it, the file ksp2midi with no options would "
+                "make from what was read"
+            ),
+        ),
+    ] = False,
     force: Annotated[
         bool,
         typer.Option(
@@ -128,10 +142,19 @@ def pull_command(
     # write of the same size are most of a run that is not at the device.
     began = monotonic()
 
+    midi_output = output.with_suffix(".mid") if also_midi else None
+
     # Before the device is touched: a read costs ten seconds of the operator's
     # attention, and refusing it afterwards wastes them.
-    if output.exists() and not force:
-        fail(f"{output} already exists (use --force to overwrite)", prog=PROG, code=1)
+    destinations = [output] if midi_output is None else [output, midi_output]
+    existing = [str(path) for path in destinations if path.exists()]
+    if existing and not force:
+        fail(f"{', '.join(existing)} already exists (use --force to overwrite)", prog=PROG, code=1)
+
+    # The map is a usage error and the config file is read here, not after the walk.
+    options = (
+        ExportOptions(drum_map=default_drum_map(CONFIG_PATH, prog=PROG)) if also_midi else None
+    )
 
     template_keys = load_template(template, prog=PROG).keys()
 
@@ -152,7 +175,9 @@ def pull_command(
 
     # What was read has to parse as a project before it is worth writing.
     try:
-        project = read_project(raw, source_name=str(output))
+        # The bare name, as reader.load gives it: --also-midi's export has to be
+        # the one loading the written file would produce, down to the track name.
+        project = read_project(raw, source_name=output.name)
     except ValueError as exc:
         fail(f"the device's answer is not a readable project: {exc}", prog=PROG, code=1)
 
@@ -162,13 +187,28 @@ def pull_command(
     except OSError as exc:
         fail(str(exc), prog=PROG, code=1)
 
-    print_report(project.diagnostics, prog=PROG, verbose=verbose)
+    report = project.diagnostics
+    exported = None
+    if options is not None and midi_output is not None:
+        exported = export_project(project, options)
+        report = report.merge(exported.diagnostics)
+        if exported.is_empty:
+            print_report(report, prog=PROG, verbose=verbose)
+            fail(f"{output} was written, but no pattern holds notes to export", prog=PROG, code=1)
+        try:
+            exported.midi.save(midi_output)
+        except OSError as exc:
+            fail(str(exc), prog=PROG, code=1)
+
+    print_report(report, prog=PROG, verbose=verbose)
     if not quiet:
         notes = sum(len(pattern.notes) for track in project.tracks for pattern in track.patterns)
         total = monotonic() - began
         print(f"read slot {slot} in {reading:.1f} s, {transport.requests} requests")
         print(f"wrote {output}")
         print(f"  {notes} note(s), {project.tempo_bpm:g} BPM")
+        if exported is not None and midi_output is not None:
+            print(summary(exported, midi_output))
         print(f"  {total:.1f} s total, {reading:.1f} s of it at the device")
 
 

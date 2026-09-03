@@ -52,7 +52,10 @@ class Passes(enum.StrEnum):
     FOUR = "4"
 
 
-def _summary(result: ExportResult, destination: Path, dry_run: bool, repeat: int) -> str:
+def summary(
+    result: ExportResult, destination: Path, *, dry_run: bool = False, repeat: int = 1
+) -> str:
+    """What was written, in the words ksp-pull --also-midi has to repeat."""
     patterns = ", ".join(str(n) for n in result.pattern_numbers)
     tracks = ", ".join(result.track_names)
     verb = "would write" if dry_run else "wrote"
@@ -338,7 +341,7 @@ def export(
     if not quiet:
         print(
             "\n".join(
-                _summary(result, destination, dry_run, options.repeat)
+                summary(result, destination, dry_run=dry_run, repeat=options.repeat)
                 for result, destination in planned
             )
         )
