@@ -1,9 +1,18 @@
 import Foundation
 import KSPKit
+import KSPMIDI
 import KSPRun
 import Testing
 
 @testable import KSPApp
+
+/// The designation the app runs under until the sidebar or the track list moves it.
+let gmDrums = DrumSense(designation: .auto, channel: MIDIImport.drumChannel + 1)
+
+/// What a selection resolves to under given settings, resolved as ``AppModel`` resolves it.
+func drumSense(_ selection: SourceTrackSelection, _ settings: Settings = Settings()) -> DrumSense {
+    settings.drumSense(named: selection.drumTrack)
+}
 
 /// A twin per target: SwiftPM cannot share a source file between two test targets.
 enum RepoData {

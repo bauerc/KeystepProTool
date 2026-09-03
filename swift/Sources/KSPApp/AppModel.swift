@@ -27,16 +27,41 @@ final class AppModel {
         /// Identity, not path: dropping the same file again is a new drop and needs a new read.
         let id = UUID()
 
-        var blockReason: String? { ticks?.blockReason }
-
-        var exclusionNote: String? { ticks?.exclusionNote }
-
-        /// The tick set this drop seeded; a read that has not landed yet seeded neither.
-        private var ticks: (blockReason: String?, exclusionNote: String?)? {
+        /// Both of these read the tick set this drop seeded, so a read that has not landed yet --
+        /// which seeded neither -- says nothing.
+        func blockReason(_ settings: Settings) -> String? {
             switch summary {
-            case .project: return (selection.blockReason, selection.exclusionNote)
-            case .song: return (sourceSelection.blockReason, sourceSelection.exclusionNote)
+            case .project: return selection.blockReason
+            case .song:
+                return sourceSelection.blockReason(
+                    settings.drumSense(named: sourceSelection.drumTrack))
             case .loading, .failed: return nil
+            }
+        }
+
+        var exclusionNote: String? {
+            switch summary {
+            case .project: return selection.exclusionNote
+            case .song: return sourceSelection.exclusionNote
+            case .loading, .failed: return nil
+            }
+        }
+    }
+
+    /// The sidebar's three rows. ``source`` exists only while the track list has sent a track to
+    /// Drums, and is the editor for which track that is.
+    enum DrumChoice: Hashable, Identifiable, Sendable {
+        case automatic
+        case source(Int)
+        case none
+
+        var id: Self { self }
+
+        var label: String {
+            switch self {
+            case .automatic: return Settings.Drums.automatic.label
+            case .source(let number): return "Source track \(number)"
+            case .none: return Settings.Drums.none.label
             }
         }
     }
@@ -246,6 +271,37 @@ final class AppModel {
         mutate { $0.sourceSelection.send(sourceTrack, to: destination) }
     }
 
+    /// What the track list and the sidebar's channel row draw under.
+    var drumSense: DrumSense { settings.drumSense(named: staged?.sourceSelection.drumTrack) }
+
+    /// The rows in order; the middle one only while a source track is sent to Drums.
+    var drumChoices: [DrumChoice] {
+        let named = staged?.sourceSelection.drumTrack.map(DrumChoice.source)
+        return [.automatic] + (named.map { [$0] } ?? []) + [.none]
+    }
+
+    /// Two editors, one designation: the sidebar owns Automatic and None, the track list the named
+    /// track, which wins over both. Choosing either of the sidebar's clears the track list's, so
+    /// only one row is ever selected -- but a named track leaves ``Settings/drums`` alone, so None
+    /// is still there when the track goes elsewhere rather than silently becoming Automatic.
+    var drumChoice: DrumChoice {
+        get {
+            guard let named = staged?.sourceSelection.drumTrack else {
+                return settings.drums == .none ? .none : .automatic
+            }
+            return .source(named)
+        }
+        set {
+            switch newValue {
+            // Already the selected row: the track list is where the named track is edited.
+            case .source: break
+            case .automatic, .none:
+                settings.drums = newValue == .none ? .none : .automatic
+                mutate { $0.sourceSelection.clearDrums() }
+            }
+        }
+    }
+
     private func mutate(_ change: (inout Staged) -> Void) {
         guard case .staged(var staged) = phase else { return }
         change(&staged)
@@ -253,7 +309,7 @@ final class AppModel {
         discardPreview()
     }
 
-    var blockReason: String? { staged?.blockReason }
+    var blockReason: String? { staged?.blockReason(settings) }
 
     var exclusionNote: String? { staged?.exclusionNote }
 

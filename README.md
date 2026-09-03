@@ -89,8 +89,10 @@ source tracks in the file's own order — the number `--midi-tracks` would call 
 its channels, and how many notes it holds over how many bars. A track holding nothing is still
 listed, dimmed and reading *no notes*, so a file whose parts are not where you expected them says
 so before you convert rather than after. The track the import will take for drums is marked
-**Drums**; a second channel 10 track is marked **Percussion** instead, because the device has one
-drum track and the rest come in melodically. The track carrying the file's tempo and time
+**Drums**; a second track on the searched channel is marked **Percussion** instead, because the
+device has one drum track and the rest come in melodically. Both badges follow the **Drums** choice
+in the sidebar below, so moving the channel moves them and taking nothing as drums leaves no row
+badged at all. The track carrying the file's tempo and time
 signature but no notes — track 1 of anything this tool exported — is marked **Tempo**, so a
 round-tripped file does not read as though a part went missing. Under the list sits what the read
 found — a track
@@ -118,6 +120,14 @@ place by hand are named — a route merges a source track's channels onto its on
 routing the ones you never touched would move them. Send two tracks to one device track, or send
 anything but the drums to track 1, and Convert says which two clash rather than letting the run
 refuse it.
+
+**Choosing where the drums come from.** The sidebar's **Drums** section carries the other two
+answers. **Automatic** searches one channel for a kit and offers a stepper for which — General MIDI
+puts one on 10, but a DAW can export one anywhere, and a kit on an ordinary channel would otherwise
+import silently as melodic pitches. **None** takes no track as drums at all. A source track sent to
+**Drums** in the list is the third answer, and shows in the sidebar as **Source track N** while it
+stands; choosing Automatic or None sends that track back to Automatic, so the two can never both be
+set. The three are `--drum-channel`, `--no-drums` and `--drum-track` as the CLI spells them.
 
 **Ticking what is exported.** Every slot starts ticked, and the export follows the ticks. Click a
 slot to leave that one out, a track name to leave out the whole track, a slot number to leave that

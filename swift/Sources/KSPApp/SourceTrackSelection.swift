@@ -90,6 +90,13 @@ struct SourceTrackSelection: Sendable, Equatable {
         }
     }
 
+    /// Every track sent to Drums, not just the first: two is a state the picker allows and
+    /// ``clash(_:)`` reports, and a skipped one keeps its choice, so clearing must take them all
+    /// or the sidebar's row snaps back to the one left behind.
+    mutating func clearDrums() {
+        for (number, destination) in chosen where destination == .drums { chosen[number] = nil }
+    }
+
     var countLine: String? {
         guard !isInert else { return nil }
         return "\(ticked.count) of \(tracks.count) source track\(tracks.count == 1 ? "" : "s") "
@@ -104,11 +111,11 @@ struct SourceTrackSelection: Sendable, Equatable {
         return "That needs \(demand) device tracks, so \(over) would be dropped."
     }
 
-    var blockReason: String? {
+    func blockReason(_ drums: DrumSense) -> String? {
         guard !isInert else { return nil }
         if ticked.isEmpty { return "Nothing is ticked. Tick at least one source track to convert." }
         // Refused by the run rather than resolved by it, so it must not reach the runner at all.
-        if let clash { return clash }
+        if let clash = clash(drums) { return clash }
         // Left to Convert this reaches the runner and comes back as "no notes to convert".
         guard demand == 0 else { return nil }
         return "No ticked source track holds notes, so nothing would be written."
@@ -138,21 +145,29 @@ struct SourceTrackSelection: Sendable, Equatable {
         return pairs.isEmpty ? nil : pairs.joined(separator: ",")
     }
 
-    /// `--drum-track`; `nil` leaves the reader's own channel 10 detection standing.
+    /// `--drum-track`; `nil` leaves the sidebar's own designation standing.
     var drumTrack: Int? { placed.first { chosen[$0] == .drums } }
 
     /// The ticked tracks placed by hand, in source order.
     private var placed: [Int] { chosen.keys.filter(ticked.contains).sorted() }
 
-    /// The ticked track the import will write as drums. The fallback is the first ticked track on
-    /// channel 10 rather than the reader's `isDrumTrack`, which names the first over the whole
-    /// file: the assignment looks among the clips actually read, so skipping it promotes the next.
-    private var drumSource: Int? {
-        drumTrack ?? tracks.first { ticked.contains($0.number) && $0.isPercussion }?.number
+    /// The ticked track the import will write as drums. Under `auto` the fallback is the first
+    /// ticked track on the searched channel rather than the reader's `isDrumTrack`, which names the
+    /// first over the whole file: the assignment looks among the clips actually read, so skipping
+    /// one promotes the next.
+    func drumSource(_ drums: DrumSense) -> Int? {
+        switch drums.designation {
+        case .source(let number): return number
+        case .none: return nil
+        case .auto:
+            return tracks.first {
+                ticked.contains($0.number) && $0.channels.contains(drums.channel)
+            }?.number
+        }
     }
 
     /// A destination the run would refuse rather than resolve, named before it can reach the run.
-    private var clash: String? {
+    private func clash(_ drums: DrumSense) -> String? {
         var holder: [Int: Int] = [:]
         for number in placed {
             guard let device = chosen[number]?.device else { continue }
@@ -165,16 +180,16 @@ struct SourceTrackSelection: Sendable, Equatable {
             }
             holder[device] = number
         }
-        guard let drums = drumSource else { return nil }
+        guard let source = drumSource(drums) else { return nil }
         for number in placed {
             guard let device = chosen[number]?.device else { continue }
-            if number == drums && device != 1 {
-                return "Source track \(drums) is the drum track, so it can only go to "
+            if number == source && device != 1 {
+                return "Source track \(source) is the drum track, so it can only go to "
                     + "\(Destination.track(1).label); only device track 1 carries a drum set."
             }
-            if number != drums && device == 1 {
+            if number != source && device == 1 {
                 return "Source track \(number) is sent to \(Destination.track(1).label), which "
-                    + "source track \(drums) holds as the drum track; only device track 1 carries "
+                    + "source track \(source) holds as the drum track; only device track 1 carries "
                     + "a drum set."
             }
         }

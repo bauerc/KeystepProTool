@@ -255,7 +255,47 @@ struct DropView: View {
     private var importGroup: some View {
         sectionHeader("MIDI import")
 
+        drums
+
         ignores
+    }
+
+    /// The channel row is offered only while a channel is what the import searches: under None
+    /// nothing is searched, and a named source track is found without one.
+    @ViewBuilder
+    private var drums: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Drums").font(TypeScale.sectionTitle)
+
+            Picker("Drums", selection: $model.drumChoice) {
+                ForEach(model.drumChoices) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+            .onChange(of: model.drumChoice) { model.discardPreview() }
+
+            Text(
+                "Automatic searches one channel for a kit; None imports every track melodically. "
+                    + "Sending a source track to Drums in the list names one outright."
+            )
+            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+        }
+
+        if model.drumSense.designation == .auto {
+            VStack(alignment: .leading, spacing: 4) {
+                Stepper(value: $model.settings.drumChannel, in: Settings.drumChannelRange) {
+                    Text("Channel \(model.settings.drumChannel)").font(TypeScale.sectionTitle)
+                }
+                .controlSize(.small)
+                .onChange(of: model.settings.drumChannel) { model.discardPreview() }
+
+                Text(
+                    "The source track sitting wholly on this channel becomes the drum track. "
+                        + "General MIDI puts a kit on 10, but a DAW can export one anywhere."
+                )
+                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+            }
+        }
     }
 
     /// Swing here is the export's sense: flattening the grid, not declining to fit one to a source.
@@ -438,7 +478,9 @@ struct DropView: View {
         case .song(let summary):
             VStack(alignment: .leading, spacing: 12) {
                 trackList(
-                    SourceTrackList(summary), selection: staged.sourceSelection,
+                    SourceTrackList(
+                        summary, drums: model.drumSense, selection: staged.sourceSelection),
+                    selection: staged.sourceSelection,
                     placements: placements(staged.segmentation))
                 Divider()
                 segmentation(staged.segmentation)

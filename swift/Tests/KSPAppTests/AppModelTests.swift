@@ -400,6 +400,74 @@ import Testing
         #expect(selection.spec == nil)
     }
 
+    /// The middle row is the track list's, so the sidebar offers it only once a track fills it.
+    @Test func thenamedTrackRowIsOfferedOnlyWhileOneIsNamed() async throws {
+        let model = model()
+        model.accept(midiFixture)
+        await model.summarise()
+        #expect(model.drumChoices == [.automatic, .none])
+        #expect(model.drumChoice == .automatic)
+
+        model.send(sourceTrack: 3, to: .drums)
+
+        #expect(model.drumChoices == [.automatic, .source(3), .none])
+        #expect(model.drumChoice == .source(3))
+    }
+
+    /// The ambiguous pair never exists in the UI: the sidebar's two clear the track list's choice.
+    @Test(arguments: [AppModel.DrumChoice.automatic, .none])
+    func choosingInTheSidebarClearsTheDrumsDestination(choice: AppModel.DrumChoice) async throws {
+        let model = model()
+        model.accept(midiFixture)
+        await model.summarise()
+        model.send(sourceTrack: 3, to: .drums)
+
+        model.drumChoice = choice
+
+        #expect(try #require(model.staged).sourceSelection.drumTrack == nil)
+        #expect(try #require(model.staged).sourceSelection.destination(3) == .automatic)
+        #expect(model.drumChoice == choice)
+    }
+
+    /// Two tracks on Drums is a state the picker allows and `clash` reports, so clearing the first
+    /// alone would let the sidebar's row snap back to the second.
+    @Test func choosingInTheSidebarClearsEveryDrumsDestination() async throws {
+        let model = model()
+        model.accept(midiFixture)
+        await model.summarise()
+        model.send(sourceTrack: 3, to: .drums)
+        model.send(sourceTrack: 4, to: .drums)
+
+        model.drumChoice = .none
+
+        #expect(model.drumChoice == .none)
+        #expect(try #require(model.staged).sourceSelection.drumTrack == nil)
+    }
+
+    /// `ConvertRunner.run` fails `--drum-track` with `--no-drums` at exit 2, so the named track
+    /// wins where the two meet -- but it must not spend None to do it: sending the track elsewhere
+    /// gives the answer the user chose back, rather than silently searching channel 10.
+    @Test func anamedDrumTrackWinsOverNoneWithoutDiscardingIt() async throws {
+        let model = model()
+        model.accept(midiFixture)
+        await model.summarise()
+        model.drumChoice = .none
+
+        model.send(sourceTrack: 3, to: .drums)
+
+        #expect(model.drumChoice == .source(3))
+        let named = model.conversionSettings.convertOptions(source: midiFixture, output: nil)
+        #expect(named.drumTrack == 3)
+        #expect(!named.noDrums)
+
+        model.send(sourceTrack: 3, to: .track(2))
+
+        #expect(model.drumChoice == .none)
+        let cleared = model.conversionSettings.convertOptions(source: midiFixture, output: nil)
+        #expect(cleared.drumTrack == nil)
+        #expect(cleared.noDrums)
+    }
+
     @Test func untickingAsourceTrackDiscardsAdryRunPreview() async throws {
         let model = model()
         model.settings.dryRun = true
