@@ -12,8 +12,9 @@ than against a reimplementation of the same expectations. See ROADMAP.md M1.
 | `recall_tape.txt` | MCC's Recall To exchange with the device, 8,951 request/reply frame pairs |
 | `recall_project_2_tape.txt` | The same exchange against **project 2**, so the slot byte is pinned against a second value |
 | `import_project_3_tape.txt` | MCC writing that data back into **project 3** — the write direction, 8,951 write/ack pairs |
+| `bulk_fast_requests.txt` | The 2,044 coalesced read requests, so both cores' plans are held to one sequence |
 
-All three are distilled by `tools/make_recall_tape.py` from captures under
+The three tapes are distilled by `tools/make_recall_tape.py` from captures under
 `usb_midi_investigation/`, which are gitignored — the tapes are tracked so the
 replay tests cannot skip silently on a fresh clone. Each line is
 `<sent> <received>`, whitespace-separated hex.
@@ -23,6 +24,14 @@ It happens exactly once, and it is a finding rather than a capture glitch: the
 truncated `0xFF` write at `123_117_1` stalled the link and MCC recovered with a
 fresh identity request. Keeping it in the data rather than only in prose is why
 `test_capture_evidence.py` can assert it. See spec section 7.6.
+
+`bulk_fast_requests.txt` is the one file here that **is** regenerable, and the
+one that pins code rather than hardware: `uv run python
+tools/gen_bulk_fast_fixture.py` rewrites it from `ksp.bulk_fast`. It exists
+because `KSPKit` transcribes `bulk_plan`'s generated table separately, so
+nothing in Swift would notice a regenerated Python one. Each line is
+`<item> <param> <indices|-> <count|->`. See
+[ADR 0003](../../docs/adr/0003-the-swift-core-reads-the-fast-plan-only.md).
 
 ## Provenance, and why it matters
 
