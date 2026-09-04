@@ -324,6 +324,7 @@ func replayProbe(needle: String, slot: UInt8, path: String, wait: Double) throws
     var values = 0
     var mismatched = 0
     var silent: [String] = []
+    var echoed: [(request: [UInt8], reply: [UInt8])] = []
     var short: [String] = []
     let started = Date()
     for request in plan {
@@ -332,6 +333,9 @@ func replayProbe(needle: String, slot: UInt8, path: String, wait: Double) throws
                 acked += 1
             } else if answers(frame.bytes, request) {
                 answered += 1
+                if plan.count <= 32 {
+                    echoed.append((request, Array(frame.bytes.dropFirst(request.count - 1).dropLast())))
+                }
                 let carried = frame.bytes.count - request.count
                 values += carried
                 let asked = request.count == 11 ? 1 : Int(request[request.count - 2])
@@ -346,6 +350,11 @@ func replayProbe(needle: String, slot: UInt8, path: String, wait: Double) throws
         if answered + mismatched < acked { silent.append(hex(request)) }
     }
     let elapsed = Date().timeIntervalSince(started)
+    if plan.count <= 32 {
+        for (request, reply) in echoed {
+            print("  \(hex(request)) -> values \(hex(reply))")
+        }
+    }
     print("  plan            \(plan.count) requests from \(path)")
     print("  answered        \(answered)   acks \(acked)   mismatched \(mismatched)")
     print("  values returned \(values)")

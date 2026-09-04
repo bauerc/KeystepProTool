@@ -223,6 +223,11 @@ MCC's stream is what `bulk_plan` reproduces and what the tapes pin down, so it s
 derives a second walk from the identical `PLAN`: same 117,783 addresses, different frames. Two
 things account for the whole saving.
 
+> **The coalescing below is measured against the tapes, not the device, and hardware has since
+> refuted part of it — see [#255](https://github.com/bauerc/KeystepProTool/issues/255).** A
+> per-pattern scalar coalesced into a 16-entry range comes back as index 1's value repeated, so
+> `nIdx=1` runs must not be coalesced. The gate and the `nIdx=3` runs are unaffected.
+
 **Coalescing.** Every contiguous run over the walking index becomes one request. All 2,004 runs in
 the plan are contiguous and none exceeds 64 values, so **8,911 long reads become 2,004** — the
 extent binds long before the 100 of 7.7 does. Two details only a plan-wide view catches: MCC's
@@ -401,8 +406,22 @@ restores the value rather than merely filling a hole.
 parses: `ksp-swift-cli dump` renders it as a project — 132 BPM, sixteen-note patterns, drum mode —
 not as a well-formed sheet of filler.
 
-What this does **not** yet do is H3.2's byte-diff against MCC's own export of the same slot, which
-needs a Recall From at the GUI. The read is demonstrated; the last equivalence is not.
+**The byte-diff has since been run, and it found a defect that is not the transport's.** Against a
+fresh MCC `Recall From` of the same slot, this read differs on **114 of 153,497 keys** — and the
+Python raw-USB read of the same slot, taken the same day, differs on **117**. The two cores agree
+with each other and disagree with MCC in the same families, so the transport is exonerated and the
+walk is not: `bulk_fast` coalesces per-pattern scalars into a range the device does not honour, and
+answers with index 1's value repeated. That is **[#255](https://github.com/bauerc/KeystepProTool/issues/255)**, it predates this work, and it corrupts
+`ksp-pull` today.
+
+So 7.9.2 establishes what it set out to — the transport carries a whole project, deterministically,
+at the projected cost — and nothing more. **A CoreMIDI read is not yet byte-equal to MCC's export,
+and will not be until #255 is fixed in both cores.**
+
+One accident worth recording: the two cores' three-key difference is `123_117_14/15/16`, where
+CoreMIDI's own `0xFF` truncation forced the element-wise re-read of 7.9.1 and so produced the
+*correct* values where the raw-USB walk's coalesced read did not. The defect in this transport
+masked a worse one in the plan.
 
 **A published endpoint is not a live one, and the app must not treat it as one.** After an MCC
 launch-and-quit cycle in the same session, the `KeyStep Pro` endpoint was still enumerated and
