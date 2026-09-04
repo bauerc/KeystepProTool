@@ -34,6 +34,9 @@ import PackageDescription
                 .product(name: "SwiftMIDIFile", package: "swift-midi-file"),
             ]
         ),
+        // A target of its own because CoreMIDI is Apple-only and KSPKit is what builds on the
+        // Linux runner. README section 5 has the rest.
+        .target(name: "KSPDevice", dependencies: ["KSPKit"]),
         // The command bodies, as a library rather than as part of the executable below.
         //
         // SwiftPM forbids a non-test target from depending on an executable target, so anything
@@ -42,7 +45,7 @@ import PackageDescription
         // meaning anything -- so the runners sit here and both faces call them.
         .target(
             name: "KSPRun",
-            dependencies: ["KSPMIDI"],
+            dependencies: ["KSPMIDI", "KSPDevice"],
             // MCC's factory default, which `convert` overwrites when the user names no template.
             //
             // A SwiftPM resource must live under its own target's directory, and SwiftPM copies a
@@ -65,6 +68,7 @@ import PackageDescription
         // UniformTypeIdentifiers all ship in the Command Line Tools SDK, so this needs no Xcode.
         .executableTarget(name: "KSPApp", dependencies: ["KSPRun"]),
         .testTarget(name: "KSPMIDITests", dependencies: ["KSPMIDI"]),
+        .testTarget(name: "KSPDeviceTests", dependencies: ["KSPDevice"]),
         .testTarget(name: "KSPRunTests", dependencies: ["KSPRun"]),
         // Tests an executable target, which needs `@main` rather than a `main.swift`.
         .testTarget(name: "KSPSwiftCLITests", dependencies: ["KSPSwiftCLI"]),
