@@ -18,6 +18,9 @@ public enum Constants {
     public static let patternsPerTrack = 16
     public static let maxSteps = 64
 
+    /// Project slots a user can name; the protocol's own slot byte is wider (``Sysex.maxSlot``).
+    public static let projectSlots = 16
+
     /// Scenes and pattern chaining, item 121.
     public static let sceneCount = 16
 

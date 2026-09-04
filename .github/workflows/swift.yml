@@ -10,7 +10,7 @@ name: swift
 # it. Keeping both is the point: Linux still covers `KSPKit` -- the format core and, from M12,
 # `Mutate.swift` -- at 1x, and only the MIDI half pays 10x.
 #
-# What neither job covers is the three parity scripts. They drive both toolchains at once and need
+# What neither job covers is the four parity scripts. They drive both toolchains at once and need
 # `uv` beside Swift, so ./scripts/validate.sh runs them on a dev machine and nowhere else.
 #
 # The container image carries swift-format, so no toolchain setup step is needed there.

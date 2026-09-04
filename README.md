@@ -560,9 +560,18 @@ one and the export would land on the project. A project whose patterns hold no n
 the `.KeyStepPro` and then fails: a MIDI file with nothing in it would look like success.
 
 This is the one command that needs the USB extra from [Installation](#installation); the raw-USB
-dependency is optional because most people converting files have no reason to install libusb. That
-extra is also why `ksp-pull` alone has no Swift counterpart and stands outside the two CLIs'
-byte-for-byte contract — `--also-midi` inherits that exception rather than making a new one.
+dependency is optional because most people converting files have no reason to install libusb. The
+Swift CLI reaches the same wire through CoreMIDI instead, so it wants neither the extra nor `sudo`:
+
+```sh
+swift/.build/debug/ksp-swift-cli pull my_project.KeyStepPro --slot 3
+```
+
+Same options, same summary, same bytes: `scripts/pull_parity.sh` holds both cores to one
+`.KeyStepPro` over the captured exchange. Two options are Python's alone — `--mcc-plan`, because
+the Swift core carries one walk and no flag to choose another
+([ADR 0003](docs/adr/0003-the-swift-core-reads-the-fast-plan-only.md)), and `--also-midi`, whose
+exported `.mid` is the documented exception to the byte-for-byte contract either way.
 
 Three things about the read:
 

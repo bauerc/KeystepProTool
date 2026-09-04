@@ -45,7 +45,7 @@ fail() {
     exit "$status"
 }
 
-banner "=== [1/9] Auto-formatting with Ruff ==="
+banner "=== [1/10] Auto-formatting with Ruff ==="
 run_step uv run ruff format .
 if ! run_step uv run ruff check --fix .; then
     fail "❌ LINT VIOLATIONS REMAIN" \
@@ -53,27 +53,27 @@ if ! run_step uv run ruff check --fix .; then
 fi
 
 if command -v gitleaks &> /dev/null; then
-    banner "\n=== [2/9] Scanning for exposed API keys ==="
+    banner "\n=== [2/10] Scanning for exposed API keys ==="
     if ! run_step gitleaks detect --no-git --verbose; then
         fail "❌ ALERT: Hardcoded credentials or API keys detected!" \
             "Claude: remove the secret and use an environment variable instead."
     fi
 fi
 
-banner "\n=== [3/9] Running Parallel Syntax Check ==="
+banner "\n=== [3/10] Running Parallel Syntax Check ==="
 if ! run_step uv run python -m compileall -q -j 0 src tests tools; then
     fail "❌ SYNTAX ERROR DETECTED" \
         "Claude: Fix the broken syntax or indentation shown above."
 fi
 banner "✅ Syntax passes."
 
-banner "\n=== [4/9] Running Fast Type Check ==="
+banner "\n=== [4/10] Running Fast Type Check ==="
 if ! run_step uv run mypy; then
     fail "❌ TYPE MISMATCH DETECTED" \
         "Claude: Review the Mypy trace above and correct variable assignments."
 fi
 
-banner "\n=== [5/9] Running Parallel Unit Tests ==="
+banner "\n=== [5/10] Running Parallel Unit Tests ==="
 if ! run_step uv run pytest -n auto -m "not slow and not hardware"; then
     fail "❌ UNIT TEST FAILURE" \
         "Claude: You broke existing runtime logic. Review the failing test above."
@@ -81,7 +81,7 @@ fi
 
 # Skipped where the toolchain is absent, as with gitleaks above.
 if command -v swift &> /dev/null; then
-    banner "\n=== [6/9] Linting and testing the Swift package ==="
+    banner "\n=== [6/10] Linting and testing the Swift package ==="
 
     swift_flags=()
     developer_dir=$(xcode-select -p 2> /dev/null)
@@ -108,7 +108,7 @@ if command -v swift &> /dev/null; then
             "Claude: Review the failing Swift test above. 'swift test' builds, so this covers the build too."
     fi
 
-    # One fingerprint gates all three parity steps. Content hashes, never mtimes: a checkout, a
+    # One fingerprint gates all four parity steps. Content hashes, never mtimes: a checkout, a
     # stash pop or a branch switch all restore an older mtime, and a stale green would be worse than
     # no gate. Hashing the built ksp-swift-cli is what covers every Swift source change, and sweeping
     # swift/Sources is what catches the bundled template, which `find -type f` sees only there.
@@ -120,38 +120,47 @@ if command -v swift &> /dev/null; then
                 | sort -z | xargs -0 shasum
             shasum swift/Package.swift pyproject.toml uv.lock \
                 scripts/port_parity.sh scripts/writer_parity.sh scripts/midi_parity.sh \
+                scripts/pull_parity.sh tests/fixtures/recall_tape.txt \
+                tests/fixtures/recall_project_2_tape.txt \
                 swift/.build/debug/ksp-swift-cli
         } 2> /dev/null | shasum | cut -d' ' -f1
     )
 
     if [[ -n $parity_fingerprint && $parity_fingerprint == $(cat "$parity_stamp" 2> /dev/null) ]]; then
-        banner "\n=== [7-9/9] Parity gates: inputs unchanged since the last green run -- skipping ==="
+        banner "\n=== [7-10/10] Parity gates: inputs unchanged since the last green run -- skipping ==="
     else
-        banner "\n=== [7/9] Comparing ksp-swift-cli dump against ksp-dump ==="
+        banner "\n=== [7/10] Comparing ksp-swift-cli dump against ksp-dump ==="
         if ! run_step ./scripts/port_parity.sh; then
             fail "❌ THE TWO PORTS DISAGREE" \
                 "Claude: the Swift dump no longer reproduces the Python's output. The Python is the reference implementation; fix the Swift."
         fi
         banner "✅ Both ports agree."
 
-        banner "\n=== [8/9] Comparing the Swift writer against the Python's ==="
+        banner "\n=== [8/10] Comparing the Swift writer against the Python's ==="
         if ! run_step ./scripts/writer_parity.sh; then
             fail "❌ THE TWO WRITERS DISAGREE" \
                 "Claude: the Swift writer no longer reproduces the Python's bytes. The Python is the reference implementation; fix the Swift."
         fi
         banner "✅ Both writers agree."
 
-        banner "\n=== [9/9] Comparing the two ports' conversions, both directions ==="
+        banner "\n=== [9/10] Comparing the two ports' conversions, both directions ==="
         if ! run_step ./scripts/midi_parity.sh; then
             fail "❌ THE TWO PORTS CONVERT DIFFERENTLY" \
                 "Claude: the Swift no longer converts as the Python does. The Python is the reference implementation; fix the Swift."
         fi
         banner "✅ Both ports convert alike."
 
+        banner "\n=== [10/10] Comparing the two cores' pull over the shared tapes ==="
+        if ! run_step ./scripts/pull_parity.sh; then
+            fail "❌ THE TWO CORES PULL DIFFERENTLY" \
+                "Claude: the Swift no longer reads a project off the wire as the Python does. The Python is the reference implementation; fix the Swift."
+        fi
+        banner "✅ Both cores pull alike."
+
         mkdir -p "$(dirname "$parity_stamp")" && echo "$parity_fingerprint" > "$parity_stamp"
     fi
 else
-    banner "\n=== [6/9] No swift on PATH -- skipping the swift/ package ==="
+    banner "\n=== [6/10] No swift on PATH -- skipping the swift/ package ==="
 fi
 
 exit 0

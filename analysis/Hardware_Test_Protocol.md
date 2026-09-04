@@ -485,6 +485,14 @@ to hold end to end. Neither entry below has run on hardware yet.
   was **saved**, so save any panel edits before pulling. Add `--mcc-plan` to walk MCC's
   8,951-request stream instead of the coalesced 1,007 if the two need comparing directly on
   hardware.
+
+  The Swift CLI reads the same slot over CoreMIDI, so it wants no `sudo` and no libusb, and the two
+  files must `cmp`. `scripts/pull_parity.sh` holds that over the tapes; this is the same check on
+  the wire, and it costs one more read:
+
+  ```sh
+  swift/.build/debug/ksp-swift-cli pull project_files/captures/H3-pull-swift.KeyStepPro --slot <N>
+  ```
 - **Confirms if:** the command completes, `ksp.reader.read_project` parses the result without
   error, and the printed note count and tempo look like the loaded project.
 - **Falsified if:** the device times out, returns a filler answer (an unsaved slot reads as `0x7f`
@@ -623,8 +631,9 @@ One probe, and it was what stood between the Swift port and a read the app could
   launch-on-demand, so the `ioreg` line above reads as though nothing owns interface 2 unless
   something is holding a MIDI client open while you run it — `sniff` in another shell does.
 
-- **Reading a whole project over CoreMIDI** is the end of the chain, and needs `KSPKit` linked
-  because it drives `BulkRead.readRaw` rather than replaying frames:
+- **Reading a whole project over CoreMIDI** is the end of the chain. `ksp-swift-cli pull` is the
+  command that does it now; the bare driver below is what the figures were measured through, and it
+  needs `KSPKit` linked because it drives `BulkRead.readRaw` rather than replaying frames:
 
   ```sh
   (cd swift && swift build --target KSPKit)

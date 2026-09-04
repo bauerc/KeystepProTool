@@ -239,7 +239,7 @@ picture of someone else's product (ADR 0002).
 
 ## Out of scope
 
-**The CLI.** Its output is a byte-for-byte contract across two implementations held by three parity
+**The CLI.** Its output is a byte-for-byte contract across two implementations held by four parity
 scripts. The visual language stops at the window and the bundle icon. Do not extend it into
 `port_parity.sh`.
 

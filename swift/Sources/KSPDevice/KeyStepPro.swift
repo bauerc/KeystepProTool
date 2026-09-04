@@ -8,8 +8,14 @@ public enum KeyStepPro {
     public static func open(
         timeoutMs: Int = DeviceTransport.defaultTimeoutMs
     ) throws -> (device: DeviceTransport, version: String) {
-        let device = DeviceTransport(
-            port: try CoreMIDIPort(named: endpointName), timeoutMs: timeoutMs)
+        let device = try attach(timeoutMs: timeoutMs)
         return (device, try device.identify())
+    }
+
+    /// The device alone, for a caller that decides for itself whether to ask its identity.
+    public static func attach(
+        timeoutMs: Int = DeviceTransport.defaultTimeoutMs
+    ) throws -> DeviceTransport {
+        DeviceTransport(port: try CoreMIDIPort(named: endpointName), timeoutMs: timeoutMs)
     }
 }

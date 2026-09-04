@@ -172,6 +172,40 @@ import Testing
         #expect(try Self.run(["convert"]).code == 2)
     }
 
+    @Test func noPullDestinationIsTwo() throws {
+        #expect(try Self.run(["pull"]).code == 2)
+    }
+
+    @Test(arguments: ["0", "17"]) func aPullSlotOutsideTheSixteenIsTwo(_ slot: String) throws {
+        let result = try Self.run(["pull", "/nonexistent/pulled.KeyStepPro", "--slot", slot])
+        #expect(result.code == 2)
+        #expect(result.stderr.contains("'--slot' must be in 1...16"))
+    }
+
+    @Test func aPullTimeoutBelowOneMillisecondIsTwo() throws {
+        let result = try Self.run(["pull", "/nonexistent/pulled.KeyStepPro", "--timeout", "0"])
+        #expect(result.code == 2)
+        #expect(result.stderr.contains("'--timeout' must be at least 1"))
+    }
+
+    @Test func aPullOntoAnExistingFileIsOne() throws {
+        // The real fixture as the destination: it exists, so the run is refused before the device
+        // is opened -- which is also what keeps this test off the hardware.
+        let result = try Self.run(["pull", Self.project])
+        #expect(result.code == 1)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli pull: \(Self.project) already exists (use --force to "
+                + "overwrite)\n")
+    }
+
+    @Test func pullOffersNoChoiceOfWalk() throws {
+        // One walk and no flag to choose another: --help must not imply a choice that is not there.
+        let result = try Self.run(["pull", "--help"])
+        #expect(result.code == 0)
+        #expect(!result.stdout.contains("--mcc-plan"))
+    }
+
     @Test func anUnknownOptionIsTwo() throws {
         // Not 64, which is what ArgumentParser exits with if the entry point stops mapping.
         let result = try Self.run(["dump", Self.project, "--nope"])
