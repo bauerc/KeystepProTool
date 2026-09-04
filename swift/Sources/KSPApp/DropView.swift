@@ -947,7 +947,8 @@ struct DropView: View {
     }
 
     /// Not scrolled: the staged view already scrolls, and a scroller inside one traps the wheel.
-    private func grid(_ grid: PatternGrid, selection: GridSelection, length: ExportLength)
+    /// No selection is the read-only preview: every slot as it stands, and nothing to click.
+    private func grid(_ grid: PatternGrid, selection: GridSelection?, length: ExportLength?)
         -> some View
     {
         VStack(alignment: .leading, spacing: 6) {
@@ -958,19 +959,22 @@ struct DropView: View {
                     Color.clear.frame(width: AppLayout.gridOrigin, height: 1)
                     HStack(spacing: AppLayout.cellSpacing) {
                         ForEach(grid.columns, id: \.self) { column in
-                            columnHeader(column, state: selection.state(ofPattern: column))
+                            columnHeader(column, selection: selection)
                         }
                     }
                 }
                 ForEach(grid.rows, id: \.track) { trackRow($0, selection: selection) }
             }
 
-            if let line = length.line {
+            if let line = length?.line {
                 Text(line).font(TypeScale.label).foregroundStyle(palette.mutedInk)
             }
 
             Text(PatternGrid.legend).font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
-            Text(GridSelection.legend).font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
+            if selection != nil {
+                Text(GridSelection.legend).font(TypeScale.smallValue)
+                    .foregroundStyle(palette.mutedInk)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1062,44 +1066,40 @@ struct DropView: View {
         .help(region.detail)
     }
 
-    private func columnHeader(_ column: Int, state: GridSelection.Tick) -> some View {
-        Button {
-            model.toggle(pattern: column)
-        } label: {
-            Text("\(column)")
-                .font(TypeScale.smallValue)
-                .foregroundStyle(state == .on ? HierarchicalShapeStyle.secondary : .tertiary)
-                .strikethrough(state == .off)
-                .frame(width: AppLayout.cellWidth)
-                .contentShape(Rectangle())
+    @ViewBuilder
+    private func columnHeader(_ column: Int, selection: GridSelection?) -> some View {
+        let state = selection?.state(ofPattern: column) ?? .on
+        let label = columnLabel(column, state: state)
+        if selection == nil {
+            label.help("Pattern slot \(column)")
+        } else {
+            Button {
+                model.toggle(pattern: column)
+            } label: {
+                label.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(
+                state == .on
+                    ? "Pattern slot \(column) — click to untick it on every track."
+                    : "Pattern slot \(column) — click to tick it on every track.")
         }
-        .buttonStyle(.plain)
-        .help(
-            state == .on
-                ? "Pattern slot \(column) — click to untick it on every track."
-                : "Pattern slot \(column) — click to tick it on every track.")
+    }
+
+    private func columnLabel(_ column: Int, state: GridSelection.Tick) -> some View {
+        Text("\(column)")
+            .font(TypeScale.smallValue)
+            .foregroundStyle(state == .on ? HierarchicalShapeStyle.secondary : .tertiary)
+            .strikethrough(state == .off)
+            .frame(width: AppLayout.cellWidth)
     }
 
     /// One track: its name, its cells, the rails joining whatever it chains, and the chain beneath.
-    private func trackRow(_ row: PatternGrid.Row, selection: GridSelection) -> some View {
-        let state = selection.state(ofTrack: row.track)
+    private func trackRow(_ row: PatternGrid.Row, selection: GridSelection?) -> some View {
+        let state = selection?.state(ofTrack: row.track) ?? .on
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 0) {
-                Button {
-                    model.toggle(track: row.track)
-                } label: {
-                    rowHead(
-                        readout: row.readout, name: row.name, isDrum: row.isDrum,
-                        struck: state == .off, dimmed: state != .on
-                    )
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(
-                    row.detail
-                        + (state == .on
-                            ? " · Click to untick this whole track."
-                            : " · Click to tick this whole track."))
+                trackHead(row, state: state, ticking: selection != nil)
                 Color.clear.frame(width: AppLayout.labelGap, height: 1)
                 HStack(spacing: AppLayout.cellSpacing) {
                     ForEach(row.cells, id: \.pattern) {
@@ -1116,6 +1116,30 @@ struct DropView: View {
                     .font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
                     .padding(.leading, AppLayout.gridOrigin)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func trackHead(_ row: PatternGrid.Row, state: GridSelection.Tick, ticking: Bool)
+        -> some View
+    {
+        let head = rowHead(
+            readout: row.readout, name: row.name, isDrum: row.isDrum, struck: state == .off,
+            dimmed: state != .on)
+        if ticking {
+            Button {
+                model.toggle(track: row.track)
+            } label: {
+                head.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(
+                row.detail
+                    + (state == .on
+                        ? " · Click to untick this whole track."
+                        : " · Click to tick this whole track."))
+        } else {
+            head.help(row.detail)
         }
     }
 
@@ -1154,40 +1178,50 @@ struct DropView: View {
     }
 
     /// An em dash means the slot holds nothing; `0` means it holds notes with every step off.
-    private func slot(_ cell: PatternGrid.Cell, track: Int, selection: GridSelection) -> some View {
-        let ticked = selection.isTicked(track: track, pattern: cell.pattern)
+    @ViewBuilder
+    private func slot(_ cell: PatternGrid.Cell, track: Int, selection: GridSelection?) -> some View
+    {
+        let ticked = selection?.isTicked(track: track, pattern: cell.pattern) ?? true
+        let face = slotFace(cell, track: track, ticked: ticked)
+        if selection == nil {
+            face.help(cell.detail)
+        } else {
+            Button {
+                model.toggle(track: track, pattern: cell.pattern)
+            } label: {
+                face.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(cell.detail + (ticked ? "" : " · unticked, so it will not be exported"))
+        }
+    }
+
+    private func slotFace(_ cell: PatternGrid.Cell, track: Int, ticked: Bool) -> some View {
         let fill = slotFill(
             track: track, notes: cell.noteCount, steps: cell.stepCount, isEmpty: cell.isEmpty)
         let ink = DeviceColor.ink(on: fill)
-        return Button {
-            model.toggle(track: track, pattern: cell.pattern)
-        } label: {
-            Text(cell.label)
-                .font(TypeScale.value)
-                // Shrunk rather than truncated: a count reading "1…" would be worse than small.
-                .lineLimit(1).minimumScaleFactor(0.7)
-                // An empty slot takes the muted ink rather than the fill's, so a grid of them
-                // cannot shout over the two cells that actually hold something.
-                .foregroundStyle(cell.isEmpty ? palette.mutedInk : ink)
-                .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
-                .background(
-                    slotBackground(
-                        fill: fill, ink: ink, steps: cell.isEmpty ? 0 : cell.stepCount)
-                )
-                // The whole export channel: solid exports, dashed does not, and nothing else about
-                // the cell moves with the tick.
-                .overlay {
-                    RoundedRectangle(cornerRadius: AppLayout.cellRadius)
-                        .strokeBorder(
-                            ink.opacity(0.35),
-                            style: ticked
-                                ? StrokeStyle(lineWidth: 1)
-                                : StrokeStyle(lineWidth: 1, dash: [2, 2]))
-                }
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(cell.detail + (ticked ? "" : " · unticked, so it will not be exported"))
+        return Text(cell.label)
+            .font(TypeScale.value)
+            // Shrunk rather than truncated: a count reading "1…" would be worse than small.
+            .lineLimit(1).minimumScaleFactor(0.7)
+            // An empty slot takes the muted ink rather than the fill's, so a grid of them
+            // cannot shout over the two cells that actually hold something.
+            .foregroundStyle(cell.isEmpty ? palette.mutedInk : ink)
+            .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
+            .background(
+                slotBackground(
+                    fill: fill, ink: ink, steps: cell.isEmpty ? 0 : cell.stepCount)
+            )
+            // The whole export channel: solid exports, dashed does not, and nothing else about
+            // the cell moves with the tick.
+            .overlay {
+                RoundedRectangle(cornerRadius: AppLayout.cellRadius)
+                    .strokeBorder(
+                        ink.opacity(0.35),
+                        style: ticked
+                            ? StrokeStyle(lineWidth: 1)
+                            : StrokeStyle(lineWidth: 1, dash: [2, 2]))
+            }
     }
 
     /// The pattern readout in its well, the track name, and the drum badge. Both grids draw it, so
@@ -1260,11 +1294,38 @@ struct DropView: View {
                     }
 
                     findings(outcome)
+
+                    if let preview = model.readPreview { readBack(preview) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .task(id: model.readPreview?.project) { await model.previewRead() }
+    }
+
+    /// What the read wrote, drawn as a dropped project is drawn but with nothing to tick: the
+    /// files are written already, so a selection here would decide nothing.
+    @ViewBuilder
+    private func readBack(_ preview: AppModel.ReadPreview) -> some View {
+        Divider()
+        switch preview.summary {
+        case .loading:
+            ProgressView("Reading the project back…").controlSize(.small)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle")
+                .font(TypeScale.label).foregroundStyle(palette.warning).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        case .project(let summary):
+            VStack(alignment: .leading, spacing: 12) {
+                grid(PatternGrid(summary), selection: nil, length: nil)
+                Divider()
+                arrangement(preview.arrangement)
+            }
+        // A project never summarises as a song; a read writes nothing else.
+        case .song:
+            EmptyView()
+        }
     }
 
     /// A split run names its own files, so the name reaches the folder they land in instead.

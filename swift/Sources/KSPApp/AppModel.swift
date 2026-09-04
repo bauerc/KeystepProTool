@@ -54,6 +54,14 @@ final class AppModel {
         }
     }
 
+    /// What the project a read wrote turned out to hold, read back off the file rather than kept
+    /// from the walk: the preview is then of what actually landed on disk.
+    struct ReadPreview: Equatable {
+        let project: URL
+        var summary: SummaryState = .loading
+        var arrangement: ArrangementState = .loading
+    }
+
     /// The sidebar's three rows. ``source`` exists only while the track list has sent a track to
     /// Drums, and is the editor for which track that is.
     enum DrumChoice: Hashable, Identifiable, Sendable {
@@ -112,6 +120,8 @@ final class AppModel {
     /// What the read's files are called. Empty is not "unnamed": it is the slot's own default,
     /// which is what the field shows as its placeholder.
     var readName: String = ""
+    /// `nil` whenever the result on screen is not a successful read's.
+    private(set) var readPreview: ReadPreview?
     /// Set through ``choose(_:)`` and ``useDefault(for:)`` alone, so every change is saved.
     private(set) var folders: Folders
 
@@ -236,6 +246,7 @@ final class AppModel {
         }
         name = Naming.stem(of: url)
         lastKind = job.kind
+        readPreview = nil
         phase = .staged(Staged(job: job))
     }
 
@@ -417,7 +428,27 @@ final class AppModel {
         let outcome = await DeviceRead.run(plan, verbose: settings.verbose, pull: pull)
 
         if !outcome.written.isEmpty { reveal(outcome.written) }
+        // A failure wrote no project, so there is nothing to read back and preview.
+        readPreview = outcome.failed ? nil : ReadPreview(project: plan.target)
         phase = .done(outcome)
+    }
+
+    /// What the read wrote, summarised and laid out as a dropped project would be. On the
+    /// defaults, not on ``settings``: this says what came off the device, not what an export would
+    /// make of it.
+    func previewRead() async {
+        guard let pending = readPreview, pending.summary == .loading else { return }
+        let job = Job.toMIDI(pending.project)
+
+        let summary = await Conversion.summarise(job)
+        // A late answer must not land on a result that has since been replaced, for the reason
+        // ``summarise()`` guards its own.
+        guard readPreview?.project == pending.project else { return }
+        readPreview?.summary = summary
+
+        let arrangement = await Conversion.arrange(job, settings: Settings())
+        guard readPreview?.project == pending.project else { return }
+        readPreview?.arrangement = arrangement
     }
 
     func cancel() { reset() }
@@ -426,5 +457,6 @@ final class AppModel {
         phase = .idle
         name = ""
         readName = ""
+        readPreview = nil
     }
 }

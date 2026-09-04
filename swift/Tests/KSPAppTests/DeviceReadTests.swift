@@ -274,6 +274,69 @@ private final class Revealed {
         }
     }
 
+    /// The stub stands in for the runner's write, so the preview reads a real project back.
+    private func writing(_ fixture: String) -> @Sendable (PullRunner.Options) -> RunResult {
+        let source = RepoData.projectFiles.appending(path: fixture)
+        return { options in
+            try? FileManager.default.copyItem(at: source, to: options.output)
+            return RunResult(
+                stdout: "read slot 1 in 4.1 s, 1007 requests", destinations: [options.output])
+        }
+    }
+
+    @Test func thepreviewIsOfTheProjectTheReadWroteRatherThanOfTheWalk() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory, pull: writing("project_5.KeyStepPro"))
+        let expected = try summarise("project_5.KeyStepPro")
+
+        await model.read()
+
+        let pending = try #require(model.readPreview)
+        #expect(pending.project == directory.appending(path: "Project 1.KeyStepPro"))
+        #expect(pending.summary == .loading)
+
+        await model.previewRead()
+
+        guard case .project(let shown) = model.readPreview?.summary else {
+            Issue.record("the project the read wrote should have been summarised")
+            return
+        }
+        #expect(shown.tempoBPM == expected.tempoBPM)
+        #expect(shown.tracks.count == expected.tracks.count)
+        // Named after the file it was read back from, not after the fixture it was copied from.
+        #expect(shown.sourceName == "Project 1.KeyStepPro")
+        guard case .ready = model.readPreview?.arrangement else {
+            Issue.record("the patterns should have been laid out")
+            return
+        }
+    }
+
+    @Test func afailedReadPreviewsNothing() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(
+            writingInto: directory,
+            pull: PullLog(answering: .failure(PullRunner.prog, "not answering", code: 1)).pull)
+
+        await model.read()
+
+        #expect(model.readPreview == nil)
+    }
+
+    @Test func adropAfterAreadReplacesTheResultAndItsPreview() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory, pull: writing("project_5.KeyStepPro"))
+        await model.read()
+        #expect(model.readPreview != nil)
+
+        model.accept(RepoData.projectFiles.appending(path: "m6-test-file.mid"))
+
+        #expect(model.readPreview == nil)
+        #expect(model.staged != nil)
+    }
+
     /// The picker's projects are the device's, and `pull --slot` validates against the same count.
     @Test func thepickerCoversTheDevicesOwnSixteen() {
         #expect(DeviceRead.slots.count == Constants.projectSlots)
