@@ -67,6 +67,22 @@ enum Naming {
         return name.isEmpty ? fallbackStem : name
     }
 
+    /// `stem`, moved along to `stem 2`, `stem 3`, ... until every suffix named is free. A read
+    /// writing two files needs one stem that suits both, not a free name per file.
+    static func vacantStem(
+        in directory: URL, stem: String, suffixes: [String],
+        exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
+    ) -> String {
+        let base = sanitised(stem)
+        var candidate = base
+        var attempt = 2
+        while suffixes.contains(where: { exists(directory.appending(path: candidate + $0)) }) {
+            candidate = "\(base) \(attempt)"
+            attempt += 1
+        }
+        return candidate
+    }
+
     /// `directory/stem.ext`, moved along to `stem 2`, `stem 3`, ... until nothing is there.
     static func vacant(
         in directory: URL, stem: String, extension ext: String,
@@ -85,14 +101,8 @@ enum Naming {
     private static func firstFree(
         in directory: URL, stem: String, extension ext: String?, exists: (URL) -> Bool
     ) -> URL {
-        let base = sanitised(stem)
         let tail = ext.map { ".\($0)" } ?? ""
-        var candidate = directory.appending(path: "\(base)\(tail)")
-        var attempt = 2
-        while exists(candidate) {
-            candidate = directory.appending(path: "\(base) \(attempt)\(tail)")
-            attempt += 1
-        }
-        return candidate
+        let free = vacantStem(in: directory, stem: stem, suffixes: [tail], exists: exists)
+        return directory.appending(path: "\(free)\(tail)")
     }
 }

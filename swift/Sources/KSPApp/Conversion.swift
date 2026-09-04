@@ -15,6 +15,13 @@ enum Job: Sendable, Hashable {
 }
 
 struct Outcome: Sendable, Equatable {
+    /// Which run produced it. The window asks only so the band can say "read" over a read; every
+    /// other part of an outcome means the same thing whichever way it was made.
+    enum Source: Sendable {
+        case conversion
+        case deviceRead
+    }
+
     /// What the run wrote, or would have written under a dry run. Empty is the failure.
     var written: [URL]
     var headline: String
@@ -22,6 +29,7 @@ struct Outcome: Sendable, Equatable {
     /// The folder a split run filled; `nil` when the run wrote a single named file.
     let folder: URL?
     let dryRun: Bool
+    let source: Source
 
     /// Rendered once: SwiftUI re-evaluates a body far more often than a conversion happens.
     let collapsedRows: [Finding]
@@ -29,13 +37,14 @@ struct Outcome: Sendable, Equatable {
 
     init(
         written: [URL], headline: String, report: Report, note: String?, folder: URL? = nil,
-        dryRun: Bool = false
+        dryRun: Bool = false, source: Source = .conversion
     ) {
         self.written = written
         self.headline = headline
         self.note = note
         self.folder = folder
         self.dryRun = dryRun
+        self.source = source
         // Not `Report.note(verbose:)`: its text names a CLI flag, not the sidebar's toggle.
         self.collapsedRows = report.rows(verbose: false)
         self.allRows = report.rows(verbose: true)
@@ -47,8 +56,13 @@ struct Outcome: Sendable, Equatable {
     var failed: Bool { written.isEmpty }
 
     var resultLine: String {
-        if failed { return "Nothing was written" }
+        if failed { return source == .deviceRead ? "Nothing was read" : "Nothing was written" }
         return written.count == 1 ? written[0].lastPathComponent : "\(written.count) files written"
+    }
+
+    /// The band's way back to the start, worded for the run that got here.
+    var againLabel: String {
+        source == .deviceRead ? "Read another" : "Convert another"
     }
 
     var previewLine: String {
@@ -237,7 +251,7 @@ enum Conversion {
         return detail.isEmpty ? "Converted." : detail.joined(separator: "\n")
     }
 
-    private static func collisionNote(_ target: URL) -> String {
+    static func collisionNote(_ target: URL) -> String {
         "That name is taken, so this one is \(target.lastPathComponent)."
     }
 }

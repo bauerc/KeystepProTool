@@ -13,8 +13,8 @@ func located(_ patterns: [Int]) -> String {
     return ordered.count == 1 ? "pattern \(first)" : "patterns \(first)-\(last)"
 }
 
-/// A row head's pattern number, two digits as the device's four displays show it, or `--` where
-/// the track is on no pattern at all. Shared so both grids read the same way round.
+/// A pattern number or a project slot, two digits as the device's four displays show it, or `--`
+/// where the track is on no pattern at all. Shared so every readout reads the same way round.
 func patternReadout(_ pattern: Int?) -> String {
     pattern.map { String(format: "%02d", $0) } ?? "--"
 }

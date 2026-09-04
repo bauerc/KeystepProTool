@@ -410,6 +410,16 @@ enum AppLayout {
         return min(meterSegmentCount - 1, max(1, Int(lit)))
     }
 
+    /// The slot picker sits on the pattern map's own column metrics, so a project number stands
+    /// where a pattern number does. Taller than a slot cell only because this one is clicked.
+    static var slotPickerWidth: CGFloat { axisWidth }
+    static let slotCellHeight: CGFloat = 24
+    /// The device card, which the idle pane holds beside nothing else, so it is sized to its own
+    /// contents rather than to the pane.
+    static let deviceCardWidth: CGFloat = 520
+    static let deviceCardPadding: CGFloat = 14
+    static let cardRadius: CGFloat = 8
+
     /// A severity glyph's column, wide enough that the text beside it starts on one edge.
     static let findingGlyphWidth: CGFloat = 14
     /// "Track 1, pattern 16" is the longest a gauge's site reads.

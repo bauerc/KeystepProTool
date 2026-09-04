@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import KSPKit
+import KSPRun
 import Observation
 
 @MainActor
@@ -12,6 +13,9 @@ final class AppModel {
         case idle
         case staged(Staged)
         case working(String)
+        /// A read in flight, at the project it is reading. Nothing about it can be cancelled:
+        /// the walk is the runner's, and it does not take one.
+        case reading(Int)
         case done(Outcome)
     }
 
@@ -48,6 +52,14 @@ final class AppModel {
             case .loading, .failed: return nil
             }
         }
+    }
+
+    /// What the project a read wrote turned out to hold, read back off the file rather than kept
+    /// from the walk: the preview is then of what actually landed on disk.
+    struct ReadPreview: Equatable {
+        let project: URL
+        var summary: SummaryState = .loading
+        var arrangement: ArrangementState = .loading
     }
 
     /// The sidebar's three rows. ``source`` exists only while the track list has sent a track to
@@ -88,11 +100,35 @@ final class AppModel {
             settingsStore.save(newValue)
         }
     }
+    /// Which of the device's sixteen the read takes, remembered as the destinations are: a user
+    /// who reads project 7 reads it again.
+    var slot: Int {
+        get { chosenSlot }
+        set {
+            chosenSlot = newValue
+            settingsStore.save(slot: newValue)
+        }
+    }
+    /// Whether the read also writes the `.mid` the runner's own export would make from it.
+    var alsoMidi: Bool {
+        get { chosenAlsoMidi }
+        set {
+            chosenAlsoMidi = newValue
+            settingsStore.save(alsoMidi: newValue)
+        }
+    }
+    /// What the read's files are called. Empty is not "unnamed": it is the slot's own default,
+    /// which is what the field shows as its placeholder.
+    var readName: String = ""
+    /// `nil` whenever the result on screen is not a successful read's.
+    private(set) var readPreview: ReadPreview?
     /// Set through ``choose(_:)`` and ``useDefault(for:)`` alone, so every change is saved.
     private(set) var folders: Folders
 
     private var chosenMode: Mode
     private var chosenAppearance: Appearance
+    private var chosenSlot: Int
+    private var chosenAlsoMidi: Bool
     private var slots: [Job.Kind: Settings]
     /// The direction the panel is showing while nothing is staged, so cancelling a drop does not
     /// snap it to the other one. Within a session only: a launch starts at the import.
@@ -103,22 +139,27 @@ final class AppModel {
     private let destination: (Job, Folders) -> Destination
     private let reveal: ([URL]) -> Void
     private let chooseFolder: @MainActor (URL?) -> URL?
+    private let pull: @Sendable (PullRunner.Options) -> RunResult
 
     init(
         store: FolderStore = FolderStore(),
         settingsStore: SettingsStore = SettingsStore(),
         destination: @escaping (Job, Folders) -> Destination = AppModel.destination(for:folders:),
         reveal: @escaping ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) },
-        chooseFolder: @escaping @MainActor (URL?) -> URL? = AppModel.chooseFolder(startingAt:)
+        chooseFolder: @escaping @MainActor (URL?) -> URL? = AppModel.chooseFolder(startingAt:),
+        pull: @escaping @Sendable (PullRunner.Options) -> RunResult = { PullRunner.run($0) }
     ) {
         self.store = store
         self.settingsStore = settingsStore
         self.destination = destination
         self.reveal = reveal
         self.chooseFolder = chooseFolder
+        self.pull = pull
         self.folders = store.load()
         self.chosenMode = settingsStore.loadMode()
         self.chosenAppearance = settingsStore.loadAppearance()
+        self.chosenSlot = settingsStore.loadSlot()
+        self.chosenAlsoMidi = settingsStore.loadAlsoMidi()
         self.slots = Dictionary(
             uniqueKeysWithValues: Job.Kind.allCases.map { ($0, settingsStore.load($0)) })
     }
@@ -189,6 +230,12 @@ final class AppModel {
     }
 
     func accept(_ url: URL) {
+        // A drop landing on a run already in flight would be staged and then thrown away by that
+        // run's own answer, which lands last. A read is seconds at the device; both are ignored.
+        switch phase {
+        case .working, .reading: return
+        case .idle, .staged, .done: break
+        }
         guard let job = Conversion.job(for: url) else {
             phase = .done(
                 Outcome(
@@ -199,6 +246,7 @@ final class AppModel {
         }
         name = Naming.stem(of: url)
         lastKind = job.kind
+        readPreview = nil
         phase = .staged(Staged(job: job))
     }
 
@@ -357,10 +405,58 @@ final class AppModel {
         phase = .done(outcome)
     }
 
+    /// Where the read's files go and what they are called, resolved fresh for the reason
+    /// ``convert()`` re-plans its own.
+    var deviceReadPlan: DeviceRead.Plan {
+        DeviceRead.plan(
+            slot: slot, named: readName,
+            into: Destinations.forProjects(chosen: folders.project), alsoMidi: alsoMidi)
+    }
+
+    /// The `.mid` is written beside the project the read just wrote, which is the app's own
+    /// default; a chosen MIDI folder is the export's rule and does not reach here.
+    var deviceMIDINote: String? {
+        guard alsoMidi, folders.midi != nil else { return nil }
+        return "The MIDI file is written beside the project, not in the MIDI files folder."
+    }
+
+    func read() async {
+        guard case .idle = phase else { return }
+        let plan = deviceReadPlan
+        phase = .reading(plan.slot)
+
+        let outcome = await DeviceRead.run(plan, verbose: settings.verbose, pull: pull)
+
+        if !outcome.written.isEmpty { reveal(outcome.written) }
+        // A failure wrote no project, so there is nothing to read back and preview.
+        readPreview = outcome.failed ? nil : ReadPreview(project: plan.target)
+        phase = .done(outcome)
+    }
+
+    /// What the read wrote, summarised and laid out as a dropped project would be. On the
+    /// defaults, not on ``settings``: this says what came off the device, not what an export would
+    /// make of it.
+    func previewRead() async {
+        guard let pending = readPreview, pending.summary == .loading else { return }
+        let job = Job.toMIDI(pending.project)
+
+        let summary = await Conversion.summarise(job)
+        // A late answer must not land on a result that has since been replaced, for the reason
+        // ``summarise()`` guards its own.
+        guard readPreview?.project == pending.project else { return }
+        readPreview?.summary = summary
+
+        let arrangement = await Conversion.arrange(job, settings: Settings())
+        guard readPreview?.project == pending.project else { return }
+        readPreview?.arrangement = arrangement
+    }
+
     func cancel() { reset() }
 
     func reset() {
         phase = .idle
         name = ""
+        readName = ""
+        readPreview = nil
     }
 }
