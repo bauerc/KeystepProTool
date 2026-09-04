@@ -459,13 +459,16 @@ final class AppModel {
         guard let pending = readPreview, pending.summary == .loading else { return }
         let job = Job.toMIDI(pending.project)
 
-        let summary = await Conversion.summarise(job)
+        async let summarised = Conversion.summarise(job)
+        async let arranged = Conversion.arrange(job, settings: Settings())
+
+        let summary = await summarised
         // A late answer must not land on a result that has since been replaced, for the reason
         // ``summarise()`` guards its own.
         guard readPreview?.project == pending.project else { return }
         readPreview?.summary = summary
 
-        let arrangement = await Conversion.arrange(job, settings: Settings())
+        let arrangement = await arranged
         guard readPreview?.project == pending.project else { return }
         readPreview?.arrangement = arrangement
     }
