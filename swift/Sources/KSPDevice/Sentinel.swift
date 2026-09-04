@@ -16,8 +16,10 @@ enum Sentinel {
         guard reply.count > 6, reply[6] == Sysex.cmdReadReply,
             request.count > indexFromEnd
         else { return nil }
+        // A reply shorter than the request it echoes is malformed, not truncated: a negative
+        // count would re-address the repair at or before the index it started from.
         let carried = reply.count - request.count
-        return carried < promise(of: request) ? carried : nil
+        return (0..<promise(of: request)).contains(carried) ? carried : nil
     }
 
     /// The whole reply, rebuilt: the value after the ones that arrived is the sentinel, and the

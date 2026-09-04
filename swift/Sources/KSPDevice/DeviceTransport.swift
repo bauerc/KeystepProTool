@@ -31,7 +31,10 @@ public final class DeviceTransport: Transport {
         do {
             return try Sysex.parseIdentity(reply)
         } catch {
-            throw DeviceError.unreadableIdentity(reply, error)
+            // A `KSPError` rather than a `DeviceError`, as Python raises `ValueError` here and
+            // not `TransportError`: a frame that came back and answered the wrong question is
+            // what the caller prefixes with the slot it was reading.
+            throw KSPError.value("\(error): \(hex(reply))")
         }
     }
 

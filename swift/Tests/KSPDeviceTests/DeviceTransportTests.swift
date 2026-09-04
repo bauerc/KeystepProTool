@@ -93,11 +93,13 @@ private let identityReply = "f07e7f060200206b0200090025140502f7"
         #expect("\(DeviceError.notAnswering)".contains("killall MIDIServer"))
     }
 
+    /// A `KSPError`, as Python's is a `ValueError`: the frame came back and answered the wrong
+    /// question, so the caller names the slot it was reading rather than the wire.
     @Test func anUnreadableIdentityReplyShowsItsBytes() throws {
         let device = DeviceTransport(port: port { _ in [[0xF0, 0x7E, 0xF7]] }, timeoutMs: 50)
 
-        let error = #expect(throws: DeviceError.self) { try device.identify() }
-        #expect(error?.description.contains("f07ef7") == true)
+        let error = #expect(throws: KSPError.self) { try device.identify() }
+        #expect(error?.description == "not a KeyStep Pro identity reply: f07ef7")
     }
 
     @Test func theProloguePassesStraightThrough() throws {

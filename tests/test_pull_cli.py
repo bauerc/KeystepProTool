@@ -329,3 +329,37 @@ def test_also_midi_refuses_a_destination_that_is_its_own_midi_file(
     assert "same file" in capsys.readouterr().err
     assert not written.exists()
     assert not attached.slots[1].asked
+
+
+def test_also_midi_refuses_its_own_midi_file_whatever_the_case(
+    attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The volume is case-insensitive by default, so ``.MID`` names the very file the export
+    would write, and an exact match would let the read clobber its own project."""
+    written = tmp_path / "pulled.MID"
+
+    assert main([str(written), "--also-midi"]) == 2
+
+    assert "same file" in capsys.readouterr().err
+    assert not written.exists()
+    assert not attached.slots[1].asked
+
+
+def test_an_unreadable_identity_is_named_with_the_slot_it_was_reading(
+    monkeypatch: pytest.MonkeyPatch,
+    device: FakeDevice,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A frame that came back and answered the wrong question is a ValueError, so it carries
+    the slot the walk's own failures carry."""
+    monkeypatch.setattr(device, "exchange", lambda _: bytes.fromhex("f07ef7"))
+    monkeypatch.setattr(pull, "UsbMidiTransport", lambda **_: device)
+    written = tmp_path / "pulled.KeyStepPro"
+
+    assert main([str(written), "--slot", "5"]) == 1
+
+    assert capsys.readouterr().err == (
+        "ksp-pull: slot 5: not a KeyStep Pro identity reply: f07ef7\n"
+    )
+    assert not written.exists()

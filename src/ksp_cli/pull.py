@@ -73,7 +73,9 @@ class _MidiPlan(NamedTuple):
 def _midi_plan(output: Path, *, prog: str) -> _MidiPlan:
     """The sidecar for *output*, refusing a name whose .mid is *output* itself."""
     path = output.with_suffix(".mid")
-    if path == output:
+    # Case-folded: the volume this writes to is case-insensitive by default, where ``Foo.MID``
+    # and the ``Foo.mid`` beside it are one file.
+    if output.suffix.lower() == ".mid":
         fail(
             f"--also-midi cannot write {output}: the project and its MIDI would be the "
             "same file; name the project .KeyStepPro",

@@ -19,6 +19,15 @@ import Testing
         #expect(Sentinel.shortfall(of: answerFromPatterns(later), to: later) == nil)
     }
 
+    /// Shorter than the request it echoes is malformed, not truncated: repairing it would
+    /// re-address at the index it started from and hand back a frame the device never sent.
+    @Test func aReplyShorterThanItsOwnRequestIsNotJudgedShort() throws {
+        let request = try patternRequest(from: 14, count: 3)
+        let clipped = Array(reply(to: request, values: [60, 60, 60]).prefix(8)) + [Sysex.end]
+
+        #expect(Sentinel.shortfall(of: clipped, to: request) == nil)
+    }
+
     @Test func aScalarReplyIsNeverJudgedShort() throws {
         let request = try Sysex.buildReadRequest(ReadRequest(item: 120, param: 37))
         #expect(Sentinel.shortfall(of: reply(to: request, values: [3]), to: request) == nil)

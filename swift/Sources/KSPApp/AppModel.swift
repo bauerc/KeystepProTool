@@ -107,6 +107,7 @@ final class AppModel {
         set {
             chosenSlot = newValue
             settingsStore.save(slot: newValue)
+            refreshReadPlan()
         }
     }
     /// Whether the read also writes the `.mid` the runner's own export would make from it.
@@ -115,15 +116,20 @@ final class AppModel {
         set {
             chosenAlsoMidi = newValue
             settingsStore.save(alsoMidi: newValue)
+            refreshReadPlan()
         }
     }
     /// What the read's files are called. Empty is not "unnamed": it is the slot's own default,
     /// which is what the field shows as its placeholder.
-    var readName: String = ""
+    var readName: String = "" { didSet { refreshReadPlan() } }
     /// `nil` whenever the result on screen is not a successful read's.
     private(set) var readPreview: ReadPreview?
     /// Set through ``choose(_:)`` and ``useDefault(for:)`` alone, so every change is saved.
-    private(set) var folders: Folders
+    private(set) var folders: Folders { didSet { refreshReadPlan() } }
+    /// Where the read's files would go and what they would be called, as the card shows it.
+    /// Kept rather than resolved on demand: a body is evaluated on every keystroke, and
+    /// resolving a free name walks the destination folder.
+    private(set) var deviceReadPlan: DeviceRead.Plan
 
     private var chosenMode: Mode
     private var chosenAppearance: Appearance
@@ -155,13 +161,18 @@ final class AppModel {
         self.reveal = reveal
         self.chooseFolder = chooseFolder
         self.pull = pull
-        self.folders = store.load()
+        let loaded = store.load()
+        let slot = settingsStore.loadSlot()
+        let alsoMidi = settingsStore.loadAlsoMidi()
+        self.folders = loaded
         self.chosenMode = settingsStore.loadMode()
         self.chosenAppearance = settingsStore.loadAppearance()
-        self.chosenSlot = settingsStore.loadSlot()
-        self.chosenAlsoMidi = settingsStore.loadAlsoMidi()
+        self.chosenSlot = slot
+        self.chosenAlsoMidi = alsoMidi
         self.slots = Dictionary(
             uniqueKeysWithValues: Job.Kind.allCases.map { ($0, settingsStore.load($0)) })
+        self.deviceReadPlan = AppModel.readPlan(
+            slot: slot, named: "", folders: loaded, alsoMidi: alsoMidi)
     }
 
     /// The direction whose remembered settings the panel is editing.
@@ -406,12 +417,20 @@ final class AppModel {
     }
 
     /// Where the read's files go and what they are called, resolved fresh for the reason
-    /// ``convert()`` re-plans its own.
-    var deviceReadPlan: DeviceRead.Plan {
-        DeviceRead.plan(
-            slot: slot, named: readName,
-            into: Destinations.forProjects(chosen: folders.project), alsoMidi: alsoMidi)
+    /// ``convert()`` re-plans its own: a name can be taken since the card last drew.
+    private var resolvedReadPlan: DeviceRead.Plan {
+        AppModel.readPlan(slot: slot, named: readName, folders: folders, alsoMidi: alsoMidi)
     }
+
+    private static func readPlan(
+        slot: Int, named: String, folders: Folders, alsoMidi: Bool
+    ) -> DeviceRead.Plan {
+        DeviceRead.plan(
+            slot: slot, named: named, into: Destinations.forProjects(chosen: folders.project),
+            alsoMidi: alsoMidi)
+    }
+
+    private func refreshReadPlan() { deviceReadPlan = resolvedReadPlan }
 
     /// The `.mid` is written beside the project the read just wrote, which is the app's own
     /// default; a chosen MIDI folder is the export's rule and does not reach here.
@@ -422,7 +441,7 @@ final class AppModel {
 
     func read() async {
         guard case .idle = phase else { return }
-        let plan = deviceReadPlan
+        let plan = resolvedReadPlan
         phase = .reading(plan.slot)
 
         let outcome = await DeviceRead.run(plan, verbose: settings.verbose, pull: pull)

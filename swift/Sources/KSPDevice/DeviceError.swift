@@ -43,10 +43,6 @@ extension DeviceError {
         DeviceError("\(bytes) bytes is more than the \(capacity) one MIDI packet carries")
     }
 
-    static func unreadableIdentity(_ reply: [UInt8], _ reason: any Error) -> DeviceError {
-        DeviceError("\(reason): \(hex(reply))")
-    }
-
     /// A re-read addressed past what a seven-bit SysEx byte can carry.
     static func unaddressable(index: Int, count: Int) -> DeviceError {
         DeviceError("re-reading \(count) values from index \(index) needs more than a SysEx byte")

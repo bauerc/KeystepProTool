@@ -31,15 +31,10 @@ final class CoreMIDIPort: SysExPort {
 
         try check(
             MIDIClientCreateWithBlock("ksp" as CFString, &client, nil), "creating the MIDI client")
-        let frames = self.frames
+        let queue = frames
         try check(
             MIDIInputPortCreateWithBlock(client, "ksp-in" as CFString, &input) { packets, _ in
-                var packet = packets.pointee.packet
-                for _ in 0..<packets.pointee.numPackets {
-                    frames.feed(
-                        withUnsafeBytes(of: packet.data) { Array($0.prefix(Int(packet.length))) })
-                    packet = MIDIPacketNext(&packet).pointee
-                }
+                for frame in packetFrames(in: packets) { queue.feed(frame) }
             }, "opening the input port")
         try check(
             MIDIOutputPortCreate(client, "ksp-out" as CFString, &output), "opening the output port")
@@ -69,6 +64,13 @@ final class CoreMIDIPort: SysExPort {
     func nextFrame(within seconds: Double) -> [UInt8]? {
         frames.next(within: seconds)
     }
+}
+
+/// Every packet one callback was handed. The list's own iterator, never `MIDIPacketNext` over a
+/// copied packet: that copy is 268 bytes read out of a smaller buffer, and stepping from it
+/// addresses the copy's own storage rather than the next packet.
+func packetFrames(in packets: UnsafePointer<MIDIPacketList>) -> [[UInt8]] {
+    packets.unsafeSequence().map { Array($0.bytes()) }
 }
 
 private func check(_ status: OSStatus, _ what: String) throws {
