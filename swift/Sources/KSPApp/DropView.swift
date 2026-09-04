@@ -82,6 +82,10 @@ struct DropView: View {
                 .font(TypeScale.label).foregroundStyle(palette.bandInk.opacity(0.65))
         case .working(let filename):
             Text(filename).font(TypeScale.bandTitle).lineLimit(1).truncationMode(.middle)
+        case .reading(let slot):
+            Text("Project \(slot)").font(TypeScale.bandTitle)
+            Text("KeyStep Pro → project file")
+                .font(TypeScale.label).foregroundStyle(palette.bandInk.opacity(0.65))
         case .done(let outcome):
             // The glyph carries the outcome; the colour only agrees with it. Track 2 is orange and
             // Track 4 is red, so a status hue is never enough on its own.
@@ -107,8 +111,8 @@ struct DropView: View {
             }
             .disabled(model.blockReason != nil)
             .keyboardShortcut(.defaultAction)
-        case .done:
-            Button("Convert another") { model.reset() }
+        case .done(let outcome):
+            Button(outcome.againLabel) { model.reset() }
         default:
             EmptyView()
         }
@@ -383,24 +387,131 @@ struct DropView: View {
             self.staged(staged)
         case .working(let filename):
             ProgressView("Converting \(filename)…")
+        case .reading(let slot):
+            reading(slot)
         case .done(let outcome):
             done(outcome)
         }
     }
 
     private var idle: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "arrow.down.doc")
-                .font(.system(size: 44))
+        VStack(spacing: 18) {
+            Spacer(minLength: 0)
+            VStack(spacing: 8) {
+                Image(systemName: "arrow.down.doc")
+                    .font(.system(size: 44))
+                    .foregroundStyle(palette.mutedInk)
+                Text("Drop a MIDI file here").font(.title3)
+                Text(
+                    "Drop a .KeyStepPro instead to get a MIDI file back. "
+                        + "Where each one lands is on the right."
+                )
+                .font(TypeScale.label)
                 .foregroundStyle(palette.mutedInk)
-            Text("Drop a MIDI file here").font(.title3)
+                .multilineTextAlignment(.center)
+            }
+            Spacer(minLength: 0)
+            deviceCard
+        }
+    }
+
+    /// The other way a project reaches the app: off the device rather than out of a file. It sits
+    /// on the idle pane because it is an alternative to the drop above it, not a mode of its own.
+    private var deviceCard: some View {
+        let plan = model.deviceReadPlan
+        return VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("Read from the KeyStep Pro")
+
             Text(
-                "Drop a .KeyStepPro instead to get a MIDI file back. "
-                    + "Where each one lands is on the right."
+                "The device is read over USB and needs no password. A project is read as it was "
+                    + "saved, so save any panel edits first."
             )
-            .font(TypeScale.label)
-            .foregroundStyle(palette.mutedInk)
-            .multilineTextAlignment(.center)
+            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+            .fixedSize(horizontal: false, vertical: true)
+
+            slotPicker
+
+            TextField(DeviceRead.defaultStem(slot: model.slot), text: $model.readName)
+                .textFieldStyle(.roundedBorder)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Will be written to").font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                Text(plan.target.path).font(.callout).textSelection(.enabled)
+                    .lineLimit(2).truncationMode(.middle)
+            }
+
+            if let note = plan.note {
+                Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Also write the MIDI file", isOn: $model.alsoMidi)
+                    .toggleStyle(.checkbox)
+                Text("The same .mid that converting the project afterwards would make.")
+                    .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                if let note = model.deviceMIDINote {
+                    Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button("Read project \(model.slot)") { Task { await model.read() } }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(AppLayout.deviceCardPadding)
+        .frame(width: AppLayout.deviceCardWidth, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(palette.surface))
+    }
+
+    /// The device's sixteen on the pattern map's own metrics. The chosen one is a lit readout
+    /// among unlit ones and is named in full below the row, so no hue carries the choice.
+    private var slotPicker: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: AppLayout.cellSpacing) {
+                ForEach(Array(DeviceRead.slots), id: \.self) { slot in slotCell(slot) }
+            }
+            .frame(width: AppLayout.slotPickerWidth, alignment: .leading)
+            Text("Project \(model.slot) of \(DeviceRead.slots.upperBound)")
+                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+        }
+    }
+
+    private func slotCell(_ slot: Int) -> some View {
+        let chosen = slot == model.slot
+        return Button {
+            model.slot = slot
+        } label: {
+            Text(patternReadout(slot))
+                .font(TypeScale.readout)
+                .foregroundStyle(chosen ? palette.bandInk : palette.mutedInk)
+                .frame(width: AppLayout.cellWidth, height: AppLayout.slotCellHeight)
+                .background(
+                    RoundedRectangle(cornerRadius: AppLayout.cellRadius)
+                        .fill(chosen ? palette.well : palette.inert)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: AppLayout.cellRadius)
+                        .strokeBorder(palette.ink.opacity(chosen ? 0.55 : 0), lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Project \(slot)")
+        .accessibilityLabel("Project \(slot)")
+    }
+
+    /// The walk reports no position, so the progress is the system's own indeterminate view --
+    /// with the one instruction that matters while it runs.
+    private func reading(_ slot: Int) -> some View {
+        VStack(spacing: 8) {
+            ProgressView("Reading project \(slot) from the KeyStep Pro…")
+            Text("This takes a few seconds. Leave the device alone until it finishes.")
+                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
         }
     }
 

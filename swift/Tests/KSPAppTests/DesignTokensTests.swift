@@ -43,6 +43,15 @@ private func contrast(_ one: Color, _ other: Color) -> Double {
         #expect(AppLayout.limitRowWidth <= AppLayout.minimumContentWidth)
     }
 
+    /// The card and the sixteen cells in it are both drawn at a fixed width, so both are clipped
+    /// in silence if either outgrows what holds it.
+    @Test func adeviceCardFitsThePaneAndItsSlotRowFitsTheCard() {
+        #expect(AppLayout.deviceCardWidth <= AppLayout.minimumContentWidth)
+        #expect(
+            AppLayout.slotPickerWidth + 2 * AppLayout.deviceCardPadding
+                <= AppLayout.deviceCardWidth)
+    }
+
     /// The meter is quantity and nothing else: a figure at all lights a segment, the wall lights
     /// them all, and no step across the range goes backwards.
     @Test func ameterFillsFromNothingUpToTheWall() {
