@@ -199,6 +199,16 @@ import Testing
                 + "overwrite)\n")
     }
 
+    @Test func aPullNamingTheProjectItselfMidIsTwo() throws {
+        // Refused before the device is opened, which is also what keeps this test off the hardware.
+        let result = try Self.run(["pull", "/nonexistent/pulled.mid", "--also-midi"])
+        #expect(result.code == 2)
+        #expect(
+            result.stderr
+                == "ksp-swift-cli pull: --also-midi cannot write /nonexistent/pulled.mid: the "
+                + "project and its MIDI would be the same file; name the project .KeyStepPro\n")
+    }
+
     @Test func pullOffersNoChoiceOfWalk() throws {
         // One walk and no flag to choose another: --help must not imply a choice that is not there.
         let result = try Self.run(["pull", "--help"])

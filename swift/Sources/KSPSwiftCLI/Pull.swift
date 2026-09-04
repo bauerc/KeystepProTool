@@ -41,6 +41,14 @@ struct Pull: ParsableCommand {
             """, completion: .file())
     var template: String?
 
+    @Flag(
+        name: .customLong("also-midi"),
+        help: """
+            also write the .mid beside it, the file `export` with no options would make from what \
+            was read
+            """)
+    var alsoMidi = false
+
     @Flag(name: .customLong("force"), help: "overwrite an existing output file")
     var force = false
 
@@ -67,7 +75,8 @@ struct Pull: ParsableCommand {
             PullRunner.Options(
                 output: URL(filePath: output), slot: slot, noIdentity: noIdentity,
                 timeoutMs: timeoutMs, template: template.map { URL(filePath: $0) },
-                force: force, quiet: quiet, verbose: verbose))
+                alsoMidi: alsoMidi, force: force, quiet: quiet, verbose: verbose,
+                configPath: drumMapConfigPath))
         try emit(result)
     }
 }
