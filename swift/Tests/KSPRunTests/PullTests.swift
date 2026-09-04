@@ -135,6 +135,121 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: written.path))
     }
 
+    @Test func alsoMidiWritesTheProjectAndItsMidiFromOneRead() throws {
+        let device = TapeDevice(try recallTape())
+        let written = try scratch()
+        defer { try? FileManager.default.removeItem(at: written.deletingLastPathComponent()) }
+
+        let result = PullRunner.run(
+            PullRunner.Options(output: written, alsoMidi: true, configPath: noPersonalConfig),
+            attach: { device })
+
+        #expect(result.code == 0)
+        #expect(FileManager.default.fileExists(atPath: written.path))
+        #expect(FileManager.default.fileExists(atPath: midiBeside(written).path))
+        #expect(device.asked.count == 1007)
+    }
+
+    /// `--also-midi` composes the two commands; it does not export differently.
+    @Test(arguments: [1, 2]) func theExportedMidiIsTheFileExportWouldHaveWritten(slot: Int) throws {
+        let tape = slot == 1 ? "recall_tape.txt" : "recall_project_2_tape.txt"
+        let device = TapeDevice(try recallTape(named: tape))
+        let composed = try scratch()
+        defer { try? FileManager.default.removeItem(at: composed.deletingLastPathComponent()) }
+
+        #expect(
+            PullRunner.run(
+                PullRunner.Options(
+                    output: composed, slot: slot, alsoMidi: true, configPath: noPersonalConfig),
+                attach: { device }
+            ).code == 0)
+
+        let separate = composed.deletingLastPathComponent().appending(path: "separate.mid")
+        #expect(
+            ExportRunner.run(
+                ExportRunner.Options(path: composed, output: separate, configPath: noPersonalConfig)
+            ).code == 0)
+
+        #expect(try Data(contentsOf: midiBeside(composed)) == (try Data(contentsOf: separate)))
+    }
+
+    @Test func alsoMidiNamesBothFilesInTheSummary() throws {
+        let device = TapeDevice(try recallTape())
+        let written = try scratch()
+        defer { try? FileManager.default.removeItem(at: written.deletingLastPathComponent()) }
+
+        let result = PullRunner.run(
+            PullRunner.Options(output: written, alsoMidi: true, configPath: noPersonalConfig),
+            attach: { device })
+
+        #expect(result.stdout.contains("wrote \(written.relativePath)\n"))
+        #expect(result.stdout.contains("wrote \(midiBeside(written).relativePath)\n"))
+        #expect(result.stdout.contains("note(s) from pattern(s) "))
+        // The timing line stays last, whatever the export put in front of it.
+        #expect(result.stdout.hasSuffix(" s of it at the device"))
+    }
+
+    /// Both destinations are checked before the device is touched, and --force covers both.
+    @Test func anExistingMidiStopsTheReadTheWayAnExistingProjectDoes() throws {
+        let device = TapeDevice(try recallTape())
+        let written = try scratch()
+        let midi = midiBeside(written)
+        try FileManager.default.createDirectory(
+            at: written.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "mine".write(to: midi, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: written.deletingLastPathComponent()) }
+
+        let refused = PullRunner.run(
+            PullRunner.Options(output: written, alsoMidi: true, configPath: noPersonalConfig),
+            attach: { device })
+
+        #expect(refused.code == 1)
+        #expect(refused.message == "\(midi.relativePath) already exists (use --force to overwrite)")
+        #expect(!FileManager.default.fileExists(atPath: written.path))
+        #expect(try Data(contentsOf: midi) == Data("mine".utf8))
+        #expect(device.asked.isEmpty)
+
+        #expect(
+            PullRunner.run(
+                PullRunner.Options(
+                    output: written, alsoMidi: true, force: true, configPath: noPersonalConfig),
+                attach: { device }
+            ).code == 0)
+        #expect(try Data(contentsOf: midi) != Data("mine".utf8))
+    }
+
+    /// The read is worth keeping; a MIDI file with nothing in it would look like success.
+    @Test func aProjectWithNoNotesKeepsThePullAndRefusesTheMidi() throws {
+        let device = TapeDevice(try templateValues())
+        let written = try scratch()
+        defer { try? FileManager.default.removeItem(at: written.deletingLastPathComponent()) }
+
+        let result = PullRunner.run(
+            PullRunner.Options(output: written, alsoMidi: true, configPath: noPersonalConfig),
+            attach: { device })
+
+        #expect(result.code == 1)
+        #expect(result.stderr.contains("no pattern holds notes"))
+        #expect(FileManager.default.fileExists(atPath: written.path))
+        #expect(!FileManager.default.fileExists(atPath: midiBeside(written).path))
+    }
+
+    /// Naming the project .mid would have the export overwrite the project.
+    @Test func alsoMidiRefusesADestinationThatIsItsOwnMidiFile() throws {
+        let device = TapeDevice(try recallTape())
+        let written = try scratch().deletingPathExtension().appendingPathExtension("mid")
+        defer { try? FileManager.default.removeItem(at: written.deletingLastPathComponent()) }
+
+        let result = PullRunner.run(
+            PullRunner.Options(output: written, alsoMidi: true, configPath: noPersonalConfig),
+            attach: { device })
+
+        #expect(result.code == 2)
+        #expect(result.stderr.contains("same file"))
+        #expect(!FileManager.default.fileExists(atPath: written.path))
+        #expect(device.asked.isEmpty)
+    }
+
     @Test func quietWritesTheProjectAndNoSummary() throws {
         let device = TapeDevice(try recallTape())
         let written = try scratch()
@@ -146,6 +261,21 @@ import Testing
         #expect(result.code == 0)
         #expect(result.stdout.isEmpty)
         #expect(FileManager.default.fileExists(atPath: written.path))
+    }
+}
+
+/// Where `--also-midi` puts the export: beside the project, suffixed `.mid`.
+private func midiBeside(_ output: URL) -> URL {
+    output.deletingPathExtension().appendingPathExtension("mid")
+}
+
+/// The factory default's parameters -- a saved project that holds no notes.
+private func templateValues() throws -> [String: Int] {
+    guard let path = ConvertRunner.defaultTemplate() else {
+        throw KSPError.value("the bundled factory default is missing")
+    }
+    return try LenientJSON.load(contentsOf: path).compactMapValues {
+        if case .int(let value) = $0 { value } else { nil }
     }
 }
 

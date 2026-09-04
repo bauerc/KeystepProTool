@@ -568,10 +568,10 @@ swift/.build/debug/ksp-swift-cli pull my_project.KeyStepPro --slot 3
 ```
 
 Same options, same summary, same bytes: `scripts/pull_parity.sh` holds both cores to one
-`.KeyStepPro` over the captured exchange. Two options are Python's alone — `--mcc-plan`, because
-the Swift core carries one walk and no flag to choose another
-([ADR 0003](docs/adr/0003-the-swift-core-reads-the-fast-plan-only.md)), and `--also-midi`, whose
-exported `.mid` is the documented exception to the byte-for-byte contract either way.
+`.KeyStepPro` over the captured exchange, and both cores' `--also-midi` to one event stream — the
+exported `.mid` is the documented exception to the byte-for-byte contract. One option is Python's
+alone, `--mcc-plan`, because the Swift core carries one walk and no flag to choose another
+([ADR 0003](docs/adr/0003-the-swift-core-reads-the-fast-plan-only.md)).
 
 Three things about the read:
 

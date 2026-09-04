@@ -493,6 +493,18 @@ to hold end to end. Neither entry below has run on hardware yet.
   ```sh
   swift/.build/debug/ksp-swift-cli pull project_files/captures/H3-pull-swift.KeyStepPro --slot <N>
   ```
+
+  `--also-midi` on either core writes the `.mid` beside the project from the same read. It costs no
+  extra read to check, because the file it writes is the one a separate `export` of that project
+  makes, and `tools/midi_events.py` compares the two cores' across the running-status difference:
+
+  ```sh
+  swift/.build/debug/ksp-swift-cli pull project_files/captures/H3-pull-swift.KeyStepPro \
+      --slot <N> --also-midi --force
+  swift/.build/debug/ksp-swift-cli export project_files/captures/H3-pull-swift.KeyStepPro \
+      -o /tmp/separate.mid
+  cmp project_files/captures/H3-pull-swift.mid /tmp/separate.mid
+  ```
 - **Confirms if:** the command completes, `ksp.reader.read_project` parses the result without
   error, and the printed note count and tempo look like the loaded project.
 - **Falsified if:** the device times out, returns a filler answer (an unsaved slot reads as `0x7f`

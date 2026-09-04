@@ -3,6 +3,11 @@
 # got, so each side reads a captured exchange instead: same tape, same slot, same template, and
 # the .KeyStepPro that comes out has to `cmp`. Slot 1's tape has MCC's own export to check
 # against as well; slot 2's has none, and there the two cores check each other.
+#
+# --also-midi's file is compared too, as parsed events -- mido writes running status and
+# swift-midi-file does not. The tape driver links KSPKit alone and cannot export, so the Swift side
+# of that half is `ksp-swift-cli export` on the project just pulled; that it is the same file
+# --also-midi writes is held by PullTests, byte for byte.
 set -o pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
 
@@ -13,6 +18,10 @@ fi
 
 # The one file both cores' default resolves to; passed explicitly so the comparison names it.
 template=src/ksp_cli/templates/Default.KeyStepPro
+
+# Absent when this gate is run before the package is built; the MIDI half is skipped, not failed.
+swift_cli=swift/.build/debug/ksp-swift-cli
+[[ -x $swift_cli ]] || echo "pull_parity: $swift_cli is not built -- skipping the --also-midi half"
 
 scratch=swift/.build/pull-parity
 puller=$scratch/pulltape
@@ -41,8 +50,11 @@ count=0
 for case in "recall_tape.txt|1|initial_project.KeyStepPro" "recall_project_2_tape.txt|2|-"; do
     IFS='|' read -r tape slot export <<< "$case"
     count=$((count + 1))
-    py=$sandbox/py_$slot.KeyStepPro
-    sw=$sandbox/sw_$slot.KeyStepPro
+    # One basename per slot, a directory per core: the project's own name becomes the exported
+    # MIDI's conductor track name, so two names would differ before a note was compared.
+    mkdir -p "$sandbox/py" "$sandbox/sw" || exit 1
+    py=$sandbox/py/pulled_$slot.KeyStepPro
+    sw=$sandbox/sw/pulled_$slot.KeyStepPro
 
     if ! "$puller" "tests/fixtures/$tape" "$slot" "$template" "$sw"; then
         echo "pull_parity: the Swift core failed on $tape" >&2
@@ -50,8 +62,12 @@ for case in "recall_tape.txt|1|initial_project.KeyStepPro" "recall_project_2_tap
         continue
     fi
 
-    # --no-identity on both sides: the version is the one thing a tape cannot answer for.
-    if ! uv run python - "tests/fixtures/$tape" "$slot" "$template" "$py" <<'PYTHON'; then
+    # --no-identity on both sides: the version is the one thing a tape cannot answer for. HOME is
+    # redirected so --also-midi's export never picks up a personal ~/.config drum map, and its
+    # warnings are held back rather than printed -- this gate judges files, not streams.
+    warnings=$sandbox/warnings_$slot.err
+    if ! HOME=$sandbox uv run python - "tests/fixtures/$tape" "$slot" "$template" "$py" \
+        2> "$warnings" <<'PYTHON'; then
 import pathlib
 import sys
 
@@ -64,9 +80,12 @@ tape, slot, template, output = sys.argv[1:5]
 device = FakeDevice({int(slot): DeviceModel(tape_values(pathlib.Path(tape)))})
 pull.UsbMidiTransport = lambda **_: device
 sys.exit(
-    pull.main([output, "--slot", slot, "--template", template, "--no-identity", "--quiet"])
+    pull.main(
+        [output, "--slot", slot, "--template", template, "--no-identity", "--quiet", "--also-midi"]
+    )
 )
 PYTHON
+        cat "$warnings" >&2
         echo "pull_parity: the Python core failed on $tape" >&2
         status=1
         continue
@@ -75,6 +94,19 @@ PYTHON
     if ! cmp "$py" "$sw"; then
         echo "pull_parity: slot $slot differs between the two cores" >&2
         status=1
+    fi
+
+    if [[ -x $swift_cli ]]; then
+        if ! HOME=$sandbox "$swift_cli" export "$sw" --quiet 2> "$warnings"; then
+            cat "$warnings" >&2
+            echo "pull_parity: the Swift core could not export what it pulled from $tape" >&2
+            status=1
+        elif ! diff -u \
+            <(uv run python tools/midi_events.py "${py%.KeyStepPro}.mid") \
+            <(uv run python tools/midi_events.py "${sw%.KeyStepPro}.mid"); then
+            echo "pull_parity: slot $slot's exported MIDI differs between the two cores" >&2
+            status=1
+        fi
     fi
 
     # The half a core-to-core diff cannot see: that what they agree on is what MCC exported.

@@ -192,10 +192,12 @@ public enum ExportRunner {
         }
         let result = try MIDIExport.exportProject(narrowed, options: exportOptions)
         if result.isEmpty { return [] }
-        let destination =
-            options.output
-            ?? options.path.deletingPathExtension().appendingPathExtension("mid")
-        return [(result, destination)]
+        return [(result, options.output ?? defaultDestination(options.path))]
+    }
+
+    /// Where a whole-project export lands with no `-o`: the source, suffixed `.mid`.
+    static func defaultDestination(_ path: URL) -> URL {
+        path.deletingPathExtension().appendingPathExtension("mid")
     }
 
     /// `<stem>_track{N}_pattern{P}.mid` -- one file holds exactly one of each.
