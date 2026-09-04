@@ -566,11 +566,14 @@ One probe, and it was what stood between the Swift port and a read the app could
 
 ### H6.1 — Does the device answer over CoreMIDI rather than raw USB?
 
-- [x] **run 2026-09-03 — CONFIRMED.** Identity, short read, coalesced read at count 16 and at the
-  count-100 ceiling, and the sixteen-slot prologue sweep all answer over the ordinary CoreMIDI
-  endpoint, unprivileged, at 4.00 ms an exchange — and are unchanged with MIDI Control Center
-  running. The facts and the recommendation are in
-  [spec 7.9](./format/SysEx_Direct_Transfer_Path.md) — this entry keeps only how to re-run it.
+- [x] **run 2026-09-03 — CONFIRMED, with one caveat.** Identity, short read, coalesced read at count
+  16 and at the count-100 ceiling, and the sixteen-slot prologue sweep all answer over the ordinary
+  CoreMIDI endpoint, unprivileged, at 4.00 ms an exchange — the same period H1.3 measured on raw
+  USB, so the transport costs nothing. `bulk_fast`'s whole 2,044-frame walk replayed in **8.20 s,
+  2,044 answered, 0 mismatched**. The caveat: **CoreMIDI truncates a reply at the first `0xFF`**, so
+  the `123_117` sentinel range comes back empty and must be re-read element-wise. Facts and the
+  recommendation are in [spec 7.9](./format/SysEx_Direct_Transfer_Path.md) — this entry keeps only
+  how to re-run it.
 
 - **Nothing to quit and no `sudo`.** This is the one probe here that neither needs the device to
   itself nor needs root: it goes *through* macOS's USB-MIDI driver rather than detaching it, which
@@ -585,6 +588,19 @@ One probe, and it was what stood between the Swift port and a read the app could
   /tmp/coremidi_probe slots "KeyStep Pro"           # the sixteen-slot prologue sweep
   /tmp/coremidi_probe throughput "KeyStep Pro" 1    # 200 rounds at each of count 1/16/64/100
   /tmp/coremidi_probe sniff 20                      # whatever arrives, e.g. during an MCC recall
+  ```
+
+- **Replaying a real walk** is what turned up the `0xFF` truncation, and it is the only figure here
+  that is a timed dump rather than a projection. Generate the plan at the desk, then replay it —
+  `replay` reports any reply carrying fewer values than its echoed count:
+
+  ```sh
+  uv run python -c "
+  from ksp import bulk_fast
+  from ksp.sysex import build_read_request
+  print('\n'.join(build_read_request(r, 1).hex() for r in bulk_fast.iter_requests()))
+  " > /tmp/plan.txt
+  /tmp/coremidi_probe replay "KeyStep Pro" 1 /tmp/plan.txt
   ```
 
 - **Which process holds interface 2** is the question behind the question, and `ioreg` answers it

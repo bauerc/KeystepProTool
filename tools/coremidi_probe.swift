@@ -13,14 +13,18 @@ let end: UInt8 = 0xF7
 let ack: [UInt8] = header + [0x1C, 0x00, end]
 let identityRequest: [UInt8] = [0xF0, 0x7E, 0x7F, 0x06, 0x01, end]
 
+/// Where a three-index long reply's values start: header 6, command, slot, param, index count,
+/// item, three indices, count. `src/ksp/sysex.py` parses the same offset as `12 + n_indices`.
+let longReplyValues = 15
+
 /// `01 <slot> 25 78` -- 120_37, the first read of MCC's own plan, and the frame `usb_probe scalar`
-/// sends. Eleven bytes: one CoreMIDI packet either way.
+/// sends.
 func scalarRequest(slot: UInt8) -> [UInt8] {
     header + [0x01, slot, 37, 120, end]
 }
 
-/// `0b <slot> 6d 03 7c 01 01 01 10` -- 124_109_1_1_1 count 16, the coalesced form. Its reply
-/// carries sixteen values, so it is the frame that says whether a long read survives the driver.
+/// `0b <slot> 6d 03 7c 01 01 01 <count>` -- 124_109_1_1_1, the coalesced form. Its reply carries
+/// `count` values, so it is the frame that says whether a long read survives the driver.
 func coalescedRequest(slot: UInt8, count: UInt8) -> [UInt8] {
     header + [0x0B, slot, 109, 0x03, 124, 1, 1, 1, count, end]
 }
@@ -38,32 +42,54 @@ func stringProperty(_ object: MIDIObjectRef, _ property: CFString) -> String {
     return value.takeRetainedValue() as String
 }
 
-func hex(_ bytes: [UInt8]) -> String {
+func hex(_ bytes: some Sequence<UInt8>) -> String {
     bytes.map { String(format: "%02x", $0) }.joined()
 }
 
-func endpoints() -> ([MIDIEndpointRef], [MIDIEndpointRef]) {
-    let sources = (0..<MIDIGetNumberOfSources()).map(MIDIGetSource)
-    let destinations = (0..<MIDIGetNumberOfDestinations()).map(MIDIGetDestination)
-    return (sources, destinations)
+func bytes(fromHex text: some StringProtocol) -> [UInt8] {
+    stride(from: 0, to: text.count - 1, by: 2).compactMap { offset in
+        let start = text.index(text.startIndex, offsetBy: offset)
+        let stop = text.index(start, offsetBy: 2)
+        return UInt8(text[start..<stop], radix: 16)
+    }
 }
 
 func describe(_ endpoint: MIDIEndpointRef) -> String {
     stringProperty(endpoint, kMIDIPropertyDisplayName)
 }
 
-/// Collects whole SysEx messages off one input port, reassembling across packets.
+/// A three-index read reply carrying `count` values.
+func isFullReply(_ frame: [UInt8], count: Int) -> Bool {
+    frame.count == longReplyValues + count + 1 && frame[6] == 0x0C && frame[14] == UInt8(count)
+}
+
+/// Whether a reply answers the address its request asked for. Everything between the command byte
+/// and the terminator is echoed verbatim, short form and long form alike (spec 7.1).
+func answers(_ reply: [UInt8], _ request: [UInt8]) -> Bool {
+    let body = request.dropFirst(7).dropLast()
+    guard reply.count >= 7 + body.count else { return false }
+    return Array(reply[7..<(7 + body.count)]) == Array(body)
+}
+
+/// Whole SysEx messages off the input port, as a blocking queue.
+///
+/// `next` is the only way out, so the semaphore and the queue can never drift apart -- a drain that
+/// bypassed the semaphore would leave stale signals that make a later wait return on an empty queue.
 final class Collector: @unchecked Sendable {
     private let lock = NSLock()
     private var pending: [UInt8] = []
     private var frames: [(endpoint: String, bytes: [UInt8])] = []
-    /// Signalled per completed frame, so a timing run waits on the device rather than on a poll.
-    let arrived = DispatchSemaphore(value: 0)
+    private let arrived = DispatchSemaphore(value: 0)
 
     func feed(_ endpoint: String, _ bytes: [UInt8]) {
-        lock.lock()
         var completed = 0
+        lock.lock()
         for byte in bytes {
+            // Real-time bytes are legal *inside* a SysEx stream and the device emits clock whenever
+            // its transport runs; appending one would corrupt the frame around it. `0xFF` is the
+            // exception and must survive: System Reset never arrives mid-frame, and Arturia spends
+            // that byte as the unset sentinel (spec 7.6). Dropping it loses 16 values a walk.
+            if (0xF8...0xFE).contains(byte) { continue }
             if byte == 0xF0 {
                 pending = [byte]
             } else if !pending.isEmpty {
@@ -79,26 +105,32 @@ final class Collector: @unchecked Sendable {
         for _ in 0..<completed { arrived.signal() }
     }
 
-    func drain() -> [(endpoint: String, bytes: [UInt8])] {
+    func next(within seconds: Double) -> (endpoint: String, bytes: [UInt8])? {
+        guard arrived.wait(timeout: .now() + seconds) == .success else { return nil }
         lock.lock()
         defer { lock.unlock() }
-        let taken = frames
-        frames = []
-        return taken
+        return frames.isEmpty ? nil : frames.removeFirst()
     }
 }
 
 /// One client listening on every source, so a reply is caught whichever endpoint carries it.
 final class Listener {
     let collector = Collector()
+    let sources: [MIDIEndpointRef]
+    let destinations: [MIDIEndpointRef]
     private var client = MIDIClientRef()
     private var input = MIDIPortRef()
     private var output = MIDIPortRef()
 
     init() throws {
+        // Enumerated once: an index handed to the input block must not outlive the list it indexes,
+        // and a device appearing mid-run would renumber a second enumeration.
+        sources = (0..<MIDIGetNumberOfSources()).map(MIDIGetSource)
+        destinations = (0..<MIDIGetNumberOfDestinations()).map(MIDIGetDestination)
+        let names = sources.map(describe)
+
         try check(MIDIClientCreateWithBlock("ksp-probe" as CFString, &client, nil), "client")
         let collector = self.collector
-        let names = endpoints().0.map(describe)
         try check(
             MIDIInputPortCreateWithBlock(client, "in" as CFString, &input) { packets, context in
                 let index = context.map { $0.load(as: Int.self) } ?? -1
@@ -114,7 +146,7 @@ final class Listener {
             }, "input port")
         try check(MIDIOutputPortCreate(client, "out" as CFString, &output), "output port")
 
-        for (index, source) in endpoints().0.enumerated() {
+        for (index, source) in sources.enumerated() {
             let box = UnsafeMutablePointer<Int>.allocate(capacity: 1)
             box.initialize(to: index)
             MIDIPortConnectSource(input, source, box)
@@ -131,13 +163,28 @@ final class Listener {
         try check(MIDISend(output, destination, &builder), "send")
     }
 
-    /// Waits `seconds` for traffic, running the run loop so the input block fires.
+    /// Everything that arrives within `seconds`, waiting on the device rather than spinning.
     func listen(seconds: Double) -> [(endpoint: String, bytes: [UInt8])] {
+        var collected: [(endpoint: String, bytes: [UInt8])] = []
         let deadline = Date().addingTimeInterval(seconds)
-        while Date() < deadline {
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+        while let frame = collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
+            collected.append(frame)
         }
-        return collector.drain()
+        return collected
+    }
+
+    /// One transaction: the request, then frames until the ack ends it (spec 7.1).
+    func exchange(_ request: [UInt8], to destination: MIDIEndpointRef, wait: Double) throws
+        -> [(endpoint: String, bytes: [UInt8])]
+    {
+        try send(request, to: destination)
+        var collected: [(endpoint: String, bytes: [UInt8])] = []
+        let deadline = Date().addingTimeInterval(wait)
+        while let frame = collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
+            collected.append(frame)
+            if frame.bytes == ack { break }
+        }
+        return collected
     }
 }
 
@@ -162,126 +209,152 @@ func report(_ request: [UInt8], _ replies: [(endpoint: String, bytes: [UInt8])])
     }
 }
 
-func matching(_ needle: String, _ list: [MIDIEndpointRef]) -> [MIDIEndpointRef] {
-    list.filter { describe($0).localizedCaseInsensitiveContains(needle) }
+func destination(_ needle: String, _ listener: Listener) throws -> MIDIEndpointRef {
+    guard
+        let found = listener.destinations.first(where: {
+            describe($0).localizedCaseInsensitiveContains(needle)
+        })
+    else { throw ProbeError("no destination matching \"\(needle)\"") }
+    return found
 }
 
 // MARK: - probes
 
-func listProbe() {
-    let (sources, destinations) = endpoints()
-    print("sources (\(sources.count)):")
-    for (index, endpoint) in sources.enumerated() { print("  [\(index)] \(describe(endpoint))") }
-    print("destinations (\(destinations.count)):")
-    for (index, endpoint) in destinations.enumerated() {
+func listProbe() throws {
+    let listener = try Listener()
+    print("sources (\(listener.sources.count)):")
+    for (index, endpoint) in listener.sources.enumerated() {
+        print("  [\(index)] \(describe(endpoint))")
+    }
+    print("destinations (\(listener.destinations.count)):")
+    for (index, endpoint) in listener.destinations.enumerated() {
         print("  [\(index)] \(describe(endpoint))")
     }
 }
 
 func exchangeProbe(needle: String, slot: UInt8, wait: Double) throws {
     let listener = try Listener()
-    let targets = matching(needle, endpoints().1)
-    guard !targets.isEmpty else { throw ProbeError("no destination matching \"\(needle)\"") }
+    let target = try destination(needle, listener)
+    print("destination \(describe(target)):")
 
-    for destination in targets {
-        print("destination \(describe(destination)):")
+    print("  identity request")
+    report(identityRequest, try listener.exchange(identityRequest, to: target, wait: wait))
 
-        print("  identity request")
-        _ = listener.listen(seconds: 0.1)
-        try listener.send(identityRequest, to: destination)
-        report(identityRequest, listener.listen(seconds: wait))
+    print("  prologue then scalar read (slot \(slot))")
+    try listener.send(prologue(slot: slot), to: target)
+    _ = listener.listen(seconds: 0.2)
+    let scalar = scalarRequest(slot: slot)
+    report(scalar, try listener.exchange(scalar, to: target, wait: wait))
 
-        print("  prologue then scalar read (slot \(slot))")
-        try listener.send(prologue(slot: slot), to: destination)
-        _ = listener.listen(seconds: 0.2)
-        let scalar = scalarRequest(slot: slot)
-        try listener.send(scalar, to: destination)
-        report(scalar, listener.listen(seconds: wait))
-
-        print("  coalesced read, count 16 (slot \(slot))")
-        let coalesced = coalescedRequest(slot: slot, count: 16)
-        try listener.send(coalesced, to: destination)
-        report(coalesced, listener.listen(seconds: wait))
-
-        print("  coalesced read, count 100 (slot \(slot))")
-        let long = coalescedRequest(slot: slot, count: 100)
-        try listener.send(long, to: destination)
-        report(long, listener.listen(seconds: wait))
+    for count in [16, 100] as [UInt8] {
+        print("  coalesced read, count \(count) (slot \(slot))")
+        let request = coalescedRequest(slot: slot, count: count)
+        report(request, try listener.exchange(request, to: target, wait: wait))
     }
 }
 
-/// Reads 120_37 out of every slot, each behind its own prologue. Distinct values are the proof
-/// that slot selection survives the driver too, not just a single frame.
+/// Reads 120_37 out of every slot, each behind its own prologue. Distinct pitch chunks are the
+/// proof that slot selection survives the driver too, not just a single frame.
 func slotsProbe(needle: String, wait: Double) throws {
     let listener = try Listener()
-    guard let destination = matching(needle, endpoints().1).first else {
-        throw ProbeError("no destination matching \"\(needle)\"")
-    }
+    let target = try destination(needle, listener)
     for slot in UInt8(1)...16 {
-        try listener.send(prologue(slot: slot), to: destination)
+        try listener.send(prologue(slot: slot), to: target)
         _ = listener.listen(seconds: 0.2)
-        let request = scalarRequest(slot: slot)
-        try listener.send(request, to: destination)
-        let replies = listener.listen(seconds: wait).filter { $0.bytes != ack }
-        guard let reply = replies.first, reply.bytes.count == 12 else {
+
+        let scalar = try listener.exchange(scalarRequest(slot: slot), to: target, wait: wait)
+        guard let reply = scalar.first(where: { $0.bytes != ack }), reply.bytes.count == 12 else {
             print("  slot \(slot): no reply")
             continue
         }
-        let chunk = coalescedRequest(slot: slot, count: 16)
-        try listener.send(chunk, to: destination)
-        let pitches = listener.listen(seconds: wait).filter { $0.bytes != ack }
-        let head = pitches.first.map { hex(Array($0.bytes.dropFirst(12).prefix(8))) } ?? "none"
+        let chunk = try listener.exchange(
+            coalescedRequest(slot: slot, count: 16), to: target, wait: wait)
+        let values =
+            chunk.first(where: { $0.bytes != ack })
+            .map { hex($0.bytes.dropFirst(longReplyValues).prefix(8)) } ?? "none"
         print(
             "  slot \(slot): byte 7 = \(reply.bytes[7])  120_37 = \(reply.bytes[10])  "
-                + "124_109_1_1_1 = \(head)")
+                + "124_109_1_1_1 = \(values)")
     }
 }
 
-/// A three-index read reply carrying `count` values: header 6, command, slot, param, index count,
-/// item, three indices, count -- fifteen bytes -- then the values and `F7`.
-func isFullReply(_ frame: [UInt8], count: Int) -> Bool {
-    frame.count == 16 + count && frame.dropFirst(6).first == 0x0C && frame[14] == UInt8(count)
-}
-
-/// Sequential request/reply pairs, timed. The whole-project read is thousands of these, so the
-/// per-exchange cost is what decides whether a CoreMIDI read is usable at all.
+/// Sequential request/reply pairs, timed. 64 is what `bulk_fast` mostly issues; 100 is the ceiling.
 func throughputProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throws {
     let listener = try Listener()
-    guard let destination = matching(needle, endpoints().1).first else {
-        throw ProbeError("no destination matching \"\(needle)\"")
-    }
-    try listener.send(prologue(slot: slot), to: destination)
+    let target = try destination(needle, listener)
+    try listener.send(prologue(slot: slot), to: target)
     _ = listener.listen(seconds: 0.2)
 
-    // 64 is what bulk_fast actually issues -- the 64-step items bind long before the 100 of 7.7.
     for count in [1, 16, 64, 100] as [UInt8] {
         let request = coalescedRequest(slot: slot, count: count)
         var answered = 0
         var acked = 0
         let started = Date()
         for _ in 0..<rounds {
-            try listener.send(request, to: destination)
-            // Request, reply, ack -- strictly serialised, so two frames end the transaction.
-            var sawReply = false
-            for _ in 0..<2 {
-                guard listener.collector.arrived.wait(timeout: .now() + wait) == .success else {
-                    break
-                }
-                for frame in listener.collector.drain() {
-                    if frame.bytes == ack {
-                        acked += 1
-                    } else if isFullReply(frame.bytes, count: Int(count)) {
-                        sawReply = true
-                    }
+            for frame in try listener.exchange(request, to: target, wait: wait) {
+                if frame.bytes == ack {
+                    acked += 1
+                } else if isFullReply(frame.bytes, count: Int(count)) {
+                    answered += 1
                 }
             }
-            if sawReply { answered += 1 }
         }
         let elapsed = Date().timeIntervalSince(started)
         print(
             "  count \(String(format: "%3d", Int(count))): \(answered)/\(rounds) replies, "
                 + "\(acked) acks, \(String(format: "%.2f", elapsed))s "
                 + "-- \(String(format: "%.2f", elapsed / Double(rounds) * 1000)) ms per exchange")
+    }
+}
+
+/// Replays a real request plan -- one hex frame per line, as `ksp.bulk_fast` emits it -- and times
+/// the whole walk. This is the only figure here that is a measured dump rather than a projection.
+func replayProbe(needle: String, slot: UInt8, path: String, wait: Double) throws {
+    let text = try String(contentsOfFile: path, encoding: .utf8)
+    let plan = text.split(separator: "\n").map { bytes(fromHex: $0) }.filter { !$0.isEmpty }
+    guard !plan.isEmpty else { throw ProbeError("no frames in \(path)") }
+
+    let listener = try Listener()
+    let target = try destination(needle, listener)
+    try listener.send(prologue(slot: slot), to: target)
+    _ = listener.listen(seconds: 0.2)
+
+    var answered = 0
+    var acked = 0
+    var values = 0
+    var mismatched = 0
+    var silent: [String] = []
+    var short: [String] = []
+    let started = Date()
+    for request in plan {
+        for frame in try listener.exchange(request, to: target, wait: wait) {
+            if frame.bytes == ack {
+                acked += 1
+            } else if answers(frame.bytes, request) {
+                answered += 1
+                let carried = frame.bytes.count - request.count
+                values += carried
+                let asked = request.count == 11 ? 1 : Int(request[request.count - 2])
+                if carried != asked, short.count < 4 {
+                    short.append(
+                        "\(hex(request)) asked \(asked), got \(carried): \(hex(frame.bytes))")
+                }
+            } else {
+                mismatched += 1
+            }
+        }
+        if answered + mismatched < acked { silent.append(hex(request)) }
+    }
+    let elapsed = Date().timeIntervalSince(started)
+    print("  plan            \(plan.count) requests from \(path)")
+    print("  answered        \(answered)   acks \(acked)   mismatched \(mismatched)")
+    print("  values returned \(values)")
+    print(
+        "  elapsed         \(String(format: "%.2f", elapsed))s "
+            + "-- \(String(format: "%.2f", elapsed / Double(plan.count) * 1000)) ms per request")
+    for line in short { print("  short reply     \(line)") }
+    if !silent.isEmpty {
+        print("  unanswered      \(silent.count), first \(silent.prefix(3).joined(separator: " "))")
     }
 }
 
@@ -299,20 +372,32 @@ func sniffProbe(seconds: Double) throws {
 let arguments = Array(CommandLine.arguments.dropFirst())
 let probe = arguments.first ?? "list"
 let needle = arguments.count > 1 ? arguments[1] : "KeyStep Pro"
-let slot = UInt8(arguments.count > 2 ? Int(arguments[2]) ?? 1 : 1)
+
+func requestedSlot() throws -> UInt8 {
+    guard arguments.count > 2 else { return 1 }
+    // 0-127 is the codec's range (`sysex.MAX_SLOT`); a wider one must not trap the probe.
+    guard let value = Int(arguments[2]), let slot = UInt8(exactly: value), slot <= 0x7F else {
+        throw ProbeError("slot \"\(arguments[2])\" is not 0 to 127")
+    }
+    return slot
+}
 
 do {
     switch probe {
-    case "list": listProbe()
-    case "exchange": try exchangeProbe(needle: needle, slot: slot, wait: 1.5)
+    case "list": try listProbe()
+    case "exchange": try exchangeProbe(needle: needle, slot: try requestedSlot(), wait: 1.5)
     case "slots": try slotsProbe(needle: needle, wait: 1.5)
-    case "throughput": try throughputProbe(needle: needle, slot: slot, rounds: 200, wait: 1.5)
+    case "throughput":
+        try throughputProbe(needle: needle, slot: try requestedSlot(), rounds: 200, wait: 1.5)
+    case "replay":
+        guard arguments.count > 3 else { throw ProbeError("replay needs a plan file") }
+        try replayProbe(
+            needle: needle, slot: try requestedSlot(), path: arguments[3], wait: 1.5)
     case "sniff": try sniffProbe(seconds: Double(needle) ?? 20)
     default:
         print(
-            "usage: coremidi_probe "
-                + "[list | exchange <name> <slot> | slots <name> | throughput <name> <slot> "
-                + "| sniff <seconds>]")
+            "usage: coremidi_probe [list | exchange <name> <slot> | slots <name> "
+                + "| throughput <name> <slot> | replay <name> <slot> <plan.txt> | sniff <seconds>]")
         exit(2)
     }
 } catch {

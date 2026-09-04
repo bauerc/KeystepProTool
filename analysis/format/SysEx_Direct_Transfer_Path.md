@@ -270,10 +270,12 @@ protocol](../Hardware_Test_Protocol.md#phase-3--acceptance) are what carry this 
 interface claim and no privileged helper.** Measured on hardware 2026-09-03, firmware 2.5.20,
 macOS 26.6.2, Swift 6.2.3, through `tools/coremidi_probe.swift`.
 
-**Why it was open.** `ksp_cli.usb_transport` claims USB interface 2, and to do that it detaches the
-kernel driver first — which is why `ksp-pull` needs `sudo`. A GUI app cannot prompt for a password
-and re-exec itself as root, so if the protocol were reachable only that way, the app would need an
-`SMJobBless` helper or an XPC service.
+**Why it was open.** `ksp_cli.usb_transport` claims USB interface 2, and it is **the claim** that
+needs root: macOS reports its class driver as active but refuses to detach it, and the claim
+succeeds anyway against an unreleased driver — which is what `ksp-pull` spends its `sudo` on
+(`src/ksp_cli/usb_transport.py`, and the `TransportError` it raises says so). A GUI app cannot
+prompt for a password and re-exec itself as root, so if the protocol were reachable only that way,
+the app would need an `SMJobBless` helper or an XPC service.
 
 **The driver being detached is CoreMIDI's own.** While any MIDI client is connected,
 `IOUSBHostInterface` with `bInterfaceNumber = 2` carries exactly one interface-level user client,
@@ -311,22 +313,69 @@ real and not an echo.
 
 **Cost: 4.00 ms per exchange, and it does not vary with payload.** 200 request/reply/ack rounds at
 each of count 1, 16, 64 and 100 returned 200 replies and 200 acks apiece, no drops, at 4.00 ms
-throughout. A one-value reply costs what a hundred-value reply costs, so this is a fixed
-per-transaction cadence of the class driver, not bandwidth — and the whole benefit of coalescing
-(7.8) survives it, because coalescing removes transactions rather than bytes.
+throughout. A one-value reply costs what a hundred-value reply costs, so the cadence is
+per-transaction rather than per-byte, and the whole benefit of coalescing (7.8) survives it,
+because coalescing removes transactions rather than bytes.
+
+**That is the same figure the raw path gives, so the transport costs nothing.** H1.3 measured
+interface 2 directly at **3.994 ms at `count=16` and 3.998 ms at `count=64`** — flat, and within
+noise of the 4.00 ms here. The 4 ms is therefore **the device's own transaction rate**, not an
+overhead the class driver adds: going through `MIDIServer` rather than around it is free.
+
+**The coalesced walk has been run, not just projected.** Replaying `ksp.bulk_fast`'s own 2,044
+frames — 1,776 of them at `count=64` — over CoreMIDI, against slot 1:
+
+```
+answered 2044/2044   acks 2044   mismatched 0
+values   117,767 of the plan's 117,783
+elapsed  8.20 s -- 4.01 ms per request
+```
+
+Every request was answered, every reply echoed the address it was asked for, and the measured 8.20 s
+lands on the 8.2 s the per-exchange cost predicts.
 
 | Walk | Requests | At 4.00 ms |
 | ---- | -------- | ---------- |
-| `bulk_plan`, MCC's stream | 8,951 | ≈ 36 s |
-| `bulk_fast`, coalesced | 2,044 | ≈ 8.2 s |
+| `bulk_plan`, MCC's stream, `count` as MCC sends it | 8,951 | ≈ 36 s |
+| `bulk_fast`, coalesced | 2,044 | **8.20 s, measured** |
 | `bulk_fast` + the gate | 1,007 | ≈ 4.0 s |
 
-H1.3's 9.6 s remains the only figure taken off the raw path, and it was MCC's 8,951-request walk;
-per request that is ≈ 1.07 ms, so CoreMIDI is roughly four times the per-transaction cost. It does
-not matter: the walk the port actually issues is the gated `bulk_fast` one, and **≈ 4 s over
-CoreMIDI beats 9.6 s over raw USB** because it asks nine times less often. The projection is
-arithmetic on a measured per-exchange cost, not a timed dump — no full walk has been run over
-CoreMIDI yet.
+H1.3's own dump figures corroborate the column: 38.3 s for the walk at MCC's count against ≈ 36 s
+projected, and 9.6 s once the count byte alone is raised — the latter is a coalesced walk of
+roughly 2,400 requests, **not** MCC's 8,951, so it belongs beside the 8.20 s row rather than being
+divided by 8,951. The two transports agree per request, and the entire saving in the table is the
+gate's, never the wire's.
+
+### 7.9.1 CoreMIDI truncates a reply at the first `0xFF`
+
+**This is the one thing the CoreMIDI path does not carry, and a transport that ignores it silently
+loses data.** `0xFF` is MIDI System Reset, and it is also the device's unset sentinel (7.6). Sent
+inside a reply it never reaches the client: CoreMIDI cuts the frame at that byte and delivers the
+terminator, so the reply arrives well-formed, echoing the address and the *honoured* count, while
+carrying fewer values than that count promises — or none at all.
+
+It is a truncation, not a per-byte strip. Reading `123_117_<pattern>`, where patterns 1–13 hold the
+sentinel and 14–16 hold 60 (H1.5):
+
+| Request | Values back |
+| ------- | ----------- |
+| start 1, `count=16` (what `bulk_fast` issues) | **0** — the whole range lost to the sentinel at index 1 |
+| start 13, `count=4` | **0** — a strip would have returned the three at 14–16 |
+| start 14, `count=3` | 3 |
+| start `<n>`, `count=1`, n ≤ 13 | **0** |
+| start `<n>`, `count=1`, n ≥ 14 | 1 |
+
+That single `123_117` range is the whole of the walk's shortfall above: 16 values, one request, and
+`ksp.sysex.parse_reply` rejects it correctly — "reply carried 0 values, header promised 16".
+
+**Recovering it is exact and nearly free.** A reply short by its first `k` values means index
+`start + k` holds `0xFF`; re-request from `start + k + 1` and repeat. `count=1` makes the position
+unambiguous, so the fallback is: on a short reply, take the values that arrived, record `0xFF` for
+the next index, and re-read the remainder. Only `123_117` carries the sentinel in any corpus file,
+so the worst case is sixteen extra round trips — under 70 ms against an 8.2 s walk.
+
+Verified as CoreMIDI's doing rather than the probe's: the same three requests, re-run with the
+probe's real-time filter compiled out entirely, return byte-identical truncated frames.
 
 **A published endpoint is not a live one, and the app must not treat it as one.** After an MCC
 launch-and-quit cycle in the same session, the `KeyStep Pro` endpoint was still enumerated and
@@ -357,7 +406,8 @@ flow control. The consequences that matter:
 
 - **No `SMJobBless`, no XPC service, no privileged helper, no password prompt.** The app ships as an
   ordinary sandboxed-capable bundle. That larger, riskier piece of work is not needed and should
-  not be ticketed.
+  not be ticketed. This is the finding that matters; the sentinel below is a wrinkle in the
+  transport, not a reason to reach for root.
 - **No `pyusb`, no `libusb`, no vendor-id matching** in the Swift port — CoreMIDI is a system
   framework and the endpoint is found by name.
 - **It conforms to `KSPKit.Transport` but must not live in `KSPKit`.** The seam is already there —
@@ -365,6 +415,12 @@ flow control. The consequences that matter:
   conforming to it adds nothing to `KSPKit`. But `KSPKit` is the one target that builds and tests
   on the Linux runner, which is why `Package.swift` gates the MIDI layer off there, and CoreMIDI is
   Apple-only. So the transport belongs in a macOS-gated target beside `KSPMIDI`, never in `KSPKit`.
+- **The `0xFF` recovery of 7.9.1 is not optional.** It is the one place CoreMIDI is not a
+  byte-transparent substitute for raw USB, it is invisible unless checked (the frame is well-formed
+  and the address echoes), and `bulk_fast`'s `123_117` range hits it on every project. Reply length
+  must be validated against the echoed count on every read, and a short reply re-read element-wise.
+  `parse_reply` already refuses the frame, so the failure is loud — but only if nothing catches the
+  error and carries on.
 - **Liveness is a probe, not an enumeration.** The endpoint outlives the device's ability to answer,
   so the transport opens with the identity request and reports "not answering — quit MIDI Control
   Center, and if that does not help, `killall MIDIServer`" rather than "not connected".
