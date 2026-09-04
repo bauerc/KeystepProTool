@@ -3,11 +3,8 @@ public enum KeyStepPro {
     /// The endpoint pair CoreMIDI publishes for it; the device offers no second port.
     public static let endpointName = "KeyStep Pro"
 
-    /// The device, and the firmware version its identity reply carries -- which no read address
-    /// holds, and which a byte-identical file needs.
-    ///
-    /// The identity exchange is what decides the device is there: an endpoint stays published,
-    /// and keeps accepting sends, after the device has stopped answering (spec 7.9.2).
+    /// The device, and the firmware version no read address carries. The identity exchange is
+    /// what decides it is there: an endpoint keeps accepting sends after it stops answering.
     public static func open(
         timeoutMs: Int = DeviceTransport.defaultTimeoutMs
     ) throws -> (device: DeviceTransport, version: String) {

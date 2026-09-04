@@ -28,20 +28,19 @@ private let identityReply = "f07e7f060200206b0200090025140502f7"
         #expect(device.exchanges == 2)
     }
 
-    @Test func silenceNamesTheFrameAndTheWait() throws {
+    @Test func totalSilenceIsTheTimeout() throws {
         let request = try patternRequest(from: 1, count: 16)
         let device = DeviceTransport(port: port { _ in [] }, timeoutMs: 250)
 
-        #expect(throws: DeviceError.noReply(to: request, within: 250)) {
-            try device.exchange(request)
-        }
+        // ksp_cli.usb_transport keeps these two apart, and so does this.
+        #expect(throws: DeviceError.timedOut(after: 250)) { try device.exchange(request) }
     }
 
-    @Test func anAckAloneIsNoReply() throws {
+    @Test func anAckAloneIsATransactionThatAnsweredNothing() throws {
         let request = try patternRequest(from: 1, count: 16)
         let device = DeviceTransport(port: port { _ in [Sysex.ack] }, timeoutMs: 50)
 
-        #expect(throws: DeviceError.self) { try device.exchange(request) }
+        #expect(throws: DeviceError.noReply(to: request)) { try device.exchange(request) }
     }
 
     @Test func twoRepliesToOneRequestAreRefused() throws {

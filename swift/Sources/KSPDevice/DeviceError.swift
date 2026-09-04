@@ -1,7 +1,7 @@
 import CoreMIDI
 
-/// A failure at the wire, worded so the message names the fix. That wording is the whole value
-/// of this layer over an `OSStatus`, so it lives in one place rather than at each throw.
+/// A failure at the wire. The wording lives here rather than at each throw, because naming the
+/// fix is the whole value of this layer over an `OSStatus`.
 public struct DeviceError: Error, Equatable, CustomStringConvertible {
     public let description: String
 
@@ -11,20 +11,25 @@ public struct DeviceError: Error, Equatable, CustomStringConvertible {
 }
 
 extension DeviceError {
-    /// Nothing published the endpoint at all.
     static func notAttached(_ name: String) -> DeviceError {
         DeviceError(
             "no MIDI device named \"\(name)\" -- is it plugged in over USB and powered on?")
     }
 
     /// The endpoint is published and takes sends, and the device behind it is mute (spec 7.9.2).
-    /// Enumerating it proves nothing, which is why this is reached by an identity exchange.
+    /// Enumerating it proves nothing, which is why an identity exchange is what reaches this.
     static let notAnswering = DeviceError(
         "the KeyStep Pro is not answering -- quit MIDI Control Center, and if that does not "
             + "help, run 'killall MIDIServer'")
 
-    static func noReply(to request: [UInt8], within milliseconds: Int) -> DeviceError {
-        DeviceError("no reply to \(hex(request)) within \(milliseconds) ms")
+    /// Python's two silences, kept apart as `usb_transport` keeps them: nothing came back at all.
+    static func timedOut(after milliseconds: Int) -> DeviceError {
+        DeviceError("timed out after \(milliseconds) ms waiting for a reply")
+    }
+
+    /// The transaction closed, and nothing in it answered the question.
+    static func noReply(to request: [UInt8]) -> DeviceError {
+        DeviceError("no reply to \(hex(request))")
     }
 
     /// Traffic from something else on the port, or a walk that has lost its place.
@@ -34,8 +39,17 @@ extension DeviceError {
                 + replies.map(hex).joined(separator: ", "))
     }
 
-    static func confused(_ what: String) -> DeviceError {
-        DeviceError(what)
+    static func oversizedFrame(_ bytes: Int, capacity: Int) -> DeviceError {
+        DeviceError("\(bytes) bytes is more than the \(capacity) one MIDI packet carries")
+    }
+
+    static func unreadableIdentity(_ reply: [UInt8], _ reason: any Error) -> DeviceError {
+        DeviceError("\(reason): \(hex(reply))")
+    }
+
+    /// A re-read addressed past what a seven-bit SysEx byte can carry.
+    static func unaddressable(index: Int, count: Int) -> DeviceError {
+        DeviceError("re-reading \(count) values from index \(index) needs more than a SysEx byte")
     }
 
     static func coreMIDI(_ what: String, _ status: OSStatus) -> DeviceError {

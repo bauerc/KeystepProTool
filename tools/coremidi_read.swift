@@ -1,8 +1,7 @@
 // Read a project off the device over CoreMIDI and write the .KeyStepPro (issues #245, #246).
 //
-// The transport it used to carry is now `KSPDevice`, under test; what is left here is the driver
-// that #247 will replace with `ksp-swift-cli pull`. Until then this is the only way to read a
-// project out of the Swift core, and the only way to exercise `KSPDevice` against the hardware.
+// A driver over `KSPDevice`: the only way to read a project out of the Swift core, and to
+// exercise the transport against the hardware, until `ksp-swift-cli pull` (#247) lands.
 //
 //   (cd swift && swift build --target KSPDevice)
 //   swiftc -O -I swift/.build/debug/Modules tools/coremidi_read.swift \

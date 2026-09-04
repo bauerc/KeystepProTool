@@ -1,9 +1,8 @@
 import CoreMIDI
 import Foundation
 
-/// The device's CoreMIDI endpoint pair. No privilege, no interface claim and no vendor id:
-/// the endpoint is found by name, and talking through `MIDIServer` reaches the same interface
-/// the raw path would have evicted it from (spec 7.9).
+/// The device's CoreMIDI endpoint pair, found by name. No privilege, no interface claim and no
+/// vendor id: `MIDIServer` reaches the interface the raw path would have evicted it from (7.9).
 final class CoreMIDIPort: SysExPort {
     /// A `MIDIPacket`'s inline data buffer.
     private let packetCapacity = MemoryLayout.size(ofValue: MIDIPacket().data)
@@ -23,9 +22,11 @@ final class CoreMIDIPort: SysExPort {
         let sources = (0..<MIDIGetNumberOfSources()).map(MIDIGetSource).filter(matches)
         guard
             let found = (0..<MIDIGetNumberOfDestinations()).map(MIDIGetDestination).first(
-                where: matches),
-            !sources.isEmpty
+                where: matches)
         else { throw DeviceError.notAttached(needle) }
+        // Half a pair: sends would land and nothing could come back, so it is the mute
+        // endpoint of 7.9.2 rather than an absent device, and takes that advice.
+        guard !sources.isEmpty else { throw DeviceError.notAnswering }
         destination = found
 
         try check(
@@ -54,11 +55,10 @@ final class CoreMIDIPort: SysExPort {
     }
 
     /// Every frame this sends is a request, and the longest is sixteen bytes, so one stack
-    /// `MIDIPacketList` holds it whole. `MIDIPacketListAdd` answers a silent NULL on overflow.
+    /// `MIDIPacketList` holds it whole -- and `MIDIPacketListAdd` overflows to a silent NULL.
     func send(_ frame: [UInt8]) throws {
         guard frame.count <= packetCapacity else {
-            throw DeviceError.confused(
-                "\(frame.count) bytes is more than the \(packetCapacity) one MIDI packet carries")
+            throw DeviceError.oversizedFrame(frame.count, capacity: packetCapacity)
         }
         var list = MIDIPacketList()
         let packet = MIDIPacketListInit(&list)

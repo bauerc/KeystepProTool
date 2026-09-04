@@ -282,10 +282,10 @@ outside that net on the day it drifted. So the command bodies moved down into `K
 faces call them:
 
 ```
-KSPKit  <-  KSPMIDI    <-  KSPRun  <-  KSPSwiftCLI   (@main, ArgumentParser)
-   ^                          ^
-   +-----  KSPDevice  --------+------  KSPApp        (M13, SwiftUI)
-              (M15, CoreMIDI)
+KSPKit  <-  KSPMIDI  <-  KSPRun  <-  KSPSwiftCLI   (@main, ArgumentParser)
+   ^                        ^ ^
+   +---  KSPDevice  --------+ +-----  KSPApp        (M13, SwiftUI)
+          (M15, CoreMIDI)
 ```
 
 `KSPSwiftCLI` keeps the `ParsableCommand` structs, `RootCommand`, `ExitStatus` and `@main`. A

@@ -34,9 +34,8 @@ import PackageDescription
                 .product(name: "SwiftMIDIFile", package: "swift-midi-file"),
             ]
         ),
-        // The transport. CoreMIDI is Apple-only and KSPKit is what builds on the Linux runner,
-        // so the device cannot live there -- and a target of its own is what keeps KSPKit's
-        // dependency list empty while KSPRun reaches the hardware (spec 7.9).
+        // A target of its own because CoreMIDI is Apple-only and KSPKit is what builds on the
+        // Linux runner. README section 5 has the rest.
         .target(name: "KSPDevice", dependencies: ["KSPKit"]),
         // The command bodies, as a library rather than as part of the executable below.
         //

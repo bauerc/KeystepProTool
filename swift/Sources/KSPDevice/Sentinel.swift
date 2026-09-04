@@ -1,13 +1,15 @@
 import KSPKit
 
-/// CoreMIDI cuts a reply at the first `0xFF` and delivers the terminator anyway (spec 7.9.1).
-/// `0xFF` is System Reset and also the device's unset sentinel, so the frame arrives well-formed,
-/// echoing its address and the count it honoured, while carrying fewer values than it promised.
+/// CoreMIDI cuts a reply at the first `0xFF` -- System Reset, and the device's unset sentinel --
+/// and delivers the terminator anyway, so only the value count gives the loss away (spec 7.9.1).
 enum Sentinel {
     /// A long request ends `<last index> <count> F7`, and its reply repeats the request's
     /// header byte for byte in place of that terminator.
     private static let countFromEnd = 2
     private static let indexFromEnd = 3
+
+    /// A SysEx byte carries seven bits, so an index or count above this cannot be addressed.
+    private static let maxDataByte = 0x7F
 
     /// How many values a long reply arrived with when it is short of its promise, nil when whole.
     static func shortfall(of reply: [UInt8], to request: [UInt8]) -> Int? {
@@ -54,13 +56,12 @@ enum Sentinel {
 
     /// The same request re-addressed past a sentinel.
     private static func rest(of request: [UInt8], from index: Int, count: Int) throws -> [UInt8] {
-        guard let index = UInt8(exactly: index), let count = UInt8(exactly: count) else {
-            throw DeviceError.confused(
-                "re-reading \(count) values from index \(index) does not fit in a SysEx frame")
+        guard index <= maxDataByte, count <= maxDataByte else {
+            throw DeviceError.unaddressable(index: index, count: count)
         }
         var tail = request
-        tail[tail.count - indexFromEnd] = index
-        tail[tail.count - countFromEnd] = count
+        tail[tail.count - indexFromEnd] = UInt8(index)
+        tail[tail.count - countFromEnd] = UInt8(count)
         return tail
     }
 }

@@ -31,7 +31,7 @@ public final class DeviceTransport: Transport {
         do {
             return try Sysex.parseIdentity(reply)
         } catch {
-            throw DeviceError.confused("\(error): \(hex(reply))")
+            throw DeviceError.unreadableIdentity(reply, error)
         }
     }
 
@@ -41,13 +41,13 @@ public final class DeviceTransport: Transport {
 
     public func exchange(_ request: [UInt8]) throws -> [UInt8] {
         guard let reply = try awaitReply(to: request) else {
-            throw DeviceError.noReply(to: request, within: timeoutMs)
+            throw DeviceError.timedOut(after: timeoutMs)
         }
         guard let carried = Sentinel.shortfall(of: reply, to: request) else { return reply }
 
         let repaired = try Sentinel.repair(request, reply, carried: carried) { tail in
             guard let answer = try awaitReply(to: tail) else {
-                throw DeviceError.noReply(to: tail, within: timeoutMs)
+                throw DeviceError.timedOut(after: timeoutMs)
             }
             return answer
         }
@@ -55,23 +55,32 @@ public final class DeviceTransport: Transport {
         return repaired.frame
     }
 
-    /// One transaction: the request, then frames until the ack closes it (spec 7.1). nil is
-    /// silence. The identity request is a universal message and its reply is not acked --
-    /// measured on hardware -- so for that one frame the reply itself ends the exchange.
+    /// One transaction: the request, then frames until the ack closes it (spec 7.1).
+    /// nil is total silence; a transaction that closed without answering throws instead.
     private func awaitReply(to request: [UInt8]) throws -> [UInt8]? {
         port.drain()
         exchanges += 1
         try port.send(request)
 
+        // The identity request is universal and its reply is not acked -- measured on hardware,
+        // unlike every Arturia frame -- so for that one frame the reply itself ends the exchange.
         let acked = request.starts(with: Sysex.header)
         var replies: [[UInt8]] = []
+        var heard = false
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000)
         while let frame = port.nextFrame(within: max(0, deadline.timeIntervalSinceNow)) {
+            heard = true
             if frame == Sysex.ack { break }
             replies.append(frame)
             if !acked { break }
         }
         guard replies.count <= 1 else { throw DeviceError.manyReplies(to: request, replies) }
-        return replies.first
+        guard let reply = replies.first else {
+            // Python keeps these apart: an ack alone is a transaction that answered nothing,
+            // while hearing nothing at all is the timeout.
+            if heard { throw DeviceError.noReply(to: request) }
+            return nil
+        }
+        return reply
     }
 }

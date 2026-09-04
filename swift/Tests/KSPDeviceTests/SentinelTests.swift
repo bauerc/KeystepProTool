@@ -67,6 +67,18 @@ import Testing
         #expect(repairs == 1)
     }
 
+    @Test func aReReadPastTheSeventhBitIsRefusedRatherThanMalformed() throws {
+        // A request the plan never issues, but poking a byte past 0x7F would build a frame the
+        // device cannot parse, so the repair stops instead.
+        let request = try Sysex.buildReadRequest(
+            ReadRequest(item: 123, param: 117, indices: [120], count: 16))
+        let truncated = reply(to: request, values: [])
+
+        #expect(throws: DeviceError.self) {
+            try Sentinel.repair(request, truncated, carried: 0, reread: { $0 })
+        }
+    }
+
     @Test func theRepairedFrameEchoesTheAddressItWasAskedFor() throws {
         let request = try patternRequest(from: 1, count: 16)
         let (frame, _) = try Sentinel.repair(
