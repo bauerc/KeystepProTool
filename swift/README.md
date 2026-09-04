@@ -49,6 +49,15 @@ error messages more often than you type it.
 > version manager (think `pyenv`/`rustup`) if you ever need parallel toolchains. This project pins
 > nothing locally and just uses whatever `swift --version` reports; CI pins via a container image.
 
+### Talking to the device needs no privilege
+
+`KSPDevice` reaches the hardware through CoreMIDI, a system framework in every toolchain above:
+**no root, no `sudo`, no `libusb`, no entitlement and no privileged helper.** It needs no extra
+install either — unlike Python's `ksp-pull`, which claims USB interface 2 directly and so has to
+run under `sudo` with `pyusb` and `libusb` present. The two paths reach the same wire, and going
+through `MIDIServer` rather than around it costs nothing measurable (spec 7.9). The one thing the
+CoreMIDI path does not carry is a `0xFF` byte, which `KSPDevice` repairs; spec 7.9.1 says why.
+
 ### Linux is a first-class target
 
 Swift is not Mac-only. `swift:6.2` on Docker Hub is an official Linux image with the same compiler
@@ -229,13 +238,14 @@ your tests can only see what is marked `public`.
 
 ## 5. How this package is laid out, and why
 
-Six targets:
+Seven targets:
 
 | Target | Is | Depends on | Builds on Linux |
 |---|---|---|---|
 | `KSPKit` | the format core; port of `src/ksp/` minus MIDI | **nothing** | yes |
 | `KSPMIDI` | the Standard MIDI File layer | `KSPKit`, `SwiftMIDIFile` | no |
-| `KSPRun` | the command bodies and the bundled template | `KSPMIDI` | no |
+| `KSPDevice` | the transport: the attached device over CoreMIDI | `KSPKit`, `CoreMIDI` | no |
+| `KSPRun` | the command bodies and the bundled template | `KSPMIDI`, `KSPDevice` | no |
 | `KSPSwiftCLI` | the `ksp-swift-cli` binary: arguments and `@main` | `KSPRun`, `ArgumentParser` | no |
 | `KSPApp` | the `ksp-app` binary: the SwiftUI drop window | `KSPRun`, `SwiftUI`, `AppKit` | no |
 | `KSPKitTests` … `KSPAppTests` | tests for each | | respectively |
@@ -246,7 +256,10 @@ therefore has **zero third-party dependencies**, and the bulk of the port (miles
 M12's `Mutate.swift`) builds and tests on GitHub's Linux runners, which bill at 1× instead of
 macOS's 10×.
 
-**So do not add a dependency to `KSPKit`.** That is the whole point of it. `swift-argument-parser`
+**So do not add a dependency to `KSPKit`.** That is the whole point of it. `KSPDevice` is what
+that rule looks like in practice: it conforms to `KSPKit`'s own `Transport` protocol, which would
+make it tempting to file under `KSPKit` — but CoreMIDI is Apple-only, so a target of its own is
+what lets `KSPRun` reach the hardware while `KSPKit` still depends on nothing. `swift-argument-parser`
 does run on Linux, but it is declared inside the same `#else` because `KSPSwiftCLI` is the only
 target that wants it and that target is gated off there anyway — no reason to make the Linux job
 fetch a package it cannot use.
@@ -269,9 +282,10 @@ outside that net on the day it drifted. So the command bodies moved down into `K
 faces call them:
 
 ```
-KSPKit  <-  KSPMIDI  <-  KSPRun  <-  KSPSwiftCLI   (@main, ArgumentParser)
-                             ^
-                             +------  KSPApp       (M13, SwiftUI)
+KSPKit  <-  KSPMIDI    <-  KSPRun  <-  KSPSwiftCLI   (@main, ArgumentParser)
+   ^                          ^
+   +-----  KSPDevice  --------+------  KSPApp        (M13, SwiftUI)
+              (M15, CoreMIDI)
 ```
 
 `KSPSwiftCLI` keeps the `ParsableCommand` structs, `RootCommand`, `ExitStatus` and `@main`. A

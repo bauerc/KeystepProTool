@@ -384,9 +384,11 @@ probe's real-time filter compiled out entirely, return byte-identical truncated 
 
 ### 7.9.2 A whole project, read over CoreMIDI
 
-Not a frame count and not a projection — the file. `tools/coremidi_read.swift` is a
+Not a frame count and not a projection — the file. The transport is `KSPDevice` (#246), a
 `KSPKit.Transport` over CoreMIDI carrying the 7.9.1 repair, handed straight to `BulkRead.readRaw`
 and `LenientJSON.write`; no format logic of its own, so what it exercises is the transport.
+`tools/coremidi_read.swift` is the driver that reads a project with it, until `ksp-swift-cli pull`
+(#247) replaces it.
 
 ```
 slot 1: 153497 keys, 1007 requests, 13 sentinels repaired, 4.80 s
@@ -396,6 +398,12 @@ slot 1: 153497 keys, 1007 requests, 13 sentinels repaired, 4.80 s
 - **1,007 requests** — the gated `bulk_fast` walk, matching the table in 7.8 exactly.
 - **13 sentinels repaired** — `123_117`, patterns 1–13, each recovered by the re-read of 7.9.1.
 - **4.80 s**, against the ≈ 4.0 s the per-exchange cost predicts.
+
+**Re-measured through `KSPDevice` itself** (2026-09-04, same slot, same firmware): 153,497 keys,
+**1,021 exchanges**, 13 sentinels repaired, **4.49 s**, and two consecutive reads byte-identical at
+3,523,191 bytes. The exchange count is the same walk seen one layer lower — the gate's 1,007
+requests, plus the 13 sentinel re-reads, plus the one identity request that decides the device is
+answering — so it corroborates the 1,007 above rather than disagreeing with it.
 
 **The sentinels land where raw USB says they must.** `123_117_1` through `123_117_13` are written as
 `247`, and 14–16 as `60` — which is H1.5's raw-USB reading (255 raw, 247 in a file) reproduced
@@ -461,10 +469,13 @@ flow control. The consequences that matter:
   conforming to it adds nothing to `KSPKit`. But `KSPKit` is the one target that builds and tests
   on the Linux runner, which is why `Package.swift` gates the MIDI layer off there, and CoreMIDI is
   Apple-only. So the transport belongs in a macOS-gated target beside `KSPMIDI`, never in `KSPKit`.
-- **`tools/coremidi_read.swift` is that transport already, and it works** (7.9.2). Moving it into
-  `KSPDevice` is the ticket: give it the device-not-answering wording, a configurable timeout, and
-  tests. The protocol mechanics — client, an input port per source, `MIDISend`, SysEx reassembled
-  across packets, one outstanding request, and the `0xFF` repair — are done and read a project.
+- **`tools/coremidi_read.swift` was that transport already, and it worked** (7.9.2). Moving it
+  into `KSPDevice` was #246, and it has landed with the device-not-answering wording, a
+  configurable timeout defaulting to Python's 1,000 ms, and tests. Two things changed in the move:
+  the input port connects to the device's own source rather than to every source, so other MIDI
+  gear on the same Mac cannot queue its traffic as a reply, and the identity request — which is
+  universal, and measurably *not* acked, unlike every Arturia frame — ends on its own reply
+  instead of waiting out the timeout for an ack that never comes.
 - **The `0xFF` recovery of 7.9.1 is not optional.** It is the one place CoreMIDI is not a
   byte-transparent substitute for raw USB, it is invisible unless checked (the frame is well-formed
   and the address echoes), and `bulk_fast`'s `123_117` range hits it on every project. Reply length
