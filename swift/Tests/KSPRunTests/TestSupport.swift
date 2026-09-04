@@ -9,6 +9,7 @@ enum RepoData {
         .deletingLastPathComponent()
 
     static let projectFiles = root.appending(path: "project_files")
+    static let fixtures = root.appending(path: "tests/fixtures")
 }
 
 /// A drum-map config path that cannot exist, so a run never picks up a personal one.

@@ -5,7 +5,7 @@ struct RootCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ksp-swift-cli",
         abstract: "Convert between Standard MIDI files and Arturia KeyStep Pro projects.",
-        subcommands: [Dump.self, Export.self, Convert.self])
+        subcommands: [Dump.self, Export.self, Convert.self, Pull.self])
 
     func run() throws {
         // The help is what the user needs, so it goes to stdout -- but no command at all is a

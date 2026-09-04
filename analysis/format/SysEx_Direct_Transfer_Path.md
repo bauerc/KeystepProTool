@@ -387,8 +387,8 @@ probe's real-time filter compiled out entirely, return byte-identical truncated 
 Not a frame count and not a projection — the file. The transport is `KSPDevice` (#246), a
 `KSPKit.Transport` over CoreMIDI carrying the 7.9.1 repair, handed straight to `BulkRead.readRaw`
 and `LenientJSON.write`; no format logic of its own, so what it exercises is the transport.
-`tools/coremidi_read.swift` is the driver that reads a project with it, until `ksp-swift-cli pull`
-(#247) replaces it.
+`ksp-swift-cli pull` (#247) is the command that reads a project with it;
+`tools/coremidi_read.swift` is the bare driver the figures below were measured through.
 
 ```
 slot 1: 153497 keys, 1007 requests, 13 sentinels repaired, 4.80 s
