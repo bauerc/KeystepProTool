@@ -8,7 +8,8 @@ public struct RunResult: Sendable {
 
     public var diagnostics: Report
 
-    /// What the command wrote, or would have written under a dry run. Empty on any failure.
+    /// What the command wrote, or would have written under a dry run. A failure names what it
+    /// had already written, and is empty only where nothing reached disk.
     public var destinations: [URL]
 
     /// Why the command failed, without the `<prog>: ` prefix `stderr` carries. `nil` on success.

@@ -90,7 +90,9 @@ public enum PullRunner {
     static func midiPlan(_ options: Options) -> MidiPlanning {
         let export = ExportRunner.Options(path: options.output, configPath: options.configPath)
         let destination = ExportRunner.defaultDestination(export.path)
-        if destination == options.output {
+        // Case-folded: the volume this writes to is case-insensitive by default, where
+        // `Foo.MID` and the `Foo.mid` beside it are one file.
+        if options.output.pathExtension.lowercased() == "mid" {
             return .refusal(
                 fail(
                     "--also-midi cannot write \(options.output.relativePath): the project and its "
@@ -210,7 +212,7 @@ public enum PullRunner {
             if exported.isEmpty {
                 return refused(
                     "\(options.output.relativePath) was written, but no pattern holds notes to "
-                        + "export", report: report, options: options)
+                        + "export", report: report, options: options, reporting: true)
             }
             do {
                 try exported.midi.rawData().write(to: midi.destination)
@@ -242,12 +244,18 @@ public enum PullRunner {
         return result
     }
 
-    /// A failure once the project is on disk: its warnings were earned by a read that happened,
-    /// so they still reach stderr, ahead of the refusal.
-    static func refused(_ message: String, report: Report, options: Options) -> RunResult {
+    /// A failure once the project is on disk: it names the project as written, because the file
+    /// is there whatever happened next. `reporting` is Python's own division -- the warnings a
+    /// read earned reach stderr ahead of an export that had nothing to write, and no other.
+    static func refused(
+        _ message: String, report: Report, options: Options, reporting: Bool = false
+    ) -> RunResult {
         var result = fail(message, code: 1)
-        result.stderr = reported(report, verbose: options.verbose, prog: prog) + result.stderr
+        if reporting {
+            result.stderr = reported(report, verbose: options.verbose, prog: prog) + result.stderr
+        }
         result.diagnostics = report
+        result.destinations = [options.output]
         return result
     }
 }

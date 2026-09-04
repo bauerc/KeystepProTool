@@ -232,6 +232,30 @@ import Testing
         #expect(result.stderr.contains("no pattern holds notes"))
         #expect(FileManager.default.fileExists(atPath: written.path))
         #expect(!FileManager.default.fileExists(atPath: midiBeside(written).path))
+        // The project is on disk, so the run names it: the app lists what a read wrote.
+        #expect(result.destinations == [written])
+    }
+
+    /// The `.mid` cannot be written over a directory, and Python prints no report on that path.
+    @Test func amidiThatCannotBeWrittenStillNamesTheProjectThatWas() throws {
+        let device = TapeDevice(try recallTape())
+        let written = try scratch()
+        defer { try? FileManager.default.removeItem(at: written.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(
+            at: midiBeside(written), withIntermediateDirectories: true)
+
+        let result = PullRunner.run(
+            PullRunner.Options(
+                output: written, alsoMidi: true, force: true, configPath: noPersonalConfig),
+            attach: { device })
+
+        #expect(result.code == 1)
+        #expect(result.stderr.hasPrefix("ksp-swift-cli pull: "))
+        // The tape's read earns five kinds of warning, and Python prints none of them here.
+        #expect(!result.stderr.contains("warning:"))
+        #expect(!result.diagnostics.render(verbose: false).isEmpty)
+        #expect(result.destinations == [written])
+        #expect(FileManager.default.fileExists(atPath: written.path))
     }
 
     /// Naming the project .mid would have the export overwrite the project.
@@ -248,6 +272,37 @@ import Testing
         #expect(result.stderr.contains("same file"))
         #expect(!FileManager.default.fileExists(atPath: written.path))
         #expect(device.asked.isEmpty)
+    }
+
+    /// The volume is case-insensitive by default, so `.MID` names the very file the export
+    /// would write and the exact-match guard would let the read clobber its own project.
+    @Test func alsoMidiRefusesADestinationThatIsItsOwnMidiFileWhateverTheCase() throws {
+        let device = TapeDevice(try recallTape())
+        let written = try scratch().deletingPathExtension().appendingPathExtension("MID")
+        defer { try? FileManager.default.removeItem(at: written.deletingLastPathComponent()) }
+
+        let result = PullRunner.run(
+            PullRunner.Options(output: written, alsoMidi: true, configPath: noPersonalConfig),
+            attach: { device })
+
+        #expect(result.code == 2)
+        #expect(result.stderr.contains("same file"))
+        #expect(!FileManager.default.fileExists(atPath: written.path))
+        #expect(device.asked.isEmpty)
+    }
+
+    /// Python wraps the identity parse failure in the slot it was reading, and the wire's own
+    /// silences are what it leaves unwrapped.
+    @Test func anUnreadableIdentityIsNamedWithTheSlotItWasReading() throws {
+        let written = try scratch()
+        defer { try? FileManager.default.removeItem(at: written) }
+
+        let result = PullRunner.run(
+            PullRunner.Options(output: written, slot: 5), attach: { UnreadableIdentity() })
+
+        #expect(result.code == 1)
+        #expect(result.stderr == "ksp-swift-cli pull: slot 5: \(UnreadableIdentity.message)\n")
+        #expect(!FileManager.default.fileExists(atPath: written.path))
     }
 
     @Test func quietWritesTheProjectAndNoSummary() throws {
@@ -288,6 +343,16 @@ private func scratch() throws -> URL {
 
 private struct DeviceUnreachable: Error, CustomStringConvertible {
     let description = "no MIDI device named \"KeyStep Pro\""
+}
+
+/// A device answering the identity request with a frame that is not one -- a `KSPError`, as the
+/// transport throws for a reply that came back and answered the wrong question.
+private final class UnreadableIdentity: PullDevice {
+    static let message = "not a KeyStep Pro identity reply: f07ef7"
+
+    func identify() throws -> String { throw KSPError.value(UnreadableIdentity.message) }
+    func send(_ frame: [UInt8]) throws {}
+    func exchange(_ request: [UInt8]) throws -> [UInt8] { [] }
 }
 
 /// The request a frame carries. `Sysex` parses replies; only a fake device parses requests.

@@ -58,14 +58,16 @@ enum DeviceRead {
     /// A failure keeps the runner's own words: they name the fix -- the cable, MIDI Control Center,
     /// `killall MIDIServer`, a slot with nothing saved in it -- and a second phrasing would not.
     static func outcome(from result: RunResult, note: String?) -> Outcome {
-        guard result.code == 0, !result.destinations.isEmpty else {
+        guard !result.destinations.isEmpty else {
             return Outcome(
                 written: [], headline: result.message ?? "The read failed.",
                 report: result.diagnostics, note: nil, source: .deviceRead)
         }
+        // A read that wrote the project and then failed over the MIDI file wrote a project all
+        // the same: the window lists it, under the runner's account of what stopped afterwards.
         return Outcome(
-            written: result.destinations, headline: summary(result), report: result.diagnostics,
-            note: note, source: .deviceRead)
+            written: result.destinations, headline: result.message ?? summary(result),
+            report: result.diagnostics, note: note, source: .deviceRead)
     }
 
     /// The runner's summary, minus the paths it wrote -- which the window lists for itself. What

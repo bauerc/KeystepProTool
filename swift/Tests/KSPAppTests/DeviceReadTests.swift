@@ -100,6 +100,22 @@ private final class Revealed {
         #expect(model.deviceReadPlan.target == directory.appending(path: "Project 1.KeyStepPro"))
     }
 
+    /// The card's plan is kept rather than resolved on every redraw, so each input that moves
+    /// it has to say so -- the project folder included.
+    @Test func thecardsPlanFollowsAChosenProjectFolder() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let elsewhere = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: elsewhere) }
+        let model = model(writingInto: directory, chosenMIDIFolder: elsewhere)
+
+        #expect(model.deviceReadPlan.target == directory.appending(path: "Project 1.KeyStepPro"))
+
+        model.choose(.project)
+
+        #expect(model.deviceReadPlan.target == elsewhere.appending(path: "Project 1.KeyStepPro"))
+    }
+
     @Test func thedestinationsOwnNoteReachesTheCard() {
         let plan = DeviceRead.plan(
             slot: 1, named: "",
@@ -172,6 +188,33 @@ private final class Revealed {
         #expect(outcome.resultLine == "2 files written")
         #expect(outcome.againLabel == "Read another")
         #expect(revealed.files == [[project, midi]])
+    }
+
+    /// The MIDI half can fail with the project already on disk. "Nothing was read" would be a
+    /// 3.5 MB file the window never named, so the read that half-happened is listed as one.
+    @Test func areadThatWroteTheProjectAndThenFailedStillListsIt() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let project = directory.appending(path: "Project 1.KeyStepPro")
+        let refused = "Project 1.KeyStepPro was written, but no pattern holds notes to export"
+        var answer = RunResult.failure(PullRunner.prog, refused, code: 1)
+        answer.destinations = [project]
+        let revealed = Revealed()
+        let model = model(
+            writingInto: directory, revealing: revealed,
+            pull: PullLog(answering: answer).pull)
+
+        await model.read()
+
+        guard case .done(let outcome) = model.phase else {
+            Issue.record("the read should have finished")
+            return
+        }
+        #expect(!outcome.failed)
+        #expect(outcome.written == [project])
+        #expect(outcome.headline == refused)
+        #expect(outcome.resultLine == "Project 1.KeyStepPro")
+        #expect(revealed.files == [[project]])
     }
 
     /// The runner's messages name the fix -- the cable, MIDI Control Center, `killall MIDIServer`,
