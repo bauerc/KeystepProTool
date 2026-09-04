@@ -23,8 +23,8 @@ f0 00 20 6b 7f 42 02 00 40 6a 31 f7
 
 The bulk stream is addressed by the tuple `(bulkItemId…, paramId, valueId/index)` — **the same
 address tuple the file keys encode**, which is why `bulkOperation` in the device JSON describes
-both transports. A CoreMIDI direct-transfer path is therefore structurally feasible and would
-reuse the same model layer.
+both transports. A CoreMIDI direct-transfer path is not merely feasible but measured: see
+[7.9](#79-the-transport-coremidi-answers-and-raw-usb-is-not-required).
 
 ### 7.1 The read protocol
 
@@ -263,3 +263,111 @@ project — but for the trailing comma MCC appends and this writer's strict JSON
 above (`tests/test_pull_cli.py::test_the_dump_is_byte_identical_to_mcc_s_export`). That is the
 tapes again, not the device; H3.1 and H3.2 in the [hardware test
 protocol](../Hardware_Test_Protocol.md#phase-3--acceptance) are what carry this check to hardware.
+
+### 7.9 The transport: CoreMIDI answers, and raw USB is not required
+
+**The device answers the whole read protocol over its ordinary CoreMIDI endpoint, with no root, no
+interface claim and no privileged helper.** Measured on hardware 2026-09-03, firmware 2.5.20,
+macOS 26.6.2, Swift 6.2.3, through `tools/coremidi_probe.swift`.
+
+**Why it was open.** `ksp_cli.usb_transport` claims USB interface 2, and to do that it detaches the
+kernel driver first — which is why `ksp-pull` needs `sudo`. A GUI app cannot prompt for a password
+and re-exec itself as root, so if the protocol were reachable only that way, the app would need an
+`SMJobBless` helper or an XPC service.
+
+**The driver being detached is CoreMIDI's own.** While any MIDI client is connected,
+`IOUSBHostInterface` with `bInterfaceNumber = 2` carries exactly one interface-level user client,
+and it is `MIDIServer` — CoreMIDI's server process:
+
+```sh
+ioreg -r -c IOUSBHostInterface -l -w0 | awk '/KeyStep Pro/,0' |
+    grep -E 'bInterfaceNumber|IOUserClientCreator'
+```
+
+That single interface is published as a single CoreMIDI endpoint pair named `KeyStep Pro`; the
+device offers no second port. So the raw path and the CoreMIDI path are **the same wire**, and
+claiming interface 2 is evicting CoreMIDI from it rather than reaching past it. Talking *through*
+`MIDIServer` reaches the identical endpoint cooperatively.
+
+`MIDIServer` is launch-on-demand: with no client connected it exits and the user client disappears,
+so the `ioreg` line above shows interface 2 unowned. Run it while something holds a MIDI client
+open, or it reads as though nothing binds the interface.
+
+Sent to that endpoint, every frame type answers unchanged — reply then ack, exactly as 7.1
+describes:
+
+| Request | Reply |
+| ------- | ----- |
+| `f07e7f0601f7` identity | `f07e7f060200206b0200090025140502f7` → **2.5.20** |
+| `01 01 25 78` short read `120_37` | `02 01 25 78 03` — the value `3` of 7.4, not the `0x7f` filler |
+| `0b 01 6d 03 7c 01 01 01 10` long read, count 16 | all 16 values |
+| `0b 01 6d 03 7c 01 01 01 64` long read, count 100 | all 100 values, a 116-byte frame |
+
+**The prologue selects over CoreMIDI too.** `05 <slot>` then `120_37` answers for all sixteen
+slots, byte 7 echoing the slot each time; `120_37` reads `3` throughout, as 7.4 says it must, while
+the pitch chunk `124_109_1_1_1` differs per slot — `24 28 2b 24` in slot 1, `3c 3e 40 3c` in slots
+4–6, `3c 48 4c 48` in slot 7, filler in the empty ones. Different projects, so the selection is
+real and not an echo.
+
+**Cost: 4.00 ms per exchange, and it does not vary with payload.** 200 request/reply/ack rounds at
+each of count 1, 16, 64 and 100 returned 200 replies and 200 acks apiece, no drops, at 4.00 ms
+throughout. A one-value reply costs what a hundred-value reply costs, so this is a fixed
+per-transaction cadence of the class driver, not bandwidth — and the whole benefit of coalescing
+(7.8) survives it, because coalescing removes transactions rather than bytes.
+
+| Walk | Requests | At 4.00 ms |
+| ---- | -------- | ---------- |
+| `bulk_plan`, MCC's stream | 8,951 | ≈ 36 s |
+| `bulk_fast`, coalesced | 2,044 | ≈ 8.2 s |
+| `bulk_fast` + the gate | 1,007 | ≈ 4.0 s |
+
+H1.3's 9.6 s remains the only figure taken off the raw path, and it was MCC's 8,951-request walk;
+per request that is ≈ 1.07 ms, so CoreMIDI is roughly four times the per-transaction cost. It does
+not matter: the walk the port actually issues is the gated `bulk_fast` one, and **≈ 4 s over
+CoreMIDI beats 9.6 s over raw USB** because it asks nine times less often. The projection is
+arithmetic on a measured per-exchange cost, not a timed dump — no full walk has been run over
+CoreMIDI yet.
+
+**A published endpoint is not a live one, and the app must not treat it as one.** After an MCC
+launch-and-quit cycle in the same session, the `KeyStep Pro` endpoint was still enumerated and
+still accepted sends, while the device answered nothing — first the read frames went silent with
+identity still answering, then identity went silent too. Nothing was unplugged and the device was
+never power-cycled. **`killall MIDIServer` restored it completely**: identity, every read frame and
+the full 4.00 ms timing came back byte-identical on the next run. So the remedy is a CoreMIDI
+server restart, not a re-plug, and the diagnosis is a probe rather than an enumeration —
+`MIDIObjectFindByUniqueID` finding the endpoint proves nothing. **Open an exchange with the
+identity request and treat silence as "no device", however healthy the endpoint list looks.**
+
+What evicted `MIDIServer` was not isolated: an MCC launch and quit preceded it, and MCC does use
+raw IOKit USB (`IOUSBLib` is loaded in its process). Whether MCC detaches interface 2 on exit, or
+whether `MIDIServer` simply failed to re-acquire it, was not separated — only that the state is
+reachable and that the restart clears it.
+
+**MIDI Control Center merely running changes nothing.** With MCC launched alongside, every reply
+above was byte-identical and the timing unchanged at 4.00 ms. MCC holds only *device*-level user clients
+(`AppleUSBHostDeviceUserClient`, which it opens on every USB device on the bus, Arturia or not) and
+no interface-level client, so it is not contending for interface 2 while idle. **Not tested: MCC
+mid-transfer**, driving a Recall From at the same time — that needs a hand on the GUI.
+
+**Recommendation for the transport ticket: CoreMIDI, and nothing else.** The Swift read wants
+`MIDIClientCreateWithBlock`, an input port per source and `MIDISend` to the destination, with SysEx
+reassembled across packets — the device's replies exceed one packet's three bytes and arrive split.
+Traffic is strictly serialised (7.1), so one outstanding request and a wait on the ack is the whole
+flow control. The consequences that matter:
+
+- **No `SMJobBless`, no XPC service, no privileged helper, no password prompt.** The app ships as an
+  ordinary sandboxed-capable bundle. That larger, riskier piece of work is not needed and should
+  not be ticketed.
+- **No `pyusb`, no `libusb`, no vendor-id matching** in the Swift port — CoreMIDI is a system
+  framework and the endpoint is found by name.
+- **It conforms to `KSPKit.Transport` but must not live in `KSPKit`.** The seam is already there —
+  `public protocol Transport { exchange, send }` in `BulkRead.swift`, which `readRaw` drives — and
+  conforming to it adds nothing to `KSPKit`. But `KSPKit` is the one target that builds and tests
+  on the Linux runner, which is why `Package.swift` gates the MIDI layer off there, and CoreMIDI is
+  Apple-only. So the transport belongs in a macOS-gated target beside `KSPMIDI`, never in `KSPKit`.
+- **Liveness is a probe, not an enumeration.** The endpoint outlives the device's ability to answer,
+  so the transport opens with the identity request and reports "not answering — quit MIDI Control
+  Center, and if that does not help, `killall MIDIServer`" rather than "not connected".
+- **The Python CLI is unaffected.** `ksp-pull` keeps its raw path and its `sudo`; this is the Swift
+  transport's answer, and the two need not converge. Should the CLI ever want it, the same finding
+  applies — a CoreMIDI transport there would drop the root requirement too.

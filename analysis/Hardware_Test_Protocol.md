@@ -560,6 +560,59 @@ commit — that needs its own protocol entry and a slot the user is willing to l
 
 ---
 
+## Phase 6 — the transport ✅ **settled affirmatively, 2026-09-03**
+
+One probe, and it was what stood between the Swift port and a read the app could actually perform.
+
+### H6.1 — Does the device answer over CoreMIDI rather than raw USB?
+
+- [x] **run 2026-09-03 — CONFIRMED.** Identity, short read, coalesced read at count 16 and at the
+  count-100 ceiling, and the sixteen-slot prologue sweep all answer over the ordinary CoreMIDI
+  endpoint, unprivileged, at 4.00 ms an exchange — and are unchanged with MIDI Control Center
+  running. The facts and the recommendation are in
+  [spec 7.9](./format/SysEx_Direct_Transfer_Path.md) — this entry keeps only how to re-run it.
+
+- **Nothing to quit and no `sudo`.** This is the one probe here that neither needs the device to
+  itself nor needs root: it goes *through* macOS's USB-MIDI driver rather than detaching it, which
+  is the whole finding.
+- **Command:** compile the standalone probe and run it. It is deliberately not a package target —
+  `KSPKit` takes no dependency, and the probe answers a question rather than shipping a feature.
+
+  ```sh
+  swiftc -O tools/coremidi_probe.swift -o /tmp/coremidi_probe
+  /tmp/coremidi_probe list                          # the endpoints CoreMIDI publishes
+  /tmp/coremidi_probe exchange "KeyStep Pro" 1      # identity, scalar, count 16, count 100
+  /tmp/coremidi_probe slots "KeyStep Pro"           # the sixteen-slot prologue sweep
+  /tmp/coremidi_probe throughput "KeyStep Pro" 1    # 200 rounds at each of count 1/16/64/100
+  /tmp/coremidi_probe sniff 20                      # whatever arrives, e.g. during an MCC recall
+  ```
+
+- **Which process holds interface 2** is the question behind the question, and `ioreg` answers it
+  without the device being busy:
+
+  ```sh
+  ioreg -r -c IOUSBHostInterface -l -w0 | awk '/KeyStep Pro/,0' |
+      grep -E 'bInterfaceNumber|IOUserClientCreator'
+  ```
+
+- **If the probe goes silent, restart CoreMIDI before suspecting the device.** An MCC launch-and-quit
+  cycle left the endpoint enumerated and accepting sends while the device answered nothing, identity
+  included. Nothing needed unplugging:
+
+  ```sh
+  killall MIDIServer      # launchd respawns it on the next client connection
+  ```
+
+  Everything came back byte-identical on the next run. Note also that `MIDIServer` is
+  launch-on-demand, so the `ioreg` line above reads as though nothing owns interface 2 unless
+  something is holding a MIDI client open while you run it — `sniff` in another shell does.
+
+**What is still untested: MCC mid-transfer.** MCC was running but idle. Driving a Recall From while
+the probe reads needs a hand on the GUI, and until someone does it the no-contention finding covers
+an idle MCC only.
+
+---
+
 ## Capture ledger
 
 Fill in as you go. This table is the record; the `.KeyStepPro` files are the evidence.
