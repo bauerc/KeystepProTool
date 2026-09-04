@@ -623,9 +623,23 @@ One probe, and it was what stood between the Swift port and a read the app could
   launch-on-demand, so the `ioreg` line above reads as though nothing owns interface 2 unless
   something is holding a MIDI client open while you run it — `sniff` in another shell does.
 
-**What is still untested: MCC mid-transfer.** MCC was running but idle. Driving a Recall From while
-the probe reads needs a hand on the GUI, and until someone does it the no-contention finding covers
-an idle MCC only.
+- **Reading a whole project over CoreMIDI** is the end of the chain, and needs `KSPKit` linked
+  because it drives `BulkRead.readRaw` rather than replaying frames:
+
+  ```sh
+  (cd swift && swift build --target KSPKit)
+  swiftc -O -I swift/.build/debug/Modules tools/coremidi_read.swift \
+      swift/.build/debug/KSPKit.build/*.o -o /tmp/coremidi_read
+  /tmp/coremidi_read 1 /tmp/slot1.KeyStepPro src/ksp_cli/templates/Default.KeyStepPro
+  ```
+
+  Slot 1 read in **4.80 s — 153,497 keys, 1,007 requests, 13 sentinels repaired**, twice over and
+  byte-identical both times ([spec 7.9.2](./format/SysEx_Direct_Transfer_Path.md)).
+
+**What is still untested: MCC mid-transfer, and H3.2's diff over this transport.** MCC was running
+but idle; driving a Recall From while the probe reads needs a hand on the GUI. And the project read
+above has not been byte-diffed against MCC's own export of the same slot — the same Recall From is
+what that would take.
 
 ---
 
