@@ -2,7 +2,7 @@
 
 Reading a project off the device exists twice in Python. `bulk_plan.iter_requests` reproduces MIDI
 Control Center's own stream — 8,951 requests, one value each — and `bulk_fast.iter_requests`
-coalesces the identical addresses into 2,044, then lets the melodic existence array settle the
+coalesces the identical addresses into 3,511, then lets the melodic existence array settle the
 note parameters it gates. `bulk_read` walks either, and `--mcc-plan` picks the slow one.
 
 `KSPKit` gets the coalesced walk and nothing else. MCC's stream is not a feature; it is evidence.

@@ -13,12 +13,12 @@ public enum BulkFast {
     // pool with holes, so a dead entry keeps whatever was there and cannot be derived.
 
     /// Requests this plan expands to, against the 8,951 MCC issues.
-    public static let requestCount = 2044
+    public static let requestCount = 3511
 
     /// What one pattern of one track costs: 75 pattern reads plus the index-less scalars.
     public static let patternRequestCount = 115
 
-    /// Every address the plan covers, coalesced into the fewest requests.
+    /// Every address the plan covers, in as few requests as the device allows.
     /// MCC's order, but with the existence array ahead of the parameters it gates.
     public static func iterRequests(maxCount: Int = Sysex.maxReadCount) throws -> [ReadRequest] {
         guard maxCount > 0 else {
@@ -40,12 +40,9 @@ public enum BulkFast {
         }
     }
 
-    /// Whether a request fills any key belonging to `pattern`. Not simply
-    /// `indices[0] == pattern`: a coalesced per-pattern scalar is one range at index 1.
+    /// Whether a request fills any key belonging to `pattern`.
     private static func covers(_ request: ReadRequest, _ pattern: Int) -> Bool {
-        guard let count = request.count, let first = request.indices.first else { return false }
-        guard request.indices.count == 1 else { return first == pattern }
-        return first <= pattern && pattern < first + count
+        request.indices.first == pattern
     }
 
     /// One group index of the plan, in the plan's own order.
@@ -115,6 +112,12 @@ public enum BulkFast {
     private static func join(_ run: [ReadRequest], maxCount: Int) throws -> [ReadRequest] {
         let first = run[0]
         guard first.count != nil else { return [first] }
+
+        // A lone index is not a range axis: the device answers a walk over one with index 1's
+        // value repeated, so the per-pattern scalars stay one request each (spec 7.8).
+        if first.indices.count == 1 {
+            return run.sorted { ($0.indices.last ?? 0) < ($1.indices.last ?? 0) }
+        }
 
         // By index, not by the order MCC asked in: it reads 121_83's fifth scene
         // ahead of the other four, and a run is a range whatever order it arrived.

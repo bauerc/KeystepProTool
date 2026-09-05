@@ -48,10 +48,11 @@ device over USB. `kspplus` gathers all four under one name.
 `midi2ksp` converts a whole file: every note-bearing track onto the device's four, chords, a drum
 track, note lengths, tempo, and sequences too long for one pattern split and chained.
 
-`ksp-pull` is newer than the rest and its acceptance gate is not yet closed: the read path is
-verified against a replayed capture and against the device's own panel, but the full-dump diff
-against MIDI Control Center's export (H3.2) has not been run on hardware. See
-[`ROADMAP.md`](./ROADMAP.md).
+`ksp-pull` is newer than the rest. Its acceptance gate closed on 2026-09-04: a full read off the
+device matches MIDI Control Center's own export of the same slot on 153,494 of 153,497 keys, the
+three exceptions being addresses that hold nothing on the device — padding past the end of two
+short arrays, which MCC reads anyway and no two of its exports agree on (H3.2).
+See [`ROADMAP.md`](./ROADMAP.md).
 
 There is also a drag-and-drop **macOS app**, *Key Step Pro Plus*, for the common case — see
 [The app](#the-app).
@@ -535,10 +536,10 @@ is on the device into a MIDI file.
 It reports what it did and how long it took:
 
 ```
-read slot 3 in 9.6 s, 1007 requests
+read slot 3 in 9.9 s, 2474 requests
 wrote my_project.KeyStepPro
   64 note(s), 120 BPM
-  11.2 s total, 9.6 s of it at the device
+  11.5 s total, 9.9 s of it at the device
 ```
 
 The request count is the walk's own, so it can be compared against the figure in
@@ -595,7 +596,7 @@ Three things about the read:
 | `--template P` | take the file's full key set from `P` instead of the shipped factory default |
 
 The default walk asks for up to 64 values per request and skips what the note pool's existence
-array has already answered — the same addresses MCC reads, in about a ninth of the frames. The
+array has already answered — the same addresses MCC reads, in about a third of the frames. The
 device's reply period does not change with the payload size, which is why that is the whole of the
 speedup.
 

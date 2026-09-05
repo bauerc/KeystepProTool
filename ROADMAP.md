@@ -310,9 +310,9 @@ Three probes changed what later phases should do:
   without touching MCC's stream:** `ksp.bulk_fast` derives a second walk from the same `PLAN`
   rather than rewriting the generated one, so `bulk_plan` and the pin `test_bulk_plan.py` holds it
   to are unchanged. Coalescing each contiguous run into one request and gating the melodic pool
-  takes 8,951 requests to about 1,000 — past the 4× this probe measured
-  ([spec 7.8](./analysis/format/SysEx_Direct_Transfer_Path.md)). What still waits on H3.2 is making
-  it `read_raw`'s **default**: the saving is counted against the tapes, not measured on a device.
+  takes 8,951 requests to about 2,500 — past the 4× this probe measured
+  ([spec 7.8](./analysis/format/SysEx_Direct_Transfer_Path.md)). H3.2 has since run, and the
+  coalesced walk is `read_raw`'s **default**.
 - **H1.6 — the ceiling is 100, and overruns are silent.** `count` clamps to 100 whatever the start
   index, and the reply echoes the count it honoured rather than the one asked for. Reading past a
   parameter's extent is not an error: the device pads to the full count with the item's own unset
@@ -325,10 +325,19 @@ Three probes changed what later phases should do:
 group, so `sudo ksp-pull OUT.KeyStepPro [--slot N]` reads the coalesced walk by default
 (`--mcc-plan` for MCC's own 8,951-request stream). It is the full-dump CLI Phase 3's H3.1 gates.
 `tests/test_pull_cli.py::test_the_dump_is_byte_identical_to_mcc_s_export` runs it against
-`FakeDevice` fed by `tests/fixtures/recall_tape.txt` and pins the 1,007-request replay figure and
-byte-for-byte agreement with `initial_project.KeyStepPro`, minus MCC's trailing comma. **That is
-CI over a replay, not hardware:** H3.1 (the live full dump) and H3.2 (the live byte-diff against
-MCC's own export) have not yet run on the device — see
+`FakeDevice` fed by `tests/fixtures/recall_tape.txt` and pins the 2,474-request replay figure and
+byte-for-byte agreement with `initial_project.KeyStepPro`, minus MCC's trailing comma.
+
+**Phase 3 ran on hardware 2026-09-04 (firmware 2.5.20, slot 1) and both gates passed over
+CoreMIDI.** H3.1 read 153,497 keys in 2,474 requests and 11.4 s, twice, byte-identically; H3.2 put
+that read against MCC's own export of the same slot and found **3 differing keys of 153,497**, all
+three the `MCC_CONSTANTS` this reader writes from a table rather than off the wire. The same slot
+read with the pre-[#255](https://github.com/bauerc/KeystepProTool/issues/255) walk differed on 114.
+Those three are overrun padding rather than parameters — `120_55` and `120_56` hold 4 and 3 entries
+against the 1–5 MCC reads ([spec 3.4](./analysis/format/Parameters_Scenes_Tracks_And_Project.md)) —
+so a `cmp` can never land on the file's last line and the key diff is the form this check takes.
+One item stays open: the raw-USB half of H3.1 (`sudo ksp-pull`, and the `cmp` of the two cores on
+the wire, held so far only over the tapes) — see
 [the hardware protocol's Phase 3](./analysis/Hardware_Test_Protocol.md#phase-3--acceptance).
 
 - **Phase 2 ran on hardware 2026-08-14 (firmware 2.5.20) and all four probes passed** — H2.1–H2.4

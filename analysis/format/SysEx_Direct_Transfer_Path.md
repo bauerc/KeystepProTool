@@ -206,7 +206,9 @@ read from any address.
 **An overrun is safe to send and unsafe to store.** Asking past an item's extent is not an error,
 but the padding is the item's own unset value — `0x7f` for the 64-step `7b` items, `0x00` for the
 `nIdx=2` items — which is precisely what a real unset entry reads as. Nothing in the reply
-distinguishes the two. `bulk_read` must therefore clip every reply to the extent the plan
+distinguishes the two. Item `78`'s per-track arrays pad with a marker that is stable across a
+session but has moved between them — `0x00` in 2026-07, `0x64` in 2026-09 — so the pad is not
+even reliably the same value twice ([§3.4](./Parameters_Scenes_Tracks_And_Project.md)). `bulk_read` must therefore clip every reply to the extent the plan
 declares, and must never infer an extent from reply length or from where sentinel values start:
 reply length is always `min(count, 100)` whatever the address.
 
@@ -218,23 +220,25 @@ None of this is a speedup on its own. The 64-step items are already covered by a
 parameters that H1.3's note singles out as the ones that do not divide evenly. What a raised count
 does to the full-dump time has not been measured, and H1.3's 9.6 s stands as the only figure.
 
-### 7.8 The same addresses in a ninth of the requests
+### 7.8 The same addresses in a third of the requests
 
 MCC's stream is what `bulk_plan` reproduces and what the tapes pin down, so it stays. `ksp.bulk_fast`
 derives a second walk from the identical `PLAN`: same 117,783 addresses, different frames. Two
 things account for the whole saving.
 
-> **The coalescing below is measured against the tapes, not the device, and hardware has since
-> refuted part of it — see [#255](https://github.com/bauerc/KeystepProTool/issues/255).** A
-> per-pattern scalar coalesced into a 16-entry range comes back as index 1's value repeated, so
-> `nIdx=1` runs must not be coalesced. The gate and the `nIdx=3` runs are unaffected.
+**Coalescing.** A contiguous run over the walking index becomes one request **only where that index
+is not the request's sole one.** A lone index is not a range axis: asked `123_115` at start 1
+count 16 the device answers `15` sixteen times, while asking the same sixteen addresses one at a
+time returns `[15, 31, 15, 15, 63, …]`. The reply is well formed, echoes its address and carries
+exactly the promised count, so nothing downstream can tell. Seven of seven sampled addresses
+disagreed with a single read, and no `nIdx=1` range has been observed to work
+([#255](https://github.com/bauerc/KeystepProTool/issues/255), firmware 2.5.20).
 
-**Coalescing.** Every contiguous run over the walking index becomes one request. All 2,004 runs in
-the plan are contiguous and none exceeds 64 values, so **8,911 long reads become 2,004** — the
-extent binds long before the 100 of 7.7 does. Two details only a plan-wide view catches: MCC's
-per-pattern scalars each walk the *group* index, so sixteen `count=1` reads of `122_90` are one
-16-entry range; and `121_83` is read scene 5 first, so a run is a range whatever order it arrived
-in.
+So of the plan's 8,911 long reads, the 1,904 runs whose walking index is a second or third index
+coalesce, and the 1,567 per-pattern scalars stay one request each: **8,911 long reads become
+3,471.** Where a run does coalesce the extent binds long before the 100 of 7.7 does — none exceeds
+64 values. One detail only a plan-wide view catches: `121_83` is read scene 5 first, so a run is a
+range whatever order it arrived in.
 
 **The melodic gate.** `50` and `109`–`113` share a note ordinal, so a 64-entry chunk of `50` that is
 all `127` settles all five per-note parameters at once. Both tapes agree without exception —
@@ -246,8 +250,8 @@ puts it after.
 | walk | project 1 | project 2 |
 | ---- | --------- | --------- |
 | `bulk_plan`, MCC's stream | 8,951 | 8,951 |
-| `bulk_fast`, coalesced | 2,044 | 2,044 |
-| `bulk_fast` + the gate | **1,007** | **976** |
+| `bulk_fast`, coalesced | 3,511 | 3,511 |
+| `bulk_fast` + the gate | **2,474** | **2,443** |
 
 > **The drum pool is not gateable, and assuming otherwise destroys bytes.** Where `54` is `127`,
 > `117`–`121` are `127` in some patterns and the default row `60/7/100/49/100` in others *within one
@@ -258,9 +262,11 @@ puts it after.
 
 Both figures above are counted against the tapes, not the device. `tests/test_bulk_fast.py` answers
 both walks out of one model of the tape's values and requires the resulting projects to be equal,
-which is what makes the saving checkable without hardware. **No timing here is measured**: H1.3's
-9.6 s remains the only figure taken off the device, and what the gate does to wall-clock is
-untested.
+which is what makes the saving checkable without hardware. That model answers a range read over a
+lone index the way the device does — the first entry repeated — so the tapes' own non-uniform
+per-pattern scalars (`123_115` is `[15, 31, 15, 15, 63, …]`) fail the walk that coalesces them.
+**No timing here is measured**: H1.3's 9.6 s remains the only figure taken off the device, and what
+the gate does to wall-clock is untested.
 
 `ksp-pull` (`src/ksp_cli/pull.py`) is the command that drives this walk: it reads the coalesced
 `bulk_fast` plan by default and takes `--mcc-plan` to walk the generated one instead. Replayed
@@ -328,7 +334,7 @@ interface 2 directly at **3.994 ms at `count=16` and 3.998 ms at `count=64`** �
 noise of the 4.00 ms here. The 4 ms is therefore **the device's own transaction rate**, not an
 overhead the class driver adds: going through `MIDIServer` rather than around it is free.
 
-**The coalesced walk has been run, not just projected.** Replaying `ksp.bulk_fast`'s own 2,044
+**A coalesced walk has been run, not just projected.** Replaying `ksp.bulk_fast`'s then 2,044
 frames — 1,776 of them at `count=64` — over CoreMIDI, against slot 1:
 
 ```
@@ -337,14 +343,16 @@ values   117,767 of the plan's 117,783
 elapsed  8.20 s -- 4.01 ms per request
 ```
 
-Every request was answered, every reply echoed the address it was asked for, and the measured 8.20 s
-lands on the 8.2 s the per-exchange cost predicts.
+Every request was answered and every reply echoed the address it was asked for — which is exactly
+how #255 hid: 100 of those frames walked a lone index and were answered with a repeat. The run
+stands as the measurement of **4.01 ms per request**; the plan it measured has since grown by the
+1,467 requests that repeat replaced.
 
 | Walk | Requests | At 4.00 ms |
 | ---- | -------- | ---------- |
 | `bulk_plan`, MCC's stream, `count` as MCC sends it | 8,951 | ≈ 36 s |
-| `bulk_fast`, coalesced | 2,044 | **8.20 s, measured** |
-| `bulk_fast` + the gate | 1,007 | ≈ 4.0 s |
+| `bulk_fast`, coalesced | 3,511 | ≈ 14.1 s |
+| `bulk_fast` + the gate | 2,474 | ≈ 9.9 s |
 
 H1.3's own dump figures corroborate the column: 38.3 s for the walk at MCC's count against ≈ 36 s
 projected, and 9.6 s once the count byte alone is raised — the latter is a coalesced walk of
@@ -396,7 +404,8 @@ slot 1: 153497 keys, 1007 requests, 13 sentinels repaired, 4.80 s
 ```
 
 - **153,497 keys** — the whole project, the same count 7.3 reconstructs from the capture.
-- **1,007 requests** — the gated `bulk_fast` walk, matching the table in 7.8 exactly.
+- **1,007 requests** — the gated `bulk_fast` walk **as it stood before #255**. The corrected walk
+  is 2,474 (7.8); every figure in this section predates the fix and none has been re-measured.
 - **13 sentinels repaired** — `123_117`, patterns 1–13, each recovered by the re-read of 7.9.1.
 - **4.80 s**, against the ≈ 4.0 s the per-exchange cost predicts.
 
@@ -404,7 +413,7 @@ slot 1: 153497 keys, 1007 requests, 13 sentinels repaired, 4.80 s
 **1,021 exchanges**, 13 sentinels repaired, **4.49 s**, and two consecutive reads byte-identical at
 3,523,191 bytes. The exchange count is the same walk seen one layer lower — the gate's 1,007
 requests, plus the 13 sentinel re-reads, plus the one identity request that decides the device is
-answering — so it corroborates the 1,007 above rather than disagreeing with it.
+answering — so it corroborates the 1,007 of the run above rather than disagreeing with it.
 
 **The sentinels land where raw USB says they must.** `123_117_1` through `123_117_13` are written as
 `247`, and 14–16 as `60` — which is H1.5's raw-USB reading (255 raw, 247 in a file) reproduced
@@ -419,13 +428,21 @@ not as a well-formed sheet of filler.
 fresh MCC `Recall From` of the same slot, this read differs on **114 of 153,497 keys** — and the
 Python raw-USB read of the same slot, taken the same day, differs on **117**. The two cores agree
 with each other and disagree with MCC in the same families, so the transport is exonerated and the
-walk is not: `bulk_fast` coalesces per-pattern scalars into a range the device does not honour, and
-answers with index 1's value repeated. That is **[#255](https://github.com/bauerc/KeystepProTool/issues/255)**, it predates this work, and it corrupts
-`ksp-pull` today.
+walk was not: `bulk_fast` coalesced per-pattern scalars into a range the device does not honour, and
+was answered with index 1's value repeated. That is
+**[#255](https://github.com/bauerc/KeystepProTool/issues/255)**; it predates this work and has since
+been fixed in both cores by not coalescing that shape (7.8).
 
 So 7.9.2 establishes what it set out to — the transport carries a whole project, deterministically,
-at the projected cost — and nothing more. **A CoreMIDI read is not yet byte-equal to MCC's export,
-and will not be until #255 is fixed in both cores.**
+at the projected cost.
+
+**The corrected walk has since been run, and it closes the gap.** Slot 1, 2026-09-04, through
+`ksp-swift-cli pull`: 153,497 keys in **2,474 requests, 11.4 s**, two consecutive reads
+byte-identical. Against MCC's own export of the same slot it differs on **3 keys of 153,497**, all
+three `MCC_CONSTANTS` — where the pre-#255 walk, read from the same slot in the same session,
+differed on 114 and exported 446 notes against MCC's 628. Every #255 family is clean. The remaining
+three are host-side values this reader writes from a table and the device does not carry
+(H3.2).
 
 One accident worth recording: the two cores' three-key difference is `123_117_14/15/16`, where
 CoreMIDI's own `0xFF` truncation forced the element-wise re-read of 7.9.1 and so produced the

@@ -27,10 +27,10 @@ import Testing
         let result = PullRunner.run(PullRunner.Options(output: written), attach: { device })
 
         // The gated walk's own figure for this tape, which `bulk_read_walk.txt` pins too.
-        #expect(device.asked.count == 1007)
+        #expect(device.asked.count == 2474)
         #expect(result.stdout.hasPrefix("read slot 1 in "))
         // The identity request is outside the count: 1,007 is the number spec 7.8 states.
-        #expect(result.stdout.contains(", 1007 requests\n"))
+        #expect(result.stdout.contains(", 2474 requests\n"))
         #expect(result.stdout.contains("\n  817 note(s), 132 BPM\n"))
         #expect(result.stdout.hasSuffix(" s of it at the device"))
     }
@@ -147,7 +147,7 @@ import Testing
         #expect(result.code == 0)
         #expect(FileManager.default.fileExists(atPath: written.path))
         #expect(FileManager.default.fileExists(atPath: midiBeside(written).path))
-        #expect(device.asked.count == 1007)
+        #expect(device.asked.count == 2474)
     }
 
     /// `--also-midi` composes the two commands; it does not export differently.
@@ -400,7 +400,8 @@ private func recallTape(named name: String = "recall_tape.txt") throws -> [Strin
     return values
 }
 
-/// Answers any address from a tape's values, at any count the device allows.
+/// Answers any address from a tape's values, the way the device answers it -- including its
+/// refusal to walk a lone index (spec 7.8).
 private final class TapeDevice: PullDevice {
     private let values: [String: Int]
     /// Answers everything with the filler byte, as a slot holding nothing saved does.
@@ -434,11 +435,16 @@ private final class TapeDevice: PullDevice {
             let payload = Array(repeating: BulkRead.filler, count: names.count)
             return buildReply(request, payload, slot: echoed)
         }
-        let payload = try names.map { name in
+        var payload = try names.map { name in
             guard let value = values[name] else {
                 throw KSPError.value("the tape holds no value for \(name)")
             }
             return value
+        }
+        if let count = request.count, request.indices.count == 1, count > 1 {
+            // Measured on hardware: a range read over a lone index comes back as the first
+            // entry repeated, whatever the later entries hold.
+            payload = Array(repeating: payload[0], count: count)
         }
         return buildReply(request, payload, slot: echoed)
     }

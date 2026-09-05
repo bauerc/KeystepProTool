@@ -20,8 +20,11 @@ re-initialising to that state; do not re-derive it.
 this programme opened has been answered, and the procedures have been removed as each tier closed.
 What is left below is the method — how to run a capture, the export and import routes, the device
 operating notes, the rules — kept because the next format question will need all of it, and because
-reconstructing it from memory is exactly how a capture gets taken wrongly. Phase 3 (below) is the
-one open item: H3.1 and H3.2 have not yet been run on hardware.
+reconstructing it from memory is exactly how a capture gets taken wrongly. Phase 3 (below) ran on
+2026-09-04: H3.1 and H3.2 are confirmed over CoreMIDI. One item stays open — the raw-USB half of
+H3.1 (`sudo ksp-pull`, and the `cmp` of the two cores on the wire). The three `MCC_CONSTANTS` keys
+H3.2 turned up are overrun padding past two short arrays, not parameters
+([§3.4](./format/Parameters_Scenes_Tracks_And_Project.md)).
 
 **Tiers 7 and 8 are complete and have been removed.** Tier 7 (2026-08-05) measured the Time Shift
 range and linearity, the swing encoding and scope, and the meaning of randomness. Tier 8
@@ -402,7 +405,7 @@ byte-identical to the populated `count=64` reply from the first session — whic
   second walk from the same `PLAN` and leaves the generated one alone, so MCC's stream and its pin
   both still hold. Nor do the tail chunks need the fixed count this note feared. A run is coalesced
   by its own extent, so the 24-lane and 240-entry parameters simply yield shorter requests than the
-  64-step ones. 8,951 requests become 1,007 on tape 1 and 976 on tape 2
+  64-step ones. 8,951 requests become 2,474 on tape 1 and 2,443 on tape 2
   ([spec 7.8](./format/SysEx_Direct_Transfer_Path.md)). **What remains gated on H3.2's byte-diff is
   only the default**: `read_raw` still walks MCC's stream unless asked for `fast`, because the
   saving is counted against the tapes and no full dump has yet been checked against a device.
@@ -470,7 +473,13 @@ to hold end to end. Neither entry below has run on hardware yet.
 
 ### H3.1 — Full dump
 
-- [ ] **not yet run.**
+- [x] **run 2026-09-04 — CONFIRMED over CoreMIDI; the raw-USB half is still owed.** Slot 1,
+  firmware 2.5.20, through `ksp-swift-cli pull`: **153,497 keys, 2,474 requests, 11.4 s**, parsing
+  to 817 notes at 132 BPM over three tracks — what the panel shows for that slot. Two consecutive
+  reads were byte-identical at 3,523,191 bytes, and `--also-midi` wrote the same `.mid` a separate
+  `export` of the pulled file writes. **What is not done: `sudo ksp-pull` and the `cmp` of the two
+  cores' files on the wire.** `scripts/pull_parity.sh` holds that over the tapes; on hardware it
+  has not been run, so the two cores are known to agree on a replay and not yet on a device.
 
 - **Resolves:** whether a full project reads correctly off the device end to end, at the request
   volume `bulk_fast` actually walks — Phase 1 and 2 exercised single scalars, one pattern and a
@@ -483,7 +492,7 @@ to hold end to end. Neither entry below has run on hardware yet.
 
   Any populated slot works; `--slot` needs no panel work first, per Phase 4. The slot is read as it
   was **saved**, so save any panel edits before pulling. Add `--mcc-plan` to walk MCC's
-  8,951-request stream instead of the coalesced 1,007 if the two need comparing directly on
+  8,951-request stream instead of the coalesced 2,474 if the two need comparing directly on
   hardware.
 
   The Swift CLI reads the same slot over CoreMIDI, so it wants no `sudo` and no libusb, and the two
@@ -513,12 +522,34 @@ to hold end to end. Neither entry below has run on hardware yet.
 
 ### H3.2 — Byte-diff against MCC's export
 
-- [ ] **not yet run.**
+- [x] **run 2026-09-04 — CONFIRMED for the walk; three keys differ, and they are not the walk's.**
+  Slot 1 read with `ksp-swift-cli pull` against MCC's own export of the same slot taken the evening
+  before (`Project 1 2026_09_03 21.26.28.KeyStepPro`, 3,523,192 bytes). **3 keys differ of
+  153,497** — `120_55_5`, `120_56_4` and `120_56_5`, where MCC holds `100` and `bulk_read`
+  substitutes the hard-coded `127` of `MCC_CONSTANTS`. Every other address matches, and the
+  exported `.mid` carries the identical event stream (628 notes; only the track name differs,
+  which is the source filename by design).
+
+  This project qualifies under the rule below: its `123_115` is
+  `[15, 31, 15, 15, 63, …]`. The same slot read in the same session with the pre-#255 walk differs
+  from MCC on **114 keys** in params 38, 40, 98, 99, 115, 119 and exports **446 notes against 628**
+  — so the fix is what closed the gap, not a quiet slot.
+
+  **Those three keys address nothing, and that is settled.** `120_55` and `120_56` have extents of
+  4 and 3 against the 1–5 MCC reads, so `120_55_5`, `120_56_4` and `120_56_5` are overrun padding
+  rather than parameters — see [§3.4](./format/Parameters_Scenes_Tracks_And_Project.md). The pad
+  itself has moved (`0x00` in 2026-07, `0x64` in 2026-09), which is why MCC's own exports of the
+  same slot disagree with each other there. `bulk_read` writes `127` to match the corpus. **A `cmp`
+  can therefore never land on the last line**, and the key diff above is the form this check takes.
 
 - **Resolves:** whether the coalesced walk `ksp-pull` uses by default reproduces MCC's export byte
   for byte. This is what promotes `bulk_fast` from "checked against the tapes" to "checked against
   the device" — the saving H1.3 and §7.8 count is over 8,951 requests that were never replayed
   live.
+- **Pick a project whose per-pattern scalars differ across its patterns**, and check that they do
+  (`123_115` — the step count — is the readiest: a project of all-16-step patterns holds it
+  uniform). This is the check #255 escaped: where every pattern holds the same value, a walk that
+  reads pattern 1 and repeats it is indistinguishable from a correct one.
 - **Command:** Recall the same project H3.1 pulled (slot `<N>`) in MCC and export it, then compare
   against the file H3.1 already wrote:
 
@@ -625,7 +656,8 @@ One probe, and it was what stood between the Swift port and a read the app could
   16 and at the count-100 ceiling, and the sixteen-slot prologue sweep all answer over the ordinary
   CoreMIDI endpoint, unprivileged, at 4.00 ms an exchange — the same period H1.3 measured on raw
   USB, so the transport costs nothing. `bulk_fast`'s whole 2,044-frame walk replayed in **8.20 s,
-  2,044 answered, 0 mismatched**. The caveat: **CoreMIDI truncates a reply at the first `0xFF`**, so
+  2,044 answered, 0 mismatched** — the plan as it stood before #255, and "0 mismatched" says every
+  frame was answered, not that every answer was right. The caveat: **CoreMIDI truncates a reply at the first `0xFF`**, so
   the `123_117` sentinel range comes back empty and must be re-read element-wise. Facts and the
   recommendation are in [spec 7.9](./format/SysEx_Direct_Transfer_Path.md) — this entry keeps only
   how to re-run it.
@@ -690,12 +722,13 @@ One probe, and it was what stood between the Swift port and a read the app could
   ```
 
   Slot 1 read in **4.80 s — 153,497 keys, 1,007 requests, 13 sentinels repaired**, twice over and
-  byte-identical both times ([spec 7.9.2](./format/SysEx_Direct_Transfer_Path.md)).
+  byte-identical both times ([spec 7.9.2](./format/SysEx_Direct_Transfer_Path.md)). That was the
+  pre-#255 walk, and the project it wrote was wrong in 114 keys. The corrected walk was run here on
+  2026-09-04 — same slot, 2,474 requests, 11.4 s — and H3.2's diff over this transport has since
+  been taken.
 
-**What is still untested: MCC mid-transfer, and H3.2's diff over this transport.** MCC was running
-but idle; driving a Recall From while the probe reads needs a hand on the GUI. And the project read
-above has not been byte-diffed against MCC's own export of the same slot — the same Recall From is
-what that would take.
+**What is still untested: MCC mid-transfer.** MCC was running but idle; driving a Recall From while
+the probe reads needs a hand on the GUI.
 
 ---
 
