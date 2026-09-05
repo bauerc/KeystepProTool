@@ -1067,23 +1067,31 @@ struct DropView: View {
     }
 
     @ViewBuilder
-    private func columnHeader(_ column: Int, selection: GridSelection?) -> some View {
-        let state = selection?.state(ofPattern: column) ?? .on
-        let label = columnLabel(column, state: state)
-        if selection == nil {
-            label.help("Pattern slot \(column)")
-        } else {
-            Button {
-                model.toggle(pattern: column)
-            } label: {
+    private func tickable<Label: View>(_ label: Label, help: String, toggle: (() -> Void)?)
+        -> some View
+    {
+        if let toggle {
+            Button(action: toggle) {
                 label.contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(
-                state == .on
-                    ? "Pattern slot \(column) — click to untick it on every track."
-                    : "Pattern slot \(column) — click to tick it on every track.")
+            .help(help)
+        } else {
+            label.help(help)
         }
+    }
+
+    private func columnHeader(_ column: Int, selection: GridSelection?) -> some View {
+        let state = selection?.state(ofPattern: column) ?? .on
+        let toggle: (() -> Void)? =
+            selection == nil ? nil : { model.toggle(pattern: column) }
+        let help =
+            toggle == nil
+            ? "Pattern slot \(column)"
+            : (state == .on
+                ? "Pattern slot \(column) — click to untick it on every track."
+                : "Pattern slot \(column) — click to tick it on every track.")
+        return tickable(columnLabel(column, state: state), help: help, toggle: toggle)
     }
 
     private func columnLabel(_ column: Int, state: GridSelection.Tick) -> some View {
@@ -1119,28 +1127,21 @@ struct DropView: View {
         }
     }
 
-    @ViewBuilder
     private func trackHead(_ row: PatternGrid.Row, state: GridSelection.Tick, ticking: Bool)
         -> some View
     {
         let head = rowHead(
             readout: row.readout, name: row.name, isDrum: row.isDrum, struck: state == .off,
             dimmed: state != .on)
-        if ticking {
-            Button {
-                model.toggle(track: row.track)
-            } label: {
-                head.contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(
-                row.detail
-                    + (state == .on
-                        ? " · Click to untick this whole track."
-                        : " · Click to tick this whole track."))
-        } else {
-            head.help(row.detail)
-        }
+        let help =
+            ticking
+            ? row.detail
+                + (state == .on
+                    ? " · Click to untick this whole track."
+                    : " · Click to tick this whole track.")
+            : row.detail
+        return tickable(
+            head, help: help, toggle: ticking ? { model.toggle(track: row.track) } : nil)
     }
 
     /// A chain that jumps gets no bar; the caption says the order instead. The rail is the only
@@ -1178,22 +1179,17 @@ struct DropView: View {
     }
 
     /// An em dash means the slot holds nothing; `0` means it holds notes with every step off.
-    @ViewBuilder
     private func slot(_ cell: PatternGrid.Cell, track: Int, selection: GridSelection?) -> some View
     {
         let ticked = selection?.isTicked(track: track, pattern: cell.pattern) ?? true
-        let face = slotFace(cell, track: track, ticked: ticked)
-        if selection == nil {
-            face.help(cell.detail)
-        } else {
-            Button {
-                model.toggle(track: track, pattern: cell.pattern)
-            } label: {
-                face.contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(cell.detail + (ticked ? "" : " · unticked, so it will not be exported"))
-        }
+        let toggle: (() -> Void)? =
+            selection == nil ? nil : { model.toggle(track: track, pattern: cell.pattern) }
+        let help =
+            toggle == nil
+            ? cell.detail
+            : cell.detail + (ticked ? "" : " · unticked, so it will not be exported")
+        return tickable(
+            slotFace(cell, track: track, ticked: ticked), help: help, toggle: toggle)
     }
 
     private func slotFace(_ cell: PatternGrid.Cell, track: Int, ticked: Bool) -> some View {

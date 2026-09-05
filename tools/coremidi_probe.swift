@@ -135,13 +135,8 @@ final class Listener {
             MIDIInputPortCreateWithBlock(client, "in" as CFString, &input) { packets, context in
                 let index = context.map { $0.load(as: Int.self) } ?? -1
                 let name = index >= 0 && index < names.count ? names[index] : "?"
-                var packet = packets.pointee.packet
-                for _ in 0..<packets.pointee.numPackets {
-                    let bytes = withUnsafeBytes(of: packet.data) {
-                        Array($0.prefix(Int(packet.length)))
-                    }
-                    collector.feed(name, bytes)
-                    packet = MIDIPacketNext(&packet).pointee
+                for packet in packets.unsafeSequence() {
+                    collector.feed(name, Array(packet.bytes()))
                 }
             }, "input port")
         try check(MIDIOutputPortCreate(client, "out" as CFString, &output), "output port")
