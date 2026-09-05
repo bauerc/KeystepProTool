@@ -13,7 +13,8 @@ public enum BulkRead {
     /// From the identity reply; nothing in the read protocol itself supplies it.
     public static let defaultVersion = "2.5.20"
 
-    /// Read 0 from hardware but 127 in every corpus file: host-side, so hard-coded.
+    /// Padding past the end of two short arrays, not parameters, so the device's answer is a
+    /// marker that has changed between sessions; 127 is what the corpus holds (spec 3.4).
     public static let mccConstants = ["120_55_5": 127, "120_56_4": 127, "120_56_5": 127]
 
     /// What a read returns when the device has no project to give. Well-formed, so

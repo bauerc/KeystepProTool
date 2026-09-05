@@ -21,9 +21,10 @@ this programme opened has been answered, and the procedures have been removed as
 What is left below is the method — how to run a capture, the export and import routes, the device
 operating notes, the rules — kept because the next format question will need all of it, and because
 reconstructing it from memory is exactly how a capture gets taken wrongly. Phase 3 (below) ran on
-2026-09-04: H3.1 and H3.2 are confirmed over CoreMIDI. Two items stay open — the raw-USB half of
-H3.1 (`sudo ksp-pull`, and the `cmp` of the two cores on the wire), and the three `MCC_CONSTANTS`
-keys H3.2 turned up, which are host-side state rather than constants.
+2026-09-04: H3.1 and H3.2 are confirmed over CoreMIDI. One item stays open — the raw-USB half of
+H3.1 (`sudo ksp-pull`, and the `cmp` of the two cores on the wire). The three `MCC_CONSTANTS` keys
+H3.2 turned up are overrun padding past two short arrays, not parameters
+([§3.4](./format/Parameters_Scenes_Tracks_And_Project.md)).
 
 **Tiers 7 and 8 are complete and have been removed.** Tier 7 (2026-08-05) measured the Time Shift
 range and linearity, the swing encoding and scope, and the meaning of randomness. Tier 8
@@ -534,11 +535,12 @@ to hold end to end. Neither entry below has run on hardware yet.
   from MCC on **114 keys** in params 38, 40, 98, 99, 115, 119 and exports **446 notes against 628**
   — so the fix is what closed the gap, not a quiet slot.
 
-  **`MCC_CONSTANTS` is the open item, and it is not #255.** Those three addresses read `0` off the
-  wire and are written from a table; the Project 1 exports of 2026-07-30 and 2026-08-02 hold `127`
-  and the one of 2026-09-03 holds `100`, so they are not constants but host-side state that varies.
-  Until that is settled, a `cmp` cannot land on the last line, and the key diff above is the form
-  this check takes.
+  **Those three keys address nothing, and that is settled.** `120_55` and `120_56` have extents of
+  4 and 3 against the 1–5 MCC reads, so `120_55_5`, `120_56_4` and `120_56_5` are overrun padding
+  rather than parameters — see [§3.4](./format/Parameters_Scenes_Tracks_And_Project.md). The pad
+  itself has moved (`0x00` in 2026-07, `0x64` in 2026-09), which is why MCC's own exports of the
+  same slot disagree with each other there. `bulk_read` writes `127` to match the corpus. **A `cmp`
+  can therefore never land on the last line**, and the key diff above is the form this check takes.
 
 - **Resolves:** whether the coalesced walk `ksp-pull` uses by default reproduces MCC's export byte
   for byte. This is what promotes `bulk_fast` from "checked against the tapes" to "checked against

@@ -46,6 +46,22 @@ recorded; nothing reads it.
 `70`–`72` project tempo · `73` global BPM + metronome bitfield ·
 `74` global swing · `75` current scene (0-based) · `68` / `69` ARP groups.
 
+**`123`, `55` and `56` are read as a block of five and two of them run short.** MCC's dictionary
+names them *Track MIDI channel*, *Track transpose group* and *ARP swing* (`KeyStepPro.json` fields
+63–65), and one `multibulk` reads all three at indices 1–5, singly. The device's extents are **5, 4
+and 3** — measured 2026-09-04, firmware 2.5.20, asking one index at a time. Three is the
+arpeggiator-capable track count, track 1 being the drum track; MCC's descriptor for this very group
+reads "ARP swing (track 2, track 3, track 4)". **Which index is which track is MCC's prose, not
+measurement** — setting ARP swing on one track alone and re-reading would settle it.
+
+**So `120_55_5`, `120_56_4` and `120_56_5` address nothing**, and they are exactly
+`bulk_read.MCC_CONSTANTS`. Past its extent each parameter answers the same value at every index out
+to 99, unchanged by whatever was read immediately before it — so it is a marker, not a stale
+transfer buffer. **What the marker is has moved**: `0x00` throughout MCC's 2026-07-30 capture,
+`0x64` on 2026-09-04. Nothing else in item `120` differs between those two reads, and the cause is
+not established. `bulk_read` writes `127` there from a table, which is what the corpus and the
+shipped `Default.KeyStepPro` hold; nothing musical depends on the choice.
+
 **Tempo is decoded.** `70`–`72` are a little-endian value in 7-bit chunks holding **BPM × 100**:
 
 ```

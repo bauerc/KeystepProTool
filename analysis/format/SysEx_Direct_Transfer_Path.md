@@ -205,7 +205,9 @@ read from any address.
 **An overrun is safe to send and unsafe to store.** Asking past an item's extent is not an error,
 but the padding is the item's own unset value — `0x7f` for the 64-step `7b` items, `0x00` for the
 `nIdx=2` items — which is precisely what a real unset entry reads as. Nothing in the reply
-distinguishes the two. `bulk_read` must therefore clip every reply to the extent the plan
+distinguishes the two. Item `78`'s per-track arrays pad with a marker that is stable across a
+session but has moved between them — `0x00` in 2026-07, `0x64` in 2026-09 — so the pad is not
+even reliably the same value twice ([§3.4](./Parameters_Scenes_Tracks_And_Project.md)). `bulk_read` must therefore clip every reply to the extent the plan
 declares, and must never infer an extent from reply length or from where sentinel values start:
 reply length is always `min(count, 100)` whatever the address.
 

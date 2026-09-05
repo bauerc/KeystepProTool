@@ -50,7 +50,8 @@ track, note lengths, tempo, and sequences too long for one pattern split and cha
 
 `ksp-pull` is newer than the rest. Its acceptance gate closed on 2026-09-04: a full read off the
 device matches MIDI Control Center's own export of the same slot on 153,494 of 153,497 keys, the
-three exceptions being host-side values this tool writes from a table rather than reading (H3.2).
+three exceptions being addresses that hold nothing on the device — padding past the end of two
+short arrays, which MCC reads anyway and no two of its exports agree on (H3.2).
 See [`ROADMAP.md`](./ROADMAP.md).
 
 There is also a drag-and-drop **macOS app**, *Key Step Pro Plus*, for the common case — see

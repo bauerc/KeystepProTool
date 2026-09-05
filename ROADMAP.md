@@ -333,8 +333,11 @@ CoreMIDI.** H3.1 read 153,497 keys in 2,474 requests and 11.4 s, twice, byte-ide
 that read against MCC's own export of the same slot and found **3 differing keys of 153,497**, all
 three the `MCC_CONSTANTS` this reader writes from a table rather than off the wire. The same slot
 read with the pre-[#255](https://github.com/bauerc/KeystepProTool/issues/255) walk differed on 114.
-Two items stay open: the raw-USB half of H3.1 (`sudo ksp-pull`, and the `cmp` of the two cores on
-the wire, held so far only over the tapes), and `MCC_CONSTANTS` itself — see
+Those three are overrun padding rather than parameters — `120_55` and `120_56` hold 4 and 3 entries
+against the 1–5 MCC reads ([spec 3.4](./analysis/format/Parameters_Scenes_Tracks_And_Project.md)) —
+so a `cmp` can never land on the file's last line and the key diff is the form this check takes.
+One item stays open: the raw-USB half of H3.1 (`sudo ksp-pull`, and the `cmp` of the two cores on
+the wire, held so far only over the tapes) — see
 [the hardware protocol's Phase 3](./analysis/Hardware_Test_Protocol.md#phase-3--acceptance).
 
 - **Phase 2 ran on hardware 2026-08-14 (firmware 2.5.20) and all four probes passed** — H2.1–H2.4
