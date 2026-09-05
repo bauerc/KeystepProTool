@@ -84,8 +84,9 @@ existence markers each decode to what the panel displays. 2026-08-14, firmware 2
 **The full 8,951-request walk has not been run against hardware**, and no dump has been
 byte-diffed against an MCC export of the same project. That is the outstanding acceptance gate.
 
-Project selection is settled on hardware (7.4). The **write direction is capture-only** — nothing
-in 7.5 or 7.6 has been sent to a device by this project.
+Project selection is settled on hardware (7.4), and so is the write direction (7.5) — a targeted
+nine-frame burst placed a note in a slot and the panel showed it. **7.6 is the half that remains
+capture-only**: no `0xFF` has ever left this project for the device.
 
 (`libusb` in `/Library/Arturia/Shared/` is used only for DFU firmware updates — not for projects.)
 
