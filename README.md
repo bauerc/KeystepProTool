@@ -48,10 +48,10 @@ device over USB. `kspplus` gathers all four under one name.
 `midi2ksp` converts a whole file: every note-bearing track onto the device's four, chords, a drum
 track, note lengths, tempo, and sequences too long for one pattern split and chained.
 
-`ksp-pull` is newer than the rest and its acceptance gate is not yet closed: the read path is
-verified against a replayed capture and against the device's own panel, but the full-dump diff
-against MIDI Control Center's export (H3.2) has not been run on hardware. See
-[`ROADMAP.md`](./ROADMAP.md).
+`ksp-pull` is newer than the rest. Its acceptance gate closed on 2026-09-04: a full read off the
+device matches MIDI Control Center's own export of the same slot on 153,494 of 153,497 keys, the
+three exceptions being host-side values this tool writes from a table rather than reading (H3.2).
+See [`ROADMAP.md`](./ROADMAP.md).
 
 There is also a drag-and-drop **macOS app**, *Key Step Pro Plus*, for the common case — see
 [The app](#the-app).

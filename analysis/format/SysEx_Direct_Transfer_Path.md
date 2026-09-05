@@ -431,9 +431,15 @@ was answered with index 1's value repeated. That is
 been fixed in both cores by not coalescing that shape (7.8).
 
 So 7.9.2 establishes what it set out to — the transport carries a whole project, deterministically,
-at the projected cost — and nothing more. **The corrected walk has not itself been run against
-hardware**: that a CoreMIDI read is now byte-equal to MCC's export is what H3.1 has to show, and
-until it does, only the tapes say so.
+at the projected cost.
+
+**The corrected walk has since been run, and it closes the gap.** Slot 1, 2026-09-04, through
+`ksp-swift-cli pull`: 153,497 keys in **2,474 requests, 11.4 s**, two consecutive reads
+byte-identical. Against MCC's own export of the same slot it differs on **3 keys of 153,497**, all
+three `MCC_CONSTANTS` — where the pre-#255 walk, read from the same slot in the same session,
+differed on 114 and exported 446 notes against MCC's 628. Every #255 family is clean. The remaining
+three are host-side values this reader writes from a table and the device does not carry
+(H3.2).
 
 One accident worth recording: the two cores' three-key difference is `123_117_14/15/16`, where
 CoreMIDI's own `0xFF` truncation forced the element-wise re-read of 7.9.1 and so produced the
