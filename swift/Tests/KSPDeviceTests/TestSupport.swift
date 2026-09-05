@@ -1,26 +1,12 @@
 import Foundation
 import KSPKit
+import KSPTape
 
 @testable import KSPDevice
 
-/// A twin per target: SwiftPM cannot share a source file between two test targets.
-/// Throwing rather than lenient: a mistyped fixture is a mistake, not a frame of zero bytes.
-func hexBytes(_ hex: String) throws -> [UInt8] {
-    var frame: [UInt8] = []
-    var index = hex.startIndex
-    while index < hex.endIndex {
-        guard let next = hex.index(index, offsetBy: 2, limitedBy: hex.endIndex),
-            let byte = UInt8(hex[index..<next], radix: 16)
-        else {
-            throw KSPError.value("\(hex) is not a run of hex bytes")
-        }
-        frame.append(byte)
-        index = next
-    }
-    return frame
-}
-
-/// The frame the device would send back to `request`, carrying `values`.
+/// The frame the device would send back to `request`, carrying `values`. Echoes the request's own
+/// header rather than rebuilding it through `KSPTape.buildReply`, which throws: these stand in as
+/// the sentinel walk's `reread`, and that closure does not.
 func reply(to request: [UInt8], values: [UInt8]) -> [UInt8] {
     var head = Array(request.dropLast())
     head[6] = head[6] == Sysex.cmdScalar ? Sysex.cmdScalarReply : Sysex.cmdReadReply

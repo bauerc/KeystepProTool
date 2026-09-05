@@ -1,4 +1,5 @@
 import KSPKit
+import KSPTape
 import Testing
 
 @testable import KSPDevice

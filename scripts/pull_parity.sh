@@ -5,9 +5,9 @@
 # against as well; slot 2's has none, and there the two cores check each other.
 #
 # --also-midi's file is compared too, as parsed events -- mido writes running status and
-# swift-midi-file does not. The tape driver links KSPKit alone and cannot export, so the Swift side
-# of that half is `ksp-swift-cli export` on the project just pulled; that it is the same file
-# --also-midi writes is held by PullTests, byte for byte.
+# swift-midi-file does not. The tape driver links the format core alone and cannot export, so the
+# Swift side of that half is `ksp-swift-cli export` on the project just pulled; that it is the same
+# file --also-midi writes is held by PullTests, byte for byte.
 set -o pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
 
@@ -31,9 +31,10 @@ mkdir -p "$scratch" || exit 1
 # checkout or a stash pop restores an older mtime, and an mtime cache would hand this gate a
 # binary built from code no longer on disk.
 stamp=$scratch/sources.sha
-current=$(cat swift/Sources/KSPKit/*.swift tools/pull_tape.swift | shasum | cut -d' ' -f1)
+current=$(cat swift/Sources/KSPKit/*.swift swift/Sources/KSPTape/*.swift tools/pull_tape.swift | shasum | cut -d' ' -f1)
 if [[ ! -x $puller || $current != $(cat "$stamp" 2> /dev/null) ]]; then
-    if ! swiftc swift/Sources/KSPKit/*.swift tools/pull_tape.swift -o "$puller"; then
+    if ! swiftc swift/Sources/KSPKit/*.swift swift/Sources/KSPTape/*.swift tools/pull_tape.swift \
+        -o "$puller"; then
         rm -f "$stamp"
         echo "pull_parity: the tape driver did not compile" >&2
         exit 1

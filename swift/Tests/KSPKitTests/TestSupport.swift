@@ -1,5 +1,6 @@
 import Foundation
 import KSPKit
+import KSPTape
 import Testing
 
 /// Repository data the tests read, resolved from this file's own path rather than copied in.
@@ -87,26 +88,6 @@ func firstDifference(_ produced: Data, _ expected: Data) -> String? {
 func withoutTrailingComma(_ data: Data) -> Data {
     #expect(data.suffix(3) == Data(",\n}".utf8), "sample does not end with MCC's trailing comma")
     return data.dropLast(3) + Data("\n}".utf8)
-}
-
-/// Throwing rather than lenient: a mistyped fixture is a mistake, not a frame of zero bytes.
-func hexBytes(_ hex: String) throws -> [UInt8] {
-    var frame: [UInt8] = []
-    var index = hex.startIndex
-    while index < hex.endIndex {
-        guard let next = hex.index(index, offsetBy: 2, limitedBy: hex.endIndex),
-            let byte = UInt8(hex[index..<next], radix: 16)
-        else {
-            throw KSPError.value("\(hex) is not a run of hex bytes")
-        }
-        frame.append(byte)
-        index = next
-    }
-    return frame
-}
-
-func hexString(_ frame: [UInt8]) -> String {
-    frame.map { ($0 < 0x10 ? "0" : "") + String($0, radix: 16) }.joined()
 }
 
 /// Frame 9 of the capture, the device's answer to the identity request.
