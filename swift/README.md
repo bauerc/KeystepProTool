@@ -238,11 +238,12 @@ your tests can only see what is marked `public`.
 
 ## 5. How this package is laid out, and why
 
-Seven targets:
+Eight targets:
 
 | Target | Is | Depends on | Builds on Linux |
 |---|---|---|---|
 | `KSPKit` | the format core; port of `src/ksp/` minus MIDI | **nothing** | yes |
+| `KSPTape` | the fake device a captured exchange answers from | `KSPKit` | yes |
 | `KSPMIDI` | the Standard MIDI File layer | `KSPKit`, `SwiftMIDIFile` | no |
 | `KSPDevice` | the transport: the attached device over CoreMIDI | `KSPKit`, `CoreMIDI` | no |
 | `KSPRun` | the command bodies and the bundled template | `KSPMIDI`, `KSPDevice` | no |
@@ -268,6 +269,17 @@ The same rule decides where a *ported module* goes rather than only where a depe
 `mutate.py` imports no `mido`, so `Mutate.swift` is in `KSPKit`; `midi_export.py` and
 `midi_import.py` both do, so they are in `KSPMIDI` whole. From M12 `swift.yml` runs a second job on
 `macos-latest`, because it is the only one that can see `KSPMIDI` and above at all.
+
+`KSPTape` is the one target nothing ships. Its request decoder, reply builder and tape-driven
+responder were hand-written four times over — once per test target that needed them and once more
+in `tools/pull_tape.swift` — and because each copy was only ever compared against a fixture, never
+against another copy, three of the four could be updated and nothing would fail (#262). It is a
+sibling of `KSPKit` rather than part of it because a shipped library has no business carrying a
+fake device. Two things follow from where it sits. `scripts/pull_parity.sh` compiles it *with*
+`KSPKit`'s own sources into a single module, where `KSPKit` is not a module there is anything to
+import — hence the `#if canImport(KSPKit)` around its import, which is what keeps that compile
+warning-free. And it cannot name `KSPRun`'s `PullDevice`, so `TapeDevice` answers the identity
+request and `KSPRunTests` is where the one-line conformance to it lives.
 
 ### Why `KSPRun` is a library and `KSPSwiftCLI` is only a face
 

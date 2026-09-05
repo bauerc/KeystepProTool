@@ -68,8 +68,8 @@ import PackageDescription
         // UniformTypeIdentifiers all ship in the Command Line Tools SDK, so this needs no Xcode.
         .executableTarget(name: "KSPApp", dependencies: ["KSPRun"]),
         .testTarget(name: "KSPMIDITests", dependencies: ["KSPMIDI"]),
-        .testTarget(name: "KSPDeviceTests", dependencies: ["KSPDevice"]),
-        .testTarget(name: "KSPRunTests", dependencies: ["KSPRun"]),
+        .testTarget(name: "KSPDeviceTests", dependencies: ["KSPDevice", "KSPTape"]),
+        .testTarget(name: "KSPRunTests", dependencies: ["KSPRun", "KSPTape"]),
         // Tests an executable target, which needs `@main` rather than a `main.swift`.
         .testTarget(name: "KSPSwiftCLITests", dependencies: ["KSPSwiftCLI"]),
         // Covers the app's file-placement rules, and is what makes `swift test` -- and so
@@ -89,6 +89,11 @@ let package = Package(
     dependencies: midiDependencies,
     targets: [
         .target(name: "KSPKit"),
-        .testTarget(name: "KSPKitTests", dependencies: ["KSPKit"]),
+        // The fake device the tape-driven gates answer from, in one place rather than one copy
+        // per consumer: SwiftPM cannot share a source file between two test targets, but it can
+        // give them all a target to depend on. Not a product -- nothing ships it -- and it sits
+        // beside KSPKit rather than inside it, which would put a fake device in the app.
+        .target(name: "KSPTape", dependencies: ["KSPKit"]),
+        .testTarget(name: "KSPKitTests", dependencies: ["KSPKit", "KSPTape"]),
     ] + midiTargets
 )

@@ -1,5 +1,6 @@
 import Foundation
 import KSPKit
+import KSPTape
 import Testing
 
 @testable import KSPRun
@@ -355,97 +356,10 @@ private final class UnreadableIdentity: PullDevice {
     func exchange(_ request: [UInt8]) throws -> [UInt8] { [] }
 }
 
-/// The request a frame carries. `Sysex` parses replies; only a fake device parses requests.
-private func decodeRequest(_ frame: [UInt8]) throws -> ReadRequest {
-    let body = Array(frame.dropFirst(Sysex.header.count).dropLast())
-    if body[0] == Sysex.cmdScalar {
-        return ReadRequest(item: Int(body[3]), param: Int(body[2]))
-    }
-    let indexCount = Int(body[3])
-    return ReadRequest(
-        item: Int(body[4]), param: Int(body[2]),
-        indices: body[5..<(5 + indexCount)].map(Int.init), count: Int(body[5 + indexCount]))
-}
-
-private func buildReply(_ request: ReadRequest, _ values: [Int], slot: Int) -> [UInt8] {
-    let body: [Int]
-    if request.count == nil {
-        body = [Int(Sysex.cmdScalarReply), slot, request.param, request.item] + values
-    } else {
-        body =
-            [Int(Sysex.cmdReadReply), slot, request.param, request.indices.count, request.item]
-            + request.indices + [request.count ?? 0] + values
-    }
-    return Sysex.header + body.map { UInt8($0) } + [Sysex.end]
-}
-
-private func hexBytes(_ text: some StringProtocol) -> [UInt8] {
-    stride(from: 0, to: text.count, by: 2).map { offset in
-        let start = text.index(text.startIndex, offsetBy: offset)
-        return UInt8(text[start...text.index(after: start)], radix: 16) ?? 0
-    }
-}
-
 /// Every address one of `tests/fixtures/*_tape.txt` delivered, as the device sent it.
 private func recallTape(named name: String = "recall_tape.txt") throws -> [String: Int] {
-    let path = RepoData.fixtures.appending(path: name)
-    var values: [String: Int] = [:]
-    for line in try String(contentsOf: path, encoding: .utf8).split(separator: "\n") {
-        let fields = line.split(separator: " ")
-        let (request, payload) = try Sysex.parseReply(hexBytes(fields[1]))
-        for (name, value) in zip(try BulkRead.keysFor(request), payload) {
-            values[name] = value
-        }
-    }
-    return values
+    try tapeValues(contentsOf: RepoData.fixtures.appending(path: name))
 }
 
-/// Answers any address from a tape's values, the way the device answers it -- including its
-/// refusal to walk a lone index (spec 7.8).
-private final class TapeDevice: PullDevice {
-    private let values: [String: Int]
-    /// Answers everything with the filler byte, as a slot holding nothing saved does.
-    private let filler: Bool
-
-    private(set) var asked: [ReadRequest] = []
-    private(set) var sent: [[UInt8]] = []
-    private(set) var identified = 0
-
-    init(_ values: [String: Int], filler: Bool = false) {
-        self.values = values
-        self.filler = filler
-    }
-
-    func identify() throws -> String {
-        identified += 1
-        return Constants.projectVersion
-    }
-
-    func send(_ frame: [UInt8]) throws {
-        sent.append(frame)
-    }
-
-    func exchange(_ frame: [UInt8]) throws -> [UInt8] {
-        let request = try decodeRequest(frame)
-        asked.append(request)
-        // Echo the slot asked about, so the walk's own check of it is exercised.
-        let echoed = try Sysex.parseSlot(frame)
-        let names = try BulkRead.keysFor(request)
-        if filler {
-            let payload = Array(repeating: BulkRead.filler, count: names.count)
-            return buildReply(request, payload, slot: echoed)
-        }
-        var payload = try names.map { name in
-            guard let value = values[name] else {
-                throw KSPError.value("the tape holds no value for \(name)")
-            }
-            return value
-        }
-        if let count = request.count, request.indices.count == 1, count > 1 {
-            // Measured on hardware: a range read over a lone index comes back as the first
-            // entry repeated, whatever the later entries hold.
-            payload = Array(repeating: payload[0], count: count)
-        }
-        return buildReply(request, payload, slot: echoed)
-    }
-}
+/// The conformance lives here rather than in KSPTape, which cannot name `PullDevice`.
+extension TapeDevice: PullDevice {}
