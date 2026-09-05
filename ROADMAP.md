@@ -346,12 +346,14 @@ No console entry point is declared until the milestone lands, per CLAUDE.md.
 
 ### Open items
 
-- **The write direction is decoded but unimplemented.** A write is the read protocol with the
-  reply opcodes sent as requests, over the same 8,951 addresses in the same order — so
-  `ksp.bulk_plan` is already the write plan ([spec 7.5](./analysis/format/SysEx_Direct_Transfer_Path.md)).
-  Phase 0 remains read-only and nothing in `ksp/` encodes a write. Two things block one: `06 <slot>`
-  looks like a commit and is untested, and a value read as `0xFF` **cannot be sent back** — MCC's
-  attempt stalled the device (spec 7.6).
+- **The write direction is hardware-confirmed but unimplemented.** A write is the read protocol
+  with the reply opcodes sent as requests, and on 2026-08-19 a targeted nine-frame burst placed a
+  note in a slot ([spec 7.5](./analysis/format/SysEx_Direct_Transfer_Path.md)): **no `05` prologue
+  before a write**, **no per-frame acks**, and **`06 <slot>` as the mandatory commit**. A partial
+  write needs no full 8,951-frame dump, so `ksp.bulk_plan` is a write plan rather than the write
+  plan. `ksp.sysex` carries the three write primitives and nothing above it does; the probe is
+  `tools/usb_push_test.py`, not a command. One thing still blocks a *full* write: a value read as
+  `0xFF` **cannot be sent back** — MCC's attempt stalled the device (spec 7.6). See #89.
 - **`0xFF` is the device's unset sentinel**, and `247` is MCC's corruption of it in transit. A
   *file* writer must keep emitting `247`; a *device* writer must not. See
   [per-pattern scalars](./analysis/format/Parameters_Pattern_Scalars.md).

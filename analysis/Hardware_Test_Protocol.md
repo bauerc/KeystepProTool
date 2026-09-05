@@ -574,9 +574,44 @@ One probe, and it was the last thing standing between the read path and a projec
   sudo uv run python tools/usb_probe.py --save project_files/captures/slots.jsonl slots
   ```
 
-**Do not extend this to the write direction.** Confirming byte 7 on a read costs nothing. Testing
-it on a write means sending 8,951 frames to a slot, and spec 7.5 flags `06 <slot>` as an untested
-commit — that needs its own protocol entry and a slot the user is willing to lose.
+**The write direction has its own entry now** — Phase 5 below. Confirming byte 7 on a read costs
+nothing; confirming it on a write costs a slot, which is why it is a phase of its own rather than a
+rider on this one.
+
+---
+
+## Phase 5 — the write direction ✅ **settled affirmatively, 2026-08-19**
+
+One probe, and it moved the write direction from a reading of MCC's captures to something this
+project has done to a device. (`H5.1` is the M6 gate question near the top, which predates the
+phases; this one starts at `.2`.)
+
+### H5.2 — Does a targeted write reach a slot, and what closes it?
+
+- [x] **run 2026-08-19 — CONFIRMED.** Nine write frames and an epilogue placed C3 on Track 2,
+  Pattern 1, Step 1 of project 8, and the panel showed it. The device answered the whole burst with
+  a single ack, in under a millisecond. Four framing rules came out of it — **no `05` prologue
+  before a write**, **no per-frame acks**, **`06 <slot>` as the mandatory commit**, and **a partial
+  write needing no full 8,951-frame dump** — and they are in
+  [spec 7.5](./format/SysEx_Direct_Transfer_Path.md); this entry keeps only how to re-run it.
+
+- **This one costs a slot.** Alone among the probes here, it changes what the device has stored.
+  Pick a project you are willing to lose and name it with `--slot`.
+- **The mode is the finding.** `--mode ack` stalls waiting for acks that do not come; `no-ack` is
+  the one that works. This probe takes no positional name, so the option-ordering trap that catches
+  the Phase 1 and Phase 2 probes does not apply here:
+
+  ```sh
+  sudo uv run python tools/usb_push_test.py --mode no-ack --slot 8 \
+      --save project_files/captures/push_test_no_ack.jsonl
+  ```
+
+**What is still untested: the sentinel, a read-back diff, and this transport.** No `0xFF` has been
+sent — MCC's attempt stalled the device (spec 7.6) and what a writer should send instead is
+unknown, so a *full* write is still gated. Slot 8 was confirmed by the ack and by the panel, never
+dumped and diffed against what was intended. And the probe predates Phase 6: it ran over raw USB,
+and a rule about when acks arrive is transport-shaped, so it wants re-confirming over CoreMIDI.
+Tracked in #89.
 
 ---
 
