@@ -20,7 +20,7 @@ ADDRESSED = 117783
 
 #: What each tape costs to read: MCC's 8,951, then the merged plan, then the
 #: merged plan with the pool gate applied. Project 2 carries fewer notes.
-EXPECTED_REQUESTS = {"recall_tape.txt": 1007, "recall_project_2_tape.txt": 976}
+EXPECTED_REQUESTS = {"recall_tape.txt": 2474, "recall_project_2_tape.txt": 2443}
 
 Loader = Callable[[str], dict[str, int | str]]
 
@@ -55,7 +55,7 @@ def test_the_fast_plan_covers_exactly_what_mcc_covers() -> None:
 
 
 def test_the_fast_plan_declares_its_own_length() -> None:
-    assert len(list(bulk_fast.iter_requests())) == bulk_fast.REQUEST_COUNT == 2044
+    assert len(list(bulk_fast.iter_requests())) == bulk_fast.REQUEST_COUNT == 3511
 
 
 def test_the_swift_port_is_held_to_this_plan(fixtures_dir: Path) -> None:
@@ -65,7 +65,7 @@ def test_the_swift_port_is_held_to_this_plan(fixtures_dir: Path) -> None:
 
 
 def test_the_swift_port_is_held_to_this_walk(fixtures_dir: Path) -> None:
-    """Agreeing on 1,007 requests is not agreeing on which 1,007, and only the gate decides that.
+    """Agreeing on 2,474 requests is not agreeing on which 2,474, and only the gate decides that.
     Regenerate it with ``uv run python tools/gen_bulk_read_walk_fixture.py``."""
     walk = (fixtures_dir / "bulk_read_walk.txt").read_text()
 
@@ -82,6 +82,15 @@ def test_every_request_is_one_the_device_answers() -> None:
         if request.count is not None:
             assert 1 <= len(request.indices) <= 3
             assert 0 < request.count <= sysex.MAX_READ_COUNT
+
+
+def test_no_run_over_a_lone_index_is_read_as_a_range() -> None:
+    """The device answers a range read over a lone index with the first entry repeated, so a
+    per-pattern scalar coalesced into a 16-entry range reads pattern 1 sixteen times.
+    """
+    for request in bulk_fast.iter_requests():
+        if request.count is not None and len(request.indices) == 1:
+            assert request.count == 1, f"{request.item}_{request.param} walks a lone index"
 
 
 def test_no_run_in_the_plan_is_longer_than_a_single_request() -> None:
@@ -134,7 +143,7 @@ def test_the_gate_saves_the_requests_it_claims(
     bulk_read.read_raw(device, template_keys, fast=True)
 
     assert len(device.asked) == EXPECTED_REQUESTS[tape_name]
-    assert len(device.asked) < bulk_plan.REQUEST_COUNT / 8
+    assert len(device.asked) < bulk_plan.REQUEST_COUNT / 3
 
 
 def test_the_drum_pool_is_never_skipped(device: DeviceModel, template_keys: list[str]) -> None:
@@ -168,18 +177,13 @@ def test_the_pattern_walk_covers_every_key_of_that_pattern(pattern: int) -> None
     owed = {name for name in whole if name.startswith("123_") and pattern_of(name) == pattern}
 
     assert owed <= subset
-    # The per-pattern scalars ride in one 16-entry range, so neighbouring patterns come
-    # along; no other track's pattern data may. The index-less track scalars are kept.
-    assert not {
-        name
-        for name in subset
-        if name.startswith(("124_", "125_", "126_")) and pattern_of(name) is not None
-    }
+    # Nothing but this pattern's own keys and the index-less track scalars.
+    assert not {name for name in subset if pattern_of(name) not in (None, pattern)}
 
 
 def test_the_pattern_walk_reads_the_scalars_that_make_a_pattern_play() -> None:
-    """Step count, swing, pattern bits and data state are per-pattern scalars that bulk_fast
-    coalesces into one range at index 1.
+    """Step count, swing, pattern bits and data state are per-pattern scalars, and each is its
+    own request.
     """
     for pattern in (1, 5, 16):
         names = set(addresses(list(bulk_fast.iter_pattern_requests(123, pattern))))

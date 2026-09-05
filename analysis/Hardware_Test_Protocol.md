@@ -402,7 +402,7 @@ byte-identical to the populated `count=64` reply from the first session — whic
   second walk from the same `PLAN` and leaves the generated one alone, so MCC's stream and its pin
   both still hold. Nor do the tail chunks need the fixed count this note feared. A run is coalesced
   by its own extent, so the 24-lane and 240-entry parameters simply yield shorter requests than the
-  64-step ones. 8,951 requests become 1,007 on tape 1 and 976 on tape 2
+  64-step ones. 8,951 requests become 2,474 on tape 1 and 2,443 on tape 2
   ([spec 7.8](./format/SysEx_Direct_Transfer_Path.md)). **What remains gated on H3.2's byte-diff is
   only the default**: `read_raw` still walks MCC's stream unless asked for `fast`, because the
   saving is counted against the tapes and no full dump has yet been checked against a device.
@@ -483,7 +483,7 @@ to hold end to end. Neither entry below has run on hardware yet.
 
   Any populated slot works; `--slot` needs no panel work first, per Phase 4. The slot is read as it
   was **saved**, so save any panel edits before pulling. Add `--mcc-plan` to walk MCC's
-  8,951-request stream instead of the coalesced 1,007 if the two need comparing directly on
+  8,951-request stream instead of the coalesced 2,474 if the two need comparing directly on
   hardware.
 
   The Swift CLI reads the same slot over CoreMIDI, so it wants no `sudo` and no libusb, and the two
@@ -519,6 +519,10 @@ to hold end to end. Neither entry below has run on hardware yet.
   for byte. This is what promotes `bulk_fast` from "checked against the tapes" to "checked against
   the device" — the saving H1.3 and §7.8 count is over 8,951 requests that were never replayed
   live.
+- **Pick a project whose per-pattern scalars differ across its patterns**, and check that they do
+  (`123_115` — the step count — is the readiest: a project of all-16-step patterns holds it
+  uniform). This is the check #255 escaped: where every pattern holds the same value, a walk that
+  reads pattern 1 and repeats it is indistinguishable from a correct one.
 - **Command:** Recall the same project H3.1 pulled (slot `<N>`) in MCC and export it, then compare
   against the file H3.1 already wrote:
 
@@ -590,7 +594,8 @@ One probe, and it was what stood between the Swift port and a read the app could
   16 and at the count-100 ceiling, and the sixteen-slot prologue sweep all answer over the ordinary
   CoreMIDI endpoint, unprivileged, at 4.00 ms an exchange — the same period H1.3 measured on raw
   USB, so the transport costs nothing. `bulk_fast`'s whole 2,044-frame walk replayed in **8.20 s,
-  2,044 answered, 0 mismatched**. The caveat: **CoreMIDI truncates a reply at the first `0xFF`**, so
+  2,044 answered, 0 mismatched** — the plan as it stood before #255, and "0 mismatched" says every
+  frame was answered, not that every answer was right. The caveat: **CoreMIDI truncates a reply at the first `0xFF`**, so
   the `123_117` sentinel range comes back empty and must be re-read element-wise. Facts and the
   recommendation are in [spec 7.9](./format/SysEx_Direct_Transfer_Path.md) — this entry keeps only
   how to re-run it.
@@ -655,7 +660,9 @@ One probe, and it was what stood between the Swift port and a read the app could
   ```
 
   Slot 1 read in **4.80 s — 153,497 keys, 1,007 requests, 13 sentinels repaired**, twice over and
-  byte-identical both times ([spec 7.9.2](./format/SysEx_Direct_Transfer_Path.md)).
+  byte-identical both times ([spec 7.9.2](./format/SysEx_Direct_Transfer_Path.md)). That was the
+  pre-#255 walk, and the project it wrote was wrong in 114 keys; the corrected walk is 2,474
+  requests and has not been re-run here.
 
 **What is still untested: MCC mid-transfer, and H3.2's diff over this transport.** MCC was running
 but idle; driving a Recall From while the probe reads needs a hand on the GUI. And the project read

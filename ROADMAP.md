@@ -325,7 +325,7 @@ Three probes changed what later phases should do:
 group, so `sudo ksp-pull OUT.KeyStepPro [--slot N]` reads the coalesced walk by default
 (`--mcc-plan` for MCC's own 8,951-request stream). It is the full-dump CLI Phase 3's H3.1 gates.
 `tests/test_pull_cli.py::test_the_dump_is_byte_identical_to_mcc_s_export` runs it against
-`FakeDevice` fed by `tests/fixtures/recall_tape.txt` and pins the 1,007-request replay figure and
+`FakeDevice` fed by `tests/fixtures/recall_tape.txt` and pins the 2,474-request replay figure and
 byte-for-byte agreement with `initial_project.KeyStepPro`, minus MCC's trailing comma. **That is
 CI over a replay, not hardware:** H3.1 (the live full dump) and H3.2 (the live byte-diff against
 MCC's own export) have not yet run on the device — see

@@ -52,7 +52,8 @@ private func recallTape() throws -> [String: Int] {
     return values
 }
 
-/// Answers any address from a tape's values, at any count the device allows.
+/// Answers any address from a tape's values, the way the device answers it -- including its
+/// refusal to walk a lone index (spec 7.8).
 private final class DeviceModel: Transport {
     private let values: [String: Int]
     /// What the walk put on the wire, which is what the gate is judged by.
@@ -87,11 +88,16 @@ private final class DeviceModel: Transport {
                 request, Array(repeating: BulkRead.filler, count: names.count),
                 slot: echoing ?? slot)
         }
-        let payload = try names.map { name in
+        var payload = try names.map { name in
             guard let value = values[name] else {
                 throw KSPError.value("tape holds no value for \(name)")
             }
             return value
+        }
+        if let count = request.count, request.indices.count == 1, count > 1 {
+            // Measured on hardware: a range read over a lone index comes back as the first
+            // entry repeated, whatever the later entries hold.
+            payload = Array(repeating: payload[0], count: count)
         }
         return buildReply(request, payload, slot: echoing ?? slot)
     }
@@ -136,13 +142,13 @@ private func templateKeys() throws -> [String] {
     }
 
     @Test func theGateSkipsTheAddressesPythonSkips() throws {
-        // Both cores asking 1,007 times is not both asking the same 1,007 times, and only the
+        // Both cores asking 2,474 times is not both asking the same 2,474 times, and only the
         // second is the port being right.
         let device = DeviceModel(try recallTape())
         _ = try BulkRead.readRaw(device, templateKeys: [String]())
         let expected = try pythonWalk()
 
-        #expect(device.asked.count == 1_007)
+        #expect(device.asked.count == 2_474)
         #expect(device.asked.count == expected.count)
         let mismatch = zip(device.asked, expected).enumerated().first {
             $0.element.0 != $0.element.1

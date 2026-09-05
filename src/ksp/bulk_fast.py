@@ -20,14 +20,14 @@ MELODIC_GATED: Final = frozenset({109, 110, 111, 112, 113})
 #: pool with holes, so a dead entry keeps whatever was there and cannot be derived.
 
 #: Requests this plan expands to, against bulk_plan's 8,951.
-REQUEST_COUNT: Final = 2044
+REQUEST_COUNT: Final = 3511
 
 #: What one pattern of one track costs: 75 pattern reads plus the index-less scalars.
 PATTERN_REQUEST_COUNT: Final = 115
 
 
 def iter_requests(max_count: int = MAX_READ_COUNT) -> Iterator[ReadRequest]:
-    """Every address bulk_plan reads, coalesced into the fewest requests.
+    """Every address bulk_plan reads, in as few requests as the device allows.
     MCC's order, but with the existence array ahead of the parameters it gates."""
     for low, high, leaves in PLAN:
         requests = (request for index in range(low, high + 1) for request in _expand(index, leaves))
@@ -43,11 +43,7 @@ def iter_pattern_requests(item: int, pattern: int) -> Iterator[ReadRequest]:
 
 
 def _covers(request: ReadRequest, pattern: int) -> bool:
-    """Whether a request fills any key belonging to ``pattern``. Not simply
-    ``indices[0] == pattern``: a coalesced per-pattern scalar is one range at index 1."""
-    assert request.count is not None
-    if len(request.indices) == 1:
-        return request.indices[0] <= pattern < request.indices[0] + request.count
+    """Whether a request fills any key belonging to ``pattern``."""
     return request.indices[0] == pattern
 
 
@@ -95,6 +91,12 @@ def _join(run: list[ReadRequest], max_count: int) -> Iterator[ReadRequest]:
     first = run[0]
     if first.count is None:
         yield first
+        return
+
+    # A lone index is not a range axis: the device answers a walk over one with index 1's
+    # value repeated, so the per-pattern scalars stay one request each (spec 7.8).
+    if len(first.indices) == 1:
+        yield from sorted(run, key=lambda request: request.indices[-1])
         return
 
     # By index, not by the order MCC asked in: it reads 121_83's fifth scene

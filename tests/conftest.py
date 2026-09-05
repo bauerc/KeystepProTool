@@ -196,7 +196,8 @@ def tape_values(path: Path) -> dict[str, int]:
 
 
 class DeviceModel:
-    """Answers any address from a tape's values, at any count the device allows."""
+    """Answers any address from a tape's values, the way the device answers it -- including
+    its refusal to walk a lone index (spec 7.8)."""
 
     def __init__(self, values: dict[str, int]) -> None:
         self._values = values
@@ -216,10 +217,13 @@ class DeviceModel:
         missing = [name for name in names if name not in self._values]
         if missing:
             raise LookupError(f"tape holds no value for {missing[0]}")
+        values = tuple(self._values[name] for name in names)
+        if request.count is not None and len(request.indices) == 1 and request.count > 1:
+            # Measured on hardware: a range read over a lone index comes back as the first
+            # entry repeated, whatever the later entries hold.
+            values = (values[0],) * request.count
         # Echo the slot asked about, so bulk_read's check of it is exercised.
-        return build_reply(
-            request, tuple(self._values[name] for name in names), sysex.parse_slot(frame)
-        )
+        return build_reply(request, values, sysex.parse_slot(frame))
 
 
 class FakeDevice:

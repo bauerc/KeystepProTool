@@ -56,7 +56,7 @@ private func number(_ field: Substring) throws -> Int {
 
     @Test func thePlanDeclaresItsOwnLength() throws {
         #expect(try BulkFast.iterRequests().count == BulkFast.requestCount)
-        #expect(BulkFast.requestCount == 2044)
+        #expect(BulkFast.requestCount == 3511)
     }
 
     @Test func thePlanAddressesEveryKeyExactlyOnce() throws {
@@ -75,6 +75,16 @@ private func number(_ field: Substring) throws -> Int {
             if let count = request.count {
                 #expect((1...3).contains(request.indices.count))
                 #expect(0 < count && count <= Sysex.maxReadCount)
+            }
+        }
+    }
+
+    @Test func noRunOverALoneIndexIsReadAsARange() throws {
+        // The device answers a range read over a lone index with the first entry repeated, so
+        // a per-pattern scalar coalesced into a 16-entry range reads pattern 1 sixteen times.
+        for request in try BulkFast.iterRequests() where request.indices.count == 1 {
+            if let count = request.count {
+                #expect(count == 1, "\(request.item)_\(request.param) walks a lone index")
             }
         }
     }
@@ -120,18 +130,14 @@ private func number(_ field: Substring) throws -> Int {
             whole.filter { $0.hasPrefix("123_") && patternOf($0) == pattern })
 
         #expect(owed.isSubset(of: subset))
-        // The per-pattern scalars ride in one 16-entry range, so neighbouring patterns come
-        // along; no other track's pattern data may. The index-less track scalars are kept.
-        #expect(
-            !subset.contains {
-                ["124_", "125_", "126_"].contains(where: $0.hasPrefix) && patternOf($0) != nil
-            })
+        // Nothing but this pattern's own keys and the index-less track scalars.
+        #expect(!subset.contains { patternOf($0) != nil && patternOf($0) != pattern })
     }
 
     @Test(arguments: [1, 5, 16])
     func thePatternWalkReadsTheScalarsThatMakeAPatternPlay(pattern: Int) throws {
-        // Step count, swing, pattern bits and data state are per-pattern scalars coalesced
-        // into one range at index 1.
+        // Step count, swing, pattern bits and data state are per-pattern scalars, and each is
+        // its own request.
         let names = Set(
             try addresses(try BulkFast.iterPatternRequests(item: 123, pattern: pattern)))
         let owed: Set = [
