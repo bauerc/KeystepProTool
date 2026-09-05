@@ -8,16 +8,20 @@ public enum LenientJSON {
         guard let comma = data[..<brace].lastIndex(of: UInt8(ascii: ",")) else { return data }
 
         let between = data[data.index(after: comma)..<brace]
-        guard between.allSatisfy(isJSONWhitespace) else { return data }
+        guard between.allSatisfy(\.isJSONWhitespace) else { return data }
         return data[..<comma] + data[data.index(after: comma)...]
     }
 
     public static func parse(_ data: Data) throws -> RawProject {
-        let cleaned = strippingTrailingComma(data)
         do {
-            return try JSONDecoder().decode(Document.self, from: cleaned).values
-        } catch let error as DecodingError {
-            throw KSPError.value(complaint(about: error, in: cleaned))
+            return try data.withUnsafeBytes { raw in
+                guard var scanner = JSONScanner(raw) else {
+                    throw JSONScanner.Failure.malformed("the document is empty", at: 0)
+                }
+                return try scanner.project()
+            }
+        } catch let failure as JSONScanner.Failure {
+            throw KSPError.value(complaint(about: failure))
         }
     }
 
@@ -74,77 +78,10 @@ public enum LenientJSON {
         return leading + rest.compactMap { name in project[name].map { (key: name, value: $0) } }
     }
 
-    private static func complaint(about error: DecodingError, in data: Data) -> String {
-        switch error {
-        case .typeMismatch(_, let context), .valueNotFound(_, let context):
-            context.codingPath.isEmpty
-                ? "expected a JSON object, got \(topLevelTypeName(data))"
-                : "could not parse: \(context.debugDescription)"
-        case .keyNotFound(_, let context), .dataCorrupted(let context):
-            "could not parse: \(context.debugDescription)"
-        @unknown default:
-            "could not parse: \(error)"
+    private static func complaint(about failure: JSONScanner.Failure) -> String {
+        switch failure {
+        case .notAnObject(let typeName): "expected a JSON object, got \(typeName)"
+        case .malformed(let reason, let offset): "could not parse: \(reason) at byte \(offset)"
         }
-    }
-
-    private struct Document: Decodable {
-        let values: RawProject
-
-        init(from decoder: any Decoder) throws {
-            let container = try decoder.container(keyedBy: Name.self)
-            var values = RawProject(minimumCapacity: container.allKeys.count)
-            for key in container.allKeys {
-                values[key.stringValue] = try Self.value(from: container, at: key)
-            }
-            self.values = values
-        }
-
-        private static func value(
-            from container: KeyedDecodingContainer<Name>, at key: Name
-        ) throws -> JSONValue {
-            if let number = try? container.decode(Int.self, forKey: key) {
-                return .int(number)
-            }
-            if let text = try? container.decode(String.self, forKey: key) {
-                return .string(text)
-            }
-            if (try? container.decode(Bool.self, forKey: key)) != nil {
-                return .other("bool")
-            }
-            if (try? container.decode(Double.self, forKey: key)) != nil {
-                return .other("float")
-            }
-            if try container.decodeNil(forKey: key) {
-                return .other("NoneType")
-            }
-            if (try? container.nestedUnkeyedContainer(forKey: key)) != nil {
-                return .other("list")
-            }
-            return .other("dict")
-        }
-
-        private struct Name: CodingKey {
-            let stringValue: String
-            var intValue: Int? { nil }
-
-            init(stringValue: String) { self.stringValue = stringValue }
-            init?(intValue: Int) { nil }
-        }
-    }
-
-    private static func topLevelTypeName(_ data: Data) -> String {
-        switch data.first(where: { !isJSONWhitespace($0) }) {
-        case UInt8(ascii: "["): "list"
-        case UInt8(ascii: "\""): "str"
-        case UInt8(ascii: "t"), UInt8(ascii: "f"): "bool"
-        case UInt8(ascii: "n"): "NoneType"
-        case .some(let byte) where byte == UInt8(ascii: "-") || (byte >= 0x30 && byte <= 0x39):
-            data.contains(UInt8(ascii: ".")) ? "float" : "int"
-        default: "unknown"
-        }
-    }
-
-    private static func isJSONWhitespace(_ byte: UInt8) -> Bool {
-        byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D
     }
 }
