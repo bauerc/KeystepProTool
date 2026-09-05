@@ -14,8 +14,8 @@ case "${1-}" in
         ;;
 esac
 
-# The tracked samples, as tests/conftest.py:SAMPLE_NAMES and TestSupport.swift:Samples.names list
-# them. project_files/captures/ is gitignored, so a worktree or CI has only these to measure.
+# The tracked samples, as tests/conftest.py:SAMPLE_NAMES lists them. project_files/captures/ is
+# gitignored, so a worktree or CI has only these to measure.
 samples=(
     Default.KeyStepPro
     baseline.KeyStepPro
@@ -25,32 +25,11 @@ samples=(
     user_empty_project.KeyStepPro
 )
 
-# The three flags a Command Line Tools install needs, as validate.sh builds them.
-swift_flags=()
-developer_dir=$(xcode-select -p 2> /dev/null)
-clt_frameworks="$developer_dir/Library/Developer/Frameworks"
-if [[ $developer_dir == */CommandLineTools && -d $clt_frameworks/Testing.framework ]]; then
-    swift_flags=(
-        -Xswiftc -F -Xswiftc "$clt_frameworks"
-        -Xswiftc -Xfrontend -Xswiftc -disable-cross-import-overlays
-        -Xlinker -rpath -Xlinker "$clt_frameworks"
-    )
-fi
-
 readings=$(mktemp) || exit 1
 trap 'rm -f "$readings"' EXIT
 
-have_swift=0
-command -v swift &> /dev/null && have_swift=1
-
 echo "machine:  $(uname -srm)"
 echo "python:   $(uv run python -V 2>&1)"
-if ((have_swift)); then
-    echo "swift:    $(swift --version 2> /dev/null | head -n 1)"
-    echo "          debug configuration, the one the parity scripts build"
-else
-    echo "swift:    not on PATH -- measuring the Python core only"
-fi
 echo
 
 for sample in "${samples[@]}"; do
@@ -63,17 +42,6 @@ for sample in "${samples[@]}"; do
 
     if ! uv run python tools/bench_read.py --json "$file" >> "$readings"; then
         echo "bench_read.py failed on $sample" >&2
-        exit 1
-    fi
-
-    ((have_swift)) || continue
-    if ! output=$(
-        cd swift \
-            && KSP_BENCH=1 KSP_BENCH_FILE="$sample" swift test "${swift_flags[@]}" \
-                --filter ReadCost 2>&1
-    ) || ! grep -m1 '^{"core"' <<< "$output" >> "$readings"; then
-        echo "swift test --filter ReadCost failed on $sample:" >&2
-        tail -n 20 <<< "$output" >&2
         exit 1
     fi
 done
