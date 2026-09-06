@@ -11,6 +11,7 @@ import Foundation
 let header: [UInt8] = [0xF0, 0x00, 0x20, 0x6B, 0x7F, 0x42]
 let end: UInt8 = 0xF7
 let ack: [UInt8] = header + [0x1C, 0x00, end]
+let ack1: [UInt8] = ack
 let identityRequest: [UInt8] = [0xF0, 0x7E, 0x7F, 0x06, 0x01, end]
 
 /// Where a three-index long reply's values start: header 6, command, slot, param, index count,
@@ -824,6 +825,193 @@ func pipeReplayProbe(
             + "\(unmatched) unmatched, \(values) values")
 }
 
+/// Can the device be *told* not to ack, or told how deep a burst to take? The ack costs a 2 ms
+/// transmit slot -- half of every read -- so a flag that suppresses it would be worth more than
+/// every request the walk could prune.
+///
+/// The write direction is the precedent: it takes a whole burst unbuffered and answers it with one
+/// ack at the `06` commit, so the ack regime is already something the session framing selects.
+/// This asks whether the read direction has the same switch.
+///
+/// Every frame here is a known read opcode (`01`, `0b`, `05`) with its own fields varied. Inventing
+/// command bytes is what is deliberately not done: `02`, `06` and `0c` are the write opcodes, there
+/// is no restore path in this tool, and an unknown opcode carrying a slot byte could commit
+/// something no probe can undo.
+func handshakeProbe(needle: String, slot: UInt8, wait: Double) throws {
+    setvbuf(stdout, nil, _IOLBF, 0)
+    let listener = try Listener()
+    let target = try destination(needle, listener)
+    let name = describe(target)
+
+    /// Sends one frame and reports what came back, without assuming either arrives.
+    func probe(_ frame: [UInt8], settle: Double = 0.06) throws -> (
+        reply: [UInt8]?, ack: Bool, extra: Int
+    ) {
+        listener.collector.drain()
+        try listener.send(frame, to: target)
+        var reply: [UInt8]?
+        var ack = false
+        var extra = 0
+        let deadline = Date().addingTimeInterval(settle)
+        while let got = listener.collector.next(
+            within: max(0, deadline.timeIntervalSinceNow))
+        {
+            guard got.endpoint == name else { continue }
+            if got.bytes == ack1 {
+                ack = true
+            } else if reply == nil {
+                reply = got.bytes
+            } else {
+                extra += 1
+            }
+        }
+        return (reply, ack, extra)
+    }
+
+    func sign(_ result: (reply: [UInt8]?, ack: Bool, extra: Int)) -> String {
+        let body = result.reply.map { "reply \($0.count)b" } ?? "SILENT"
+        return "\(body), \(result.ack ? "acked" : "NO ACK")"
+            + (result.extra > 0 ? ", +\(result.extra) more" : "")
+    }
+
+    let read = header + [0x0B, slot, 109, 0x03, 124, 1, 1, 1, 16, end]
+    let scalar = header + [0x01, slot, 37, 120, end]
+
+    print("  1. is the prologue what puts the read in per-frame-ack mode?")
+    // Nothing selected yet this session: does a read answer at all, and does it ack?
+    print("     cold read, no 05 sent:        \(sign(try probe(read)))")
+    _ = try probe(prologue(slot: slot))
+    print("     after 05 \(slot):                   \(sign(try probe(read)))")
+    print("     the 05 prologue itself:       \(sign(try probe(prologue(slot: slot))))")
+
+    print("  2. does 05 take a mode byte? (05 <slot> <mode>, then one read)")
+    var oddities: [String] = []
+    let baseline = try probe(read)
+    let baselineValue = baseline.reply?.dropFirst(15).first
+    for mode in UInt8(0)...127 {
+        _ = try probe(header + [0x05, slot, mode, end], settle: 0.03)
+        let after = try probe(read)
+        let value = after.reply?.dropFirst(15).first
+        if after.ack != baseline.ack || (after.reply == nil) != (baseline.reply == nil) {
+            oddities.append("mode \(mode): \(sign(after))")
+        } else if value != baselineValue {
+            oddities.append("mode \(mode): data changed, \(hex([value ?? 0]))")
+        }
+        // Put the session back on the slot under test before the next mode.
+        _ = try probe(prologue(slot: slot), settle: 0.02)
+    }
+    print(
+        oddities.isEmpty
+            ? "     all 128 mode bytes behave exactly like a bare 05 -- reply then ack"
+            : "     " + oddities.prefix(12).joined(separator: "\n     "))
+
+    print("  3. do the read opcodes carry a spare field? (a flag bit, or a byte before F7)")
+    var variants: [(String, [UInt8])] = []
+    // nIdx is 1-3, and 4 is known to draw nothing. Anything above it is unexplored space in a
+    // field the device already validates, which is where a flag would sit most cheaply.
+    for bit in [0x04, 0x08, 0x10, 0x20, 0x40] as [Int] {
+        var framed = read
+        framed[9] = UInt8(0x03 | bit)
+        variants.append(("nIdx 3|0x\(String(bit, radix: 16))", framed))
+    }
+    // A trailing byte after the count, and after a short read's item.
+    for spare in [0x00, 0x01, 0x7F] as [UInt8] {
+        variants.append(("long read + \(hex([spare]))", Array(read.dropLast()) + [spare, end]))
+        variants.append(("short read + \(hex([spare]))", Array(scalar.dropLast()) + [spare, end]))
+    }
+    _ = try probe(prologue(slot: slot))
+    for (label, frame) in variants {
+        print("     \(label.padding(toLength: 22, withPad: " ", startingAt: 0)) \(sign(try probe(frame)))")
+    }
+
+    print("  4. is an unpaced window of 4 loss-free after any of that?")
+    let window = (0..<4).map { header + [0x0B, slot, 109, 0x03, 124, 1, 1, UInt8(1 + $0), 16, end] }
+    listener.collector.drain()
+    for frame in window { try listener.send(frame, to: target) }
+    var back = 0
+    let deadline = Date().addingTimeInterval(0.3)
+    while let got = listener.collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
+        if got.endpoint == name, got.bytes != ack1, window.contains(where: { answers(got.bytes, $0) })
+        {
+            back += 1
+        }
+    }
+    print("     \(back)/4 replies -- \(back == 4 ? "loss-free" : "still dropping, as before")")
+}
+
+/// What else answers? Reads only, so the whole sweep is non-destructive: a scalar read of an item
+/// that does not exist draws silence, and nothing here can commit.
+///
+/// Two questions. Byte 7 of a request is a slot number the device echoes but does not obey -- `05`
+/// is what selects the project (7.4) -- so it is a field with room in it, and a flag that turned
+/// the ack off would sit there. And if the device keeps its global settings in an item of their
+/// own, a scalar sweep of the item space is what finds it.
+func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
+    setvbuf(stdout, nil, _IOLBF, 0)
+    let listener = try Listener()
+    let target = try destination(needle, listener)
+    let name = describe(target)
+    try listener.send(prologue(slot: slot), to: target)
+    _ = listener.listen(seconds: 0.2)
+
+    func probe(_ frame: [UInt8], settle: Double = 0.03) throws -> (
+        reply: [UInt8]?, ack: Bool
+    ) {
+        listener.collector.drain()
+        try listener.send(frame, to: target)
+        var reply: [UInt8]?
+        var acked = false
+        let deadline = Date().addingTimeInterval(settle)
+        while let got = listener.collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
+            guard got.endpoint == name else { continue }
+            if got.bytes == ack1 { acked = true } else if reply == nil { reply = got.bytes }
+        }
+        return (reply, acked)
+    }
+
+    print("  1. byte 7 of a long read, swept 0-127 -- does any value turn the ack off?")
+    var unacked: [Int] = []
+    var silent: [Int] = []
+    var values: [UInt8: Int] = [:]
+    for byte in UInt8(0)...127 {
+        let result = try probe(header + [0x0B, byte, 109, 0x03, 124, 1, 1, 1, 16, end])
+        if result.reply == nil { silent.append(Int(byte)) }
+        if !result.ack { unacked.append(Int(byte)) }
+        if let first = result.reply?.dropFirst(15).first { values[first, default: 0] += 1 }
+    }
+    print("     silent: \(silent.count)   unacked: \(unacked.count)   "
+        + "distinct first values: \(values.count)")
+    if !unacked.isEmpty { print("     unacked at: \(unacked.prefix(16))") }
+
+    print("  2. count byte edges -- 0, the 100 ceiling, and past it")
+    for count in [0, 1, 100, 101, 127] as [UInt8] {
+        let request = header + [0x0B, slot, 109, 0x03, 124, 1, 1, 1, count, end]
+        let result = try probe(request)
+        // A reply echoes the request byte for byte and appends its values, so the values it
+        // carried is the difference -- not a fixed offset, which differs by request form.
+        let carried = result.reply.map { $0.count - request.count } ?? -1
+        print("     count \(String(format: "%3d", Int(count))): "
+            + "\(result.reply == nil ? "SILENT" : "\(carried) values back"), "
+            + "\(result.ack ? "acked" : "NO ACK")")
+    }
+
+    // A scalar read answers for every item and every param, so silence cannot be used to find
+    // what exists -- the device returns whatever sits at the address and validates neither field.
+    // Any search for a settings area has to come from captured MCC traffic instead.
+    print("  3. does an address space sweep distinguish anything? (scalar reads)")
+    var itemsAnswering = 0
+    var paramsAnswering = 0
+    for item in UInt8(0)...127 where try probe(header + [0x01, slot, 37, item, end]).reply != nil {
+        itemsAnswering += 1
+    }
+    for param in UInt8(0)...127
+    where try probe(header + [0x01, slot, param, 120, end]).reply != nil {
+        paramsAnswering += 1
+    }
+    print("     \(itemsAnswering)/128 items and \(paramsAnswering)/128 params answer at param 37 "
+        + "/ item 120 -- no existence check, so a sweep cannot locate a settings area")
+}
+
 // MARK: - main
 
 let arguments = Array(CommandLine.arguments.dropFirst())
@@ -852,6 +1040,10 @@ do {
         try pipelineProbe(needle: needle, slot: try requestedSlot(), rounds: 50, wait: 1.5)
     case "grid":
         try gridProbe(needle: needle, slot: try requestedSlot(), rounds: 100, wait: 1.5)
+    case "handshake":
+        try handshakeProbe(needle: needle, slot: try requestedSlot(), wait: 1.5)
+    case "space":
+        try spaceProbe(needle: needle, slot: try requestedSlot(), wait: 1.5)
     case "pipereplay":
         guard arguments.count > 5 else {
             throw ProbeError("pipereplay needs a plan file, a window and a pace in microseconds")
@@ -870,6 +1062,7 @@ do {
             "usage: coremidi_probe [list | exchange <name> <slot> | slots <name> "
                 + "| throughput <name> <slot> | cadence <name> <slot> "
                 + "| pipeline <name> <slot> | grid <name> <slot> "
+                + "| handshake <name> <slot> | space <name> <slot> "
                 + "| pipereplay <name> <slot> <plan.txt> <window> <pace-us> [wait-ms] "
                 + "| replay <name> <slot> <plan.txt> | sniff <seconds>]")
         exit(2)
