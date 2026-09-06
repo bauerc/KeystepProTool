@@ -662,6 +662,36 @@ One probe, and it was what stood between the Swift port and a read the app could
   recommendation are in [spec 7.9](./format/SysEx_Direct_Transfer_Path.md) — this entry keeps only
   how to re-run it.
 
+- [x] **run 2026-09-06 — the 4.00 ms exchange decomposes into two 2 ms device transmit slots.**
+  `cadence` (200 rounds per count, arrival stamped in the CoreMIDI callback) splits the round trip:
+  count 1 gives 2.013 ms send→reply / 1.976 ms reply→ack / 0.017 ms ack→next-send (medians); count
+  100 gives 2.316 / 1.672 / 0.014 ms. The two transmit halves always sum to 4.00 ms — a larger
+  payload moves the boundary between them, never the total — and host turnaround (0.015 ms) and
+  driver-callback lag (0.02 ms) are both negligible. `grid` (100 rounds per delay) confirms the
+  reply lands on a 2 ms grid: holding off 0.0–2.5 ms after each reply before asking again pins the
+  reply-to-reply period at 4.000 ms (send→reply falls 3.978 → 1.499 ms in exact step with the
+  delay), 3.0–4.0 ms gives 6.000 ms, 5.0–6.0 ms gives 8.000 ms — every observed period an exact
+  multiple of 2 ms, nothing in between. The identity request (`F0 7E ...`) is the one frame the
+  device does not ack, and repeated identity exchanges come back every 2.000 ms, exactly half —
+  which marks the second slot as the device's ack transmit, not the host's wait: dispatching the
+  next request on the reply instead of the ack measures 3.99 ms per exchange against 4.00 ms, so
+  dropping the wait for the ack is worth nothing.
+
+  `pipeline` shows the grid bounds how far pipelining helps rather than ruling it out. Unpaced:
+  window 2 is loss-free, window 3 loses 48 of 50 rounds, windows 4 and 8 lose nearly everything —
+  the device drops requests it cannot take and sends no error frame. Paced 2 ms between sends, all
+  loss-free: window 16 → 3.17 ms/reply, window 32 → 3.03 ms, window 64 → 2.97 ms; the gain is the
+  device deferring acks, and the share of 2 ms gaps rises from 0% to 51% as the window deepens. The
+  4 ms is per device, not per item — a window spanning items 123/124/125/126 gives the same
+  4.001 ms gap, and the short `01` scalar command behaves identically to the long `0b`.
+
+  `pipereplay` over the real 3,511-request `bulk_fast` plan, repeatable to 0.01 s: sequential
+  14.04 s (4.000 ms/request, 3,511 answered, 0 lost); window 8 paced 2 ms with a 40 ms retry
+  timeout, 11.84 s (3.372 ms/request, 3,511 answered, ~11 re-asked, 0 lost, the same 117,770 values
+  returned) — a correct pipelined read is worth about **1.19×**, not the "up to depth `x`" a deeper
+  window suggests: windows 32 and 64 go faster but still lose 6 and 30 requests after 8 retries, so
+  they are not correct walks.
+
 - **Nothing to quit and no `sudo`.** This is the one probe here that neither needs the device to
   itself nor needs root: it goes *through* macOS's USB-MIDI driver rather than detaching it, which
   is the whole finding.
@@ -674,6 +704,10 @@ One probe, and it was what stood between the Swift port and a read the app could
   /tmp/coremidi_probe exchange "KeyStep Pro" 1      # identity, scalar, count 16, count 100
   /tmp/coremidi_probe slots "KeyStep Pro"           # the sixteen-slot prologue sweep
   /tmp/coremidi_probe throughput "KeyStep Pro" 1    # 200 rounds at each of count 1/16/64/100
+  /tmp/coremidi_probe cadence "KeyStep Pro" 1       # splits send->reply->ack->next-send, by count
+  /tmp/coremidi_probe grid "KeyStep Pro" 1          # reply-to-reply period against a held-off delay
+  /tmp/coremidi_probe pipeline "KeyStep Pro" 1      # unpaced vs. paced windows, loss and gap share
+  /tmp/coremidi_probe pipereplay "KeyStep Pro" 1 /tmp/plan.txt <window> <pace-us> [wait-ms]
   /tmp/coremidi_probe sniff 20                      # whatever arrives, e.g. during an MCC recall
   ```
 
@@ -726,6 +760,12 @@ One probe, and it was what stood between the Swift port and a read the app could
   pre-#255 walk, and the project it wrote was wrong in 114 keys. The corrected walk was run here on
   2026-09-04 — same slot, 2,474 requests, 11.4 s — and H3.2's diff over this transport has since
   been taken.
+
+- **Debug vs. release build, run 2026-09-06.** A release-build `ksp-swift-cli pull` of slot 1 reads
+  the same 2,474 requests in **10.1 s — 4.08 ms per exchange** — against the 3.999 ms wire floor
+  `cadence`/`grid` establish; a debug build takes 10.5 s (4.24 ms). Time the release binary. Two
+  pulls taken before and after all of the cadence/grid/pipeline probing are byte-identical, so none
+  of it disturbed the device.
 
 **What is still untested: MCC mid-transfer.** MCC was running but idle; driving a Recall From while
 the probe reads needs a hand on the GUI.
