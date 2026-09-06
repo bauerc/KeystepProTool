@@ -1012,6 +1012,128 @@ func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
         + "/ item 120 -- no existence check, so a sweep cannot locate a settings area")
 }
 
+/// Can a lone index be walked after all? 1,567 of the walk's requests carry one index and fetch one
+/// value, because a `count` walk on a request's only index repeats that index instead of advancing.
+/// Collapsing each of the 100 families into a single ranged request would drop 1,467 requests --
+/// about 5.9 s -- and unlike dropping the undecoded reads it loses nothing.
+///
+/// The idea under test is that the device walks the *last* index (7.1), so a lone index might walk
+/// if it is no longer alone. Ground truth is the same addresses read one at a time; a variant is
+/// only believed if it reproduces that byte for byte.
+func loneProbe(needle: String, slot: UInt8, item: UInt8, param: UInt8, span: Int, wait: Double)
+    throws
+{
+    setvbuf(stdout, nil, _IOLBF, 0)
+    let listener = try Listener()
+    let target = try destination(needle, listener)
+    let name = describe(target)
+    try listener.send(prologue(slot: slot), to: target)
+    _ = listener.listen(seconds: 0.2)
+
+    func values(of frame: [UInt8], asked request: [UInt8]) -> [UInt8] {
+        guard frame.count > request.count else { return [] }
+        return Array(frame.dropFirst(request.count - 1).dropLast())
+    }
+
+    func ask(_ request: [UInt8]) throws -> [UInt8]? {
+        listener.collector.drain()
+        try listener.send(request, to: target)
+        var reply: [UInt8]?
+        let deadline = Date().addingTimeInterval(0.08)
+        while let got = listener.collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
+            guard got.endpoint == name, got.bytes != ack1 else { continue }
+            if reply == nil, answers(got.bytes, request) { reply = got.bytes }
+        }
+        return reply
+    }
+
+    print("  item \(item), param \(param), indices 1...\(span) on slot \(slot)")
+
+    var truth: [UInt8] = []
+    for index in 1...span {
+        let request = header + [0x0B, slot, param, 0x01, item, UInt8(index), 1, end]
+        guard let reply = try ask(request) else { truth.append(0xEE); continue }
+        truth.append(contentsOf: values(of: reply, asked: request))
+    }
+    print("  one at a time (\(span) requests, the ground truth): \(hex(truth))")
+
+    let flat = header + [0x0B, slot, param, 0x01, item, 1, UInt8(span), end]
+    if let reply = try ask(flat) {
+        let got = values(of: reply, asked: flat)
+        print("  nIdx=1, count \(span):                        \(hex(got))"
+            + "  \(got == truth ? "<- WALKS" : "<- repeats, as known")")
+    } else {
+        print("  nIdx=1, count \(span):                        SILENT")
+    }
+
+    // The walked index goes last, so the dummy leads; the other order is tried too in case the
+    // device walks the first index of a two-index request instead.
+    for dummy in [0, 1, 2] as [UInt8] {
+        let trailing = header + [0x0B, slot, param, 0x02, item, dummy, 1, UInt8(span), end]
+        let leading = header + [0x0B, slot, param, 0x02, item, 1, dummy, UInt8(span), end]
+        for (label, request) in [("(\(dummy), idx)", trailing), ("(idx, \(dummy))", leading)] {
+            guard let reply = try ask(request) else {
+                print("  nIdx=2 \(label), count \(span):                 SILENT")
+                continue
+            }
+            let got = values(of: reply, asked: request)
+            let verdict =
+                got == truth
+                ? "<- WALKS, and matches the ground truth"
+                : (Set(got).count == 1 ? "<- one value repeated" : "<- different data")
+            print("  nIdx=2 \(label), count \(span):                 \(hex(got))  \(verdict)")
+        }
+    }
+}
+
+/// Does a `count` walk that overruns its last index roll into the next middle index, or pad? The
+/// earlier probe ran on a near-empty project, where "padding" and "an empty next slice" look the
+/// same; this asks a slot whose next slice holds data, so the two answers differ.
+func rolloverProbe(needle: String, slot: UInt8, item: UInt8, mid: UInt8, wait: Double) throws {
+    setvbuf(stdout, nil, _IOLBF, 0)
+    let listener = try Listener()
+    let target = try destination(needle, listener)
+    let name = describe(target)
+    try listener.send(prologue(slot: slot), to: target)
+    _ = listener.listen(seconds: 0.2)
+
+    func ask(_ request: [UInt8]) throws -> [UInt8] {
+        listener.collector.drain()
+        try listener.send(request, to: target)
+        var out: [UInt8] = []
+        let deadline = Date().addingTimeInterval(0.2)
+        while let got = listener.collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
+            guard got.endpoint == name, got.bytes != ack1, answers(got.bytes, request) else {
+                continue
+            }
+            out = Array(got.bytes.dropFirst(request.count - 1).dropLast())
+            break
+        }
+        return out
+    }
+
+    func note(_ mid1: UInt8, _ mid2: UInt8, count: UInt8) -> [UInt8] {
+        header + [0x0B, slot, 109, 0x03, item, mid1, mid2, 1, count, end]
+    }
+
+    let first = try ask(note(mid, 1, count: 64))
+    let next = try ask(note(mid, 2, count: 64))
+    let over = try ask(note(mid, 1, count: 100))
+
+    print("  \(item)_109_\(mid)_1, count  64: \(first.count) values, \(hex(first.suffix(8))) (tail)")
+    print("  \(item)_109_\(mid)_2, count  64: \(next.count) values, \(hex(next.prefix(8))) (head)")
+    print("  \(item)_109_\(mid)_1, count 100: \(over.count) values")
+    guard over.count >= 100, first.count >= 64, next.count >= 36 else {
+        print("  short replies -- inconclusive")
+        return
+    }
+    let overrun = Array(over[64..<100])
+    print("     values 1-64  match the plain read: \(Array(over[0..<64]) == first)")
+    print("     values 65-100:                     \(hex(overrun))")
+    print("     == the next middle index's head?   \(overrun == Array(next[0..<36]))")
+    print("     all one value (padding)?           \(Set(overrun).count == 1)")
+}
+
 // MARK: - main
 
 let arguments = Array(CommandLine.arguments.dropFirst())
@@ -1044,6 +1166,16 @@ do {
         try handshakeProbe(needle: needle, slot: try requestedSlot(), wait: 1.5)
     case "space":
         try spaceProbe(needle: needle, slot: try requestedSlot(), wait: 1.5)
+    case "rollover":
+        try rolloverProbe(
+            needle: needle, slot: try requestedSlot(),
+            item: arguments.count > 3 ? (UInt8(arguments[3]) ?? 124) : 124,
+            mid: arguments.count > 4 ? (UInt8(arguments[4]) ?? 1) : 1, wait: 1.5)
+    case "lone":
+        guard arguments.count > 5 else { throw ProbeError("lone needs an item, a param and a span") }
+        try loneProbe(
+            needle: needle, slot: try requestedSlot(), item: UInt8(arguments[3]) ?? 121,
+            param: UInt8(arguments[4]) ?? 38, span: Int(arguments[5]) ?? 16, wait: 1.5)
     case "pipereplay":
         guard arguments.count > 5 else {
             throw ProbeError("pipereplay needs a plan file, a window and a pace in microseconds")
@@ -1063,6 +1195,7 @@ do {
                 + "| throughput <name> <slot> | cadence <name> <slot> "
                 + "| pipeline <name> <slot> | grid <name> <slot> "
                 + "| handshake <name> <slot> | space <name> <slot> "
+                + "| lone <name> <slot> <item> <param> <span> | rollover <name> <slot> "
                 + "| pipereplay <name> <slot> <plan.txt> <window> <pace-us> [wait-ms] "
                 + "| replay <name> <slot> <plan.txt> | sniff <seconds>]")
         exit(2)
