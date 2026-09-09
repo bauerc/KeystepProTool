@@ -126,6 +126,13 @@ It is what stops the light face being a white void with four coloured rows float
 
 Four tracks down, sixteen pattern slots across. Each row wears its track's colour.
 
+The idle window draws it **empty but present** — the same four rows and sixteen slots, in the track
+colours under the density floor, with the drop prompt on a plate over them. The app's first
+impression is then its own object rather than a system dialog's file glyph, the window explains
+itself at a glance, and there is something for the conversion playhead to cross. A file dragged
+over the window lights the map rather than washing the pane: the drop target is the instrument
+coming up.
+
 ### Slot cells
 
 Three orthogonal channels, so no combination of states turns to mud:
@@ -224,7 +231,11 @@ the device lights the currently playing step (§4.2.9). It is the one moment the
 else to show.
 
 - Honour `reduce-motion`; fall back to the static progress view.
-- Give it a floor, or a sub-second conversion flashes once and reads as a glitch.
+- Give it a floor, or a sub-second conversion flashes once and reads as a glitch. The floor is held
+  **before** the first step and never open after the last: a chase held open would gate the result,
+  and a failure the user needs to see, on the animation. The conversion finishes when it finishes,
+  and the chase is cut short.
+- The chase's clock is the view's own. Nothing the conversion does may wait on it.
 
 **Nothing else in the app animates.** Everywhere else, motion is noise.
 

@@ -139,6 +139,11 @@ struct Palette: Sendable {
 enum Density {
     static let floor = 0.18
     static let ceiling = 0.92
+    /// The map at rest, held under ``floor`` so an empty map can never read as one holding notes.
+    static let resting = 0.14
+    /// The same map under a file being dragged over the window. The instrument lighting up is the
+    /// drop target: a wash over the pane would sit on a ground the map has already coloured.
+    static let restingTargeted = 0.42
     /// A pattern is read as full at two notes per step; chords pass that without looking different.
     static let saturationPoint = 2.0
 
@@ -233,6 +238,8 @@ enum AppLayout {
     static let scrollerAllowance: CGFloat = 15
 
     static let columnCount = 16
+    /// The four sequencer tracks the map is rows of, one panel colour each (manual §1.4).
+    static let rowCount = 4
     /// A row head, in order: the readout well, the track name, the drum badge. Summed rather than
     /// fixed, so contents that grow cannot overflow the head in silence.
     static var labelWidth: CGFloat {
