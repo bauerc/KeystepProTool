@@ -71,7 +71,7 @@ def test_the_dump_is_byte_identical_to_mcc_s_export(
     assert written.read_bytes() == without_trailing_comma(expected.read_bytes())
 
 
-def test_the_walk_asks_for_64_values_at_a_time(
+def test_the_walk_asks_for_a_hundred_values_at_a_time(
     attached: FakeDevice, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """H3.1 asks for the coalesced walk, not MCC's 8,951 count-1 reads."""
@@ -79,12 +79,12 @@ def test_the_walk_asks_for_64_values_at_a_time(
     assert main([str(written)]) == 0
 
     counts = [request.count for request in attached.slots[1].asked if request.count is not None]
-    assert max(counts) == 64
+    assert max(counts) == 100
     # The gated walk's own figure for this tape, which test_bulk_fast pins too.
-    assert len(attached.slots[1].asked) == 2474
+    assert len(attached.slots[1].asked) == 2169
     # And the summary reports the walk, not the walk plus the identity request:
-    # 2,474 is the number spec 7.8 states and an operator compares a run against.
-    assert "2474 requests" in capsys.readouterr().out
+    # 2,375 is the number spec 7.8 states and an operator compares a run against.
+    assert "2169 requests" in capsys.readouterr().out
 
 
 def test_the_mcc_plan_reads_the_same_project_in_far_more_requests(
@@ -255,7 +255,7 @@ def test_also_midi_writes_the_project_and_its_midi_from_one_read(
 
     assert written.exists()
     assert written.with_suffix(".mid").exists()
-    assert len(attached.slots[1].asked) == 2474
+    assert len(attached.slots[1].asked) == 2169
 
 
 @pytest.mark.parametrize("slot", [1, 2])

@@ -3,7 +3,7 @@
 from collections.abc import Iterable, Iterator
 from typing import Final, Protocol
 
-from ksp import bulk_fast
+from ksp import bulk_fast, constants
 from ksp.bulk_plan import iter_requests
 from ksp.keys import key
 from ksp.lenient_json import LEADING_KEYS
@@ -48,6 +48,12 @@ def keys_for(request: ReadRequest) -> list[str]:
     A long read walks its last index forward by ``count``; the others are fixed."""
     if request.count is None:
         return [key(request.item, request.param)]
+    if bulk_fast.rolls_over(request):
+        outer, start = request.indices[0], bulk_fast.flat(request.indices)
+        return [
+            key(request.item, request.param, *bulk_fast.unflat(outer, start + offset))
+            for offset in range(request.count)
+        ]
     head, last = request.indices[:-1], request.indices[-1]
     return [
         key(request.item, request.param, *head, last + offset) for offset in range(request.count)
@@ -81,11 +87,26 @@ def _pool_gate(request: ReadRequest, pool_slot: int) -> list[str]:
     ]
 
 
+def _pattern_holds_data(request: ReadRequest, seen: dict[str, int]) -> bool | None:
+    """Parameter 40 for the pattern this request belongs to, or ``None`` if unread.
+    Unread settles nothing: the walk asks rather than guess at what it has not seen."""
+    flag = seen.get(key(request.item, bulk_fast.DATA_STATE, request.indices[0]))
+    return None if flag is None else flag == bulk_fast.HAS_DATA
+
+
 def _already_answered(request: ReadRequest, seen: dict[str, int]) -> int | None:
     """The value a request would return, when an earlier reply already settles it.
-    Two rules, both about the melodic pool and both spec 3."""
-    if request.count is None or len(request.indices) != 3:
+    The pattern data state settles two families; the rest is the melodic pool (spec 3)."""
+    if request.count is None:
         return None
+    if request.item == constants.ITEM_CONTROL_TRACK and len(request.indices) == 2:
+        if request.param in bulk_fast.CONTROL_GATED and _pattern_holds_data(request, seen) is False:
+            return bulk_fast.CONTROL_GATED[request.param]
+        return None
+    if len(request.indices) != 3:
+        return None
+    if request.param in bulk_fast.PATTERN_GATED and _pattern_holds_data(request, seen) is False:
+        return bulk_fast.pattern_fill(request.param, request.indices[1])
     if request.param in bulk_fast.MELODIC_GATED:
         gate = _pool_gate(request, request.indices[1])
         return bulk_fast.EMPTY if all(seen.get(n) == bulk_fast.EMPTY for n in gate) else None

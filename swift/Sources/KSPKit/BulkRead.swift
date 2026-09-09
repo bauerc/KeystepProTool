@@ -34,6 +34,12 @@ public enum BulkRead {
         guard let last = request.indices.last else {
             throw KSPError.value("\(request) is a long read with no index to walk")
         }
+        if BulkFast.rollsOver(request) {
+            let (outer, start) = (request.indices[0], BulkFast.flat(request.indices))
+            return (0..<count).map {
+                Keys.key(request.item, request.param, indices: BulkFast.unflat(outer, start + $0))
+            }
+        }
         let head = Array(request.indices.dropLast())
         return (0..<count).map {
             Keys.key(request.item, request.param, indices: head + [last + $0])
@@ -113,10 +119,30 @@ public enum BulkRead {
         }
     }
 
+    /// Parameter 40 for the pattern this request belongs to, or `nil` if unread.
+    /// Unread settles nothing: the walk asks rather than guess at what it has not seen.
+    private static func patternHoldsData(_ request: ReadRequest, _ seen: [String: Int]) -> Bool? {
+        let name = Keys.key(request.item, BulkFast.dataState, indices: [request.indices[0]])
+        guard let flag = seen[name] else { return nil }
+        return flag == BulkFast.hasData
+    }
+
     /// The value a request would return, when an earlier reply already settles it.
-    /// Two rules, both about the melodic pool and both spec 3.
+    /// The pattern data state settles two families; the rest is the melodic pool (spec 3).
     private static func alreadyAnswered(_ request: ReadRequest, _ seen: [String: Int]) -> Int? {
+        guard request.count != nil else { return nil }
+        if request.item == Constants.itemControlTrack, request.indices.count == 2 {
+            guard let fill = BulkFast.controlGated[request.param],
+                patternHoldsData(request, seen) == false
+            else { return nil }
+            return fill
+        }
         guard let count = request.count, request.indices.count == 3 else { return nil }
+        if patternHoldsData(request, seen) == false,
+            let fill = BulkFast.patternFill(param: request.param, slot: request.indices[1])
+        {
+            return fill
+        }
         if BulkFast.melodicGated.contains(request.param) {
             let gate = poolGate(request, request.indices[1], count: count)
             return gate.allSatisfy { seen[$0] == BulkFast.empty } ? BulkFast.empty : nil

@@ -48,13 +48,13 @@ private func templateKeys() throws -> [String] {
     }
 
     @Test func theGateSkipsTheAddressesPythonSkips() throws {
-        // Both cores asking 2,474 times is not both asking the same 2,474 times, and only the
+        // Both cores asking 2,169 times is not both asking the same 2,169 times, and only the
         // second is the port being right.
         let device = TapeDevice(try recallTape())
         _ = try BulkRead.readRaw(device, templateKeys: [String]())
         let expected = try pythonWalk()
 
-        #expect(device.asked.count == 2_474)
+        #expect(device.asked.count == 2_169)
         #expect(device.asked.count == expected.count)
         let mismatch = zip(device.asked, expected).enumerated().first {
             $0.element.0 != $0.element.1
@@ -69,14 +69,18 @@ private func templateKeys() throws -> [String] {
         }
     }
 
-    @Test func theGateNeverSkipsTheDrumPool() throws {
-        // A dead drum entry reads 127 in some patterns and the default row in others, so
-        // nothing derives it.
-        let device = TapeDevice(try recallTape())
+    @Test func theDrumPoolIsNeverDerivedInAPatternThatHoldsData() throws {
+        // A dead drum entry reads 127 in some patterns and the default row in others, so no
+        // existence array derives it. Parameter 40 is the one thing that settles one, and only
+        // where the pattern holds no note at all.
+        let tape = try recallTape()
+        let device = TapeDevice(tape)
         _ = try BulkRead.readRaw(device, templateKeys: [String]())
         let pool = Set(
             try BulkFast.iterRequests().filter {
                 (117...121).contains($0.param) && $0.indices.count == 3
+                    && tape[Keys.key(123, BulkFast.dataState, indices: [$0.indices[0]])]
+                        == BulkFast.hasData
             })
 
         #expect(!pool.isEmpty)

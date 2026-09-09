@@ -8,6 +8,7 @@ import pytest
 
 from conftest import DeviceModel, tape_values
 from ksp import bulk_fast, bulk_plan, bulk_read, lenient_json, sysex
+from ksp.keys import key
 from ksp.sysex import ReadRequest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
@@ -18,9 +19,10 @@ import gen_bulk_read_walk_fixture
 TAPES = ("recall_tape.txt", "recall_project_2_tape.txt")
 ADDRESSED = 117783
 
-#: What each tape costs to read: MCC's 8,951, then the merged plan, then the
-#: merged plan with the pool gate applied. Project 2 carries fewer notes.
-EXPECTED_REQUESTS = {"recall_tape.txt": 2474, "recall_project_2_tape.txt": 2443}
+#: What each tape costs to read: MCC's 8,951, then the merged plan, then the merged plan
+#: with both gates applied. Project 2 carries fewer notes, and the data state settles whole
+#: patterns, so it gains the more of the two.
+EXPECTED_REQUESTS = {"recall_tape.txt": 2169, "recall_project_2_tape.txt": 1979}
 
 Loader = Callable[[str], dict[str, int | str]]
 
@@ -55,7 +57,7 @@ def test_the_fast_plan_covers_exactly_what_mcc_covers() -> None:
 
 
 def test_the_fast_plan_declares_its_own_length() -> None:
-    assert len(list(bulk_fast.iter_requests())) == bulk_fast.REQUEST_COUNT == 3511
+    assert len(list(bulk_fast.iter_requests())) == bulk_fast.REQUEST_COUNT == 3399
 
 
 def test_the_swift_port_is_held_to_this_plan(fixtures_dir: Path) -> None:
@@ -93,11 +95,11 @@ def test_no_run_over_a_lone_index_is_read_as_a_range() -> None:
             assert request.count == 1, f"{request.item}_{request.param} walks a lone index"
 
 
-def test_no_run_in_the_plan_is_longer_than_a_single_request() -> None:
-    """The extent binds before the protocol does: the longest contiguous run in PLAN is a 64-entry
-    pool chunk, well inside the 100 the device honours.
+def test_the_protocol_binds_a_run_before_the_extent_does() -> None:
+    """It was the other way round while a run stopped at its own 64-entry chunk. Rolling over
+    joins three of them, so the 100 the device honours is what cuts a run now.
     """
-    assert max(r.count or 0 for r in bulk_fast.iter_requests()) == 64
+    assert max(r.count or 0 for r in bulk_fast.iter_requests()) == sysex.MAX_READ_COUNT == 100
 
 
 def test_the_existence_array_is_read_before_the_notes_it_gates() -> None:
@@ -146,15 +148,21 @@ def test_the_gate_saves_the_requests_it_claims(
     assert len(device.asked) < bulk_plan.REQUEST_COUNT / 3
 
 
-def test_the_drum_pool_is_never_skipped(device: DeviceModel, template_keys: list[str]) -> None:
-    """A dead drum entry reads 127 in some patterns and the default row in others, so nothing
-    derives it.
+def test_the_drum_pool_is_never_derived_in_a_pattern_that_holds_data(
+    device: DeviceModel, tape_name: str, fixtures_dir: Path, template_keys: list[str]
+) -> None:
+    """A dead drum entry reads 127 in some patterns and the default row in others, so no
+    existence array derives it. Parameter 40 is the one thing that settles one, and only where
+    the pattern holds no note at all -- so every pattern that holds data is still asked in full.
     """
+    values = tape_values(fixtures_dir / tape_name)
     bulk_read.read_raw(device, template_keys, fast=True)
     drum_pool = {
         request
         for request in bulk_fast.iter_requests()
-        if request.param in range(117, 122) and len(request.indices) == 3
+        if request.param in range(117, 122)
+        and len(request.indices) == 3
+        and values[key(123, bulk_fast.DATA_STATE, request.indices[0])] == bulk_fast.HAS_DATA
     }
 
     assert drum_pool
@@ -209,7 +217,7 @@ def test_the_pattern_walk_carries_the_index_less_scalars() -> None:
 def test_the_pattern_walk_is_a_fraction_of_the_whole() -> None:
     requests = list(bulk_fast.iter_pattern_requests(123, 1))
 
-    assert len(requests) == bulk_fast.PATTERN_REQUEST_COUNT == 115
+    assert len(requests) == bulk_fast.PATTERN_REQUEST_COUNT == 108
     assert len(requests) < bulk_fast.REQUEST_COUNT / 16
 
 
@@ -248,3 +256,94 @@ def test_the_slot_reaches_every_frame(device: DeviceModel, template_keys: list[s
     bulk_read.read_raw(device, template_keys, fast=True, slot=2)
 
     assert device.slots == {2}
+
+
+def test_a_pattern_holding_no_data_is_not_asked_for_its_note_pool(
+    fixtures_dir: Path, template_keys: list[str]
+) -> None:
+    """Parameter 40 is the firmware's own "this pattern holds notes" flag. Track 4 holds none in
+    any pattern of this tape, so every pooled note parameter in it is the empty row already.
+    """
+    device = DeviceModel(tape_values(fixtures_dir / "recall_tape.txt"))
+    bulk_read.read_raw(device, template_keys, fast=True)
+
+    pooled = {50, 54, 109, 110, 111, 112, 113, 117, 118, 119, 120, 121}
+    asked = {
+        request.indices[0]
+        for request in device.asked
+        if request.count is not None
+        and len(request.indices) == 3
+        and request.item == 126
+        and request.param in pooled
+    }
+
+    assert asked == set()
+
+
+def test_the_data_state_is_read_before_the_pool_it_settles() -> None:
+    """Without this the gate has nothing to consult and every pattern is asked in full. It comes
+    before the existence array too: a whole pattern settles more than a chunk does.
+    """
+    seen_state: set[tuple[int, int]] = set()
+    for request in bulk_fast.iter_requests():
+        if request.count is None:
+            continue
+        if request.param == bulk_fast.DATA_STATE and len(request.indices) == 1:
+            seen_state.add((request.item, request.indices[0]))
+        elif request.param in bulk_fast.PATTERN_GATED and len(request.indices) == 3:
+            assert (request.item, request.indices[0]) in seen_state
+
+
+def test_a_pool_walk_rolls_over_into_the_next_chunk() -> None:
+    """The device walks a count past the end of one middle index into the next, within the same
+    outer index, so track 1's three 64-entry chunks are two requests rather than three.
+    """
+    requests = [
+        (request.indices, request.count)
+        for request in bulk_fast.iter_requests()
+        if request.item == 123
+        and request.param == 117
+        and len(request.indices) == 3
+        and request.indices[0] == 1
+    ]
+
+    assert requests == [((1, 1, 1), 100), ((1, 2, 37), 92)]
+
+
+def test_a_rolled_over_request_names_the_keys_it_actually_fills() -> None:
+    """Its last index runs past the chunk length and carries into the next chunk, so the flat
+    keys are not the naive ``last + offset``.
+    """
+    rolled = ReadRequest(item=123, param=117, indices=(1, 1, 1), count=100)
+
+    names = bulk_read.keys_for(rolled)
+
+    assert names[0] == "123_117_1_1_1"
+    assert names[63] == "123_117_1_1_64"
+    assert names[64] == "123_117_1_2_1"
+    assert names[99] == "123_117_1_2_36"
+
+
+def test_nothing_a_chunk_gate_settles_is_rolled_over() -> None:
+    """The two compete: the existence array skips an empty chunk outright, and a request
+    coalesced across that chunk would fetch it back. Rolling over is for the pool no chunk
+    gate reaches.
+    """
+    assert not bulk_fast.ROLLED_OVER & bulk_fast.MELODIC_GATED
+    assert bulk_fast.MELODIC_GATE not in bulk_fast.ROLLED_OVER
+
+
+def test_a_pattern_holding_no_data_is_not_asked_for_its_control_lanes(
+    fixtures_dir: Path, template_keys: list[str]
+) -> None:
+    """The control track carries the same data state as any other, and its five CC lanes hold a
+    value per step. No pattern of this tape holds data, so none of the lanes needs asking.
+    """
+    device = DeviceModel(tape_values(fixtures_dir / "recall_tape.txt"))
+    bulk_read.read_raw(device, template_keys, fast=True)
+
+    lanes = [
+        request for request in device.asked if request.item == 122 and len(request.indices) == 2
+    ]
+
+    assert lanes == []
