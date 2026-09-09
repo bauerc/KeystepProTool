@@ -15,14 +15,14 @@ velocity `127` is genuinely ambiguous in isolation.
 > Never infer note presence from velocity.
 
 **`127` marks an empty *entry*, not the end of the list — and the two parameter sets differ.**
-The drum array is a pool with holes: deleting a note empties its entry and leaves the later ones
+The drum array is a pool with holes: deleting a trigger empties its entry and leaves the later ones
 where they are. The melodic array is genuinely compacted — verified across all five sample files,
 no slot holds a non-`127` value after an interior `127`.
 
 So the scan rules are asymmetric, and a reader that applies rule 1 to the drum set destroys data.
 `initial_project` Track 1 pattern 5 slot 1 has holes at entries 28–29 and 35, with five lane-12
-notes at entries 30–34 and four lane-17 notes at 36–39 behind them; pattern 9 has holes at
-entries 22–24 and 28. Stopping at the first sentinel drops **43 live notes** across the two
+triggers at entries 30–34 and four lane-17 triggers at 36–39 behind them; pattern 9 has holes at
+entries 22–24 and 28. Stopping at the first sentinel drops **43 live triggers** across the two
 patterns, and then reports their step-active flags as orphans.
 
 > **The check that settles it:** scanning the whole pool takes flags-without-a-note to **exactly
@@ -65,10 +65,10 @@ Note the asymmetry in what is *allocated* versus what is *allowed*. Melodic item
 `idx2` = 1–3, so 192 is exactly the key space. Track 1 addresses a fourth chunk — 256 slots — and
 still stops at 192, so the ceiling is a firmware limit rather than a storage one.
 
-**At the ceiling the device refuses the next hit — it does not overwrite.** The operator confirms
-the 193rd hit was rejected outright, with the error shown immediately and no existing event
-disturbed. So there is no "oldest note wins" recycling to emulate: a writer handed more than 192
-events per pattern must either **reject the source** or **drop the overflow and warn**, and
+**At the ceiling the device refuses the next trigger — it does not overwrite.** The operator
+confirms the 193rd trigger was rejected outright, with the error shown immediately and no existing
+event disturbed. So there is no "oldest note wins" recycling to emulate: a writer handed more than
+192 events per pattern must either **reject the source** or **drop the overflow and warn**, and
 either way the file it emits stays a faithful prefix rather than a scrambled pool.
 
 > **Track 1's fourth slot is zero-filled, not sentinel-filled.** In all 16 patterns of all five

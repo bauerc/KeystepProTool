@@ -31,8 +31,8 @@ mapping starts at MIDI note 36", and the Custom defaults 36…59 are exactly tha
 
 #### What the device's map actually is — measured
 
-**Hardware, capture D5.** One hit per lane on 24 consecutive steps — lane *i* on step *i+1* — and
-the pattern recorded while it played once. The device transmitted **36, 37, … 59** in lane order
+**Hardware, capture D5.** One trigger per lane on 24 consecutive steps — lane *i* on step *i+1* —
+and the pattern recorded while it played once. The device transmitted **36, 37, … 59** in lane order
 on **channel 10**, which settles both halves of the question at once:
 
 - **The factory map is chromatic from 36**, not from 0. MCC's `defaultValue` of `0` for Low note
@@ -42,10 +42,10 @@ on **channel 10**, which settles both halves of the question at once:
   this being an off-by-one in the reading.
 
 The recording cross-checks against the export, which makes it a whole-chain result rather than a
-MIDI observation alone: the 24 *sounding* notes in `D5-drum-map.KeyStepPro` carry `117` = 0…23 on
-steps 1…24, in the same order as the pitches heard. (The pattern also holds five superseded hits
-on lanes 19–23; they are pooled with their step-active bits clear, so the `52` decode is what
-separates them — see [the two index spaces](./Index_Spaces_And_Note_Placement.md).)
+MIDI observation alone: the 24 *sounding* triggers in `D5-drum-map.KeyStepPro` carry `117` = 0…23
+on steps 1…24, in the same order as the pitches heard. (The pattern also holds five superseded
+triggers on lanes 19–23; they are pooled with their step-active bits clear, so the `52` decode is
+what separates them — see [the two index spaces](./Index_Spaces_And_Note_Placement.md).)
 
 The operator's menu readout supplies the rest of the shape, and exists nowhere else:
 

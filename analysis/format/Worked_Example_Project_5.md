@@ -67,7 +67,8 @@ Track 1 (item `123`), pattern 1, documented as "kick on beats 1 and 5":
 
 **Re-read on the device 2026-08-05, protocol T6.1** — a display read, not a capture. The display
 shows −1 and **+1**, matching `120` = 48, 50 against the centre of 49. `project_5_description.txt`
-originally transcribed −1 for both kick hits and has been corrected; the file was right all along.
+originally transcribed −1 for both kick triggers and has been corrected; the file was right all
+along.
 
 Drum `120` therefore decodes against the melodic centre at these two points. The rest of its range
 is untested — T7.3 sweeps it.

@@ -11,7 +11,7 @@
 A note can sit in the pool, fully formed, and still not play. **"Why a note might not play" below
 lists every reason;** this section is the evidence for the commonest one, row 2.
 
-`D1-two-hits` / `D1-step-off` toggle a drum step off **without deleting its note**: the pooled
+`D1-two-hits` / `D1-step-off` toggle a drum step off **without deleting its trigger**: the pooled
 entry survives byte-for-byte and only the step-active bit clears — and the step does not sound on
 the device.
 
@@ -20,8 +20,8 @@ the device.
 > be set. A reader that reports pooled notes is correct; an exporter that renders them without
 > checking the flag emits audio the hardware never makes.
 
-This is not hypothetical. In `initial_project`, pattern 3 lanes 0 and 19 hold 20 pooled drum
-notes with no flags at all, and pattern 1 lane 17 holds 8 of which only 4 are flagged.
+This is not hypothetical. In `initial_project`, pattern 3 lanes 0 and 19 hold 20 pooled
+triggers with no flags at all, and pattern 1 lane 17 holds 8 of which only 4 are flagged.
 
 **The device itself cannot show you the difference**, which is why the corpus is full of these.
 Asked directly whether the UI distinguished "step off, note still stored" from "step empty" after
@@ -90,9 +90,9 @@ terminator silently discards live notes.
 #### Evidence for row 3 — the last step
 
 **Hardware-observed** on `initial_project` Track 1 pattern 9. `123_115_9` = 47, i.e. a 48-step
-drum pattern, and the pattern holds pooled, step-active notes out to step 63.
+drum pattern, and the pattern holds pooled, step-active triggers out to step 63.
 
-**In the project's saved state those notes are disabled and do not play** — that is the file's
+**In the project's saved state those triggers are disabled and do not play** — that is the file's
 own configuration and the correct behaviour. The observation was made by deliberately raising
 Last Step to 64, at which point they appear and sound; lowering it back to 48 disables them
 again, with the step-64 light going out. The toggle was a diagnostic action, not the file's state.

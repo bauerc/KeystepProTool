@@ -50,8 +50,8 @@ enforced by `tests/test_reader.py`.
 - **Two index spaces** (see [the two index spaces](./format/Index_Spaces_And_Note_Placement.md)) — the top source of bugs. `48`/`49` are step-indexed; `50` and `109`–`113`
   are indexed by note ordinal, with `50` giving each note's 0-based step. The device stores an
   event list, not a step grid.
-- **Existence ≠ audibility** (see [existence versus audibility](./format/Existence_Versus_Audibility.md))**.** A note exists when `50 != 127` (`54` for drums); it *sounds* only if
-  its step-active bit is set (`48` melodic, `52` drum — packed lane-major). Never infer a note
+- **Existence ≠ audibility** (see [existence versus audibility](./format/Existence_Versus_Audibility.md))**.** An event exists when `50 != 127` (`54` for drums); it *sounds* only if
+  its step-active bit is set (`48` melodic, `52` drum — packed lane-major). Never infer an event
   from its velocity, and never infer emptiness from `40` (it latches).
 - **Placing a melodic note is 8 keys, not one**
   (see [note placement](./format/Index_Spaces_And_Note_Placement.md)): `50`, `109`–`113` by note ordinal, plus
@@ -60,7 +60,7 @@ enforced by `tests/test_reader.py`.
   thing that should be building that set.
 - Track 1 (item `123`) carries a second DRUM parameter set. The mode flag is **`86` bit 6**, not
   `100`. A writer must set `86` to match whichever set it writes.
-- A drum note's `117` is a **lane index (0–23)**, not a pitch (see [the drum lane map](./format/Parameters_Drum_Lane_Map.md)). The lane→note map is a global
+- A trigger's `117` is a **lane index (0–23)**, not a pitch (see [the drum lane map](./format/Parameters_Drum_Lane_Map.md)). The lane→note map is a global
   device setting absent from the file; `ksp.drum_map` holds it as configuration and every consumer
   states which map it assumed.
 - **Gate is measured** (see [the gate ladder](./format/Gate_Length_Ladder.md)): an index, `stored = detent − 1`, 128 rungs, 0.0625–64 steps,

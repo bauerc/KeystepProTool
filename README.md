@@ -234,7 +234,7 @@ project_5.KeyStepPro
 `seq` on a note line is the note's step skip — which of the four 16/32/48/64 sequences it plays
 in.
 
-A drum note stores a **lane number**, not a pitch. Which MIDI note a lane transmits is set by the
+A trigger stores a **lane number**, not a pitch. Which MIDI note a lane transmits is set by the
 device's Drum Map, which lives in global device settings and is **not stored in the project
 file** — so the tool cannot read it and says `(assumed - not in file)` next to whichever map it
 used. The default is Arturia's: chromatic from MIDI note 36. Override it per run with
@@ -340,7 +340,7 @@ times, and exists only in the `.mid`. The device stores no such count, so no rep
 written back to a project — which is why it is capped separately from `--passes` and named apart
 from it.
 
-Where a pattern holds both a melodic and a drum note set, only the one the track's mode flag
+Where a pattern holds both a melodic and a drum set, only the one the track's mode flag
 (parameter `86` bit 6) says the device plays is exported — the other is leftovers from before the
 track was switched over, and exporting it would put notes in the file that no hardware produces.
 `--include-stale` exports both.
@@ -501,12 +501,12 @@ interleave two takes.
 
 Pitch and velocity pass through unchanged; both are 7-bit on each side.
 
-**Drums need a map, and the map is not in the file.** A drum note stores a *lane*, and which MIDI
+**Drums need a map, and the map is not in the file.** A trigger stores a *lane*, and which MIDI
 note a lane plays is a global device setting (see `ksp-dump` above). Reading one back can fall
 through to Arturia's default and say so; writing one cannot, because a source whose drums sit
-anywhere but 36–59 would have every hit dropped. So an unconfigured import **fits** a chromatic map
-to the source's own pitches and reports which one it used. `--drum-map` overrides it, and a map in
-`~/.config/keysteppro/drum_map.json` is used ahead of fitting.
+anywhere but 36–59 would have every trigger dropped. So an unconfigured import **fits** a chromatic
+map to the source's own pitches and reports which one it used. `--drum-map` overrides it, and a map
+in `~/.config/keysteppro/drum_map.json` is used ahead of fitting.
 
 A drum track is found on MIDI channel 10, which is what General MIDI reserves. Only the first one
 is: track 1 is the only one carrying a drum set, so a second channel 10 part is imported
