@@ -43,6 +43,21 @@ private func contrast(_ one: Color, _ other: Color) -> Double {
         #expect(AppLayout.limitRowWidth <= AppLayout.minimumContentWidth)
     }
 
+    /// The idle pane draws the map with nothing behind it, so its rows and columns are the
+    /// tokens' own -- and a row without a colour of its own would be drawn in another track's.
+    @Test func therestingMapHasArowPerTrackColourAndFitsThePane() {
+        #expect(AppLayout.rowCount == DeviceColor.track.count)
+        #expect(AppLayout.gridWidth <= AppLayout.minimumContentWidth)
+    }
+
+    /// An empty map must not read as one holding notes, and the least a held slot takes is the
+    /// density floor.
+    @Test func themapAtRestSitsUnderAnythingHoldingNotes() {
+        #expect(Density.resting > 0)
+        #expect(Density.resting < Density.floor)
+        #expect(Density.restingTargeted > Density.resting)
+    }
+
     /// The card and the sixteen cells in it are both drawn at a fixed width, so both are clipped
     /// in silence if either outgrows what holds it.
     @Test func adeviceCardFitsThePaneAndItsSlotRowFitsTheCard() {

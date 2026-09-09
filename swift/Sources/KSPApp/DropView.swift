@@ -8,6 +8,7 @@ struct DropView: View {
     @Bindable var model: AppModel
     @State private var targeted = false
     @Environment(\.colorScheme) private var systemScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -386,7 +387,7 @@ struct DropView: View {
         case .staged(let staged):
             self.staged(staged)
         case .working(let filename):
-            ProgressView("Converting \(filename)…")
+            working(filename)
         case .reading(let slot):
             reading(slot)
         case .done(let outcome):
@@ -394,14 +395,17 @@ struct DropView: View {
         }
     }
 
+    /// The instrument at rest rather than a system dialog: the map is the app's own object, and
+    /// an empty one says what the window is for -- four tracks, sixteen slots, drop something in.
     private var idle: some View {
         VStack(spacing: 18) {
             Spacer(minLength: 0)
-            VStack(spacing: 8) {
-                Image(systemName: "arrow.down.doc")
-                    .font(.system(size: 44))
-                    .foregroundStyle(palette.mutedInk)
-                Text("Drop a MIDI file here").font(.title3)
+            VStack(spacing: 10) {
+                restingMap(playhead: nil)
+                    .overlay { prompt }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(
+                        "Drop a MIDI file here. Four tracks of sixteen pattern slots.")
                 Text(
                     "Drop a .KeyStepPro instead to get a MIDI file back. "
                         + "Where each one lands is on the right."
@@ -413,6 +417,65 @@ struct DropView: View {
             Spacer(minLength: 0)
             deviceCard
         }
+    }
+
+    /// On a plate rather than straight over the cells: the map is dim, but a line of type over
+    /// sixteen of anything is still type over a texture.
+    private var prompt: some View {
+        Text("Drop a MIDI file here")
+            .font(.title3)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(palette.ground))
+    }
+
+    /// The chase, which is the only thing in the app that moves. Its clock is the view's own, so
+    /// the conversion is never told the animation exists and cannot be made to wait on it; the
+    /// floor lives in ``Chase/holdOff``, before the first column rather than after the last.
+    @ViewBuilder
+    private func working(_ filename: String) -> some View {
+        if reduceMotion {
+            ProgressView("Converting \(filename)…")
+        } else {
+            Playhead { column in restingMap(playhead: column) }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Converting \(filename)…")
+        }
+    }
+
+    /// Idle and converting are one object: the empty map in the track colours, at an intensity
+    /// under anything a slot holding notes takes. `playhead` lights a column white, which is what
+    /// the device lights the step it is playing.
+    private func restingMap(playhead: Int?) -> some View {
+        VStack(alignment: .leading, spacing: AppLayout.cellSpacing) {
+            ForEach(1...AppLayout.rowCount, id: \.self) { track in
+                HStack(spacing: 0) {
+                    rowHead(
+                        readout: patternReadout(nil), name: "Track \(track)", isDrum: false,
+                        dimmed: true)
+                    Color.clear.frame(width: AppLayout.labelGap, height: 1)
+                    HStack(spacing: AppLayout.cellSpacing) {
+                        ForEach(0..<AppLayout.columnCount, id: \.self) { column in
+                            restingSlot(track: track, isPlayhead: column == playhead)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The rule around every cell is what draws the map while it holds nothing, and what keeps
+    /// the white step legible on the standard unit's off-white ground.
+    private func restingSlot(track: Int, isPlayhead: Bool) -> some View {
+        let hue = DeviceColor.track(track).over(
+            palette.ground, alpha: targeted ? Density.restingTargeted : Density.resting)
+        return RoundedRectangle(cornerRadius: AppLayout.cellRadius)
+            .fill(isPlayhead ? DeviceColor.now : hue)
+            .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
+            .overlay {
+                RoundedRectangle(cornerRadius: AppLayout.cellRadius)
+                    .strokeBorder(palette.rule, lineWidth: 1)
+            }
     }
 
     /// The other way a project reaches the app: off the device rather than out of a file. It sits
@@ -1371,6 +1434,19 @@ struct DropView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+    }
+}
+
+/// What runs the chase. The start is this view's own state, created when the working pane appears
+/// and gone when it leaves, so no clock outlives the conversion it belongs to.
+private struct Playhead<Content: View>: View {
+    @ViewBuilder let map: (Int?) -> Content
+    @State private var start = Date()
+
+    var body: some View {
+        TimelineView(.periodic(from: start, by: Chase.step)) { context in
+            map(Chase.column(after: context.date.timeIntervalSince(start)))
         }
     }
 }
