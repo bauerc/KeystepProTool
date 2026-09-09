@@ -22,7 +22,7 @@ ADDRESSED = 117783
 #: What each tape costs to read: MCC's 8,951, then the merged plan, then the merged plan
 #: with both gates applied. Project 2 carries fewer notes, and the data state settles whole
 #: patterns, so it gains the more of the two.
-EXPECTED_REQUESTS = {"recall_tape.txt": 2281, "recall_project_2_tape.txt": 2091}
+EXPECTED_REQUESTS = {"recall_tape.txt": 2169, "recall_project_2_tape.txt": 1979}
 
 Loader = Callable[[str], dict[str, int | str]]
 
@@ -331,3 +331,19 @@ def test_nothing_a_chunk_gate_settles_is_rolled_over() -> None:
     """
     assert not bulk_fast.ROLLED_OVER & bulk_fast.MELODIC_GATED
     assert bulk_fast.MELODIC_GATE not in bulk_fast.ROLLED_OVER
+
+
+def test_a_pattern_holding_no_data_is_not_asked_for_its_control_lanes(
+    fixtures_dir: Path, template_keys: list[str]
+) -> None:
+    """The control track carries the same data state as any other, and its five CC lanes hold a
+    value per step. No pattern of this tape holds data, so none of the lanes needs asking.
+    """
+    device = DeviceModel(tape_values(fixtures_dir / "recall_tape.txt"))
+    bulk_read.read_raw(device, template_keys, fast=True)
+
+    lanes = [
+        request for request in device.asked if request.item == 122 and len(request.indices) == 2
+    ]
+
+    assert lanes == []

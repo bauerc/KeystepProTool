@@ -43,6 +43,10 @@ PATTERN_GATED: Final = {
     121: 100,
 }
 
+#: The control track's five CC lanes and their two step arrays, and what each holds in a
+#: pattern the data state says is empty. 96 is the skip mask's "all four sequences".
+CONTROL_GATED: Final = {90: 0, 91: 0, 92: 0, 93: 0, 94: 0, 95: 0, 96: 15}
+
 #: Pool arrays no per-chunk gate settles, so walking across their chunks costs nothing.
 #: The melodic pool is absent deliberately: its existence array skips empty chunks
 #: outright, and a request coalesced across them would fetch what the gate had dropped.

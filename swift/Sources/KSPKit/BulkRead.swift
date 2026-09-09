@@ -128,8 +128,15 @@ public enum BulkRead {
     }
 
     /// The value a request would return, when an earlier reply already settles it.
-    /// Three rules: the pattern data state, then the two about the melodic pool (spec 3).
+    /// The pattern data state settles two families; the rest is the melodic pool (spec 3).
     private static func alreadyAnswered(_ request: ReadRequest, _ seen: [String: Int]) -> Int? {
+        guard request.count != nil else { return nil }
+        if request.item == Constants.itemControlTrack, request.indices.count == 2 {
+            guard let fill = BulkFast.controlGated[request.param],
+                patternHoldsData(request, seen) == false
+            else { return nil }
+            return fill
+        }
         guard let count = request.count, request.indices.count == 3 else { return nil }
         if patternHoldsData(request, seen) == false,
             let fill = BulkFast.patternFill(param: request.param, slot: request.indices[1])

@@ -28,10 +28,10 @@ import Testing
         let result = PullRunner.run(PullRunner.Options(output: written), attach: { device })
 
         // The gated walk's own figure for this tape, which `bulk_read_walk.txt` pins too.
-        #expect(device.asked.count == 2281)
+        #expect(device.asked.count == 2169)
         #expect(result.stdout.hasPrefix("read slot 1 in "))
         // The identity request is outside the count: 1,007 is the number spec 7.8 states.
-        #expect(result.stdout.contains(", 2281 requests\n"))
+        #expect(result.stdout.contains(", 2169 requests\n"))
         #expect(result.stdout.contains("\n  817 note(s), 132 BPM\n"))
         #expect(result.stdout.hasSuffix(" s of it at the device"))
     }
@@ -148,7 +148,7 @@ import Testing
         #expect(result.code == 0)
         #expect(FileManager.default.fileExists(atPath: written.path))
         #expect(FileManager.default.fileExists(atPath: midiBeside(written).path))
-        #expect(device.asked.count == 2281)
+        #expect(device.asked.count == 2169)
     }
 
     /// `--also-midi` composes the two commands; it does not export differently.

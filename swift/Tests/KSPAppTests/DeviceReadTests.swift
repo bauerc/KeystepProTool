@@ -50,7 +50,7 @@ private final class Revealed {
     private func read(_ written: [URL], slot: Int = 1) -> RunResult {
         RunResult(
             stdout: """
-                read slot \(slot) in 9.9 s, 2281 requests
+                read slot \(slot) in 9.9 s, 2169 requests
                 wrote \(written[0].relativePath)
                   817 note(s), 132 BPM
                   10.2 s total, 9.9 s of it at the device
@@ -161,7 +161,7 @@ private final class Revealed {
         }
         #expect(
             outcome.headline == """
-                read slot 1 in 9.9 s, 2281 requests
+                read slot 1 in 9.9 s, 2169 requests
                 817 note(s), 132 BPM
                 10.2 s total, 9.9 s of it at the device
                 """)
@@ -323,7 +323,7 @@ private final class Revealed {
         return { options in
             try? FileManager.default.copyItem(at: source, to: options.output)
             return RunResult(
-                stdout: "read slot 1 in 9.9 s, 2281 requests", destinations: [options.output])
+                stdout: "read slot 1 in 9.9 s, 2169 requests", destinations: [options.output])
         }
     }
 

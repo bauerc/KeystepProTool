@@ -48,13 +48,13 @@ private func templateKeys() throws -> [String] {
     }
 
     @Test func theGateSkipsTheAddressesPythonSkips() throws {
-        // Both cores asking 2,281 times is not both asking the same 2,281 times, and only the
+        // Both cores asking 2,169 times is not both asking the same 2,169 times, and only the
         // second is the port being right.
         let device = TapeDevice(try recallTape())
         _ = try BulkRead.readRaw(device, templateKeys: [String]())
         let expected = try pythonWalk()
 
-        #expect(device.asked.count == 2_281)
+        #expect(device.asked.count == 2_169)
         #expect(device.asked.count == expected.count)
         let mismatch = zip(device.asked, expected).enumerated().first {
             $0.element.0 != $0.element.1
