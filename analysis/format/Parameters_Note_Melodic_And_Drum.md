@@ -67,7 +67,7 @@ set the mode to match what it writes, and a reader should not assume only one se
 
 `117` holds the **drum lane**, 0-based — lane 0 is the kick, confirmed by `project_5`; lanes up
 to 19 appear in `initial_project`. Its value in an *empty* list is `60`, not `127`, and drum
-velocity `119` defaults to `100` rather than `127`. Neither is a note: existence is decided by
+velocity `119` defaults to `100` rather than `127`. Neither is a trigger: existence is decided by
 `54` alone, which is sentinel-filled as usual.
 
 **`51` is a step count per drum lane**, 0-based like the melodic `98`, with one entry for each

@@ -31,7 +31,7 @@ The flag that *can* is **`86` bit 6**, and two independent lines of evidence agr
   chord mode state, Arp/Drum mode state in a bitfield"`, `"comment": "Arp/Drum mode state :
   bit 6"`.
 - The data matches exactly. `123_86` is **66** (`0b1000010`, bit 6 set) in `project_5`,
-  `project_9` and `initial_project` — every sample holding drum notes — and **2** in both empty
+  `project_9` and `initial_project` — every sample holding triggers — and **2** in both empty
   baselines. Tracks 2–4 never set it.
 
 **Confirmed on hardware.** Capture `T3-track1-drum` switches Track 1 from sequencer to drum mode
@@ -64,8 +64,8 @@ rungs are measured and the remaining three follow from the range and the constan
 converter reporting ARP octave must state the offset it applied, since it cannot echo a screen.
 
 This resolves the ambiguity that made the reader report `PatternMode.BOTH`. **`initial_project`
-Track 1 pattern 1 holds both** a real 64-step melody and a real 12-note drum pattern; bit 6 is
-set, so the drums are live and the melody is leftovers. The reader still reports every note and
+Track 1 pattern 1 holds both** a real 64-step melody and a real 12-trigger drum pattern; bit 6 is
+set, so the drums are live and the melody is leftovers. The reader still reports every event and
 warns — it resolves the *mode*, it does not discard data.
 
 ### Resolved: `116` bit 2 is Mono/Poly, and so is `99` bit 2
