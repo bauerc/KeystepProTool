@@ -79,8 +79,8 @@ private func templateKeys() throws -> [String] {
         let pool = Set(
             try BulkFast.iterRequests().filter {
                 (117...121).contains($0.param) && $0.indices.count == 3
-                    && tape[Keys.key(123, BulkFast.dataState, indices: [$0.indices[0]])]
-                        == BulkFast.hasData
+                    && tape[Keys.key(123, Constants.pPatternDataState, indices: [$0.indices[0]])]
+                        == Constants.patternHasData
             })
 
         #expect(!pool.isEmpty)

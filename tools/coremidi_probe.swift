@@ -11,7 +11,6 @@ import Foundation
 let header: [UInt8] = [0xF0, 0x00, 0x20, 0x6B, 0x7F, 0x42]
 let end: UInt8 = 0xF7
 let ack: [UInt8] = header + [0x1C, 0x00, end]
-let ack1: [UInt8] = ack
 let identityRequest: [UInt8] = [0xF0, 0x7E, 0x7F, 0x06, 0x01, end]
 
 /// Where a three-index long reply's values start: header 6, command, slot, param, index count,
@@ -650,10 +649,10 @@ func pipelineProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throw
     // A short scalar read (`01`) beside the long one (`0b`): a different command, same question.
     try burst(
         listener, to: target, named: name, label: "scalar x1 ",
-        requests: [header + [0x01, slot, 37, 120, end]], pace: 0, rounds: rounds, wait: wait)
+        requests: [scalarRequest(slot: slot)], pace: 0, rounds: rounds, wait: wait)
     try burst(
         listener, to: target, named: name, label: "scalar x2 ",
-        requests: [header + [0x01, slot, 37, 120, end], header + [0x01, slot, 38, 120, end]],
+        requests: [scalarRequest(slot: slot), header + [0x01, slot, 38, 120, end]],
         pace: 0, rounds: rounds, wait: wait)
 }
 
@@ -845,37 +844,37 @@ func handshakeProbe(needle: String, slot: UInt8, wait: Double) throws {
 
     /// Sends one frame and reports what came back, without assuming either arrives.
     func probe(_ frame: [UInt8], settle: Double = 0.06) throws -> (
-        reply: [UInt8]?, ack: Bool, extra: Int
+        reply: [UInt8]?, acked: Bool, extra: Int
     ) {
         listener.collector.drain()
         try listener.send(frame, to: target)
         var reply: [UInt8]?
-        var ack = false
+        var acked = false
         var extra = 0
         let deadline = Date().addingTimeInterval(settle)
         while let got = listener.collector.next(
             within: max(0, deadline.timeIntervalSinceNow))
         {
             guard got.endpoint == name else { continue }
-            if got.bytes == ack1 {
-                ack = true
+            if got.bytes == ack {
+                acked = true
             } else if reply == nil {
                 reply = got.bytes
             } else {
                 extra += 1
             }
         }
-        return (reply, ack, extra)
+        return (reply, acked, extra)
     }
 
-    func sign(_ result: (reply: [UInt8]?, ack: Bool, extra: Int)) -> String {
+    func sign(_ result: (reply: [UInt8]?, acked: Bool, extra: Int)) -> String {
         let body = result.reply.map { "reply \($0.count)b" } ?? "SILENT"
-        return "\(body), \(result.ack ? "acked" : "NO ACK")"
+        return "\(body), \(result.acked ? "acked" : "NO ACK")"
             + (result.extra > 0 ? ", +\(result.extra) more" : "")
     }
 
-    let read = header + [0x0B, slot, 109, 0x03, 124, 1, 1, 1, 16, end]
-    let scalar = header + [0x01, slot, 37, 120, end]
+    let read = coalescedRequest(slot: slot, count: 16)
+    let scalar = scalarRequest(slot: slot)
 
     print("  1. is the prologue what puts the read in per-frame-ack mode?")
     // Nothing selected yet this session: does a read answer at all, and does it ack?
@@ -892,7 +891,7 @@ func handshakeProbe(needle: String, slot: UInt8, wait: Double) throws {
         _ = try probe(header + [0x05, slot, mode, end], settle: 0.03)
         let after = try probe(read)
         let value = after.reply?.dropFirst(15).first
-        if after.ack != baseline.ack || (after.reply == nil) != (baseline.reply == nil) {
+        if after.acked != baseline.acked || (after.reply == nil) != (baseline.reply == nil) {
             oddities.append("mode \(mode): \(sign(after))")
         } else if value != baselineValue {
             oddities.append("mode \(mode): data changed, \(hex([value ?? 0]))")
@@ -931,7 +930,7 @@ func handshakeProbe(needle: String, slot: UInt8, wait: Double) throws {
     var back = 0
     let deadline = Date().addingTimeInterval(0.3)
     while let got = listener.collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
-        if got.endpoint == name, got.bytes != ack1, window.contains(where: { answers(got.bytes, $0) })
+        if got.endpoint == name, got.bytes != ack, window.contains(where: { answers(got.bytes, $0) })
         {
             back += 1
         }
@@ -955,7 +954,7 @@ func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
     _ = listener.listen(seconds: 0.2)
 
     func probe(_ frame: [UInt8], settle: Double = 0.03) throws -> (
-        reply: [UInt8]?, ack: Bool
+        reply: [UInt8]?, acked: Bool
     ) {
         listener.collector.drain()
         try listener.send(frame, to: target)
@@ -964,7 +963,7 @@ func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
         let deadline = Date().addingTimeInterval(settle)
         while let got = listener.collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
             guard got.endpoint == name else { continue }
-            if got.bytes == ack1 { acked = true } else if reply == nil { reply = got.bytes }
+            if got.bytes == ack { acked = true } else if reply == nil { reply = got.bytes }
         }
         return (reply, acked)
     }
@@ -974,9 +973,9 @@ func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
     var silent: [Int] = []
     var values: [UInt8: Int] = [:]
     for byte in UInt8(0)...127 {
-        let result = try probe(header + [0x0B, byte, 109, 0x03, 124, 1, 1, 1, 16, end])
+        let result = try probe(coalescedRequest(slot: byte, count: 16))
         if result.reply == nil { silent.append(Int(byte)) }
-        if !result.ack { unacked.append(Int(byte)) }
+        if !result.acked { unacked.append(Int(byte)) }
         if let first = result.reply?.dropFirst(15).first { values[first, default: 0] += 1 }
     }
     print("     silent: \(silent.count)   unacked: \(unacked.count)   "
@@ -985,14 +984,14 @@ func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
 
     print("  2. count byte edges -- 0, the 100 ceiling, and past it")
     for count in [0, 1, 100, 101, 127] as [UInt8] {
-        let request = header + [0x0B, slot, 109, 0x03, 124, 1, 1, 1, count, end]
+        let request = coalescedRequest(slot: slot, count: count)
         let result = try probe(request)
         // A reply echoes the request byte for byte and appends its values, so the values it
         // carried is the difference -- not a fixed offset, which differs by request form.
         let carried = result.reply.map { $0.count - request.count } ?? -1
         print("     count \(String(format: "%3d", Int(count))): "
             + "\(result.reply == nil ? "SILENT" : "\(carried) values back"), "
-            + "\(result.ack ? "acked" : "NO ACK")")
+            + "\(result.acked ? "acked" : "NO ACK")")
     }
 
     // A scalar read answers for every item and every param, so silence cannot be used to find
@@ -1041,7 +1040,7 @@ func loneProbe(needle: String, slot: UInt8, item: UInt8, param: UInt8, span: Int
         var reply: [UInt8]?
         let deadline = Date().addingTimeInterval(0.08)
         while let got = listener.collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
-            guard got.endpoint == name, got.bytes != ack1 else { continue }
+            guard got.endpoint == name, got.bytes != ack else { continue }
             if reply == nil, answers(got.bytes, request) { reply = got.bytes }
         }
         return reply
@@ -1103,7 +1102,7 @@ func rolloverProbe(needle: String, slot: UInt8, item: UInt8, mid: UInt8, wait: D
         var out: [UInt8] = []
         let deadline = Date().addingTimeInterval(0.2)
         while let got = listener.collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
-            guard got.endpoint == name, got.bytes != ack1, answers(got.bytes, request) else {
+            guard got.endpoint == name, got.bytes != ack, answers(got.bytes, request) else {
                 continue
             }
             out = Array(got.bytes.dropFirst(request.count - 1).dropLast())

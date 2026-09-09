@@ -87,26 +87,27 @@ def _pool_gate(request: ReadRequest, pool_slot: int) -> list[str]:
     ]
 
 
-def _pattern_holds_data(request: ReadRequest, seen: dict[str, int]) -> bool | None:
-    """Parameter 40 for the pattern this request belongs to, or ``None`` if unread.
+def _pattern_settles_empty(request: ReadRequest, seen: dict[str, int]) -> bool:
+    """Whether parameter 40 has been read for this pattern and says it holds no note.
     Unread settles nothing: the walk asks rather than guess at what it has not seen."""
-    flag = seen.get(key(request.item, bulk_fast.DATA_STATE, request.indices[0]))
-    return None if flag is None else flag == bulk_fast.HAS_DATA
+    flag = seen.get(key(request.item, constants.P_PATTERN_DATA_STATE, request.indices[0]))
+    return flag is not None and flag != constants.PATTERN_HAS_DATA
 
 
 def _already_answered(request: ReadRequest, seen: dict[str, int]) -> int | None:
     """The value a request would return, when an earlier reply already settles it.
-    The pattern data state settles two families; the rest is the melodic pool (spec 3)."""
+    The pattern data state settles a pooled param outright; the rest is the melodic pool
+    (spec 3)."""
     if request.count is None:
         return None
-    if request.item == constants.ITEM_CONTROL_TRACK and len(request.indices) == 2:
-        if request.param in bulk_fast.CONTROL_GATED and _pattern_holds_data(request, seen) is False:
-            return bulk_fast.CONTROL_GATED[request.param]
-        return None
+    if (
+        len(request.indices) > 1
+        and request.param in bulk_fast.DATA_STATE_FILL
+        and _pattern_settles_empty(request, seen)
+    ):
+        return bulk_fast.DATA_STATE_FILL[request.param]
     if len(request.indices) != 3:
         return None
-    if request.param in bulk_fast.PATTERN_GATED and _pattern_holds_data(request, seen) is False:
-        return bulk_fast.pattern_fill(request.param, request.indices[1])
     if request.param in bulk_fast.MELODIC_GATED:
         gate = _pool_gate(request, request.indices[1])
         return bulk_fast.EMPTY if all(seen.get(n) == bulk_fast.EMPTY for n in gate) else None
