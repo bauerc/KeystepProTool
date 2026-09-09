@@ -234,6 +234,14 @@ Four rows of steps in the four track colours on the black band — a miniature o
 pattern map and of the panel. Green-orange-yellow-red stays distinctive when the shapes blur at
 16pt.
 
+The rows run **four, two, three and two steps** — the device's own 64 / 32 / 48 / 32 pattern
+lengths, so the icon carries the same thing the arrange lanes do: four tracks looping at lengths
+of their own. No row is ever shorter than two steps, or its hue drops out of the sequence at
+16pt, and below 64px a row's steps are drawn merged, where a 4px cell would close its own gaps.
+
+Drawn by `tools/make_app_icon.py` and packed by `iconutil` from `scripts/bundle_app.sh`. The
+hues it reads are this document's, and `tests/test_app_icon.py` holds it to them.
+
 Do not depict the instrument itself: an off-white chassis with Arturia's coloured zones is a
 picture of someone else's product (ADR 0002).
 

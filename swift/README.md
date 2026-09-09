@@ -314,6 +314,11 @@ wrapping and the ad-hoc signing. `xcodebuild`, `actool` and `ibtool` are the onl
 from a CLT install, and a hand-assembled bundle needs none of them. `bundle_app.sh` is deliberately
 **not** in `validate.sh`, which compiles the target through `KSPAppTests` instead.
 
+`actool` being missing is also why the icon is drawn rather than compiled from an `.xcassets`
+catalog: `tools/make_app_icon.py` renders the ladder and `iconutil` packs it, from
+`bundle_app.sh`. Nothing binary is checked in, and `tests/test_app_icon.py` holds the drawing to
+the four track hues at every size on the ladder.
+
 `RunResult` carries the run twice over. `stdout`/`stderr`/`code` are the terminal's view, rendered
 inside `KSPRun` so the CLI stays a shell — `emit(_:)` in `KSPSwiftCLI` is the only place they reach
 a stream — and so the parity scripts keep comparing text this module produced. `diagnostics` (a
