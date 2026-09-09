@@ -50,6 +50,11 @@ if [[ ${#bundles[@]} -eq 0 ]]; then
 fi
 cp -R "${bundles[@]}" "$contents/Resources/"
 
+# Drawn rather than checked in: the generator is stdlib-only, and the four hues it reads are the
+# ones DesignTokens.swift paints the pattern map with.
+echo "==> Drawing the icon"
+python3 "$root/tools/make_app_icon.py" "$contents/Resources/AppIcon.icns"
+
 cat > "$contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -58,6 +63,7 @@ cat > "$contents/Info.plist" << PLIST
     <key>CFBundleName</key><string>$app_name</string>
     <key>CFBundleDisplayName</key><string>$app_name</string>
     <key>CFBundleExecutable</key><string>$exe_name</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleIdentifier</key><string>com.github.bauerc.keysteppro-plus</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
