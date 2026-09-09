@@ -82,8 +82,7 @@ def test_the_walk_asks_for_a_hundred_values_at_a_time(
     assert max(counts) == 100
     # The gated walk's own figure for this tape, which test_bulk_fast pins too.
     assert len(attached.slots[1].asked) == 2169
-    # And the summary reports the walk, not the walk plus the identity request:
-    # 2,375 is the number spec 7.8 states and an operator compares a run against.
+    # And the summary reports the walk, not the walk plus the identity request.
     assert "2169 requests" in capsys.readouterr().out
 
 

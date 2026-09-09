@@ -34,7 +34,7 @@ public enum BulkRead {
         guard let last = request.indices.last else {
             throw KSPError.value("\(request) is a long read with no index to walk")
         }
-        if BulkFast.rollsOver(request) {
+        if BulkFast.rolled(request) {
             let (outer, start) = (request.indices[0], BulkFast.flat(request.indices))
             return (0..<count).map {
                 Keys.key(request.item, request.param, indices: BulkFast.unflat(outer, start + $0))
@@ -128,21 +128,13 @@ public enum BulkRead {
     }
 
     /// The value a request would return, when an earlier reply already settles it.
-    /// The pattern data state settles two families; the rest is the melodic pool (spec 3).
+    /// The pattern data state settles one table; the rest is the melodic pool (spec 3).
     private static func alreadyAnswered(_ request: ReadRequest, _ seen: [String: Int]) -> Int? {
-        guard request.count != nil else { return nil }
-        if request.item == Constants.itemControlTrack, request.indices.count == 2 {
-            guard let fill = BulkFast.controlGated[request.param],
-                patternHoldsData(request, seen) == false
-            else { return nil }
+        guard let count = request.count else { return nil }
+        if let fill = BulkFast.dataStateFill(request), patternHoldsData(request, seen) == false {
             return fill
         }
-        guard let count = request.count, request.indices.count == 3 else { return nil }
-        if patternHoldsData(request, seen) == false,
-            let fill = BulkFast.patternFill(param: request.param, slot: request.indices[1])
-        {
-            return fill
-        }
+        guard request.indices.count == 3 else { return nil }
         if BulkFast.melodicGated.contains(request.param) {
             let gate = poolGate(request, request.indices[1], count: count)
             return gate.allSatisfy { seen[$0] == BulkFast.empty } ? BulkFast.empty : nil

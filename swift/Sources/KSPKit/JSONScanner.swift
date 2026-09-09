@@ -7,9 +7,8 @@ extension UInt8 {
     }
 }
 
-/// MCC's dialect scanned by hand rather than through `JSONDecoder`, which cost 88 % of a read
-/// (Read_Cost.md §4). Indexes a raw pointer: in the debug builds the parity scripts run, a
-/// bounds-checked subscript costs more than the scan does.
+/// MCC's dialect, scanned by hand. Indexes a raw pointer: in the debug builds the parity
+/// scripts run, a bounds-checked subscript costs more than the scan does.
 struct JSONScanner {
     enum Failure: Error {
         case notAnObject(String)
@@ -32,7 +31,7 @@ struct JSONScanner {
         skipWhitespace()
         guard index < count else { throw Failure.malformed("the document is empty", at: index) }
         guard bytes[index] == UInt8(ascii: "{") else {
-            throw Failure.notAnObject(try value().typeName)
+            throw Failure.notAnObject(topLevelTypeName())
         }
         index += 1
 
@@ -248,10 +247,10 @@ struct JSONScanner {
 
         var value: UInt32 = 0
         for byte in span[offset..<(offset + 4)] {
-            guard let digit = Character(Unicode.Scalar(byte)).hexDigitValue else {
+            guard let digit = hexValue(byte) else {
                 throw Failure.malformed("a \\u escape without four hex digits", at: start + offset)
             }
-            value = value << 4 | UInt32(digit)
+            value = value << 4 | digit
         }
         return value
     }
@@ -272,7 +271,7 @@ struct JSONScanner {
                     return
                 }
             case UInt8(ascii: "\""):
-                _ = try string()
+                try skipString()
                 continue
             default:
                 break
@@ -282,6 +281,43 @@ struct JSONScanner {
         throw Failure.malformed("the nested value is never closed", at: start)
     }
 
+    /// The name Python gives whatever the document holds instead of an object, read off its
+    /// first byte -- the value itself is never parsed, because it is already being rejected.
+    private func topLevelTypeName() -> String {
+        switch bytes[index] {
+        case UInt8(ascii: "["): "list"
+        case UInt8(ascii: "\""): "str"
+        case UInt8(ascii: "t"), UInt8(ascii: "f"): "bool"
+        case UInt8(ascii: "n"): "NoneType"
+        case UInt8(ascii: "-"), UInt8(ascii: "0")...UInt8(ascii: "9"):
+            UnsafeBufferPointer(start: bytes + index, count: count - index)
+                .contains(where: { $0 == UInt8(ascii: ".") }) ? "float" : "int"
+        default: "unknown"
+        }
+    }
+
+    /// `string()` without the value: the scan past a nested string it will never look at.
+    private mutating func skipString() throws {
+        let start = index
+        index += 1
+        while index < count {
+            switch bytes[index] {
+            case UInt8(ascii: "\""):
+                index += 1
+                return
+            case UInt8(ascii: "\\"):
+                index += 1
+                guard index < count else {
+                    throw Failure.malformed("the escape is not finished", at: index)
+                }
+            default:
+                break
+            }
+            index += 1
+        }
+        throw Failure.malformed("the string is never closed", at: start)
+    }
+
     private mutating func expect(_ word: String) throws {
         let start = index
         for byte in word.utf8 {
@@ -289,6 +325,15 @@ struct JSONScanner {
                 throw Failure.malformed("expected \(word)", at: start)
             }
             index += 1
+        }
+    }
+
+    private func hexValue(_ byte: UInt8) -> UInt32? {
+        switch byte {
+        case UInt8(ascii: "0")...UInt8(ascii: "9"): UInt32(byte - UInt8(ascii: "0"))
+        case UInt8(ascii: "a")...UInt8(ascii: "f"): UInt32(byte - UInt8(ascii: "a") + 10)
+        case UInt8(ascii: "A")...UInt8(ascii: "F"): UInt32(byte - UInt8(ascii: "A") + 10)
+        default: nil
         }
     }
 

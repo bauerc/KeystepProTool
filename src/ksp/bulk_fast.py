@@ -16,7 +16,6 @@ EMPTY: Final = 127
 #: each is the same note ordinal, so an all-EMPTY chunk of 50 settles all of them.
 MELODIC_GATE: Final = 50
 MELODIC_GATED: Final = frozenset({109, 110, 111, 112, 113})
-
 #: The drum pair (54 gating 117-121) is deliberately absent: the drum array is a
 #: pool with holes, so a dead entry keeps whatever was there and cannot be derived.
 
@@ -25,66 +24,69 @@ MELODIC_GATED: Final = frozenset({109, 110, 111, 112, 113})
 DATA_STATE: Final = 40
 HAS_DATA: Final = 3
 
-#: Note-indexed pool arrays an unflagged pattern settles, and the row each holds there.
-#: The step-indexed and per-pattern scalars are absent: those are settings, editable
-#: on a pattern that holds no note at all.
-PATTERN_GATED: Final = {
-    50: EMPTY,
-    54: EMPTY,
-    109: EMPTY,
-    110: EMPTY,
-    111: EMPTY,
-    112: EMPTY,
-    113: EMPTY,
-    117: 60,
-    118: 7,
-    119: 100,
-    120: 49,
-    121: 100,
-}
+#: Each gate reads before what it settles: the data state settles whole patterns, so it
+#: comes before the existence array, which settles pool chunks. Everything else follows.
+GATE_RANK: Final = {DATA_STATE: 0, MELODIC_GATE: 1}
 
-#: The control track's five CC lanes and their two step arrays, and what each holds in a
-#: pattern the data state says is empty. 96 is the skip mask's "all four sequences".
-CONTROL_GATED: Final = {90: 0, 91: 0, 92: 0, 93: 0, 94: 0, 95: 0, 96: 15}
+#: What each address holds in a pattern the data state says is empty, keyed by parameter
+#: and how many indices it takes -- the arity is what separates the control track's step
+#: arrays from the note pools, and no parameter settles at two arities. The per-pattern
+#: scalars are absent: those are settings, editable on a pattern that holds no note at all.
+#: 96 is the skip mask's "all four sequences".
+DATA_STATE_GATED: Final = {
+    (90, 2): 0,
+    (91, 2): 0,
+    (92, 2): 0,
+    (93, 2): 0,
+    (94, 2): 0,
+    (95, 2): 0,
+    (96, 2): 15,
+    (50, 3): EMPTY,
+    (54, 3): EMPTY,
+    (109, 3): EMPTY,
+    (110, 3): EMPTY,
+    (111, 3): EMPTY,
+    (112, 3): EMPTY,
+    (113, 3): EMPTY,
+    (117, 3): 60,
+    (118, 3): 7,
+    (119, 3): 100,
+    (120, 3): 49,
+    (121, 3): 100,
+}
 
 #: Pool arrays no per-chunk gate settles, so walking across their chunks costs nothing.
 #: The melodic pool is absent deliberately: its existence array skips empty chunks
 #: outright, and a request coalesced across them would fetch what the gate had dropped.
+#: A walk passing a chunk rolls into the next one, and stops at the outer index (spec 7.8).
 ROLLED_OVER: Final = frozenset({53, 54, 117, 118, 119, 120, 121})
 
-#: Entries per middle index in a pool. A walk passing this rolls into the next chunk,
-#: and stops at the outer index (spec 7.8).
-POOL_CHUNK: Final = constants.MAX_STEPS
+
+def rolled(request: ReadRequest) -> bool:
+    """Whether this request addresses a pool the device walks across its chunks."""
+    return request.param in ROLLED_OVER and len(request.indices) == 3
 
 
 def flat(indices: tuple[int, ...]) -> int:
     """A pool address as one 1-based position across the chunks of its outer index."""
     _, middle, last = indices
-    return (middle - 1) * POOL_CHUNK + last
+    return (middle - 1) * constants.MAX_STEPS + last
 
 
 def unflat(outer: int, position: int) -> tuple[int, int, int]:
     """The inverse of ``flat``: a position back to ``(outer, middle, last)``."""
-    middle, last = divmod(position - 1, POOL_CHUNK)
+    middle, last = divmod(position - 1, constants.MAX_STEPS)
     return outer, middle + 1, last + 1
 
 
-def rolls_over(request: ReadRequest) -> bool:
-    """Whether this request's walk carries past the end of its own chunk."""
-    return (
-        request.count is not None
-        and len(request.indices) == 3
-        and request.indices[-1] + request.count - 1 > POOL_CHUNK
-    )
-
-
-#: Track 1's phantom fourth chunk is zero-filled where the live chunks hold the default (spec 4).
-PHANTOM_FILL: Final = 0
-
-
-def pattern_fill(param: int, slot: int) -> int:
-    """What a pooled parameter holds in a pattern parameter 40 says is empty."""
-    return PHANTOM_FILL if slot > constants.POOL_SLOTS else PATTERN_GATED[param]
+def data_state_fill(request: ReadRequest) -> int | None:
+    """What this address holds in a pattern parameter 40 says is empty, or ``None``
+    where parameter 40 settles nothing for it."""
+    fill = DATA_STATE_GATED.get((request.param, len(request.indices)))
+    if fill is None or len(request.indices) != 3:
+        return fill
+    # Track 1's phantom fourth chunk is zero-filled where the live chunks hold the default (spec 4).
+    return 0 if request.indices[1] > constants.POOL_SLOTS else fill
 
 
 #: Requests this plan expands to, against bulk_plan's 8,951.
@@ -138,11 +140,7 @@ def _coalesce(requests: Iterable[ReadRequest], max_count: int) -> Iterator[ReadR
             order.append([request])
             continue
         # A rolled-over param keys on the outer index alone, so its chunks join one run.
-        head = (
-            request.indices[:1]
-            if request.param in ROLLED_OVER and len(request.indices) == 3
-            else request.indices[:-1]
-        )
+        head = request.indices[:1] if rolled(request) else request.indices[:-1]
         run_key = (request.item, request.param, head)
         run = runs.get(run_key)
         if run is None:
@@ -155,12 +153,9 @@ def _coalesce(requests: Iterable[ReadRequest], max_count: int) -> Iterator[ReadR
 
 
 def _gate_first(order: list[list[ReadRequest]]) -> Iterator[list[ReadRequest]]:
-    """Each gate ahead of what it settles, order otherwise kept: the data state settles whole
-    patterns, so it comes before the existence array, which settles pool chunks."""
-    ranked = {DATA_STATE: 0, MELODIC_GATE: 1}
-    for rank in (0, 1):
-        yield from (run for run in order if ranked.get(run[0].param) == rank)
-    yield from (run for run in order if run[0].param not in ranked)
+    """Each gate ahead of what it settles, order otherwise kept -- a stable sort, so the
+    runs sharing a rank keep the order MCC asked in."""
+    yield from sorted(order, key=lambda run: GATE_RANK.get(run[0].param, len(GATE_RANK)))
 
 
 def _join(run: list[ReadRequest], max_count: int) -> Iterator[ReadRequest]:
@@ -175,53 +170,35 @@ def _join(run: list[ReadRequest], max_count: int) -> Iterator[ReadRequest]:
         yield from sorted(run, key=lambda request: request.indices[-1])
         return
 
-    if first.param in ROLLED_OVER and len(first.indices) == 3:
-        yield from _join_rolled(run, max_count)
-        return
+    # A rolled-over pool counts across its chunks; every other run walks its last index.
+    # Both are constant across a run, which is what the run key was built from.
+    is_rolled = rolled(first)
+    outer, head = first.indices[0], first.indices[:-1]
+
+    def position(indices: tuple[int, ...]) -> int:
+        return flat(indices) if is_rolled else indices[-1]
+
+    def rebuild(at: int) -> tuple[int, ...]:
+        return unflat(outer, at) if is_rolled else (*head, at)
 
     # By index, not by the order MCC asked in: it reads 121_83's fifth scene
     # ahead of the other four, and a run is a range whatever order it arrived.
-    ordered = sorted(run, key=lambda request: request.indices[-1])
-    start = ordered[0].indices[-1]
+    ordered = sorted(run, key=lambda request: position(request.indices))
+    start = position(ordered[0].indices)
     total = 0
     for request in ordered:
         assert request.count is not None
-        if request.indices[-1] != start + total:
+        if position(request.indices) != start + total:
             raise ValueError(
-                f"{first.item}_{first.param} run breaks at index {request.indices[-1]}, "
-                f"expected {start + total}"
+                f"{first.item}_{first.param} run breaks at position "
+                f"{position(request.indices)}, expected {start + total}"
             )
         total += request.count
 
-    head = ordered[0].indices[:-1]
     for offset in range(0, total, max_count):
         yield ReadRequest(
             item=first.item,
             param=first.param,
-            indices=(*head, start + offset),
-            count=min(max_count, total - offset),
-        )
-
-
-def _join_rolled(run: list[ReadRequest], max_count: int) -> Iterator[ReadRequest]:
-    """Join a run whose chunks the device walks through, flattening the middle index."""
-    ordered = sorted(run, key=lambda request: flat(request.indices))
-    outer = ordered[0].indices[0]
-    start = flat(ordered[0].indices)
-    total = 0
-    for request in ordered:
-        assert request.count is not None
-        if flat(request.indices) != start + total:
-            raise ValueError(
-                f"{request.item}_{request.param} run breaks at {request.indices}, "
-                f"expected position {start + total}"
-            )
-        total += request.count
-
-    for offset in range(0, total, max_count):
-        yield ReadRequest(
-            item=ordered[0].item,
-            param=ordered[0].param,
-            indices=unflat(outer, start + offset),
+            indices=rebuild(start + offset),
             count=min(max_count, total - offset),
         )

@@ -33,8 +33,18 @@ def tape_name(request: pytest.FixtureRequest) -> str:
 
 
 @pytest.fixture
-def device(tape_name: str, fixtures_dir: Path) -> DeviceModel:
-    return DeviceModel(tape_values(fixtures_dir / tape_name))
+def tape(tape_name: str, fixtures_dir: Path) -> dict[str, int]:
+    return tape_values(fixtures_dir / tape_name)
+
+
+@pytest.fixture
+def device(tape: dict[str, int]) -> DeviceModel:
+    return DeviceModel(tape)
+
+
+@pytest.fixture
+def recall_device(fixtures_dir: Path) -> DeviceModel:
+    return DeviceModel(tape_values(fixtures_dir / "recall_tape.txt"))
 
 
 @pytest.fixture
@@ -128,13 +138,12 @@ def test_the_fast_read_reconstructs_what_mcc_reads(
 
 
 def test_the_replayed_project_still_matches_its_file(
-    fixtures_dir: Path, project_files_dir: Path, template_keys: list[str]
+    recall_device: DeviceModel, project_files_dir: Path, template_keys: list[str]
 ) -> None:
     """Tape 1 is MCC recalling initial_project, so the fast walk owes the file itself -- not merely
     agreement with the other walk.
     """
-    device = DeviceModel(tape_values(fixtures_dir / "recall_tape.txt"))
-    replayed = bulk_read.read_raw(device, template_keys, fast=True)
+    replayed = bulk_read.read_raw(recall_device, template_keys, fast=True)
 
     assert replayed == lenient_json.load_path(project_files_dir / "initial_project.KeyStepPro")
 
@@ -149,20 +158,19 @@ def test_the_gate_saves_the_requests_it_claims(
 
 
 def test_the_drum_pool_is_never_derived_in_a_pattern_that_holds_data(
-    device: DeviceModel, tape_name: str, fixtures_dir: Path, template_keys: list[str]
+    device: DeviceModel, tape: dict[str, int], template_keys: list[str]
 ) -> None:
     """A dead drum entry reads 127 in some patterns and the default row in others, so no
     existence array derives it. Parameter 40 is the one thing that settles one, and only where
     the pattern holds no note at all -- so every pattern that holds data is still asked in full.
     """
-    values = tape_values(fixtures_dir / tape_name)
     bulk_read.read_raw(device, template_keys, fast=True)
     drum_pool = {
         request
         for request in bulk_fast.iter_requests()
         if request.param in range(117, 122)
         and len(request.indices) == 3
-        and values[key(123, bulk_fast.DATA_STATE, request.indices[0])] == bulk_fast.HAS_DATA
+        and tape[key(123, bulk_fast.DATA_STATE, request.indices[0])] == bulk_fast.HAS_DATA
     }
 
     assert drum_pool
@@ -259,22 +267,19 @@ def test_the_slot_reaches_every_frame(device: DeviceModel, template_keys: list[s
 
 
 def test_a_pattern_holding_no_data_is_not_asked_for_its_note_pool(
-    fixtures_dir: Path, template_keys: list[str]
+    recall_device: DeviceModel, template_keys: list[str]
 ) -> None:
     """Parameter 40 is the firmware's own "this pattern holds notes" flag. Track 4 holds none in
     any pattern of this tape, so every pooled note parameter in it is the empty row already.
     """
-    device = DeviceModel(tape_values(fixtures_dir / "recall_tape.txt"))
-    bulk_read.read_raw(device, template_keys, fast=True)
+    bulk_read.read_raw(recall_device, template_keys, fast=True)
 
-    pooled = {50, 54, 109, 110, 111, 112, 113, 117, 118, 119, 120, 121}
     asked = {
         request.indices[0]
-        for request in device.asked
+        for request in recall_device.asked
         if request.count is not None
-        and len(request.indices) == 3
         and request.item == 126
-        and request.param in pooled
+        and (request.param, len(request.indices)) in bulk_fast.DATA_STATE_GATED
     }
 
     assert asked == set()
@@ -290,7 +295,7 @@ def test_the_data_state_is_read_before_the_pool_it_settles() -> None:
             continue
         if request.param == bulk_fast.DATA_STATE and len(request.indices) == 1:
             seen_state.add((request.item, request.indices[0]))
-        elif request.param in bulk_fast.PATTERN_GATED and len(request.indices) == 3:
+        elif (request.param, len(request.indices)) in bulk_fast.DATA_STATE_GATED:
             assert (request.item, request.indices[0]) in seen_state
 
 
@@ -334,16 +339,17 @@ def test_nothing_a_chunk_gate_settles_is_rolled_over() -> None:
 
 
 def test_a_pattern_holding_no_data_is_not_asked_for_its_control_lanes(
-    fixtures_dir: Path, template_keys: list[str]
+    recall_device: DeviceModel, template_keys: list[str]
 ) -> None:
     """The control track carries the same data state as any other, and its five CC lanes hold a
     value per step. No pattern of this tape holds data, so none of the lanes needs asking.
     """
-    device = DeviceModel(tape_values(fixtures_dir / "recall_tape.txt"))
-    bulk_read.read_raw(device, template_keys, fast=True)
+    bulk_read.read_raw(recall_device, template_keys, fast=True)
 
     lanes = [
-        request for request in device.asked if request.item == 122 and len(request.indices) == 2
+        request
+        for request in recall_device.asked
+        if request.item == 122 and len(request.indices) == 2
     ]
 
     assert lanes == []

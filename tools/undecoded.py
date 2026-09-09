@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any
 
 from ksp.bulk_fast import iter_requests
+from ksp.bulk_read import keys_for
 from ksp.lenient_json import load_path, strip_trailing_commas
 from ksp.reader import read_project
-from ksp.sysex import ReadRequest
 
 #: Arturia's own parameter names, for the report. Absent on a machine without MCC.
 VENDOR = Path("/Library/Arturia/MIDI Control Center/Resources/KeyStepPro.json")
@@ -54,16 +54,6 @@ class Tracking(dict[str, Any]):
         return super().items()
 
 
-def addresses(request: ReadRequest) -> list[str]:
-    """The keys one request fills, walking its last index by ``count``."""
-    base = f"{request.item}_{request.param}"
-    if request.count is None:
-        return [base]
-    lead = "".join(f"_{index}" for index in request.indices[:-1])
-    last = request.indices[-1]
-    return [f"{base}{lead}_{last + step}" for step in range(request.count)]
-
-
 def vendor_names() -> dict[int, str]:
     if not VENDOR.exists():
         return {}
@@ -101,15 +91,15 @@ def main(paths: list[str]) -> int:
         )
 
     names = vendor_names()
-    everused = {
-        (int(key.split("_")[0]), int(key.split("_")[1]))
-        for key in touched
-        if key[:1].isdigit() and "_" in key
-    }
+    everused: set[tuple[int, int]] = set()
+    for name in touched:
+        fields = name.split("_", 2)
+        if len(fields) > 1 and fields[0].isdigit() and fields[1].isdigit():
+            everused.add((int(fields[0]), int(fields[1])))
     structural: dict[tuple[int, int], list[int]] = defaultdict(lambda: [0, 0])
     content: dict[tuple[int, int], list[int]] = defaultdict(lambda: [0, 0])
     for request in iter_requests():
-        keys = addresses(request)
+        keys = keys_for(request)
         if any(key in touched for key in keys):
             continue
         family = (request.item, request.param)

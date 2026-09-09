@@ -11,7 +11,6 @@ import Foundation
 let header: [UInt8] = [0xF0, 0x00, 0x20, 0x6B, 0x7F, 0x42]
 let end: UInt8 = 0xF7
 let ack: [UInt8] = header + [0x1C, 0x00, end]
-let ack1: [UInt8] = ack
 let identityRequest: [UInt8] = [0xF0, 0x7E, 0x7F, 0x06, 0x01, end]
 
 /// Where a three-index long reply's values start: header 6, command, slot, param, index count,
@@ -28,6 +27,11 @@ func scalarRequest(slot: UInt8) -> [UInt8] {
 /// `count` values, so it is the frame that says whether a long read survives the driver.
 func coalescedRequest(slot: UInt8, count: UInt8) -> [UInt8] {
     header + [0x0B, slot, 109, 0x03, 124, 1, 1, 1, count, end]
+}
+
+/// One item, `window` consecutive third indices -- what a coalesced walk actually issues.
+func steps(_ window: Int, slot: UInt8, item: UInt8 = 124) -> [[UInt8]] {
+    (0..<window).map { header + [0x0B, slot, 109, 0x03, item, 1, 1, UInt8(1 + $0), 16, end] }
 }
 
 /// `05 <slot>` -- selects which project a read returns. Never answered.
@@ -405,14 +409,17 @@ func ms(_ from: UInt64, _ to: UInt64) -> Double {
     (Double(to) - Double(from)) / 1_000_000
 }
 
+func mean(_ samples: [Double]) -> Double {
+    samples.isEmpty ? 0 : samples.reduce(0, +) / Double(samples.count)
+}
+
 func spread(_ label: String, _ samples: [Double]) -> String {
     guard !samples.isEmpty else { return "    \(label) none" }
     let sorted = samples.sorted()
     let at = { (fraction: Double) in
         sorted[min(sorted.count - 1, Int(fraction * Double(sorted.count)))]
     }
-    let mean = samples.reduce(0, +) / Double(samples.count)
-    let figures = [sorted[0], at(0.5), mean, at(0.95), sorted[sorted.count - 1]]
+    let figures = [sorted[0], at(0.5), mean(samples), at(0.95), sorted[sorted.count - 1]]
         .map { String(format: "%6.3f", $0) }.joined(separator: "  ")
     return "    \(label)  \(figures)"
 }
@@ -580,9 +587,6 @@ func burst(
         }
     }
 
-    let mean = { (samples: [Double]) in
-        samples.isEmpty ? 0 : samples.reduce(0, +) / Double(samples.count)
-    }
     let paced = pace > 0 ? String(format: " paced %.0f\u{00B5}s", pace * 1_000_000) : "          "
     print(
         "  \(label)\(paced): "
@@ -611,16 +615,11 @@ func pipelineProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throw
     try listener.send(prologue(slot: slot), to: target)
     _ = listener.listen(seconds: 0.2)
 
-    /// One item, `window` consecutive third indices -- what a coalesced walk actually issues.
-    func steps(_ window: Int, item: UInt8 = 124) -> [[UInt8]] {
-        (0..<window).map { header + [0x0B, slot, 109, 0x03, item, 1, 1, UInt8(1 + $0), 16, end] }
-    }
-
     print("  \(rounds) rounds per window, slot \(slot); throughput over loss-free rounds only")
     for window in [1, 2, 3, 4, 8] {
         try burst(
             listener, to: target, named: name, label: "window \(String(format: "%2d", window))",
-            requests: steps(window), pace: 0, rounds: rounds, wait: wait)
+            requests: steps(window, slot: slot), pace: 0, rounds: rounds, wait: wait)
     }
     print("  the same windows, sends spread out -- is the ceiling a buffer or a parse rate?")
     for (window, pace) in [
@@ -629,7 +628,7 @@ func pipelineProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throw
     ] {
         try burst(
             listener, to: target, named: name, label: "window \(String(format: "%2d", window))",
-            requests: steps(window), pace: pace, rounds: rounds, wait: wait)
+            requests: steps(window, slot: slot), pace: pace, rounds: rounds, wait: wait)
     }
 
     // The last way the rate could be beaten: if 4 ms were a per-item lock rather than the
@@ -637,23 +636,24 @@ func pipelineProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throw
     print("  across items, and across parameters -- is the tick per item or per device?")
     try burst(
         listener, to: target, named: name, label: "2 items   ",
-        requests: [steps(1, item: 124)[0], steps(1, item: 125)[0]], pace: 0, rounds: rounds,
+        requests: [steps(1, slot: slot, item: 124)[0], steps(1, slot: slot, item: 125)[0]],
+        pace: 0, rounds: rounds,
         wait: wait)
     try burst(
         listener, to: target, named: name, label: "4 items   ",
-        requests: [123, 124, 125, 126].map { steps(1, item: UInt8($0))[0] }, pace: 0,
+        requests: [123, 124, 125, 126].map { steps(1, slot: slot, item: UInt8($0))[0] }, pace: 0,
         rounds: rounds, wait: wait)
     try burst(
         listener, to: target, named: name, label: "4 items p ",
-        requests: [123, 124, 125, 126].map { steps(1, item: UInt8($0))[0] }, pace: 0.002,
+        requests: [123, 124, 125, 126].map { steps(1, slot: slot, item: UInt8($0))[0] }, pace: 0.002,
         rounds: rounds, wait: wait)
     // A short scalar read (`01`) beside the long one (`0b`): a different command, same question.
     try burst(
         listener, to: target, named: name, label: "scalar x1 ",
-        requests: [header + [0x01, slot, 37, 120, end]], pace: 0, rounds: rounds, wait: wait)
+        requests: [scalarRequest(slot: slot)], pace: 0, rounds: rounds, wait: wait)
     try burst(
         listener, to: target, named: name, label: "scalar x2 ",
-        requests: [header + [0x01, slot, 37, 120, end], header + [0x01, slot, 38, 120, end]],
+        requests: [scalarRequest(slot: slot), header + [0x01, slot, 38, 120, end]],
         pace: 0, rounds: rounds, wait: wait)
 }
 
@@ -704,9 +704,6 @@ func gridProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throws {
             }
             previous = reply.at
         }
-        let mean = { (samples: [Double]) in
-            samples.isEmpty ? 0 : samples.reduce(0, +) / Double(samples.count)
-        }
         let range = { (samples: [Double]) in
             samples.isEmpty
                 ? "     -" : String(format: "%6.3f-%6.3f", samples.min()!, samples.max()!)
@@ -736,10 +733,9 @@ func gridProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throws {
         if round > 0, previous != 0 { period.append(ms(previous, reply.at)) }
         previous = reply.at
     }
-    let mean = period.isEmpty ? 0 : period.reduce(0, +) / Double(period.count)
     print(
         "  identity (never acked), delay 0.0 ms: reply -> reply "
-            + "\(String(format: "%6.3f", mean)) ms "
+            + "\(String(format: "%6.3f", mean(period))) ms "
             + "[\(String(format: "%6.3f-%6.3f", period.min() ?? 0, period.max() ?? 0))]")
 }
 
@@ -837,7 +833,7 @@ func pipeReplayProbe(
 /// command bytes is what is deliberately not done: `02`, `06` and `0c` are the write opcodes, there
 /// is no restore path in this tool, and an unknown opcode carrying a slot byte could commit
 /// something no probe can undo.
-func handshakeProbe(needle: String, slot: UInt8, wait: Double) throws {
+func handshakeProbe(needle: String, slot: UInt8) throws {
     setvbuf(stdout, nil, _IOLBF, 0)
     let listener = try Listener()
     let target = try destination(needle, listener)
@@ -850,22 +846,22 @@ func handshakeProbe(needle: String, slot: UInt8, wait: Double) throws {
         listener.collector.drain()
         try listener.send(frame, to: target)
         var reply: [UInt8]?
-        var ack = false
+        var acked = false
         var extra = 0
         let deadline = Date().addingTimeInterval(settle)
         while let got = listener.collector.next(
             within: max(0, deadline.timeIntervalSinceNow))
         {
             guard got.endpoint == name else { continue }
-            if got.bytes == ack1 {
-                ack = true
+            if got.bytes == ack {
+                acked = true
             } else if reply == nil {
                 reply = got.bytes
             } else {
                 extra += 1
             }
         }
-        return (reply, ack, extra)
+        return (reply, acked, extra)
     }
 
     func sign(_ result: (reply: [UInt8]?, ack: Bool, extra: Int)) -> String {
@@ -874,8 +870,8 @@ func handshakeProbe(needle: String, slot: UInt8, wait: Double) throws {
             + (result.extra > 0 ? ", +\(result.extra) more" : "")
     }
 
-    let read = header + [0x0B, slot, 109, 0x03, 124, 1, 1, 1, 16, end]
-    let scalar = header + [0x01, slot, 37, 120, end]
+    let read = coalescedRequest(slot: slot, count: 16)
+    let scalar = scalarRequest(slot: slot)
 
     print("  1. is the prologue what puts the read in per-frame-ack mode?")
     // Nothing selected yet this session: does a read answer at all, and does it ack?
@@ -925,13 +921,13 @@ func handshakeProbe(needle: String, slot: UInt8, wait: Double) throws {
     }
 
     print("  4. is an unpaced window of 4 loss-free after any of that?")
-    let window = (0..<4).map { header + [0x0B, slot, 109, 0x03, 124, 1, 1, UInt8(1 + $0), 16, end] }
+    let window = steps(4, slot: slot)
     listener.collector.drain()
     for frame in window { try listener.send(frame, to: target) }
     var back = 0
     let deadline = Date().addingTimeInterval(0.3)
     while let got = listener.collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
-        if got.endpoint == name, got.bytes != ack1, window.contains(where: { answers(got.bytes, $0) })
+        if got.endpoint == name, got.bytes != ack, window.contains(where: { answers(got.bytes, $0) })
         {
             back += 1
         }
@@ -946,7 +942,7 @@ func handshakeProbe(needle: String, slot: UInt8, wait: Double) throws {
 /// is what selects the project (7.4) -- so it is a field with room in it, and a flag that turned
 /// the ack off would sit there. And if the device keeps its global settings in an item of their
 /// own, a scalar sweep of the item space is what finds it.
-func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
+func spaceProbe(needle: String, slot: UInt8) throws {
     setvbuf(stdout, nil, _IOLBF, 0)
     let listener = try Listener()
     let target = try destination(needle, listener)
@@ -964,7 +960,7 @@ func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
         let deadline = Date().addingTimeInterval(settle)
         while let got = listener.collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
             guard got.endpoint == name else { continue }
-            if got.bytes == ack1 { acked = true } else if reply == nil { reply = got.bytes }
+            if got.bytes == ack { acked = true } else if reply == nil { reply = got.bytes }
         }
         return (reply, acked)
     }
@@ -974,7 +970,7 @@ func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
     var silent: [Int] = []
     var values: [UInt8: Int] = [:]
     for byte in UInt8(0)...127 {
-        let result = try probe(header + [0x0B, byte, 109, 0x03, 124, 1, 1, 1, 16, end])
+        let result = try probe(coalescedRequest(slot: byte, count: 16))
         if result.reply == nil { silent.append(Int(byte)) }
         if !result.ack { unacked.append(Int(byte)) }
         if let first = result.reply?.dropFirst(15).first { values[first, default: 0] += 1 }
@@ -985,7 +981,7 @@ func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
 
     print("  2. count byte edges -- 0, the 100 ceiling, and past it")
     for count in [0, 1, 100, 101, 127] as [UInt8] {
-        let request = header + [0x0B, slot, 109, 0x03, 124, 1, 1, 1, count, end]
+        let request = coalescedRequest(slot: slot, count: count)
         let result = try probe(request)
         // A reply echoes the request byte for byte and appends its values, so the values it
         // carried is the difference -- not a fixed offset, which differs by request form.
@@ -1020,7 +1016,7 @@ func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
 /// The idea under test is that the device walks the *last* index (7.1), so a lone index might walk
 /// if it is no longer alone. Ground truth is the same addresses read one at a time; a variant is
 /// only believed if it reproduces that byte for byte.
-func loneProbe(needle: String, slot: UInt8, item: UInt8, param: UInt8, span: Int, wait: Double)
+func loneProbe(needle: String, slot: UInt8, item: UInt8, param: UInt8, span: Int)
     throws
 {
     setvbuf(stdout, nil, _IOLBF, 0)
@@ -1041,7 +1037,7 @@ func loneProbe(needle: String, slot: UInt8, item: UInt8, param: UInt8, span: Int
         var reply: [UInt8]?
         let deadline = Date().addingTimeInterval(0.08)
         while let got = listener.collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
-            guard got.endpoint == name, got.bytes != ack1 else { continue }
+            guard got.endpoint == name, got.bytes != ack else { continue }
             if reply == nil, answers(got.bytes, request) { reply = got.bytes }
         }
         return reply
@@ -1089,7 +1085,7 @@ func loneProbe(needle: String, slot: UInt8, item: UInt8, param: UInt8, span: Int
 /// Does a `count` walk that overruns its last index roll into the next middle index, or pad? The
 /// earlier probe ran on a near-empty project, where "padding" and "an empty next slice" look the
 /// same; this asks a slot whose next slice holds data, so the two answers differ.
-func rolloverProbe(needle: String, slot: UInt8, item: UInt8, mid: UInt8, wait: Double) throws {
+func rolloverProbe(needle: String, slot: UInt8, item: UInt8, mid: UInt8) throws {
     setvbuf(stdout, nil, _IOLBF, 0)
     let listener = try Listener()
     let target = try destination(needle, listener)
@@ -1103,7 +1099,7 @@ func rolloverProbe(needle: String, slot: UInt8, item: UInt8, mid: UInt8, wait: D
         var out: [UInt8] = []
         let deadline = Date().addingTimeInterval(0.2)
         while let got = listener.collector.next(within: max(0, deadline.timeIntervalSinceNow)) {
-            guard got.endpoint == name, got.bytes != ack1, answers(got.bytes, request) else {
+            guard got.endpoint == name, got.bytes != ack, answers(got.bytes, request) else {
                 continue
             }
             out = Array(got.bytes.dropFirst(request.count - 1).dropLast())
@@ -1163,19 +1159,19 @@ do {
     case "grid":
         try gridProbe(needle: needle, slot: try requestedSlot(), rounds: 100, wait: 1.5)
     case "handshake":
-        try handshakeProbe(needle: needle, slot: try requestedSlot(), wait: 1.5)
+        try handshakeProbe(needle: needle, slot: try requestedSlot())
     case "space":
-        try spaceProbe(needle: needle, slot: try requestedSlot(), wait: 1.5)
+        try spaceProbe(needle: needle, slot: try requestedSlot())
     case "rollover":
         try rolloverProbe(
             needle: needle, slot: try requestedSlot(),
             item: arguments.count > 3 ? (UInt8(arguments[3]) ?? 124) : 124,
-            mid: arguments.count > 4 ? (UInt8(arguments[4]) ?? 1) : 1, wait: 1.5)
+            mid: arguments.count > 4 ? (UInt8(arguments[4]) ?? 1) : 1)
     case "lone":
         guard arguments.count > 5 else { throw ProbeError("lone needs an item, a param and a span") }
         try loneProbe(
             needle: needle, slot: try requestedSlot(), item: UInt8(arguments[3]) ?? 121,
-            param: UInt8(arguments[4]) ?? 38, span: Int(arguments[5]) ?? 16, wait: 1.5)
+            param: UInt8(arguments[4]) ?? 38, span: Int(arguments[5]) ?? 16)
     case "pipereplay":
         guard arguments.count > 5 else {
             throw ProbeError("pipereplay needs a plan file, a window and a pace in microseconds")
