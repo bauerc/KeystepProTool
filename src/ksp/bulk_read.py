@@ -48,6 +48,12 @@ def keys_for(request: ReadRequest) -> list[str]:
     A long read walks its last index forward by ``count``; the others are fixed."""
     if request.count is None:
         return [key(request.item, request.param)]
+    if bulk_fast.rolls_over(request):
+        outer, start = request.indices[0], bulk_fast.flat(request.indices)
+        return [
+            key(request.item, request.param, *bulk_fast.unflat(outer, start + offset))
+            for offset in range(request.count)
+        ]
     head, last = request.indices[:-1], request.indices[-1]
     return [
         key(request.item, request.param, *head, last + offset) for offset in range(request.count)

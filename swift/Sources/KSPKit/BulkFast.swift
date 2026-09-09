@@ -26,6 +26,32 @@ public enum BulkFast {
         117: 60, 118: 7, 119: 100, 120: 49, 121: 100,
     ]
 
+    /// Pool arrays no per-chunk gate settles, so walking across their chunks costs nothing.
+    /// The melodic pool is absent deliberately: its existence array skips empty chunks
+    /// outright, and a request coalesced across them would fetch what the gate had dropped.
+    public static let rolledOver: Set<Int> = [53, 54, 117, 118, 119, 120, 121]
+
+    /// Entries per middle index in a pool. A walk passing this rolls into the next chunk,
+    /// and stops at the outer index (spec 7.8).
+    public static let poolChunk = Constants.maxSteps
+
+    /// A pool address as one 1-based position across the chunks of its outer index.
+    public static func flat(_ indices: [Int]) -> Int {
+        (indices[1] - 1) * poolChunk + indices[2]
+    }
+
+    /// The inverse of `flat`: a position back to `(outer, middle, last)`.
+    public static func unflat(_ outer: Int, _ position: Int) -> [Int] {
+        let (middle, last) = (position - 1).quotientAndRemainder(dividingBy: poolChunk)
+        return [outer, middle + 1, last + 1]
+    }
+
+    /// Whether this request's walk carries past the end of its own chunk.
+    public static func rollsOver(_ request: ReadRequest) -> Bool {
+        guard let count = request.count, request.indices.count == 3 else { return false }
+        return request.indices[2] + count - 1 > poolChunk
+    }
+
     /// Track 1's phantom fourth chunk is zero-filled where the live chunks hold the
     /// default (spec 4).
     public static let phantomFill = 0
@@ -37,10 +63,10 @@ public enum BulkFast {
     }
 
     /// Requests this plan expands to, against the 8,951 MCC issues.
-    public static let requestCount = 3511
+    public static let requestCount = 3399
 
     /// What one pattern of one track costs: 75 pattern reads plus the index-less scalars.
-    public static let patternRequestCount = 115
+    public static let patternRequestCount = 108
 
     /// Every address the plan covers, in as few requests as the device allows.
     /// MCC's order, but with the existence array ahead of the parameters it gates.
@@ -113,11 +139,11 @@ public enum BulkFast {
                 order.append([request])
                 continue
             }
-            let key = RunKey(
-                item: request.item,
-                param: request.param,
-                head: Array(request.indices.dropLast())
-            )
+            // A rolled-over param keys on the outer index alone, so its chunks join one run.
+            let head =
+                rolledOver.contains(request.param) && request.indices.count == 3
+                ? Array(request.indices.prefix(1)) : Array(request.indices.dropLast())
+            let key = RunKey(item: request.item, param: request.param, head: head)
             if let position = runs[key] {
                 order[position].append(request)
             } else {
@@ -147,6 +173,10 @@ public enum BulkFast {
             return run.sorted { ($0.indices.last ?? 0) < ($1.indices.last ?? 0) }
         }
 
+        if rolledOver.contains(first.param), first.indices.count == 3 {
+            return try joinRolled(run, maxCount: maxCount)
+        }
+
         // By index, not by the order MCC asked in: it reads 121_83's fifth scene
         // ahead of the other four, and a run is a range whatever order it arrived.
         let ordered = run.sorted { ($0.indices.last ?? 0) < ($1.indices.last ?? 0) }
@@ -169,6 +199,31 @@ public enum BulkFast {
                 item: first.item,
                 param: first.param,
                 indices: head + [start + offset],
+                count: min(maxCount, total - offset)
+            )
+        }
+    }
+
+    /// Join a run whose chunks the device walks through, flattening the middle index.
+    private static func joinRolled(_ run: [ReadRequest], maxCount: Int) throws -> [ReadRequest] {
+        let ordered = run.sorted { flat($0.indices) < flat($1.indices) }
+        let outer = ordered[0].indices[0]
+        let start = flat(ordered[0].indices)
+        var total = 0
+        for request in ordered {
+            guard flat(request.indices) == start + total else {
+                throw KSPError.value(
+                    "\(request.item)_\(request.param) run breaks at \(request.indices), "
+                        + "expected position \(start + total)")
+            }
+            total += request.count ?? 0
+        }
+
+        return stride(from: 0, to: total, by: maxCount).map { offset in
+            ReadRequest(
+                item: ordered[0].item,
+                param: ordered[0].param,
+                indices: unflat(outer, start + offset),
                 count: min(maxCount, total - offset)
             )
         }

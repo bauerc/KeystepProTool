@@ -22,7 +22,7 @@ ADDRESSED = 117783
 #: What each tape costs to read: MCC's 8,951, then the merged plan, then the merged plan
 #: with both gates applied. Project 2 carries fewer notes, and the data state settles whole
 #: patterns, so it gains the more of the two.
-EXPECTED_REQUESTS = {"recall_tape.txt": 2375, "recall_project_2_tape.txt": 2113}
+EXPECTED_REQUESTS = {"recall_tape.txt": 2281, "recall_project_2_tape.txt": 2091}
 
 Loader = Callable[[str], dict[str, int | str]]
 
@@ -57,7 +57,7 @@ def test_the_fast_plan_covers_exactly_what_mcc_covers() -> None:
 
 
 def test_the_fast_plan_declares_its_own_length() -> None:
-    assert len(list(bulk_fast.iter_requests())) == bulk_fast.REQUEST_COUNT == 3511
+    assert len(list(bulk_fast.iter_requests())) == bulk_fast.REQUEST_COUNT == 3399
 
 
 def test_the_swift_port_is_held_to_this_plan(fixtures_dir: Path) -> None:
@@ -95,11 +95,11 @@ def test_no_run_over_a_lone_index_is_read_as_a_range() -> None:
             assert request.count == 1, f"{request.item}_{request.param} walks a lone index"
 
 
-def test_no_run_in_the_plan_is_longer_than_a_single_request() -> None:
-    """The extent binds before the protocol does: the longest contiguous run in PLAN is a 64-entry
-    pool chunk, well inside the 100 the device honours.
+def test_the_protocol_binds_a_run_before_the_extent_does() -> None:
+    """It was the other way round while a run stopped at its own 64-entry chunk. Rolling over
+    joins three of them, so the 100 the device honours is what cuts a run now.
     """
-    assert max(r.count or 0 for r in bulk_fast.iter_requests()) == 64
+    assert max(r.count or 0 for r in bulk_fast.iter_requests()) == sysex.MAX_READ_COUNT == 100
 
 
 def test_the_existence_array_is_read_before_the_notes_it_gates() -> None:
@@ -217,7 +217,7 @@ def test_the_pattern_walk_carries_the_index_less_scalars() -> None:
 def test_the_pattern_walk_is_a_fraction_of_the_whole() -> None:
     requests = list(bulk_fast.iter_pattern_requests(123, 1))
 
-    assert len(requests) == bulk_fast.PATTERN_REQUEST_COUNT == 115
+    assert len(requests) == bulk_fast.PATTERN_REQUEST_COUNT == 108
     assert len(requests) < bulk_fast.REQUEST_COUNT / 16
 
 
@@ -292,3 +292,42 @@ def test_the_data_state_is_read_before_the_pool_it_settles() -> None:
             seen_state.add((request.item, request.indices[0]))
         elif request.param in bulk_fast.PATTERN_GATED and len(request.indices) == 3:
             assert (request.item, request.indices[0]) in seen_state
+
+
+def test_a_pool_walk_rolls_over_into_the_next_chunk() -> None:
+    """The device walks a count past the end of one middle index into the next, within the same
+    outer index, so track 1's three 64-entry chunks are two requests rather than three.
+    """
+    requests = [
+        (request.indices, request.count)
+        for request in bulk_fast.iter_requests()
+        if request.item == 123
+        and request.param == 117
+        and len(request.indices) == 3
+        and request.indices[0] == 1
+    ]
+
+    assert requests == [((1, 1, 1), 100), ((1, 2, 37), 92)]
+
+
+def test_a_rolled_over_request_names_the_keys_it_actually_fills() -> None:
+    """Its last index runs past the chunk length and carries into the next chunk, so the flat
+    keys are not the naive ``last + offset``.
+    """
+    rolled = ReadRequest(item=123, param=117, indices=(1, 1, 1), count=100)
+
+    names = bulk_read.keys_for(rolled)
+
+    assert names[0] == "123_117_1_1_1"
+    assert names[63] == "123_117_1_1_64"
+    assert names[64] == "123_117_1_2_1"
+    assert names[99] == "123_117_1_2_36"
+
+
+def test_nothing_a_chunk_gate_settles_is_rolled_over() -> None:
+    """The two compete: the existence array skips an empty chunk outright, and a request
+    coalesced across that chunk would fetch it back. Rolling over is for the pool no chunk
+    gate reaches.
+    """
+    assert not bulk_fast.ROLLED_OVER & bulk_fast.MELODIC_GATED
+    assert bulk_fast.MELODIC_GATE not in bulk_fast.ROLLED_OVER

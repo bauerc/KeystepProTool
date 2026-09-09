@@ -56,7 +56,7 @@ private func number(_ field: Substring) throws -> Int {
 
     @Test func thePlanDeclaresItsOwnLength() throws {
         #expect(try BulkFast.iterRequests().count == BulkFast.requestCount)
-        #expect(BulkFast.requestCount == 3511)
+        #expect(BulkFast.requestCount == 3399)
     }
 
     @Test func thePlanAddressesEveryKeyExactlyOnce() throws {
@@ -89,10 +89,19 @@ private func number(_ field: Substring) throws -> Int {
         }
     }
 
-    @Test func noRunInThePlanIsLongerThanASingleRequest() throws {
-        // The extent binds before the protocol does: the longest contiguous run is a 64-entry
-        // pool chunk, well inside the 100 the device honours.
-        #expect(try BulkFast.iterRequests().map { $0.count ?? 0 }.max() == 64)
+    @Test func nothingAChunkGateSettlesIsRolledOver() {
+        // The two compete: the existence array skips an empty chunk outright, and a request
+        // coalesced across that chunk would fetch it back. Rolling over is for the pool no
+        // chunk gate reaches.
+        #expect(BulkFast.rolledOver.isDisjoint(with: BulkFast.melodicGated))
+        #expect(!BulkFast.rolledOver.contains(BulkFast.melodicGate))
+    }
+
+    @Test func theProtocolBindsARunBeforeTheExtentDoes() throws {
+        // It was the other way round while a run stopped at its own 64-entry chunk. Rolling
+        // over joins three of them, so the 100 the device honours is what cuts a run now.
+        #expect(try BulkFast.iterRequests().map { $0.count ?? 0 }.max() == Sysex.maxReadCount)
+        #expect(Sysex.maxReadCount == 100)
     }
 
     @Test func theExistenceArrayIsReadBeforeTheNotesItGates() throws {
@@ -161,7 +170,7 @@ private func number(_ field: Substring) throws -> Int {
         let requests = try BulkFast.iterPatternRequests(item: 123, pattern: 1)
 
         #expect(requests.count == BulkFast.patternRequestCount)
-        #expect(BulkFast.patternRequestCount == 115)
+        #expect(BulkFast.patternRequestCount == 108)
         #expect(requests.count < BulkFast.requestCount / 16)
     }
 

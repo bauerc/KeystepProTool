@@ -34,6 +34,12 @@ public enum BulkRead {
         guard let last = request.indices.last else {
             throw KSPError.value("\(request) is a long read with no index to walk")
         }
+        if BulkFast.rollsOver(request) {
+            let (outer, start) = (request.indices[0], BulkFast.flat(request.indices))
+            return (0..<count).map {
+                Keys.key(request.item, request.param, indices: BulkFast.unflat(outer, start + $0))
+            }
+        }
         let head = Array(request.indices.dropLast())
         return (0..<count).map {
             Keys.key(request.item, request.param, indices: head + [last + $0])
