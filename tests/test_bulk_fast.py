@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from conftest import DeviceModel, tape_values
-from ksp import bulk_fast, bulk_plan, bulk_read, lenient_json, sysex
+from ksp import bulk_fast, bulk_plan, bulk_read, constants, lenient_json, sysex
 from ksp.keys import key
 from ksp.sysex import ReadRequest
 
@@ -162,7 +162,8 @@ def test_the_drum_pool_is_never_derived_in_a_pattern_that_holds_data(
         for request in bulk_fast.iter_requests()
         if request.param in range(117, 122)
         and len(request.indices) == 3
-        and values[key(123, bulk_fast.DATA_STATE, request.indices[0])] == bulk_fast.HAS_DATA
+        and values[key(123, constants.P_PATTERN_DATA_STATE, request.indices[0])]
+        == constants.PATTERN_HAS_DATA
     }
 
     assert drum_pool
@@ -267,14 +268,13 @@ def test_a_pattern_holding_no_data_is_not_asked_for_its_note_pool(
     device = DeviceModel(tape_values(fixtures_dir / "recall_tape.txt"))
     bulk_read.read_raw(device, template_keys, fast=True)
 
-    pooled = {50, 54, 109, 110, 111, 112, 113, 117, 118, 119, 120, 121}
     asked = {
         request.indices[0]
         for request in device.asked
         if request.count is not None
         and len(request.indices) == 3
         and request.item == 126
-        and request.param in pooled
+        and request.param in bulk_fast.DATA_STATE_FILL
     }
 
     assert asked == set()
@@ -288,9 +288,9 @@ def test_the_data_state_is_read_before_the_pool_it_settles() -> None:
     for request in bulk_fast.iter_requests():
         if request.count is None:
             continue
-        if request.param == bulk_fast.DATA_STATE and len(request.indices) == 1:
+        if request.param == constants.P_PATTERN_DATA_STATE and len(request.indices) == 1:
             seen_state.add((request.item, request.indices[0]))
-        elif request.param in bulk_fast.PATTERN_GATED and len(request.indices) == 3:
+        elif request.param in bulk_fast.DATA_STATE_FILL and len(request.indices) == 3:
             assert (request.item, request.indices[0]) in seen_state
 
 

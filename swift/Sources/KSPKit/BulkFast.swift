@@ -12,23 +12,25 @@ public enum BulkFast {
     // The drum pair (54 gating 117-121) is deliberately absent: the drum array is a
     // pool with holes, so a dead entry keeps whatever was there and cannot be derived.
 
-    /// The firmware's own per-pattern flag, and the value meaning the pattern holds notes.
-    /// It latches upward and never back down, so only "not 3" settles anything (spec 3.3).
-    public static let dataState = 40
-    public static let hasData = 3
+    /// Each gate ahead of what it settles: the data state settles whole patterns, so it is
+    /// read before the existence array, which settles only a pool chunk.
+    public static let gates = [Constants.pPatternDataState, melodicGate]
 
-    /// Note-indexed pool arrays an unflagged pattern settles, and the row each holds there.
-    /// The step-indexed and per-pattern scalars are absent: those are settings, editable
-    /// on a pattern that holds no note at all.
-    public static let patternGated: [Int: Int] = [
+    /// What a pooled parameter holds in a pattern parameter 40 says holds no note. Keyed by
+    /// param, since no param is gated on both a melodic track and the control track: the
+    /// melodic pools carry three indices, the control track's CC lanes two, and the lone-index
+    /// form of either is a setting, editable on a pattern that holds no note at all.
+    public static let dataStateFill: [Int: Int] = [
         50: empty, 54: empty,
         109: empty, 110: empty, 111: empty, 112: empty, 113: empty,
-        117: 60, 118: 7, 119: 100, 120: 49, 121: 100,
+        117: 60,
+        118: Constants.defaultGateStored,
+        119: Constants.freshVelocity,
+        120: Constants.timeShiftCentre,
+        121: Constants.freshRandomness,
+        90: 0, 91: 0, 92: 0, 93: 0, 94: 0, 95: 0,
+        96: Constants.skipMaskAll,
     ]
-
-    /// The control track's five CC lanes and their two step arrays, and what each holds in a
-    /// pattern the data state says is empty. 96 is the skip mask's "all four sequences".
-    public static let controlGated: [Int: Int] = [90: 0, 91: 0, 92: 0, 93: 0, 94: 0, 95: 0, 96: 15]
 
     /// Pool arrays no per-chunk gate settles, so walking across their chunks costs nothing.
     /// The melodic pool is absent deliberately: its existence array skips empty chunks
@@ -50,20 +52,9 @@ public enum BulkFast {
         return [outer, middle + 1, last + 1]
     }
 
-    /// Whether this request's walk carries past the end of its own chunk.
+    /// Whether this request addresses a pool the device walks through the chunks of.
     public static func rollsOver(_ request: ReadRequest) -> Bool {
-        guard let count = request.count, request.indices.count == 3 else { return false }
-        return request.indices[2] + count - 1 > poolChunk
-    }
-
-    /// Track 1's phantom fourth chunk is zero-filled where the live chunks hold the
-    /// default (spec 4).
-    public static let phantomFill = 0
-
-    /// What a pooled parameter holds in a pattern parameter 40 says is empty.
-    public static func patternFill(param: Int, slot: Int) -> Int? {
-        guard let fill = patternGated[param] else { return nil }
-        return slot > Constants.poolSlots ? phantomFill : fill
+        rolledOver.contains(request.param) && request.indices.count == 3
     }
 
     /// Requests this plan expands to, against the 8,951 MCC issues.
@@ -145,7 +136,7 @@ public enum BulkFast {
             }
             // A rolled-over param keys on the outer index alone, so its chunks join one run.
             let head =
-                rolledOver.contains(request.param) && request.indices.count == 3
+                rollsOver(request)
                 ? Array(request.indices.prefix(1)) : Array(request.indices.dropLast())
             let key = RunKey(item: request.item, param: request.param, head: head)
             if let position = runs[key] {
@@ -161,10 +152,8 @@ public enum BulkFast {
     /// Each gate ahead of what it settles, order otherwise kept: the data state settles whole
     /// patterns, so it comes before the existence array, which settles pool chunks.
     private static func gateFirst(_ order: [[ReadRequest]]) -> [[ReadRequest]] {
-        let ranked: [Int: Int] = [dataState: 0, melodicGate: 1]
-        return order.filter { ranked[$0[0].param] == 0 }
-            + order.filter { ranked[$0[0].param] == 1 }
-            + order.filter { ranked[$0[0].param] == nil }
+        gates.flatMap { gate in order.filter { $0[0].param == gate } }
+            + order.filter { !gates.contains($0[0].param) }
     }
 
     private static func join(_ run: [ReadRequest], maxCount: Int) throws -> [ReadRequest] {
@@ -177,7 +166,7 @@ public enum BulkFast {
             return run.sorted { ($0.indices.last ?? 0) < ($1.indices.last ?? 0) }
         }
 
-        if rolledOver.contains(first.param), first.indices.count == 3 {
+        if rollsOver(first) {
             return try joinRolled(run, maxCount: maxCount)
         }
 

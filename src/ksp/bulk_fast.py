@@ -20,15 +20,15 @@ MELODIC_GATED: Final = frozenset({109, 110, 111, 112, 113})
 #: The drum pair (54 gating 117-121) is deliberately absent: the drum array is a
 #: pool with holes, so a dead entry keeps whatever was there and cannot be derived.
 
-#: The firmware's own per-pattern flag, and the value meaning the pattern holds notes.
-#: It latches upward and never back down, so only "not 3" settles anything (spec 3.3).
-DATA_STATE: Final = 40
-HAS_DATA: Final = 3
+#: Each gate ahead of what it settles: the data state settles whole patterns, so it is
+#: read before the existence array, which settles only a pool chunk.
+GATES: Final = (constants.P_PATTERN_DATA_STATE, MELODIC_GATE)
 
-#: Note-indexed pool arrays an unflagged pattern settles, and the row each holds there.
-#: The step-indexed and per-pattern scalars are absent: those are settings, editable
-#: on a pattern that holds no note at all.
-PATTERN_GATED: Final = {
+#: What a pooled parameter holds in a pattern parameter 40 says holds no note. Keyed by
+#: param, since no param is gated on both a melodic track and the control track: the
+#: melodic pools carry three indices, the control track's CC lanes two, and the lone-index
+#: form of either is a setting, editable on a pattern that holds no note at all.
+DATA_STATE_FILL: Final = {
     50: EMPTY,
     54: EMPTY,
     109: EMPTY,
@@ -37,15 +37,18 @@ PATTERN_GATED: Final = {
     112: EMPTY,
     113: EMPTY,
     117: 60,
-    118: 7,
-    119: 100,
-    120: 49,
-    121: 100,
+    118: constants.DEFAULT_GATE_STORED,
+    119: constants.FRESH_VELOCITY,
+    120: constants.TIME_SHIFT_CENTRE,
+    121: constants.FRESH_RANDOMNESS,
+    90: 0,
+    91: 0,
+    92: 0,
+    93: 0,
+    94: 0,
+    95: 0,
+    96: constants.SKIP_MASK_ALL,
 }
-
-#: The control track's five CC lanes and their two step arrays, and what each holds in a
-#: pattern the data state says is empty. 96 is the skip mask's "all four sequences".
-CONTROL_GATED: Final = {90: 0, 91: 0, 92: 0, 93: 0, 94: 0, 95: 0, 96: 15}
 
 #: Pool arrays no per-chunk gate settles, so walking across their chunks costs nothing.
 #: The melodic pool is absent deliberately: its existence array skips empty chunks
@@ -70,21 +73,8 @@ def unflat(outer: int, position: int) -> tuple[int, int, int]:
 
 
 def rolls_over(request: ReadRequest) -> bool:
-    """Whether this request's walk carries past the end of its own chunk."""
-    return (
-        request.count is not None
-        and len(request.indices) == 3
-        and request.indices[-1] + request.count - 1 > POOL_CHUNK
-    )
-
-
-#: Track 1's phantom fourth chunk is zero-filled where the live chunks hold the default (spec 4).
-PHANTOM_FILL: Final = 0
-
-
-def pattern_fill(param: int, slot: int) -> int:
-    """What a pooled parameter holds in a pattern parameter 40 says is empty."""
-    return PHANTOM_FILL if slot > constants.POOL_SLOTS else PATTERN_GATED[param]
+    """Whether this request addresses a pool the device walks through the chunks of."""
+    return request.param in ROLLED_OVER and len(request.indices) == 3
 
 
 #: Requests this plan expands to, against bulk_plan's 8,951.
@@ -138,11 +128,7 @@ def _coalesce(requests: Iterable[ReadRequest], max_count: int) -> Iterator[ReadR
             order.append([request])
             continue
         # A rolled-over param keys on the outer index alone, so its chunks join one run.
-        head = (
-            request.indices[:1]
-            if request.param in ROLLED_OVER and len(request.indices) == 3
-            else request.indices[:-1]
-        )
+        head = request.indices[:1] if rolls_over(request) else request.indices[:-1]
         run_key = (request.item, request.param, head)
         run = runs.get(run_key)
         if run is None:
@@ -157,10 +143,9 @@ def _coalesce(requests: Iterable[ReadRequest], max_count: int) -> Iterator[ReadR
 def _gate_first(order: list[list[ReadRequest]]) -> Iterator[list[ReadRequest]]:
     """Each gate ahead of what it settles, order otherwise kept: the data state settles whole
     patterns, so it comes before the existence array, which settles pool chunks."""
-    ranked = {DATA_STATE: 0, MELODIC_GATE: 1}
-    for rank in (0, 1):
-        yield from (run for run in order if ranked.get(run[0].param) == rank)
-    yield from (run for run in order if run[0].param not in ranked)
+    for gate in GATES:
+        yield from (run for run in order if run[0].param == gate)
+    yield from (run for run in order if run[0].param not in GATES)
 
 
 def _join(run: list[ReadRequest], max_count: int) -> Iterator[ReadRequest]:
@@ -175,7 +160,7 @@ def _join(run: list[ReadRequest], max_count: int) -> Iterator[ReadRequest]:
         yield from sorted(run, key=lambda request: request.indices[-1])
         return
 
-    if first.param in ROLLED_OVER and len(first.indices) == 3:
+    if rolls_over(first):
         yield from _join_rolled(run, max_count)
         return
 
