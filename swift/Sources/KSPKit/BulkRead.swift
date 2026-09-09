@@ -113,10 +113,23 @@ public enum BulkRead {
         }
     }
 
+    /// Parameter 40 for the pattern this request belongs to, or `nil` if unread.
+    /// Unread settles nothing: the walk asks rather than guess at what it has not seen.
+    private static func patternHoldsData(_ request: ReadRequest, _ seen: [String: Int]) -> Bool? {
+        let name = Keys.key(request.item, BulkFast.dataState, indices: [request.indices[0]])
+        guard let flag = seen[name] else { return nil }
+        return flag == BulkFast.hasData
+    }
+
     /// The value a request would return, when an earlier reply already settles it.
-    /// Two rules, both about the melodic pool and both spec 3.
+    /// Three rules: the pattern data state, then the two about the melodic pool (spec 3).
     private static func alreadyAnswered(_ request: ReadRequest, _ seen: [String: Int]) -> Int? {
         guard let count = request.count, request.indices.count == 3 else { return nil }
+        if patternHoldsData(request, seen) == false,
+            let fill = BulkFast.patternFill(param: request.param, slot: request.indices[1])
+        {
+            return fill
+        }
         if BulkFast.melodicGated.contains(request.param) {
             let gate = poolGate(request, request.indices[1], count: count)
             return gate.allSatisfy { seen[$0] == BulkFast.empty } ? BulkFast.empty : nil

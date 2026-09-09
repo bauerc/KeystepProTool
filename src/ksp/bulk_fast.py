@@ -4,6 +4,7 @@ from collections.abc import Iterable, Iterator
 from itertools import product
 from typing import Final
 
+from ksp import constants
 from ksp.bulk_plan import IDX, PLAN, Leaf
 from ksp.sysex import MAX_READ_COUNT, ReadRequest
 
@@ -18,6 +19,38 @@ MELODIC_GATED: Final = frozenset({109, 110, 111, 112, 113})
 
 #: The drum pair (54 gating 117-121) is deliberately absent: the drum array is a
 #: pool with holes, so a dead entry keeps whatever was there and cannot be derived.
+
+#: The firmware's own per-pattern flag, and the value meaning the pattern holds notes.
+#: It latches upward and never back down, so only "not 3" settles anything (spec 3.3).
+DATA_STATE: Final = 40
+HAS_DATA: Final = 3
+
+#: Note-indexed pool arrays an unflagged pattern settles, and the row each holds there.
+#: The step-indexed and per-pattern scalars are absent: those are settings, editable
+#: on a pattern that holds no note at all.
+PATTERN_GATED: Final = {
+    50: EMPTY,
+    54: EMPTY,
+    109: EMPTY,
+    110: EMPTY,
+    111: EMPTY,
+    112: EMPTY,
+    113: EMPTY,
+    117: 60,
+    118: 7,
+    119: 100,
+    120: 49,
+    121: 100,
+}
+
+#: Track 1's phantom fourth chunk is zero-filled where the live chunks hold the default (spec 4).
+PHANTOM_FILL: Final = 0
+
+
+def pattern_fill(param: int, slot: int) -> int:
+    """What a pooled parameter holds in a pattern parameter 40 says is empty."""
+    return PHANTOM_FILL if slot > constants.POOL_SLOTS else PATTERN_GATED[param]
+
 
 #: Requests this plan expands to, against bulk_plan's 8,951.
 REQUEST_COUNT: Final = 3511
@@ -81,10 +114,12 @@ def _coalesce(requests: Iterable[ReadRequest], max_count: int) -> Iterator[ReadR
 
 
 def _gate_first(order: list[list[ReadRequest]]) -> Iterator[list[ReadRequest]]:
-    """The existence array ahead of the notes it gates, order otherwise kept."""
-    gate = [run for run in order if run[0].param == MELODIC_GATE]
-    yield from gate
-    yield from (run for run in order if run[0].param != MELODIC_GATE)
+    """Each gate ahead of what it settles, order otherwise kept: the data state settles whole
+    patterns, so it comes before the existence array, which settles pool chunks."""
+    ranked = {DATA_STATE: 0, MELODIC_GATE: 1}
+    for rank in (0, 1):
+        yield from (run for run in order if ranked.get(run[0].param) == rank)
+    yield from (run for run in order if run[0].param not in ranked)
 
 
 def _join(run: list[ReadRequest], max_count: int) -> Iterator[ReadRequest]:

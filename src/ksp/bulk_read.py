@@ -81,11 +81,20 @@ def _pool_gate(request: ReadRequest, pool_slot: int) -> list[str]:
     ]
 
 
+def _pattern_holds_data(request: ReadRequest, seen: dict[str, int]) -> bool | None:
+    """Parameter 40 for the pattern this request belongs to, or ``None`` if unread.
+    Unread settles nothing: the walk asks rather than guess at what it has not seen."""
+    flag = seen.get(key(request.item, bulk_fast.DATA_STATE, request.indices[0]))
+    return None if flag is None else flag == bulk_fast.HAS_DATA
+
+
 def _already_answered(request: ReadRequest, seen: dict[str, int]) -> int | None:
     """The value a request would return, when an earlier reply already settles it.
-    Two rules, both about the melodic pool and both spec 3."""
+    Three rules: the pattern data state, then the two about the melodic pool (spec 3)."""
     if request.count is None or len(request.indices) != 3:
         return None
+    if request.param in bulk_fast.PATTERN_GATED and _pattern_holds_data(request, seen) is False:
+        return bulk_fast.pattern_fill(request.param, request.indices[1])
     if request.param in bulk_fast.MELODIC_GATED:
         gate = _pool_gate(request, request.indices[1])
         return bulk_fast.EMPTY if all(seen.get(n) == bulk_fast.EMPTY for n in gate) else None

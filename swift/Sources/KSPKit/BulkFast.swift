@@ -12,6 +12,30 @@ public enum BulkFast {
     // The drum pair (54 gating 117-121) is deliberately absent: the drum array is a
     // pool with holes, so a dead entry keeps whatever was there and cannot be derived.
 
+    /// The firmware's own per-pattern flag, and the value meaning the pattern holds notes.
+    /// It latches upward and never back down, so only "not 3" settles anything (spec 3.3).
+    public static let dataState = 40
+    public static let hasData = 3
+
+    /// Note-indexed pool arrays an unflagged pattern settles, and the row each holds there.
+    /// The step-indexed and per-pattern scalars are absent: those are settings, editable
+    /// on a pattern that holds no note at all.
+    public static let patternGated: [Int: Int] = [
+        50: empty, 54: empty,
+        109: empty, 110: empty, 111: empty, 112: empty, 113: empty,
+        117: 60, 118: 7, 119: 100, 120: 49, 121: 100,
+    ]
+
+    /// Track 1's phantom fourth chunk is zero-filled where the live chunks hold the
+    /// default (spec 4).
+    public static let phantomFill = 0
+
+    /// What a pooled parameter holds in a pattern parameter 40 says is empty.
+    public static func patternFill(param: Int, slot: Int) -> Int? {
+        guard let fill = patternGated[param] else { return nil }
+        return slot > Constants.poolSlots ? phantomFill : fill
+    }
+
     /// Requests this plan expands to, against the 8,951 MCC issues.
     public static let requestCount = 3511
 
@@ -104,9 +128,13 @@ public enum BulkFast {
         return try gateFirst(order).flatMap { try join($0, maxCount: maxCount) }
     }
 
-    /// The existence array ahead of the notes it gates, order otherwise kept.
+    /// Each gate ahead of what it settles, order otherwise kept: the data state settles whole
+    /// patterns, so it comes before the existence array, which settles pool chunks.
     private static func gateFirst(_ order: [[ReadRequest]]) -> [[ReadRequest]] {
-        order.filter { $0[0].param == melodicGate } + order.filter { $0[0].param != melodicGate }
+        let ranked: [Int: Int] = [dataState: 0, melodicGate: 1]
+        return order.filter { ranked[$0[0].param] == 0 }
+            + order.filter { ranked[$0[0].param] == 1 }
+            + order.filter { ranked[$0[0].param] == nil }
     }
 
     private static func join(_ run: [ReadRequest], maxCount: Int) throws -> [ReadRequest] {
