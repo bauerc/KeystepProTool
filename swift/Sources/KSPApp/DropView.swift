@@ -47,7 +47,6 @@ struct DropView: View {
                     .allowsHitTesting(false)
             }
         }
-        .preferredColorScheme(model.appearance.colorScheme)
     }
 
     /// The window follows the system unless the user has named a unit, and the palette follows the

@@ -125,6 +125,17 @@ private func contrast(_ one: Color, _ other: Color) -> Double {
         }
     }
 
+    /// The two faces the app wears must reach AppKit as the same two the palette is chosen by, or
+    /// the chrome is drawn as the other unit.
+    @Test func eachUnitReachesAppKitAsTheFaceItsPaletteIsChosenBy() {
+        #expect(Appearance.system.nsAppearance == nil)
+        #expect(Appearance.standard.nsAppearance?.name == .aqua)
+        #expect(Appearance.chroma.nsAppearance?.name == .darkAqua)
+        for unit in Appearance.allCases {
+            #expect((unit.nsAppearance == nil) == (unit.colorScheme == nil))
+        }
+    }
+
     @Test func blendingAtTheEndsReturnsTheGroundAndThenTheHue() {
         let hue = DeviceColor.track(1)
         let ground = Palette.chroma.ground

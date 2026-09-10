@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Which KeyStep Pro the app dresses as. The device ships in two finishes and the app has a face
@@ -23,6 +24,16 @@ enum Appearance: String, CaseIterable, Identifiable, Codable, Sendable {
         case .system: return nil
         case .standard: return .light
         case .chroma: return .dark
+        }
+    }
+
+    /// Worn by the application, not by the window: a window's own appearance dresses what SwiftUI
+    /// draws and leaves the title bar, the toolbar and the folder chooser on the system's face.
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .standard: return NSAppearance(named: .aqua)
+        case .chroma: return NSAppearance(named: .darkAqua)
         }
     }
 }

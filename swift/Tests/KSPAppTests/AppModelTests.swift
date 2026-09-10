@@ -799,4 +799,27 @@ import Testing
         #expect(outcome.note?.contains("Excluded: Track 2") == true)
         #expect(!outcome.headline.contains("Track 2"))
     }
+
+    /// A class so the model and the test share the one instance.
+    private final class DressLog {
+        var worn: [Appearance] = []
+    }
+
+    /// The unit reaches the whole app and not only the window's content: a title bar, a toolbar
+    /// and a folder chooser left on the system's own face is issue #279.
+    @Test func thechosenUnitDressesTheAppTheMomentItIsChosen() {
+        let log = DressLog()
+        let settings = advancedSettings()
+        settings.save(Appearance.standard)
+        let model = AppModel(
+            store: FolderStore(defaults: volatileDefaults()), settingsStore: settings,
+            destination: { _, _ in Destination(directory: URL(filePath: "/"), note: nil) },
+            reveal: { _ in }, chooseFolder: { _ in nil }, dress: { log.worn.append($0) })
+
+        #expect(log.worn == [.standard], "the stored unit should be worn at launch")
+
+        model.appearance = .chroma
+
+        #expect(log.worn == [.standard, .chroma])
+    }
 }
