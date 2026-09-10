@@ -134,6 +134,39 @@ import Testing
         #expect(wrongFormat.summary == nil)
         #expect(wrongFormat.message?.isEmpty == false)
     }
+
+    /// A caller showing a failure to someone says something different for each of these, so the
+    /// reason has to survive the trip out rather than being flattened into one sentence.
+    @Test func amissingProjectIsToldApartFromAnUnrecognisedOne() throws {
+        let missing = SummaryRunner.run(
+            SummaryRunner.Options(path: RepoData.projectFiles.appending(path: "nope.KeyStepPro")))
+        #expect(try #require(missing.failure).reason == .unopenable)
+
+        let wrongFormat = SummaryRunner.run(
+            SummaryRunner.Options(path: RepoData.projectFiles.appending(path: "test_file.mid")))
+        #expect(try #require(wrongFormat.failure).reason == .unrecognised)
+    }
+
+    @Test func amissingMIDIFileIsToldApartFromAnUnrecognisedOne() throws {
+        let missing = SummaryRunner.song(
+            SummaryRunner.Options(path: RepoData.projectFiles.appending(path: "nope.mid")))
+        #expect(try #require(missing.failure).reason == .unopenable)
+
+        let wrongFormat = SummaryRunner.song(
+            SummaryRunner.Options(
+                path: RepoData.projectFiles.appending(path: "project_5.KeyStepPro")))
+        #expect(try #require(wrongFormat.failure).reason == .unrecognised)
+    }
+
+    /// The path and the type's own words are what a log needs and what a window must not show.
+    @Test func afailureKeepsThePathAndTheTypesOwnWordsApart() throws {
+        let path = RepoData.projectFiles.appending(path: "test_file.mid")
+        let failure = try #require(SummaryRunner.run(SummaryRunner.Options(path: path)).failure)
+
+        #expect(failure.path == path)
+        #expect(!failure.detail.contains(path.path))
+        #expect(failure.message == "\(path.path): \(failure.detail)")
+    }
 }
 
 private func chainTrack(_ number: Int) -> Track {
