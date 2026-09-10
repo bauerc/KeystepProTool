@@ -7,11 +7,12 @@ set -o pipefail
 # $0 of its meaning.
 self=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
+. "$(dirname "$self")/lib/parity.sh"
 
 swift_cli=swift/.build/debug/ksp-swift-cli
 if [[ ! -x $swift_cli ]]; then
     echo "midi_parity: $swift_cli is not built; run 'swift build' from swift/" >&2
-    exit 1
+    exit "$PARITY_BROKEN"
 fi
 
 # The per-case worker, reached only from the xargs below. Its streams go to per-case files that the
@@ -21,7 +22,7 @@ if [[ ${1-} == "--case" ]]; then
     IFS='|' read -r index direction label args <<< "$3"
 
     dir=$sandbox/case-$index
-    mkdir -p "$dir/py" "$dir/sw" || exit 1
+    mkdir -p "$dir/py" "$dir/sw" || exit "$PARITY_BROKEN"
 
     # Filters out the two things that legitimately differ: the output directory and the leading
     # program name. Everything after the prefix is still compared exactly.
@@ -38,6 +39,15 @@ if [[ ${1-} == "--case" ]]; then
         import) name=out.KeyStepPro python=midi2ksp swift=convert ;;
     esac
 
+    # What one comparison found. A difference is named here, where the label is; a comparison
+    # that never ran has already spoken for itself and only has to outrank the difference.
+    judge() {
+        local outcome=$1
+        ((outcome == 1)) && echo "midi_parity: $label: $2" >&2
+        ((outcome > failed)) && failed=$outcome
+        return 0
+    }
+
     failed=0
     {
         # shellcheck disable=SC2086 # $args is a flag list that must word-split into arguments
@@ -52,10 +62,9 @@ if [[ ${1-} == "--case" ]]; then
             failed=1
         fi
         for stream in out err; do
-            if ! diff -u <(scrub "$dir/py.$stream") <(scrub "$dir/sw.$stream"); then
-                echo "midi_parity: $label: std$stream differs" >&2
-                failed=1
-            fi
+            compare "$label: std$stream" \
+                diff -u <(scrub "$dir/py.$stream") <(scrub "$dir/sw.$stream")
+            judge $? "std$stream differs"
         done
 
         # A shared refusal has no artifact to compare, and that is a pass, not a skip.
@@ -63,38 +72,36 @@ if [[ ${1-} == "--case" ]]; then
             case $direction in
                 # Parsed events, not bytes: mido writes running status and swift-midi-file does not.
                 export)
-                    if ! diff -u \
+                    compare "$label: the MIDI events" diff -u \
                         <(uv run python tools/midi_events.py "$dir/py/$name") \
-                        <(uv run python tools/midi_events.py "$dir/sw/$name"); then
-                        echo "midi_parity: $label: the MIDI events differ" >&2
-                        failed=1
-                    fi
+                        <(uv run python tools/midi_events.py "$dir/sw/$name")
+                    judge $? "the MIDI events differ"
                     ;;
                 split)
-                    if ! diff -u <(ls "$dir/py") <(ls "$dir/sw"); then
-                        echo "midi_parity: $label: the split file names differ" >&2
-                        failed=1
-                    fi
+                    compare "$label: the split file names" \
+                        diff -u <(ls "$dir/py") <(ls "$dir/sw")
+                    judge $? "the split file names differ"
                     for piece in "$dir/py"/*.mid; do
                         [[ -e $piece ]] || continue
                         piece=$(basename "$piece")
-                        if ! diff -u \
+                        compare "$label: $piece" diff -u \
                             <(uv run python tools/midi_events.py "$dir/py/$piece") \
-                            <(uv run python tools/midi_events.py "$dir/sw/$piece" 2> /dev/null); then
-                            echo "midi_parity: $label: $piece differs" >&2
-                            failed=1
-                        fi
+                            <(uv run python tools/midi_events.py "$dir/sw/$piece" 2> /dev/null)
+                        judge $? "$piece differs"
                     done
                     ;;
                 import)
-                    if ! cmp "$dir/py/$name" "$dir/sw/$name"; then
-                        echo "midi_parity: $label: the written project differs" >&2
-                        failed=1
-                    fi
+                    compare "$label: the written project" \
+                        cmp "$dir/py/$name" "$dir/sw/$name"
+                    judge $? "the written project differs"
                     ;;
             esac
         fi
     } > "$sandbox/case-$index.out" 2> "$sandbox/case-$index.err"
+
+    # xargs answers 123 for any failing child, so the kind of failure cannot travel in an exit
+    # code. The driver reads the tray instead.
+    ((failed == PARITY_BROKEN)) && : > "$sandbox/broken-$index"
 
     # The 3.5 MB artifacts go as soon as the case is judged; the logs live outside $dir so the
     # driver can still replay them.
@@ -229,8 +236,10 @@ if ((cases)); then
     for ((i = 0; i < cases; i++)); do
         [[ -s $sandbox/case-$i.out ]] && cat "$sandbox/case-$i.out"
         [[ -s $sandbox/case-$i.err ]] && cat "$sandbox/case-$i.err" >&2
+        [[ -e $sandbox/broken-$i ]] && status=$PARITY_BROKEN
     done
 fi
 
+((status == PARITY_BROKEN)) && parity_broke
 ((status)) || echo "midi_parity: both ports agree on $cases conversion(s)"
 exit "$status"

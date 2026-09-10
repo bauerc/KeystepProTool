@@ -3,10 +3,11 @@
 # three-line scratch main compiles straight into a binary alongside dependency-free KSPKit.
 set -o pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/parity.sh"
 
 if ! command -v swiftc &> /dev/null; then
     echo "writer_parity: no swiftc on PATH" >&2
-    exit 1
+    exit "$PARITY_BROKEN"
 fi
 
 scratch=swift/.build/writer-parity
@@ -80,11 +81,12 @@ fi
 
 for project in project_files/*.KeyStepPro; do
     name=$(basename "$project")
-    if ! cmp "$sandbox/py_$name" "$sandbox/swift_$name"; then
-        echo "writer_parity: $name differs between the two writers" >&2
-        status=1
-    fi
+    compare "$name" cmp "$sandbox/py_$name" "$sandbox/swift_$name"
+    outcome=$?
+    ((outcome == 1)) && echo "writer_parity: $name differs between the two writers" >&2
+    ((outcome > status)) && status=$outcome
 done
 
+((status == PARITY_BROKEN)) && parity_broke
 ((status)) || echo "writer_parity: both writers agree on $count projects, and with MCC's own bytes"
 exit "$status"

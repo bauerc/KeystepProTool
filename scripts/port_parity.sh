@@ -7,11 +7,12 @@ set -o pipefail
 # Absolute: this re-invokes itself as the per-comparison worker.
 self=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
+. "$(dirname "$self")/lib/parity.sh"
 
 swift_cli=swift/.build/debug/ksp-swift-cli
 if [[ ! -x $swift_cli ]]; then
     echo "port_parity: $swift_cli is not built; run 'swift build' from swift/" >&2
-    exit 1
+    exit "$PARITY_BROKEN"
 fi
 
 # One comparison. Its streams are captured so the driver can replay them in index order rather than
@@ -21,14 +22,16 @@ if [[ ${1-} == "--one" ]]; then
     IFS='|' read -r index project mode <<< "$3"
     {
         # shellcheck disable=SC2086 # an empty $mode must expand to no argument at all
-        if ! diff -u \
+        compare "$(basename "$project") (${mode:-tree})" diff -u \
             <(HOME=$sandbox uv run ksp-dump "$project" $mode) \
-            <(HOME=$sandbox "$swift_cli" dump "$project" $mode); then
-            echo "port_parity: $(basename "$project") differs (${mode:-tree})" >&2
-            exit 1
-        fi
+            <(HOME=$sandbox "$swift_cli" dump "$project" $mode)
+        outcome=$?
+        ((outcome == 1)) && echo "port_parity: $(basename "$project") differs (${mode:-tree})" >&2
+        # xargs answers 123 for any failing child, so the kind of failure cannot travel in an exit
+        # code. The driver reads the tray instead.
+        ((outcome == PARITY_BROKEN)) && : > "$sandbox/broken-$index"
     } > "$sandbox/cmp-$index.out" 2> "$sandbox/cmp-$index.err"
-    exit 0
+    exit "$outcome"
 fi
 
 sandbox=$(mktemp -d) || exit 1
@@ -53,8 +56,10 @@ if ((comparisons)); then
     for ((i = 0; i < comparisons; i++)); do
         [[ -s $sandbox/cmp-$i.out ]] && cat "$sandbox/cmp-$i.out"
         [[ -s $sandbox/cmp-$i.err ]] && cat "$sandbox/cmp-$i.err" >&2
+        [[ -e $sandbox/broken-$i ]] && status=$PARITY_BROKEN
     done
 fi
 
+((status == PARITY_BROKEN)) && parity_broke
 ((status)) || echo "port_parity: both ports agree on $count projects, tree and --json"
 exit "$status"

@@ -45,6 +45,22 @@ fail() {
     exit "$status"
 }
 
+# One parity gate. A gate answers 2 when its own comparison broke -- a `diff` whose input would not
+# open, a tool that is not built -- and that is a different thing from the ports disagreeing: no
+# source change fixes it, and the banner below is the whole reason a reader knows which they have.
+parity_step() {
+    local gate=$1 headline=$2 instruction=$3
+    run_step "$gate"
+    case $? in
+        0) return 0 ;;
+        2)
+            fail "❌ THE PARITY HARNESS BROKE, SO NOTHING WAS COMPARED" \
+                "Claude: $gate could not run its own comparison -- its error is above. The ports were neither agreed nor disagreed, so do not change the Swift. Re-run with KSP_PARITY_JOBS=1; if it passes, this was the harness."
+            ;;
+        *) fail "$headline" "$instruction" ;;
+    esac
+}
+
 banner "=== [1/10] Auto-formatting with Ruff ==="
 run_step uv run ruff format .
 if ! run_step uv run ruff check --fix .; then
@@ -120,7 +136,7 @@ if command -v swift &> /dev/null; then
                 | sort -z | xargs -0 shasum
             shasum swift/Package.swift pyproject.toml uv.lock \
                 scripts/port_parity.sh scripts/writer_parity.sh scripts/midi_parity.sh \
-                scripts/pull_parity.sh tests/fixtures/recall_tape.txt \
+                scripts/pull_parity.sh scripts/lib/parity.sh tests/fixtures/recall_tape.txt \
                 tests/fixtures/recall_project_2_tape.txt \
                 swift/.build/debug/ksp-swift-cli
         } 2> /dev/null | shasum | cut -d' ' -f1
@@ -130,31 +146,23 @@ if command -v swift &> /dev/null; then
         banner "\n=== [7-10/10] Parity gates: inputs unchanged since the last green run -- skipping ==="
     else
         banner "\n=== [7/10] Comparing ksp-swift-cli dump against ksp-dump ==="
-        if ! run_step ./scripts/port_parity.sh; then
-            fail "❌ THE TWO PORTS DISAGREE" \
-                "Claude: the Swift dump no longer reproduces the Python's output. The Python is the reference implementation; fix the Swift."
-        fi
+        parity_step ./scripts/port_parity.sh "❌ THE TWO PORTS DISAGREE" \
+            "Claude: the Swift dump no longer reproduces the Python's output. The Python is the reference implementation; fix the Swift."
         banner "✅ Both ports agree."
 
         banner "\n=== [8/10] Comparing the Swift writer against the Python's ==="
-        if ! run_step ./scripts/writer_parity.sh; then
-            fail "❌ THE TWO WRITERS DISAGREE" \
-                "Claude: the Swift writer no longer reproduces the Python's bytes. The Python is the reference implementation; fix the Swift."
-        fi
+        parity_step ./scripts/writer_parity.sh "❌ THE TWO WRITERS DISAGREE" \
+            "Claude: the Swift writer no longer reproduces the Python's bytes. The Python is the reference implementation; fix the Swift."
         banner "✅ Both writers agree."
 
         banner "\n=== [9/10] Comparing the two ports' conversions, both directions ==="
-        if ! run_step ./scripts/midi_parity.sh; then
-            fail "❌ THE TWO PORTS CONVERT DIFFERENTLY" \
-                "Claude: the Swift no longer converts as the Python does. The Python is the reference implementation; fix the Swift."
-        fi
+        parity_step ./scripts/midi_parity.sh "❌ THE TWO PORTS CONVERT DIFFERENTLY" \
+            "Claude: the Swift no longer converts as the Python does. The Python is the reference implementation; fix the Swift."
         banner "✅ Both ports convert alike."
 
         banner "\n=== [10/10] Comparing the two cores' pull over the shared tapes ==="
-        if ! run_step ./scripts/pull_parity.sh; then
-            fail "❌ THE TWO CORES PULL DIFFERENTLY" \
-                "Claude: the Swift no longer reads a project off the wire as the Python does. The Python is the reference implementation; fix the Swift."
-        fi
+        parity_step ./scripts/pull_parity.sh "❌ THE TWO CORES PULL DIFFERENTLY" \
+            "Claude: the Swift no longer reads a project off the wire as the Python does. The Python is the reference implementation; fix the Swift."
         banner "✅ Both cores pull alike."
 
         mkdir -p "$(dirname "$parity_stamp")" && echo "$parity_fingerprint" > "$parity_stamp"
