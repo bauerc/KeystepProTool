@@ -113,8 +113,8 @@ empty list.
 **Ticking what is imported.** The device has four tracks and a MIDI file may hold more, so each
 source track carries a checkbox and the first four holding notes start ticked — the same set
 `--midi-tracks 1,2,3,4` reads, and that is the option the app hands the conversion, not a mechanism
-of its own. Under the list a line says where you stand: "5 of 6 source tracks ticked; the device has
-4 tracks." Tick a fifth and it is flagged rather than refused — "That needs 5 device tracks, so 1
+of its own. The **Tracks** meter under the result says where that stands against the device's four.
+Tick a fifth and it is flagged rather than refused — "That needs 5 device tracks, so 1
 would be dropped" — because what competes for those four is a channel, not a track, so a track
 carrying two of them asks for two and a track holding nothing asks for none. Untick everything and
 Convert says so rather than writing an empty project, and the result names what was left out.
@@ -141,7 +141,7 @@ never both be set. The three are `--drum-channel`, `--no-drums` and `--drum-trac
 
 **Ticking what is exported.** Every slot starts ticked, and the export follows the ticks. Click a
 slot to leave that one out, a track name to leave out the whole track, a slot number to leave that
-slot out on every track. Any set of cells will do — a slot dropped on one track alone is kept on the
+slot out on every track; each takes a ring under the pointer. Any set of cells will do — a slot dropped on one track alone is kept on the
 others — and the result names what was left out. Untick everything and Convert says so rather than
 writing an empty file.
 
@@ -159,12 +159,11 @@ note whatever its mask, which flattens the cycle. Either way the result's findin
 happened. This is the device's own cycle, not copies of the export.
 
 Beside it sits **Repeat**, a 1–10 stepper, and that one *is* copies of the export: it lays the whole
-thing down again end to end. The line under the grid says what the two come to together — "4
-patterns × 2 repeats — 8 patterns end to end" — so the length is legible before Convert is pressed,
-and it moves as slots are unticked. Repeat exists only in the `.mid`: the device stores no such
-count, so no repeat of it can be written back to a project. At 1 the file is exactly what it was
-before the stepper existed. Splitting changes the unit rather than the count: each file holds one
-pattern, so the line gives the length per file instead.
+thing down again end to end. The **Result** header says what the two come to together — "8
+patterns · 32 beats end to end" — so the length is legible before Convert is pressed, and it moves
+as slots are unticked. Repeat exists only in the `.mid`: the device stores no such count, so no
+repeat of it can be written back to a project. At 1 the file is exactly what it was before the
+stepper existed. Splitting changes the unit rather than the count: each file holds one pattern.
 
 Install it with `make install` (see [Installation](#installation)), then:
 

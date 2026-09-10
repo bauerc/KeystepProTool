@@ -283,6 +283,23 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(try gauge(Limits(modest()), "Tracks").site == nil)
     }
 
+    @Test func asiteIsNamedOnlyOnTheFirstGaugeFoundThere() {
+        let limits = Limits(
+            SegmentationSummary(
+                tracks: [
+                    segmented(
+                        1, source: 1,
+                        patterns: [(pattern: 1, steps: 16, notes: 4, perStep: 1, dropped: 0)]),
+                    segmented(
+                        3, source: 2,
+                        patterns: [(pattern: 5, steps: 64, notes: 90, perStep: 6, dropped: 0)]),
+                ]))
+
+        #expect(
+            limits.gauges.map { limits.shownSite($0) }
+                == [nil, "Track 3", "Track 3, pattern 5", nil, nil])
+    }
+
     @Test func anemptyPlanNamesNoPlaceEither() {
         let limits = Limits(SegmentationSummary(tracks: []))
 

@@ -5,7 +5,7 @@ import KSPRun
 /// How close the planned import comes to each of the device's five walls, read off the plan the
 /// conversion would run on and the refusals the planner raised against it.
 struct Limits: Equatable {
-    static let heading = "Against the device's limits"
+    static let heading = "Device limits"
     /// Amber from three quarters of the way to the wall up to but not including the wall itself,
     /// on all five alike.
     static let nearThreshold = 0.75
@@ -82,6 +82,13 @@ struct Limits: Equatable {
     let gauges: [Gauge]
 
     var exceeded: [Gauge] { gauges.filter { $0.status == .over } }
+
+    /// Said once: a gauge found where one above it was leaves the naming to that one.
+    func shownSite(_ gauge: Gauge) -> String? {
+        guard let site = gauge.site, let index = gauges.firstIndex(where: { $0.id == gauge.id })
+        else { return gauge.site }
+        return gauges[..<index].contains { $0.site == site } ? nil : site
+    }
 
     /// Whether the plan fits, and where it does not, how much of it would not survive the trip.
     /// A wall passed outranks a wall approached: the question is yes or no, and a refusal is no.

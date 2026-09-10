@@ -352,8 +352,8 @@ struct DropView: View {
             self.staged(staged)
         case .working(let filename):
             working(filename)
-        case .reading(let slot):
-            reading(slot)
+        case .reading:
+            reading
         case .done(let outcome):
             done(outcome)
         }
@@ -364,20 +364,12 @@ struct DropView: View {
     private var idle: some View {
         VStack(spacing: 18) {
             Spacer(minLength: 0)
-            VStack(spacing: 10) {
-                restingMap(playhead: nil)
-                    .overlay { prompt }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(
-                        "Drop a MIDI file here. Four tracks of sixteen pattern slots.")
-                Text(
-                    "Drop a .KeyStepPro instead to get a MIDI file back. "
-                        + "Where each one lands is along the foot of the window."
-                )
-                .font(TypeScale.label)
-                .foregroundStyle(palette.mutedInk)
-                .multilineTextAlignment(.center)
-            }
+            restingMap(playhead: nil)
+                .overlay { prompt }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    "Drop a MIDI file or a KeyStep Pro project here. "
+                        + "Four tracks of sixteen pattern slots.")
             Spacer(minLength: 0)
             deviceCard
         }
@@ -386,7 +378,7 @@ struct DropView: View {
     /// On a plate rather than straight over the cells: the map is dim, but a line of type over
     /// sixteen of anything is still type over a texture.
     private var prompt: some View {
-        Text("Drop a MIDI file here")
+        Text("Drop a MIDI file or a KeyStep Pro project")
             .font(.title3)
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
@@ -449,13 +441,6 @@ struct DropView: View {
         return VStack(alignment: .leading, spacing: 10) {
             sectionHeader("Read from the KeyStep Pro")
 
-            Text(
-                "The device is read over USB and needs no password. A project is read as it was "
-                    + "saved, so save any panel edits first."
-            )
-            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-            .fixedSize(horizontal: false, vertical: true)
-
             slotPicker
 
             NameField(
@@ -476,8 +461,7 @@ struct DropView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Toggle("Also write the MIDI file", isOn: $model.alsoMidi)
                     .toggleStyle(.checkbox)
-                Text("The same .mid that converting the project afterwards would make.")
-                    .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                    .help("The same .mid that converting the project afterwards would make.")
                 if let note = model.deviceMIDINote {
                     Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
                         .fixedSize(horizontal: false, vertical: true)
@@ -488,6 +472,9 @@ struct DropView: View {
                 Spacer()
                 Button("Read project \(model.slot)") { Task { await model.read() } }
                     .keyboardShortcut(.defaultAction)
+                    .help(
+                        "The device is read over USB and needs no password. A project is read "
+                            + "as it was saved, so save any panel edits first.")
             }
         }
         .padding(AppLayout.deviceCardPadding)
@@ -497,16 +484,12 @@ struct DropView: View {
     }
 
     /// The device's sixteen on the pattern map's own metrics. The chosen one is a lit readout
-    /// among unlit ones and is named in full below the row, so no hue carries the choice.
+    /// among unlit ones and the Read button names it, so no hue carries the choice.
     private var slotPicker: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: AppLayout.cellSpacing) {
-                ForEach(Array(DeviceRead.slots), id: \.self) { slot in slotCell(slot) }
-            }
-            .frame(width: AppLayout.slotPickerWidth, alignment: .leading)
-            Text("Project \(model.slot) of \(DeviceRead.slots.upperBound)")
-                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+        HStack(spacing: AppLayout.cellSpacing) {
+            ForEach(Array(DeviceRead.slots), id: \.self) { slot in slotCell(slot) }
         }
+        .frame(width: AppLayout.slotPickerWidth, alignment: .leading)
     }
 
     private func slotCell(_ slot: Int) -> some View {
@@ -535,10 +518,10 @@ struct DropView: View {
 
     /// The walk reports no position, so the progress is the system's own indeterminate view --
     /// with the one instruction that matters while it runs.
-    private func reading(_ slot: Int) -> some View {
+    private var reading: some View {
         VStack(spacing: 8) {
-            ProgressView("Reading project \(slot) from the KeyStep Pro…")
-            Text("This takes a few seconds. Leave the device alone until it finishes.")
+            ProgressView("Reading from the KeyStep Pro…")
+            Text("Leave the device alone until it finishes.")
                 .font(TypeScale.label).foregroundStyle(palette.mutedInk)
         }
     }
@@ -551,20 +534,6 @@ struct DropView: View {
                 if !staged.isUnreadable { outputPlan(staged.job) }
 
                 summary(staged)
-
-                if let excluded = model.exclusionNote {
-                    Text(excluded).font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                }
-
-                // Only on the way out: these three mean something else on an import. Both notes
-                // are nil on the defaults, so Simple drops them without a face of its own.
-                if staged.job.writesMIDI, let replaced = model.settings.replacementNote {
-                    Text(replaced).font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                }
-
-                if !staged.job.writesMIDI, let ignored = model.settings.ignoredNote {
-                    Text(ignored).font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                }
 
                 if let preview = staged.preview {
                     Divider()
@@ -585,12 +554,9 @@ struct DropView: View {
     private func outputPlan(_ job: Job) -> some View {
         let plan = model.plan(for: job)
 
-        VStack(alignment: .leading, spacing: 4) {
-            NameField(prompt: "Name", text: $model.name, palette: palette)
-                .onChange(of: model.name) { model.discardPreview() }
-            Text(nameNote(plan))
-                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-        }
+        NameField(prompt: "Name", text: $model.name, palette: palette)
+            .onChange(of: model.name) { model.discardPreview() }
+            .help(nameHelp(plan))
 
         if let note = plan.note {
             Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
@@ -625,10 +591,7 @@ struct DropView: View {
                 sectionHeader("Source")
                 grid(
                     PatternGrid(summary), selection: staged.selection,
-                    length: ExportLength(
-                        summary, selection: staged.selection,
-                        repeatCount: model.settings.repeatCount,
-                        isSplit: model.settings.splitPerPattern))
+                    length: ExportLength(summary, selection: staged.selection))
                 exportOptions
                 Divider()
                 sectionHeader("Result")
@@ -719,7 +682,7 @@ struct DropView: View {
                             }
                         }
                         .frame(width: AppLayout.findingGlyphWidth, alignment: .leading)
-                        if let site = gauge.site {
+                        if let site = limits.shownSite(gauge) {
                             figured(site, font: TypeScale.label)
                                 .foregroundStyle(palette.mutedInk)
                                 .frame(width: AppLayout.limitSiteWidth, alignment: .leading)
@@ -813,7 +776,6 @@ struct DropView: View {
 
     private func segmentationGrid(_ grid: SegmentationGrid) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("What the import will lay down").font(.caption).fontWeight(.medium)
             Text(grid.header).font(TypeScale.label).foregroundStyle(palette.mutedInk)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -829,9 +791,6 @@ struct DropView: View {
                 }
                 ForEach(grid.rows, id: \.track) { segmentationRow($0) }
             }
-
-            Text(SegmentationGrid.legend).font(TypeScale.legend).foregroundStyle(
-                palette.mutedInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -887,10 +846,6 @@ struct DropView: View {
                 }
             }
 
-            if let count = selection.countLine {
-                Text(count).font(TypeScale.label).foregroundStyle(palette.mutedInk)
-            }
-
             // Ticking past the device's four is flagged, not refused, so Convert stays enabled.
             if let overflow = selection.overflowNote {
                 Label(overflow, systemImage: "exclamationmark.triangle")
@@ -901,9 +856,6 @@ struct DropView: View {
             if let note = list.note(verbose: model.verbose) {
                 Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
             }
-
-            Text(SourceTrackList.legend).font(TypeScale.legend).foregroundStyle(
-                palette.mutedInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1033,14 +985,8 @@ struct DropView: View {
                 ForEach(grid.rows, id: \.track) { trackRow($0, selection: selection) }
             }
 
-            if let line = length?.line {
-                Text(line).font(TypeScale.label).foregroundStyle(palette.mutedInk)
-            }
-
-            Text(PatternGrid.legend).font(TypeScale.legend).foregroundStyle(palette.mutedInk)
-            if selection != nil {
-                Text(GridSelection.legend).font(TypeScale.legend)
-                    .foregroundStyle(palette.mutedInk)
+            if let warning = length?.warning {
+                Text(warning).font(TypeScale.label).foregroundStyle(palette.mutedInk)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1069,8 +1015,6 @@ struct DropView: View {
             VStack(alignment: .leading, spacing: AppLayout.laneSpacing) {
                 ForEach(lanes.lanes, id: \.track) { lane($0, boundaries: lanes.boundaries) }
             }
-
-            Text(ArrangeLanes.legend).font(TypeScale.legend).foregroundStyle(palette.mutedInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1141,7 +1085,7 @@ struct DropView: View {
             Button(action: toggle) {
                 label.contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(TickStyle())
             .help(help)
         } else {
             label.help(help)
@@ -1390,10 +1334,13 @@ struct DropView: View {
     }
 
     /// A split run names its own files, so the name reaches the folder they land in instead.
-    private func nameNote(_ plan: Conversion.Plan) -> String {
-        plan.intoFolder
-            ? "This names the folder the files land in. Each file is named after the project and "
-                + "the slot it holds."
+    private func nameHelp(_ plan: Conversion.Plan) -> String {
+        if plan.intoFolder {
+            return "This names the folder the files land in. Each file is named after the "
+                + "project and the slot it holds."
+        }
+        return plan.job.writesMIDI
+            ? "This names the .mid."
             : "This is the name MIDI Control Center's Project Browser will show."
     }
 
@@ -1472,6 +1419,30 @@ private struct NameField: View {
                     .strokeBorder(Color.accentColor, lineWidth: AppLayout.fieldRingWidth)
                     .opacity(focused && activeState == .key ? 1 : 0)
             }
+    }
+}
+
+/// What says a slot, a track name or a slot number is clickable, now that no sentence under the
+/// grid does: the system accent rings it under the pointer, which is what the accent is for.
+private struct TickStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        TickFace(configuration: configuration)
+    }
+}
+
+private struct TickFace: View {
+    let configuration: ButtonStyleConfiguration
+    @State private var hovering = false
+
+    var body: some View {
+        configuration.label
+            .opacity(configuration.isPressed ? AppLayout.pressedOpacity : 1)
+            .overlay {
+                RoundedRectangle(cornerRadius: AppLayout.cellRadius)
+                    .strokeBorder(Color.accentColor, lineWidth: AppLayout.hoverRingWidth)
+                    .opacity(hovering ? 1 : 0)
+            }
+            .onHover { hovering = $0 }
     }
 }
 

@@ -448,8 +448,6 @@ final class AppModel {
 
     var blockReason: String? { staged?.blockReason(settings) }
 
-    var exclusionNote: String? { staged?.exclusionNote }
-
     func discardPreview() {
         guard case .staged(var staged) = phase, staged.preview != nil else { return }
         staged.preview = nil

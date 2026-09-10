@@ -47,18 +47,6 @@ import Testing
         #expect(selection.isTicked(1))
     }
 
-    @Test func thecountLineStatesTheTicksAgainstTheDevicesFourTracks() {
-        let selection = SourceTrackSelection(syntheticSong(tracks: (1...6).map { sourceTrack($0) }))
-
-        #expect(selection.countLine == "4 of 6 source tracks ticked; the device has 4 tracks.")
-    }
-
-    @Test func onesourceTrackIsNotPluralised() {
-        let selection = SourceTrackSelection(syntheticSong(tracks: [sourceTrack(1)]))
-
-        #expect(selection.countLine == "1 of 1 source track ticked; the device has 4 tracks.")
-    }
-
     @Test func tickingNothingDisablesConvertWithAReason() {
         var selection = SourceTrackSelection(syntheticSong(tracks: [sourceTrack(1)]))
 
@@ -158,7 +146,6 @@ import Testing
     @Test func aselectionWithNothingToTickSaysNothingAtAll() {
         let selection = SourceTrackSelection()
 
-        #expect(selection.countLine == nil)
         #expect(selection.overflowNote == nil)
         #expect(selection.blockReason(drumSense(selection)) == nil)
         #expect(selection.exclusionNote == nil)
@@ -169,7 +156,6 @@ import Testing
     @Test func areadFileTicksTheTracksThatHoldNotes() throws {
         let selection = SourceTrackSelection(try summariseSong("m6-test-file.mid"))
 
-        #expect(selection.countLine == "4 of 6 source tracks ticked; the device has 4 tracks.")
         #expect([3, 4, 5, 6].allSatisfy { selection.isTicked($0) })
         #expect(selection.spec == nil)
         #expect(selection.overflowNote == nil)

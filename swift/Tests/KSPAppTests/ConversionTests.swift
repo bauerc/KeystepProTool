@@ -335,8 +335,7 @@ import Testing
         let project = try Reader.load(contentsOf: RepoData.projectFiles.appending(path: name))
         let summary = ProjectSummary(project)
 
-        let length = ExportLength(
-            summary, selection: GridSelection(summary), repeatCount: 1, isSplit: false)
+        let length = ExportLength(summary, selection: GridSelection(summary))
         let laid = Set(try MIDIExport.renderProject(project).map(\.patternNumber))
 
         #expect(length.patterns == laid.count)

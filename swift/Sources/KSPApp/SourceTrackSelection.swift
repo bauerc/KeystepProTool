@@ -97,12 +97,6 @@ struct SourceTrackSelection: Sendable, Equatable {
         for (number, destination) in chosen where destination == .drums { chosen[number] = nil }
     }
 
-    var countLine: String? {
-        guard !isInert else { return nil }
-        return "\(ticked.count) of \(tracks.count) source track\(tracks.count == 1 ? "" : "s") "
-            + "ticked; the device has \(Constants.trackItemIDs.count) tracks."
-    }
-
     /// Said rather than refused: what a tick costs is a device track per channel, so no cap on the
     /// ticks themselves could be honest about what will fit.
     var overflowNote: String? {

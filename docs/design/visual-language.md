@@ -189,6 +189,7 @@ Three orthogonal channels, so no combination of states turns to mud:
 | **Stroke** | intent — solid exports, dashed does not | anything about content |
 | **Bottom rule** | length — a fraction of the cell width for 16 / 32 / 48 / 64 steps | |
 | **The figure** | events switched on, SF Mono | |
+| **Ring** | clickable — the system accent, under the pointer only | anything about content or export |
 
 Chain membership lives on the **chain rail** beneath the row, never inside a cell.
 
@@ -283,6 +284,25 @@ which is the contract the section below closes on.
 Colour follows the destination. A source track is `inert` until routed, then takes its device
 track's colour. The segmentation row it feeds already wears that colour, so routing is visible as
 the source row acquiring the colour of the row it lands in.
+
+## Copy
+
+**A label is the documentation.** A control, a grid or a meter carries its name and nothing
+underneath it — no legend, no caption, no sentence saying what a click does. A cell that can be
+clicked says so with its ring, not with a line under the map.
+
+**Say a number once.** The Result's header gives the length, so no line under the grid restates
+it; a limit's site is named on the first meter found there and left off the ones below it; the Read
+button names the slot, so no line under the slots does.
+
+**Do not caption what the picture already says.** A struck, dashed cell is left out, an unticked
+Keep writes the default, and a routed source track wears its device track's colour. None of them
+gets a line saying so.
+
+**Explanation lives in help.** What a control does beyond its label is its hover text, where it is
+there when wanted. What the app *found* is not explanation, and stays in the window: a finding, a
+refusal, a warning that nothing would be written, a folder it fell back to. Nobody hovers to learn
+that something went wrong.
 
 ## Motion
 

@@ -5,9 +5,6 @@ import KSPRun
 /// The four tracks on one time axis: a region per Pattern, at the length that track plays it. The
 /// geometry is the export's own, scaled into ``AppLayout/axisWidth``; this only measures it out.
 struct ArrangeLanes: Equatable {
-    static let legend =
-        "A region is one Pattern at the length its own track plays. Hover one for what it holds."
-
     /// One event of the region's sketch, in the region's own coordinates.
     struct Mark: Equatable {
         let x: CGFloat
