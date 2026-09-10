@@ -125,6 +125,33 @@ private func contrast(_ one: Color, _ other: Color) -> Double {
         }
     }
 
+    /// A name field is passive: it names what is about to be written and is read once. So its fill
+    /// may never out-contrast the ink beside it, or the eye goes to the field rather than to the
+    /// map. The second expectation is why the fill has to be chosen rather than inherited: a
+    /// near-white one is quiet on the standard ground and the loudest thing in the window on the
+    /// Chroma one.
+    @Test func anameFieldNeverOutshoutsTheTextBesideIt() {
+        for palette in [Palette.standard, Palette.chroma] {
+            #expect(
+                contrast(palette.surface, palette.ground) < contrast(palette.ink, palette.ground))
+        }
+        #expect(
+            contrast(.white, Palette.chroma.ground)
+                > contrast(Palette.chroma.ink, Palette.chroma.ground))
+    }
+
+    /// What is typed into that field, and the default standing in it until something is, both read
+    /// on the field's own fill. Fill and ground are within 1.2:1 of each other in both faces, so
+    /// it is the border that says where the field is, and it has to out-do the fill to do that.
+    @Test func anameFieldReadsInBothFaces() {
+        for palette in [Palette.standard, Palette.chroma] {
+            #expect(contrast(palette.ink, palette.surface) >= 4.5)
+            #expect(contrast(palette.mutedInk, palette.surface) >= 4.5)
+            #expect(
+                contrast(palette.rule, palette.surface) > contrast(palette.surface, palette.ground))
+        }
+    }
+
     /// The two faces the app wears must reach AppKit as the same two the palette is chosen by, or
     /// the chrome is drawn as the other unit.
     @Test func eachUnitReachesAppKitAsTheFaceItsPaletteIsChosenBy() {

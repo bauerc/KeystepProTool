@@ -441,6 +441,13 @@ enum AppLayout {
     static let deviceCardPadding: CGFloat = 14
     static let cardRadius: CGFloat = 8
 
+    /// A name field, drawn rather than bezelled. Tighter than a card, because a field sits inside
+    /// one, and the ring is heavy enough to read against a fill only a hairline separates from the
+    /// ground.
+    static let fieldRadius: CGFloat = 5
+    static let fieldPadding = EdgeInsets(top: 5, leading: 7, bottom: 5, trailing: 7)
+    static let fieldRingWidth: CGFloat = 3
+
     /// A severity glyph's column, wide enough that the text beside it starts on one edge.
     static let findingGlyphWidth: CGFloat = 14
     /// "Track 1, pattern 16" is the longest a gauge's site reads.
