@@ -24,6 +24,9 @@ struct DropView: View {
                 Divider()
                 options
             }
+
+            Divider()
+            actionBar
         }
         .frame(
             minWidth: AppLayout.minimumWindowWidth, maxWidth: .infinity,
@@ -60,8 +63,7 @@ struct DropView: View {
     private var band: some View {
         HStack(spacing: 10) {
             bandTitle
-            Spacer(minLength: 12)
-            bandAction
+            Spacer()
         }
         .padding(.horizontal, AppLayout.mainPadding)
         .frame(height: AppLayout.bandHeight)
@@ -95,9 +97,62 @@ struct DropView: View {
         }
     }
 
-    /// Convert lives in the band once the pane below it stops being the only place to put it.
+    /// Where the result lands and the button that writes it, across the foot of the window: a
+    /// commit action belongs beside what it acts on, which is not a pane's height above it.
+    private var actionBar: some View {
+        HStack(spacing: 10) {
+            landing
+            Spacer(minLength: 12)
+            action
+        }
+        .padding(.horizontal, AppLayout.mainPadding)
+        .frame(height: AppLayout.actionBarHeight)
+        .frame(maxWidth: .infinity)
+        .background(palette.surface)
+    }
+
     @ViewBuilder
-    private var bandAction: some View {
+    private var landing: some View {
+        switch model.phase {
+        // A refused file has nowhere to land, so the slot says so rather than naming a path
+        // the app has already declined to write.
+        case .staged(let staged) where staged.isUnreadable:
+            Text(Landing.nowhere)
+                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                .lineLimit(1).truncationMode(.tail)
+        case .staged(let staged):
+            landingRow(Landing(model.plan(for: staged.job)), kind: staged.job.folderKind)
+        default:
+            EmptyView()
+        }
+    }
+
+    /// The folder gives way first: the name is what the user typed, and the head of a path is
+    /// the part they can spare.
+    private func landingRow(_ landing: Landing, kind: FolderKind) -> some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 4) {
+                Image(systemName: "folder").foregroundStyle(palette.mutedInk)
+                Text(landing.folder)
+                    .foregroundStyle(palette.mutedInk)
+                    .lineLimit(1).truncationMode(.head)
+                Text("/").foregroundStyle(palette.mutedInk)
+                Text(landing.name).lineLimit(1).layoutPriority(1)
+            }
+            .font(TypeScale.label)
+            .help(landing.path)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(landing.spoken)
+
+            Button("Choose…") { model.choose(kind) }
+                .controlSize(.small)
+        }
+    }
+
+    /// The action slot, which is never empty while an action can be taken: Convert while a file
+    /// is staged, the way back once one is written, and the way in while nothing is.
+    @ViewBuilder
+    private var action: some View {
         switch model.phase {
         case .staged:
             if let reason = model.blockReason {
@@ -583,38 +638,34 @@ struct DropView: View {
     }
 
     private func staged(_ staged: AppModel.Staged) -> some View {
-        // Cancel and Convert sit outside the scroll view, so they stay reachable at any height.
-        VStack(alignment: .leading, spacing: 12) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    // A refused file has no name to give, nowhere to land and nothing to run, so
-                    // the promise goes whole rather than standing above its own refusal.
-                    if !staged.isUnreadable { outputPlan(staged.job) }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                // A refused file has no name to give, nowhere to land and nothing to run, so
+                // the promise goes whole rather than standing above its own refusal.
+                if !staged.isUnreadable { outputPlan(staged.job) }
 
-                    summary(staged)
+                summary(staged)
 
-                    if let excluded = model.exclusionNote {
-                        Text(excluded).font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                    }
-
-                    // Only on the way out: these three mean something else on an import. Both notes
-                    // are nil on the defaults, so Simple drops them without a face of its own.
-                    if staged.job.writesMIDI, let replaced = model.settings.replacementNote {
-                        Text(replaced).font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                    }
-
-                    if !staged.job.writesMIDI, let ignored = model.settings.ignoredNote {
-                        Text(ignored).font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                    }
-
-                    if let preview = staged.preview {
-                        Divider()
-                        dryRunPreview(preview)
-                    }
+                if let excluded = model.exclusionNote {
+                    Text(excluded).font(TypeScale.label).foregroundStyle(palette.mutedInk)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
 
+                // Only on the way out: these three mean something else on an import. Both notes
+                // are nil on the defaults, so Simple drops them without a face of its own.
+                if staged.job.writesMIDI, let replaced = model.settings.replacementNote {
+                    Text(replaced).font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                }
+
+                if !staged.job.writesMIDI, let ignored = model.settings.ignoredNote {
+                    Text(ignored).font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                }
+
+                if let preview = staged.preview {
+                    Divider()
+                    dryRunPreview(preview)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: staged.id) { await model.summarise() }
@@ -622,7 +673,8 @@ struct DropView: View {
         .task(id: model.arrangementKey) { await model.arrange() }
     }
 
-    /// The name, where it lands and what the landing costs: everything Convert is promising.
+    /// The name and what naming it costs. Where it lands is in the action bar, beside the button
+    /// that writes it.
     @ViewBuilder
     private func outputPlan(_ job: Job) -> some View {
         let plan = model.plan(for: job)
@@ -632,12 +684,6 @@ struct DropView: View {
                 .onChange(of: model.name) { model.discardPreview() }
             Text(nameNote(plan))
                 .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-        }
-
-        VStack(alignment: .leading, spacing: 2) {
-            Text(plan.intoFolder ? "Will be written into" : "Will be written to")
-                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-            Text(plan.target.path).font(.callout).textSelection(.enabled)
         }
 
         if let note = plan.note {

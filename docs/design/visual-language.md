@@ -116,17 +116,33 @@ Named from device vocabulary, never from shape — see `CONTEXT.md`.
 
 ### The control band
 
-A dark strip across the top of the content area carrying the file name, the direction and Convert.
-It mirrors the panel's own matte black band, which holds the OLED, the knobs and the four track
+A dark strip across the top of the content area carrying the file name and the direction. It
+mirrors the panel's own matte black band, which holds the OLED, the knobs and the four track
 displays above the coloured track zones.
 
 It is what stops the light face being a white void with four coloured rows floating in it.
 
-**The action slot is never empty.** The band's right-hand end carries whatever the phase's action
-is — Cancel and Convert while a file is staged, Convert another when one is written, and **Open…**
-while nothing is. An empty window that offers no way to fill it puts the only entrance in the menu
-bar, where a user looking at the window will not find it; the keyboard has ⌘O and the mouse has
-this. Wherever the action bar moves, the idle entrance moves with it.
+### The action bar
+
+A bar across the foot of the content area, spanning the pane and the sidebar both, carrying where
+the result lands on the left and the phase's action on the right. It is ordinary macOS: the
+surface ground, a rule above it, and a commit action at the trailing end, which is where the
+platform puts one.
+
+**Where it lands sits beside the button that writes it.** The folder is quiet and gives way first
+— the head of a path is what a reader can spare, and the name is what they just typed. Choose…
+edits the destination the staged direction writes into, and a refused file says it has none rather
+than naming a path the app has already declined to write.
+
+**The action slot is never empty.** It carries whatever the phase's action is — Cancel and Convert
+while a file is staged, Convert another when one is written, and **Open…** while nothing is. An
+empty window that offers no way to fill it puts the only entrance in the menu bar, where a user
+looking at the window will not find it; the keyboard has ⌘O and the mouse has this. Wherever the
+action bar moves, the idle entrance moves with it.
+
+The bar's height is fixed. A run in flight has no action to offer and no landing to promise, and a
+chassis that drops out from under the window for the seconds a conversion takes is worse than an
+empty one.
 
 ### The pattern map
 

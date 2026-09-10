@@ -61,7 +61,7 @@ struct Outcome: Sendable, Equatable {
         return written.count == 1 ? written[0].lastPathComponent : "\(written.count) files written"
     }
 
-    /// The band's way back to the start, worded for the run that got here.
+    /// The action bar's way back to the start, worded for the run that got here.
     var againLabel: String {
         source == .deviceRead ? "Read another" : "Convert another"
     }
@@ -297,6 +297,14 @@ extension Job {
         switch self {
         case .toProject: return "KeyStepPro"
         case .toMIDI: return "mid"
+        }
+    }
+
+    /// Which destination the action bar's Choose... edits: the one this job writes into.
+    var folderKind: FolderKind {
+        switch self {
+        case .toProject: return .project
+        case .toMIDI: return .midi
         }
     }
 
