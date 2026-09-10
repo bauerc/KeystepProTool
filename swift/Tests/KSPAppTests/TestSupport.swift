@@ -121,3 +121,28 @@ func summariseSong(_ name: String) throws -> SongSummary {
     #expect(result.message == nil)
     return try #require(result.summary)
 }
+
+/// An Open Recent list of the test's own, ordered and deduplicated as `NSDocumentController`
+/// orders its own, so a run neither reads nor writes the system's.
+@MainActor
+final class RecentFilesLog {
+    private(set) var urls: [URL] = []
+    private(set) var clearances = 0
+
+    var store: RecentFiles {
+        RecentFiles(
+            urls: { self.urls },
+            note: { url in
+                self.urls.removeAll { $0 == url }
+                self.urls.insert(url, at: 0)
+            },
+            clear: {
+                self.urls = []
+                self.clearances += 1
+            })
+    }
+}
+
+/// A recents list nothing asserts on. The log it keeps lives as long as the store's closures.
+@MainActor
+func volatileRecents() -> RecentFiles { RecentFilesLog().store }

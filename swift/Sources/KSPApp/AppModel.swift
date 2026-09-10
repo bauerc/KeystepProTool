@@ -125,6 +125,9 @@ final class AppModel {
     var readName: String = "" { didSet { refreshReadPlan() } }
     /// `nil` whenever the result on screen is not a successful read's.
     private(set) var readPreview: ReadPreview?
+    /// Held rather than read from the menu's body: `NSDocumentController` is not observable, and
+    /// Open Recent has to redraw when a file is opened.
+    private(set) var recentFiles: [URL] = []
     /// Set through ``choose(_:)`` and ``useDefault(for:)`` alone, so every change is saved.
     private(set) var folders: Folders { didSet { refreshReadPlan() } }
     /// Where the read's files would go and what they would be called, as the card shows it.
@@ -146,6 +149,8 @@ final class AppModel {
     private let destination: (Job, Folders) -> Destination
     private let reveal: ([URL]) -> Void
     private let chooseFolder: @MainActor (URL?) -> URL?
+    private let chooseFile: @MainActor () -> URL?
+    private let recents: RecentFiles
     private let pull: @Sendable (PullRunner.Options) -> RunResult
     private let dress: @MainActor (Appearance) -> Void
 
@@ -155,6 +160,8 @@ final class AppModel {
         destination: @escaping (Job, Folders) -> Destination = AppModel.destination(for:folders:),
         reveal: @escaping ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) },
         chooseFolder: @escaping @MainActor (URL?) -> URL? = AppModel.chooseFolder(startingAt:),
+        chooseFile: @escaping @MainActor () -> URL? = AppModel.chooseFile,
+        recents: RecentFiles = .documentController,
         pull: @escaping @Sendable (PullRunner.Options) -> RunResult = { PullRunner.run($0) },
         // Optional: `NSApp` stands up with the application, and a test builds a model without one.
         dress: @escaping @MainActor (Appearance) -> Void = { NSApp?.appearance = $0.nsAppearance }
@@ -164,6 +171,8 @@ final class AppModel {
         self.destination = destination
         self.reveal = reveal
         self.chooseFolder = chooseFolder
+        self.chooseFile = chooseFile
+        self.recents = recents
         self.pull = pull
         self.dress = dress
         let loaded = store.load()
@@ -178,6 +187,7 @@ final class AppModel {
             uniqueKeysWithValues: Job.Kind.allCases.map { ($0, settingsStore.load($0)) })
         self.deviceReadPlan = AppModel.readPlan(
             slot: slot, named: "", folders: loaded, alsoMidi: alsoMidi)
+        self.recentFiles = recents.urls()
         dress(chosenAppearance)
     }
 
@@ -241,18 +251,43 @@ final class AppModel {
         return panel.runModal() == .OK ? panel.url : nil
     }
 
+    @MainActor
+    private static func chooseFile() -> URL? {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = Conversion.openableTypes
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Open"
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
     var staged: Staged? {
         guard case .staged(let staged) = phase else { return nil }
         return staged
     }
 
-    func accept(_ url: URL) {
-        // A drop landing on a run already in flight would be staged and then thrown away by that
-        // run's own answer, which lands last. A read is seconds at the device; both are ignored.
+    /// A file arriving on a run already in flight would be staged and then thrown away by that
+    /// run's own answer, which lands last. A read is seconds at the device; both shut the door.
+    var canAccept: Bool {
         switch phase {
-        case .working, .reading: return
-        case .idle, .staged, .done: break
+        case .working, .reading: return false
+        case .idle, .staged, .done: return true
         }
+    }
+
+    /// File > Open. The same door as a drop, so the panel's file is staged rather than run.
+    func open() {
+        guard canAccept, let picked = chooseFile() else { return }
+        accept(picked)
+    }
+
+    func clearRecentFiles() {
+        recents.clear()
+        recentFiles = recents.urls()
+    }
+
+    func accept(_ url: URL) {
+        guard canAccept else { return }
         guard let job = Conversion.job(for: url) else {
             phase = .done(
                 Outcome(
@@ -261,6 +296,10 @@ final class AppModel {
                         + "project.", report: Report(), note: nil))
             return
         }
+        // Recent to the app is what it could open, whatever the conversion then makes of it; a
+        // file it has no direction for never was.
+        recents.note(url)
+        recentFiles = recents.urls()
         name = Naming.stem(of: url)
         lastKind = job.kind
         readPreview = nil

@@ -43,6 +43,7 @@ private final class Revealed {
         return AppModel(
             store: FolderStore(defaults: defaults), settingsStore: advancedSettings(),
             reveal: { log.files.append($0) }, chooseFolder: { _ in chosenMIDIFolder },
+            recents: volatileRecents(),
             pull: pull)
     }
 

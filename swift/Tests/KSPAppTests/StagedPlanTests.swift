@@ -12,7 +12,7 @@ import Testing
             store: FolderStore(defaults: volatileDefaults()),
             settingsStore: advancedSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
-            reveal: { _ in }, chooseFolder: { _ in nil })
+            reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents())
     }
 
     private var midiFixture: URL { RepoData.projectFiles.appending(path: "m6-test-file.mid") }

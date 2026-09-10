@@ -18,7 +18,8 @@ import Testing
             store: FolderStore(defaults: volatileDefaults()),
             settingsStore: advancedSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
-            reveal: { log.revealed.append($0) }, chooseFolder: { _ in nil })
+            reveal: { log.revealed.append($0) }, chooseFolder: { _ in nil },
+            recents: volatileRecents())
     }
 
     private var midiFixture: URL { RepoData.projectFiles.appending(path: "m6-test-file.mid") }
@@ -247,7 +248,7 @@ import Testing
         AppModel(
             store: FolderStore(defaults: defaults),
             settingsStore: SettingsStore(defaults: defaults), reveal: { _ in },
-            chooseFolder: { _ in picked })
+            chooseFolder: { _ in picked }, recents: volatileRecents())
     }
 
     private func withFolder(_ body: (UserDefaults, URL) throws -> Void) throws {
@@ -350,7 +351,7 @@ import Testing
             destination: { _, _ in
                 Destination(directory: FileManager.default.temporaryDirectory, note: nil)
             },
-            reveal: { _ in }, chooseFolder: { _ in nil })
+            reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents())
     }
 
     private var projectFixture: URL {
@@ -748,7 +749,7 @@ import Testing
             store: FolderStore(defaults: volatileDefaults()),
             settingsStore: advancedSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
-            reveal: { _ in }, chooseFolder: { _ in nil })
+            reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents())
         model.accept(projectFixture)
         await model.summarise()
         for track in 1...4 { model.toggle(track: track) }
@@ -777,7 +778,7 @@ import Testing
             store: FolderStore(defaults: volatileDefaults()),
             settingsStore: advancedSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
-            reveal: { _ in }, chooseFolder: { _ in nil })
+            reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents())
         model.accept(projectFixture)
         await model.summarise()
 
@@ -801,7 +802,7 @@ import Testing
             store: FolderStore(defaults: volatileDefaults()),
             settingsStore: advancedSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
-            reveal: { _ in }, chooseFolder: { _ in nil })
+            reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents())
         model.accept(projectFixture)
         await model.summarise()
 
@@ -831,7 +832,8 @@ import Testing
         let model = AppModel(
             store: FolderStore(defaults: volatileDefaults()), settingsStore: settings,
             destination: { _, _ in Destination(directory: URL(filePath: "/"), note: nil) },
-            reveal: { _ in }, chooseFolder: { _ in nil }, dress: { log.worn.append($0) })
+            reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents(),
+            dress: { log.worn.append($0) })
 
         #expect(log.worn == [.standard], "the stored unit should be worn at launch")
 
