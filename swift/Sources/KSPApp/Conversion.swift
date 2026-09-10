@@ -31,6 +31,9 @@ struct Outcome: Sendable, Equatable {
     let folder: URL?
     let dryRun: Bool
     let source: Source
+    /// What the band names over the result, as it named it while the run was being set up.
+    var document = ""
+    var direction = ""
 
     /// Rendered once: SwiftUI re-evaluates a body far more often than a conversion happens.
     let collapsedRows: [Finding]
@@ -55,6 +58,9 @@ struct Outcome: Sendable, Equatable {
     var all: [String] { allRows.map(\.text) }
 
     var failed: Bool { written.isEmpty }
+
+    /// The folder the files sit in: the one a split run filled, or the one beside what it wrote.
+    var directory: URL? { folder ?? written.first?.deletingLastPathComponent() }
 
     var resultLine: String {
         if failed { return source == .deviceRead ? "Nothing was read" : "Nothing was written" }
@@ -187,9 +193,12 @@ enum Conversion {
         }.value
 
         let note = [plan.note, excluded].compactMap { $0 }.joined(separator: " ")
-        return outcome(
+        var made = outcome(
             from: result, note: note.isEmpty ? nil : note, excluded: excluded,
             dryRun: settings.dryRun, folder: plan.intoFolder ? target : nil)
+        made.document = plan.source.lastPathComponent
+        made.direction = plan.job.direction
+        return made
     }
 
     /// Detached for the reason a conversion is: the parse is the file's whole size and the window

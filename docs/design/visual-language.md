@@ -122,6 +122,9 @@ displays above the coloured track zones.
 
 It is what stops the light face being a white void with four coloured rows floating in it.
 
+It names the **document** in every phase, the finished one included. What the run made is the
+pane's to announce; the band saying it as well would say it twice.
+
 ### The action bar
 
 A bar across the foot of the content area, carrying where the result lands on the left and the dry
@@ -137,8 +140,13 @@ group rather than a switch in one column and its consequence in another.
 edits the destination the staged direction writes into, and a refused file says it has none rather
 than naming a path the app has already declined to write.
 
+**Once it is written, it says where the file is.** The folder the run's files sit in takes the
+landing's place, beside **Reveal in Finder**, which shows them there. The Finder comes up only when
+asked: a window raised over the result on every run would hide the one thing the run was for.
+
 **The action slot is never empty.** It carries whatever the phase's action is — Cancel and Convert
-while a file is staged, Convert another when one is written, and **Open…** while nothing is. An
+while a file is staged, Reveal in Finder and Convert another when one is written, and **Open…**
+while nothing is. An
 empty window that offers no way to fill it puts the only entrance in the menu bar, where a user
 looking at the window will not find it; the keyboard has ⌘O and the mouse has this. Wherever the
 action bar moves, the idle entrance moves with it.
@@ -146,6 +154,17 @@ action bar moves, the idle entrance moves with it.
 The bar's height is fixed. A run in flight has no action to offer and no landing to promise, and a
 chassis that drops out from under the window for the seconds a conversion takes is worse than an
 empty one.
+
+### The result
+
+A finished run leads its pane: a status glyph a size above anything else in the window, what it
+wrote beside it in the band title's size — the file's name, or how many files — and the runner's
+own account of the run underneath in `mutedInk`.
+
+**Success is marked**, with `success` and `checkmark.circle` together. A run that wrote a file is a
+status, and the one the app exists for, so rule 2 holds as it does for a refusal: the glyph says
+it and the colour agrees. A failure takes `error` and the triangle, and its account stays in
+`ink` — nobody should have to squint at what went wrong.
 
 ### The option band
 

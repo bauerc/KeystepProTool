@@ -469,7 +469,6 @@ final class AppModel {
             phase = .staged(current)
             return
         }
-        if !outcome.written.isEmpty { reveal(outcome.written) }
         phase = .done(outcome)
     }
 
@@ -503,10 +502,16 @@ final class AppModel {
 
         let outcome = await DeviceRead.run(plan, verbose: settings.verbose, pull: pull)
 
-        if !outcome.written.isEmpty { reveal(outcome.written) }
         // A failure wrote no project, so there is nothing to read back and preview.
         readPreview = outcome.failed ? nil : ReadPreview(project: plan.target)
         phase = .done(outcome)
+    }
+
+    /// On the user's word rather than after every run: a Finder window raised over the result
+    /// hides the one thing the run was for.
+    func revealWritten() {
+        guard case .done(let outcome) = phase, !outcome.failed else { return }
+        reveal(outcome.written)
     }
 
     /// What the read wrote, summarised and laid out as a dropped project would be. On the

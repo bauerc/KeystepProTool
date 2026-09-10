@@ -20,6 +20,8 @@ enum DeviceRead {
 
     static func defaultStem(slot: Int) -> String { "Project \(slot)" }
 
+    static let direction = "KeyStep Pro → project file"
+
     static func plan(
         slot: Int, named typed: String, into destination: Destination, alsoMidi: Bool,
         exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
@@ -52,7 +54,10 @@ enum DeviceRead {
         // Detached for the reason a conversion is, and more so: this one is seconds at the device,
         // and the window has to keep drawing throughout.
         let result = await Task.detached(priority: .userInitiated) { pull(options) }.value
-        return outcome(from: result, note: plan.note)
+        var made = outcome(from: result, note: plan.note)
+        made.document = "Project \(plan.slot)"
+        made.direction = direction
+        return made
     }
 
     /// A failure keeps the runner's own words: they name the fix -- the cable, MIDI Control Center,

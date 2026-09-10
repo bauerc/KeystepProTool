@@ -80,14 +80,15 @@ struct DropView: View {
             Text(filename).font(TypeScale.bandTitle).lineLimit(1).truncationMode(.middle)
         case .reading(let slot):
             Text("Project \(slot)").font(TypeScale.bandTitle)
-            Text("KeyStep Pro → project file")
+            Text(DeviceRead.direction)
                 .font(TypeScale.label).foregroundStyle(palette.bandInk.opacity(0.65))
+        // Still the document, not the result: the result leads the pane below, and said here
+        // too it would be said twice.
         case .done(let outcome):
-            // The glyph carries the outcome; the colour only agrees with it. Track 2 is orange and
-            // Track 4 is red, so a status hue is never enough on its own.
-            Image(systemName: outcome.failed ? StatusMark.error : StatusMark.success)
-                .foregroundStyle(outcome.failed ? palette.error : palette.success)
-            Text(outcome.resultLine).font(TypeScale.bandTitle).lineLimit(1)
+            Text(outcome.document)
+                .font(TypeScale.bandTitle).lineLimit(1).truncationMode(.middle)
+            Text(outcome.direction)
+                .font(TypeScale.label).foregroundStyle(palette.bandInk.opacity(0.65))
         }
     }
 
@@ -130,31 +131,36 @@ struct DropView: View {
                 .lineLimit(1).truncationMode(.tail)
         case .staged(let staged):
             landingRow(Landing(model.plan(for: staged.job)), kind: staged.job.folderKind)
+        case .done(let outcome):
+            if let landing = Landing(outcome) { landingPath(landing) }
         default:
             EmptyView()
         }
     }
 
-    /// The folder gives way first: the name is what the user typed, and the head of a path is
-    /// the part they can spare.
     private func landingRow(_ landing: Landing, kind: FolderKind) -> some View {
         HStack(spacing: 8) {
-            HStack(spacing: 4) {
-                Image(systemName: "folder").foregroundStyle(palette.mutedInk)
-                Text(landing.folder)
-                    .foregroundStyle(palette.mutedInk)
-                    .lineLimit(1).truncationMode(.head)
-                Text("/").foregroundStyle(palette.mutedInk)
-                Text(landing.name).lineLimit(1).layoutPriority(1)
-            }
-            .font(TypeScale.label)
-            .help(landing.path)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(landing.spoken)
-
+            landingPath(landing)
             Button("Choose…") { model.choose(kind) }
                 .controlSize(.small)
         }
+    }
+
+    /// The folder gives way first: the name is what the user typed, and the head of a path is
+    /// the part they can spare.
+    private func landingPath(_ landing: Landing) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "folder").foregroundStyle(palette.mutedInk)
+            Text(landing.folder)
+                .foregroundStyle(palette.mutedInk)
+                .lineLimit(1).truncationMode(.head)
+            Text("/").foregroundStyle(palette.mutedInk)
+            Text(landing.name).lineLimit(1).layoutPriority(1)
+        }
+        .font(TypeScale.label)
+        .help(landing.path)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(landing.spoken)
     }
 
     /// The action slot, which is never empty while an action can be taken: Convert while a file
@@ -175,6 +181,9 @@ struct DropView: View {
             .disabled(model.blockReason != nil)
             .keyboardShortcut(.defaultAction)
         case .done(let outcome):
+            if !outcome.failed {
+                Button("Reveal in Finder") { model.revealWritten() }
+            }
             Button(outcome.againLabel) { model.reset() }
         case .idle:
             // Return belongs to the device card's own button here, so this takes no default
@@ -1283,18 +1292,31 @@ struct DropView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// What the run made, leading the window a size above everything it heads. The glyph carries
+    /// the status and the colour only agrees: Track 2 is orange and Track 4 is red.
+    private func resultHeader(_ outcome: Outcome) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            Image(systemName: outcome.failed ? StatusMark.error : StatusMark.success)
+                .font(TypeScale.resultMark)
+                .foregroundStyle(outcome.failed ? palette.error : palette.success)
+                .accessibilityLabel(outcome.failed ? "Failed" : "Done")
+            VStack(alignment: .leading, spacing: 4) {
+                Text(outcome.resultLine)
+                    .font(TypeScale.bandTitle).lineLimit(1).truncationMode(.middle)
+                headline(outcome, font: TypeScale.label, figures: TypeScale.headlineValue)
+                    .foregroundStyle(outcome.failed ? palette.ink : palette.mutedInk)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
     @ViewBuilder
     private func done(_ outcome: Outcome) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    if let folder = outcome.folder { landedIn(folder) }
-                    if outcome.written.count > 1 || outcome.folder != nil {
-                        writtenFiles(outcome.written)
-                    }
-
-                    headline(outcome, font: .callout, figures: TypeScale.headlineValue)
-                        .textSelection(.enabled)
+                    resultHeader(outcome)
+                    if outcome.written.count > 1 { writtenFiles(outcome.written) }
 
                     if let note = outcome.note {
                         Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
