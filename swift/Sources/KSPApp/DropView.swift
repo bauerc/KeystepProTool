@@ -715,35 +715,35 @@ struct DropView: View {
         }
     }
 
-    /// The gauges are Advanced's question: how close a figure sits to a wall it has not hit. What
-    /// the planner refused is nobody's option, so the refusals outlive the block they sit under
-    /// and are said on either face -- a note that would be dropped is not a detail to opt into.
-    @ViewBuilder
+    /// Feedback, never an option: whether a loop fits the device's walls is the most useful thing
+    /// on screen for a reader who does not know the hardware yet, so both faces show it. Advanced
+    /// adds controls; it never takes feedback away.
     private func limits(_ limits: Limits) -> some View {
-        let refusals = limits.exceeded.flatMap(\.warnings)
-        if model.mode == .advanced || !refusals.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                if model.mode == .advanced { gauges(limits) }
+        VStack(alignment: .leading, spacing: 6) {
+            gauges(limits)
 
-                ForEach(refusals, id: \.self) { warning in
-                    HStack(alignment: .firstTextBaseline, spacing: AppLayout.labelGap) {
-                        Image(systemName: StatusMark.error).font(.caption2)
-                            .frame(width: AppLayout.findingGlyphWidth, alignment: .leading)
-                        figured(warning, font: TypeScale.label)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .foregroundStyle(palette.error)
+            ForEach(limits.exceeded.flatMap(\.warnings), id: \.self) { warning in
+                HStack(alignment: .firstTextBaseline, spacing: AppLayout.labelGap) {
+                    Image(systemName: StatusMark.error).font(.caption2)
+                        .frame(width: AppLayout.findingGlyphWidth, alignment: .leading)
+                    figured(warning, font: TypeScale.label)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .foregroundStyle(palette.error)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Five rows, whatever the plan holds: a limit left out reads as a limit there is no need to
-    /// think about.
+    /// The answer, then the five figures it was read off. A limit left out reads as a limit there
+    /// is no need to think about, so all five are drawn whatever the plan holds.
     private func gauges(_ limits: Limits) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(Limits.heading).font(.caption).fontWeight(.medium)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(Limits.heading).font(.caption).fontWeight(.medium)
+                    .foregroundStyle(palette.mutedInk)
+                verdictLine(limits.verdict)
+            }
 
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(limits.gauges) { gauge in
@@ -793,6 +793,27 @@ struct DropView: View {
                 .frame(width: AppLayout.meterCapWidth, height: AppLayout.meterHeight)
         }
         .frame(width: AppLayout.meterWidth, alignment: .leading)
+    }
+
+    /// Marked in all three states, where a meter marks only a refusal: this line carries no
+    /// quantity of its own, so with the colour removed the glyph is all that is left to read the
+    /// status off -- rule 2.
+    private func verdictLine(_ verdict: Limits.Verdict) -> some View {
+        let mark = self.mark(verdict.status)
+        return Label {
+            figured(verdict.text, font: TypeScale.label)
+        } icon: {
+            Image(systemName: mark.symbol).font(.caption)
+        }
+        .foregroundStyle(mark.colour)
+    }
+
+    private func mark(_ status: Limits.Status) -> (colour: Color, symbol: String) {
+        switch status {
+        case .within: return (palette.success, StatusMark.success)
+        case .near: return (palette.warning, StatusMark.warning)
+        case .over: return (palette.error, StatusMark.error)
+        }
     }
 
     /// A refusal is the only one of the three marked: the meter already says how close a figure
