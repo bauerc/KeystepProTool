@@ -147,6 +147,9 @@ final class AppModel {
     private var chosenAppearance: Appearance
     private var chosenSlot: Int
     private var chosenAlsoMidi: Bool
+    /// Ticked for the document on screen and cleared with it: a dry run that outlived its document
+    /// would write nothing for every file after it, and say so nowhere but on the button.
+    private var dryRun = false
     private var slots: [Job.Kind: Settings]
     /// The direction the panel is showing while nothing is staged, so cancelling a drop does not
     /// snap it to the other one. Within a session only: a launch starts at the import.
@@ -206,22 +209,19 @@ final class AppModel {
     /// option Simple shows, so it is the one field either face can write.
     var settings: Settings {
         get {
-            let stored = slots[kind] ?? Settings()
-            guard mode == .simple else { return stored }
-            var plain = Settings()
-            plain.dryRun = stored.dryRun
-            return plain
+            var out = mode == .simple ? Settings() : (slots[kind] ?? Settings())
+            out.dryRun = dryRun
+            return out
         }
         set {
+            dryRun = newValue.dryRun
             // Written to whichever slot ``kind`` names now: a write before a drop lands in the
-            // other one. Under Simple only the dry run survives, so the rest of a Simple write --
-            // which is the defaults it just read -- cannot overwrite what Advanced holds.
-            var kept = slots[kind] ?? Settings()
-            if mode == .advanced {
-                kept = newValue
-            } else {
-                kept.dryRun = newValue.dryRun
-            }
+            // other one. A Simple write is the defaults it just read, so it writes to no slot at
+            // all and cannot overwrite what Advanced holds.
+            guard mode == .advanced else { return }
+            var kept = newValue
+            // The dry run has one home, and a direction's slot is not it.
+            kept.dryRun = false
             slots[kind] = kept
             settingsStore.save(kept, for: kind)
         }
@@ -308,6 +308,12 @@ final class AppModel {
         // file it has no direction for never was.
         recents.note(url)
         recentFiles = recents.urls()
+        // Whatever is on screen ends here, and the dry run ticked for it ends with it. A tick
+        // made with nothing open was made for this file, so it stands.
+        switch phase {
+        case .staged, .done: dryRun = false
+        case .idle, .working, .reading: break
+        }
         name = Naming.stem(of: url)
         lastKind = job.kind
         readPreview = nil
@@ -530,6 +536,7 @@ final class AppModel {
 
     func reset() {
         phase = .idle
+        dryRun = false
         name = ""
         readName = ""
         readPreview = nil

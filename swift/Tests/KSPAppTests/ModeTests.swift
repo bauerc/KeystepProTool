@@ -41,7 +41,7 @@ import Testing
             let store = SettingsStore(defaults: defaults)
             var export = Settings()
             export.repeatCount = 4
-            export.dryRun = true
+            export.verbose = true
             var `import` = Settings()
             `import`.ignoreVelocity = true
 
@@ -49,9 +49,9 @@ import Testing
             store.save(`import`, for: .toProject)
 
             #expect(store.load(.toMIDI).repeatCount == 4)
-            #expect(store.load(.toMIDI).dryRun)
+            #expect(store.load(.toMIDI).verbose)
             // The one field the two share, which is the whole reason for two slots.
-            #expect(!store.load(.toProject).dryRun)
+            #expect(!store.load(.toProject).verbose)
             #expect(store.load(.toProject).ignoreVelocity)
         }
     }
@@ -110,7 +110,35 @@ import Testing
             #expect(loaded.repeatCount == 9)
             #expect(loaded.ignoreSwing)
             #expect(loaded.stepSkip == .auto)
+            #expect(!loaded.verbose)
+        }
+    }
+
+    /// Unlike every setting beside it. A launch that remembered a dry run would write nothing for
+    /// every file after it, and say so nowhere but on the button.
+    @Test func thedryRunDoesNotSurviveTheNextLaunch() {
+        withVolatileDefaults { defaults in
+            var settings = Settings()
+            settings.dryRun = true
+            settings.repeatCount = 7
+            SettingsStore(defaults: defaults).save(settings, for: .toMIDI)
+
+            let loaded = SettingsStore(defaults: defaults).load(.toMIDI)
+
             #expect(!loaded.dryRun)
+            #expect(loaded.repeatCount == 7)
+        }
+    }
+
+    /// A build that did store it left the key in someone's defaults, where it must stay inert.
+    @Test func astoredDryRunFromAnEarlierBuildIsIgnored() {
+        withVolatileDefaults { defaults in
+            defaults.set(Data(#"{"dryRun":true,"repeatCount":9}"#.utf8), forKey: "settings.toMIDI")
+
+            let loaded = SettingsStore(defaults: defaults).load(.toMIDI)
+
+            #expect(!loaded.dryRun)
+            #expect(loaded.repeatCount == 9)
         }
     }
 
@@ -222,18 +250,14 @@ import Testing
         model.accept(midiFixture)
         #expect(model.kind == .toProject)
         model.settings.ignoreSwing = true
-        model.settings.dryRun = true
 
         model.accept(projectFixture)
         #expect(model.kind == .toMIDI)
         #expect(!model.settings.ignoreSwing)
-        // Shared by nothing but these two slots, which is why there are two.
-        #expect(!model.settings.dryRun)
         model.settings.repeatCount = 6
 
         model.accept(midiFixture)
         #expect(model.settings.ignoreSwing)
-        #expect(model.settings.dryRun)
         #expect(model.settings.repeatCount == 1)
 
         // The export group is reachable again, and kept what it was last given.
@@ -248,13 +272,13 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = model(writingInto: directory)
         model.mode = .advanced
-        model.settings.dryRun = true
+        model.settings.ignoreSwing = true
 
         model.accept(projectFixture)
-        #expect(!model.settings.dryRun)
+        #expect(!model.settings.ignoreSwing)
 
         model.accept(midiFixture)
-        #expect(model.settings.dryRun)
+        #expect(model.settings.ignoreSwing)
     }
 
     /// Both faces draw the segmentation grid and the limits, so both wait on the same plan.
