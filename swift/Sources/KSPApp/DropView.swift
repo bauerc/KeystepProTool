@@ -493,8 +493,9 @@ struct DropView: View {
 
             slotPicker
 
-            TextField(DeviceRead.defaultStem(slot: model.slot), text: $model.readName)
-                .textFieldStyle(.roundedBorder)
+            NameField(
+                prompt: DeviceRead.defaultStem(slot: model.slot), text: $model.readName,
+                palette: palette)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Will be written to").font(TypeScale.label).foregroundStyle(palette.mutedInk)
@@ -584,8 +585,7 @@ struct DropView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
-                        TextField("Name", text: $model.name)
-                            .textFieldStyle(.roundedBorder)
+                        NameField(prompt: "Name", text: $model.name, palette: palette)
                             .onChange(of: model.name) { model.discardPreview() }
                         Text(nameNote(plan))
                             .font(TypeScale.label).foregroundStyle(palette.mutedInk)
@@ -1434,6 +1434,41 @@ struct DropView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+}
+
+/// Where the user names what is about to be written. Drawn from the palette rather than left to
+/// `.roundedBorder`, whose bezel is AppKit's and takes no palette input: a passive field has to
+/// stay quieter than the ink beside it, and a fill the app never chose cannot promise that.
+///
+/// The ring stays the system accent, which is a user setting with accessibility weight.
+private struct NameField: View {
+    let prompt: String
+    @Binding var text: String
+    let palette: Palette
+    @FocusState private var focused: Bool
+    @Environment(\.controlActiveState) private var activeState
+
+    var body: some View {
+        TextField(prompt, text: $text, prompt: Text(prompt).foregroundStyle(palette.mutedInk))
+            .textFieldStyle(.plain)
+            .labelsHidden()
+            .font(TypeScale.label)
+            .foregroundStyle(palette.ink)
+            .focused($focused)
+            .padding(AppLayout.fieldPadding)
+            .background(
+                RoundedRectangle(cornerRadius: AppLayout.fieldRadius).fill(palette.surface)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: AppLayout.fieldRadius)
+                    .strokeBorder(palette.rule, lineWidth: 1)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: AppLayout.fieldRadius)
+                    .strokeBorder(Color.accentColor, lineWidth: AppLayout.fieldRingWidth)
+                    .opacity(focused && activeState == .key ? 1 : 0)
+            }
     }
 }
 
