@@ -442,12 +442,12 @@ import Testing
 
         let state = await Conversion.summarise(.toMIDI(broken))
 
-        guard case .failed(let message) = state else {
+        guard case .failed(let failure) = state else {
             Issue.record("an unreadable project should have failed, got \(state)")
             return
         }
-        #expect(message.contains("broken.KeyStepPro"))
-        #expect(!message.hasPrefix("ksp-swift-cli"))
+        #expect(failure.headline.contains("broken.KeyStepPro"))
+        #expect(failure.path == broken.path)
     }
 
     @Test func summarisingAMIDIFileReportsItsSourceTracks() async throws {
@@ -471,12 +471,32 @@ import Testing
 
         let state = await Conversion.summarise(.toProject(broken))
 
-        guard case .failed(let message) = state else {
+        guard case .failed(let failure) = state else {
             Issue.record("an unreadable MIDI file should have failed, got \(state)")
             return
         }
-        #expect(message.contains("broken.mid"))
-        #expect(!message.hasPrefix("ksp-swift-cli"))
+        #expect(failure.headline.contains("broken.mid"))
+        #expect(failure.path == broken.path)
+    }
+
+    /// #282, end to end: the text file named `.mid` that produced the log line in the report.
+    @Test func atextFileNamedMidIsRefusedInTheUsersWordsRatherThanTheReaders() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let bogus = directory.appending(path: "bogus.mid")
+        try Data("this is not a MIDI file at all".utf8).write(to: bogus)
+
+        let state = await Conversion.summarise(.toProject(bogus))
+
+        guard case .failed(let failure) = state else {
+            Issue.record("a text file named .mid should have failed, got \(state)")
+            return
+        }
+        #expect(
+            failure.headline == "bogus.mid isn't a MIDI file — its header doesn't match. Try "
+                + "re-exporting it from your DAW as a Standard MIDI File.")
+        #expect(!failure.headline.contains("malformed"))
+        #expect(!failure.headline.contains(directory.path))
     }
 
     @Test func amissingMIDIFileFailsRatherThanSummarisingNothing() async throws {

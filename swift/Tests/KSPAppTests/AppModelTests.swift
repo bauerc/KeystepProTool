@@ -344,13 +344,13 @@ import Testing
 
 @MainActor
 @Suite struct AppModelSummaryTests {
-    private func model() -> AppModel {
+    private func model(writingInto directory: URL = FileManager.default.temporaryDirectory)
+        -> AppModel
+    {
         AppModel(
             store: FolderStore(defaults: volatileDefaults()),
             settingsStore: advancedSettings(),
-            destination: { _, _ in
-                Destination(directory: FileManager.default.temporaryDirectory, note: nil)
-            },
+            destination: { _, _ in Destination(directory: directory, note: nil) },
             reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents())
     }
 
@@ -587,11 +587,44 @@ import Testing
         model.accept(broken)
         await model.summarise()
 
-        guard case .failed(let message) = try #require(model.staged).summary else {
+        guard case .failed(let failure) = try #require(model.staged).summary else {
             Issue.record("an unreadable MIDI file should have shown its failure")
             return
         }
-        #expect(message.contains("broken.mid"))
+        #expect(failure.headline.contains("broken.mid"))
+    }
+
+    /// #282: the app refused the file and then left Convert offering to write one anyway.
+    @Test func arefusedFileBlocksConvertAndHasNoPlanToShow() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let broken = directory.appending(path: "bogus.mid")
+        try Data("not a MIDI file".utf8).write(to: broken)
+        let model = model(writingInto: directory)
+
+        model.accept(broken)
+        #expect(model.blockReason == nil, "nothing is known about it until the read comes back")
+        await model.summarise()
+
+        #expect(try #require(model.staged).isUnreadable)
+        #expect(model.blockReason != nil)
+    }
+
+    /// Convert is blocked, but a caller could still reach ``convert()``: Return is bound to the
+    /// button and a disabled button is a drawing, not a guarantee.
+    @Test func arefusedFileWritesNothingEvenIfConvertIsReached() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Data("not a MIDI file".utf8).write(to: directory.appending(path: "bogus.mid"))
+        let model = model(writingInto: directory)
+
+        model.accept(directory.appending(path: "bogus.mid"))
+        await model.summarise()
+        await model.convert()
+
+        #expect(try #require(model.staged).isUnreadable, "the refusal should still be on screen")
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: directory.path) == ["bogus.mid"])
     }
 
     @Test func asongArrivingAfterACancelIsDropped() async throws {
@@ -619,11 +652,11 @@ import Testing
         model.accept(broken)
         await model.summarise()
 
-        guard case .failed(let message) = try #require(model.staged).summary else {
+        guard case .failed(let failure) = try #require(model.staged).summary else {
             Issue.record("an unreadable project should have shown its failure")
             return
         }
-        #expect(message.contains("broken.KeyStepPro"))
+        #expect(failure.headline.contains("broken.KeyStepPro"))
     }
 
     @Test func asummaryArrivingAfterACancelIsDropped() async throws {

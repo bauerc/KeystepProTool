@@ -84,7 +84,7 @@ enum SummaryState: Equatable {
     case loading
     case project(ProjectSummary)
     case song(SongSummary)
-    case failed(String)
+    case failed(ReadFailure)
 }
 
 /// What the import would lay down, and what the planner already found wrong with it.
@@ -200,14 +200,18 @@ enum Conversion {
             let result = await Task.detached(priority: .userInitiated) {
                 SummaryRunner.run(SummaryRunner.Options(path: source))
             }.value
-            if let summary = result.summary { return .project(summary) }
-            return .failed(result.message ?? "That project could not be read.")
+            switch result {
+            case .read(let summary): return .project(summary)
+            case .failed(let failure): return .failed(ReadFailure(failure, kind: job.kind))
+            }
         case .toProject(let source):
             let result = await Task.detached(priority: .userInitiated) {
                 SummaryRunner.song(SummaryRunner.Options(path: source))
             }.value
-            if let summary = result.summary { return .song(summary) }
-            return .failed(result.message ?? "That MIDI file could not be read.")
+            switch result {
+            case .read(let summary): return .song(summary)
+            case .failed(let failure): return .failed(ReadFailure(failure, kind: job.kind))
+            }
         }
     }
 

@@ -583,29 +583,14 @@ struct DropView: View {
     }
 
     private func staged(_ staged: AppModel.Staged) -> some View {
-        let plan = model.plan(for: staged.job)
         // Cancel and Convert sit outside the scroll view, so they stay reachable at any height.
-        return VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        NameField(prompt: "Name", text: $model.name, palette: palette)
-                            .onChange(of: model.name) { model.discardPreview() }
-                        Text(nameNote(plan))
-                            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                    }
+                    // A refused file has no name to give, nowhere to land and nothing to run, so
+                    // the promise goes whole rather than standing above its own refusal.
+                    if !staged.isUnreadable { outputPlan(staged.job) }
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(plan.intoFolder ? "Will be written into" : "Will be written to")
-                            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                        Text(plan.target.path).font(.callout).textSelection(.enabled)
-                    }
-
-                    if let note = plan.note {
-                        Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                    }
-
-                    Divider()
                     summary(staged)
 
                     if let excluded = model.exclusionNote {
@@ -637,15 +622,52 @@ struct DropView: View {
         .task(id: model.arrangementKey) { await model.arrange() }
     }
 
+    /// The name, where it lands and what the landing costs: everything Convert is promising.
+    @ViewBuilder
+    private func outputPlan(_ job: Job) -> some View {
+        let plan = model.plan(for: job)
+
+        VStack(alignment: .leading, spacing: 4) {
+            NameField(prompt: "Name", text: $model.name, palette: palette)
+                .onChange(of: model.name) { model.discardPreview() }
+            Text(nameNote(plan))
+                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+        }
+
+        VStack(alignment: .leading, spacing: 2) {
+            Text(plan.intoFolder ? "Will be written into" : "Will be written to")
+                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+            Text(plan.target.path).font(.callout).textSelection(.enabled)
+        }
+
+        if let note = plan.note {
+            Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
+        }
+
+        Divider()
+    }
+
+    /// What was refused, said once: the sentence, then the file it is about. The path is the
+    /// quieter of the two because it answers "which file", not "what now".
+    private func refusal(_ failure: ReadFailure) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(failure.headline, systemImage: StatusMark.error)
+                .font(TypeScale.label).foregroundStyle(palette.warning)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(failure.path)
+                .font(TypeScale.smallLabel).foregroundStyle(palette.mutedInk)
+                .textSelection(.enabled).lineLimit(2).truncationMode(.middle)
+        }
+    }
+
     @ViewBuilder
     private func summary(_ staged: AppModel.Staged) -> some View {
         switch staged.summary {
         case .loading:
             ProgressView(staged.job.isProject ? "Reading the project…" : "Reading the MIDI file…")
                 .controlSize(.small)
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle")
-                .font(TypeScale.label).foregroundStyle(palette.warning).textSelection(.enabled)
+        case .failed(let failure):
+            refusal(failure)
         case .project(let summary):
             VStack(alignment: .leading, spacing: 12) {
                 grid(
@@ -1374,10 +1396,8 @@ struct DropView: View {
         switch preview.summary {
         case .loading:
             ProgressView("Reading the project back…").controlSize(.small)
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle")
-                .font(TypeScale.label).foregroundStyle(palette.warning).textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+        case .failed(let failure):
+            refusal(failure)
         case .project(let summary):
             VStack(alignment: .leading, spacing: 12) {
                 grid(PatternGrid(summary), selection: nil, length: nil)

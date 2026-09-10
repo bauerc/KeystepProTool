@@ -41,8 +41,16 @@ final class AppModel {
             case .song:
                 return sourceSelection.blockReason(
                     settings.drumSense(named: sourceSelection.drumTrack))
-            case .loading, .failed: return nil
+            case .failed(let failure): return failure.blockReason
+            case .loading: return nil
             }
+        }
+
+        /// Whether the app has already refused the file. Nothing downstream of a read -- the name,
+        /// the destination, Convert -- can promise anything while this holds.
+        var isUnreadable: Bool {
+            if case .failed = summary { return true }
+            return false
         }
 
         var exclusionNote: String? {
