@@ -65,8 +65,9 @@ lands in MIDI Control Center's Templates folder, where the Project Browser will 
 you get a `.mid` beside it. **Cancel** drops it again without writing anything. One file at a time;
 everything else is the CLI's job.
 
-**Three ways in.** Drag a file onto the window or the Dock icon, **File > Open…** (⌘O), or
-**File > Open Recent**. All three stage the file rather than converting it.
+**Four ways in.** The **Open…** button at the right of the band, dragging a file onto the window or
+the Dock icon, **File > Open…** (⌘O), or **File > Open Recent**. All four stage the file rather
+than converting it.
 
 **Simple and Advanced.** A switch in the titlebar picks between the two, and the choice is
 remembered. *Simple* is what a fresh install opens on, and it keeps everything that says what is in
