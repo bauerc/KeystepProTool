@@ -44,6 +44,23 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
     }
 
+    /// One window is one conversion, so the second file is the conversion now -- there is no
+    /// second window for it to be staged in.
+    @Test func asecondFileTakesOverTheOneConversion() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.accept(midiFixture)
+        let first = try #require(model.staged)
+
+        model.accept(projectFixture)
+
+        let second = try #require(model.staged)
+        #expect(second.job == .toMIDI(projectFixture))
+        #expect(second.id != first.id)
+        #expect(model.name == "project_5")
+    }
+
     @Test func thePlanFollowsTheNameAsItIsTyped() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
