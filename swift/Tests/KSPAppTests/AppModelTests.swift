@@ -16,7 +16,7 @@ import Testing
     {
         AppModel(
             store: FolderStore(defaults: volatileDefaults()),
-            settingsStore: advancedSettings(),
+            settingsStore: volatileSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
             reveal: { log.revealed.append($0) }, chooseFolder: { _ in nil },
             recents: volatileRecents())
@@ -280,17 +280,18 @@ import Testing
         #expect(model.settings.dryRun)
     }
 
-    /// It is the one option both faces show, and it is no longer kept in either direction's slot.
-    @Test func adryRunSurvivesTheFaceAndTheDirectionOfTheFileItIsTickedFor() throws {
+    /// It is kept in neither direction's slot, so an option written beside it cannot take it down.
+    @Test func adryRunSurvivesAnOptionSetOnTheSameFile() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = model(writingInto: directory)
         model.accept(midiFixture)
         model.settings.dryRun = true
 
-        model.mode = .advanced
+        model.settings.ignoreSwing = true
 
         #expect(model.settings.dryRun)
+        #expect(model.settings.ignoreSwing)
         #expect(model.kind == .toProject)
     }
 }
@@ -405,7 +406,7 @@ import Testing
     {
         AppModel(
             store: FolderStore(defaults: volatileDefaults()),
-            settingsStore: advancedSettings(),
+            settingsStore: volatileSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
             reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents())
     }
@@ -836,7 +837,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = AppModel(
             store: FolderStore(defaults: volatileDefaults()),
-            settingsStore: advancedSettings(),
+            settingsStore: volatileSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
             reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents())
         model.accept(projectFixture)
@@ -865,7 +866,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = AppModel(
             store: FolderStore(defaults: volatileDefaults()),
-            settingsStore: advancedSettings(),
+            settingsStore: volatileSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
             reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents())
         model.accept(projectFixture)
@@ -889,7 +890,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = AppModel(
             store: FolderStore(defaults: volatileDefaults()),
-            settingsStore: advancedSettings(),
+            settingsStore: volatileSettings(),
             destination: { _, _ in Destination(directory: directory, note: nil) },
             reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents())
         model.accept(projectFixture)
@@ -916,7 +917,7 @@ import Testing
     /// and a folder chooser left on the system's own face is issue #279.
     @Test func thechosenUnitDressesTheAppTheMomentItIsChosen() {
         let log = DressLog()
-        let settings = advancedSettings()
+        let settings = volatileSettings()
         settings.save(Appearance.standard)
         let model = AppModel(
             store: FolderStore(defaults: volatileDefaults()), settingsStore: settings,

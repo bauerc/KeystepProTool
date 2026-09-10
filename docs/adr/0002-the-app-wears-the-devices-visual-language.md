@@ -78,5 +78,5 @@ safer and more legible at 16pt.
 
 **A full instrument-panel skin**, rejected: fake anodised surfaces and imitation LCD glyphs fight
 macOS conventions, accessibility settings and both appearances, and read as costume. The app keeps
-a native chassis — real sidebar, real toolbar, real controls — and puts the device's language on the
+a native chassis — real window chrome, real menus, real controls — and puts the device's language on the
 domain surfaces, which is where it means something.

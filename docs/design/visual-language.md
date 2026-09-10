@@ -124,10 +124,13 @@ It is what stops the light face being a white void with four coloured rows float
 
 ### The action bar
 
-A bar across the foot of the content area, spanning the pane and the sidebar both, carrying where
-the result lands on the left and the phase's action on the right. It is ordinary macOS: the
-surface ground, a rule above it, and a commit action at the trailing end, which is where the
-platform puts one.
+A bar across the foot of the content area, carrying where the result lands on the left and the dry
+run beside the phase's action on the right. It is ordinary macOS: the surface ground, a rule above
+it, and a commit action at the trailing end, which is where the platform puts one.
+
+**The dry run sits beside the button that obeys it.** Whether a run writes anything is one
+decision with Convert, which reads *Dry run* while it is on, so the switch and the button are one
+group rather than a switch in one column and its consequence in another.
 
 **Where it lands sits beside the button that writes it.** The folder is quiet and gives way first
 — the head of a path is what a reader can spare, and the name is what they just typed. Choose…
@@ -143,6 +146,27 @@ action bar moves, the idle entrance moves with it.
 The bar's height is fixed. A run in flight has no action to offer and no landing to promise, and a
 chassis that drops out from under the window for the seconds a conversion takes is worse than an
 empty one.
+
+### The option band
+
+One row on a surface plate directly under the source it acts on: the drum designation and channel
+under a source track list, the split, Step Skip and Repeat under a pattern grid, and in both cases
+**Keep — Velocity, Swing, Time Shift** after a rule.
+
+**A control sits inside what it changes.** A column of options beside the window says nothing about
+which of them reach the file; a control under the thing it reshapes says it by structure, and needs
+no styling to carry the distinction. What no conversion decides — the appearance, the default
+destinations, how long a finding list runs — is not in the window at all, but in Settings (⌘,).
+
+**The ticks say keep, not ignore.** The runner takes these as substitutions — replace the velocity,
+ignore the swing — but a reader is deciding what survives the trip. A ticked box keeps what the
+file holds; unticking one writes the device's own default over it. The sentence each control used
+to carry underneath is its hover text, because a row cannot hold a paragraph per control.
+
+**Every control in the band is held to a fixed width**, summed in `AppLayout` and asserted against
+`minimumContentWidth`, for the reason `trackColumnWidths` is: the band is one row inside a pane
+that scrolls vertically only, so a control added to it and left out of the sum is clipped in
+silence.
 
 ### The pattern map
 
@@ -235,9 +259,8 @@ It is marked in **all three** states, unlike a meter, and this is not a slip: th
 quantity of its own, so with the colour removed the glyph is the only thing left to read the
 status off — rule 2 again.
 
-**The limits show on both faces.** Whether a loop fits a 64-step pattern is what a reader who does
-not know the hardware most needs, so Simple keeps the block whole. Advanced adds controls; it
-never takes feedback away.
+**The limits are feedback, never an option.** Whether a loop fits a 64-step pattern is what a
+reader who does not know the hardware most needs, so the block is always whole.
 
 ### Finding rows
 

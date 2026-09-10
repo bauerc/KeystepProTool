@@ -17,6 +17,12 @@ struct KSPApp: App {
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified)
         .commands { FileCommands(model: .shared) }
+
+        // `SwiftUI.Settings` rather than the app's own ``Settings``: this is the scene AppKit
+        // mounts under ⌘, and names in the application menu.
+        SwiftUI.Settings {
+            SettingsWindow(model: .shared)
+        }
     }
 }
 

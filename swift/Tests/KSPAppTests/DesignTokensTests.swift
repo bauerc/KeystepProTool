@@ -43,6 +43,15 @@ private func contrast(_ one: Color, _ other: Color) -> Double {
         #expect(AppLayout.limitRowWidth <= AppLayout.minimumContentWidth)
     }
 
+    /// The options sit beside what they change, which puts each direction's whole set on one row
+    /// inside a pane that scrolls vertically only. A control added to a band and left out of its
+    /// widths would be clipped in silence.
+    @Test func eitherDirectionsOptionBandFitsThePane() {
+        #expect(AppLayout.bandWidth(AppLayout.exportBandWidths) <= AppLayout.minimumContentWidth)
+        #expect(AppLayout.bandWidth(AppLayout.importBandWidths) <= AppLayout.minimumContentWidth)
+        #expect(AppLayout.keepWidths.count == 3)
+    }
+
     /// The idle pane draws the map with nothing behind it, so its rows and columns are the
     /// tokens' own -- and a row without a colour of its own would be drawn in another track's.
     @Test func therestingMapHasArowPerTrackColourAndFitsThePane() {

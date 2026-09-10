@@ -15,7 +15,7 @@ struct Settings: Sendable, Equatable, Codable {
     /// A deliberate twin of the CLI's own `--drum-channel` check; a test pins the two together.
     static let drumChannelRange = 1...16
 
-    /// The two designations the sidebar owns. A source track is the track list's to name.
+    /// The two designations the Source section owns. A source track is the track list's to name.
     enum Drums: String, CaseIterable, Identifiable, Codable, Sendable {
         case automatic
         case none
@@ -39,6 +39,8 @@ struct Settings: Sendable, Equatable, Codable {
 
     /// The document's rather than a preference's: it is cleared when that document ends.
     var dryRun = false
+    /// The app's own rather than a direction's: ``SettingsStore`` keeps it, and ``AppModel``
+    /// overlays it here, as it does ``dryRun``.
     var verbose = false
     /// How much of the step-skip cycle the export renders. Export-only: an import has no cycle.
     var stepSkip: StepSkip = .auto
@@ -145,11 +147,10 @@ struct Settings: Sendable, Equatable, Codable {
             verbose: verbose, configPath: drumMapConfigPath)
     }
 
-    /// What survives a launch. ``dryRun``, ``cells``, ``midiTracksSpec``, ``routeSpec`` and
-    /// ``drumTrack`` belong to a drop rather than to a preference, so they are left out and come
-    /// back as-new.
+    /// What survives a launch. ``cells``, ``midiTracksSpec``, ``routeSpec`` and ``drumTrack``
+    /// belong to a drop rather than to a preference, so they are left out and come back as-new;
+    /// ``dryRun`` and ``verbose`` are the app's own, kept where neither direction can differ.
     private enum CodingKeys: String, CodingKey {
-        case verbose
         case stepSkip
         case repeatCount
         case drums
@@ -174,7 +175,6 @@ extension Settings {
             try blob.decodeIfPresent(T.self, forKey: key) ?? fallback
         }
         self.init()
-        verbose = try read(.verbose, fresh.verbose)
         stepSkip = try read(.stepSkip, fresh.stepSkip)
         repeatCount = try read(.repeatCount, fresh.repeatCount)
         drums = try read(.drums, fresh.drums)

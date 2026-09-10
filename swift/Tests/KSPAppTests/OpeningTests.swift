@@ -17,7 +17,7 @@ import UniformTypeIdentifiers
     ) -> AppModel {
         AppModel(
             store: FolderStore(defaults: volatileDefaults()),
-            settingsStore: advancedSettings(),
+            settingsStore: volatileSettings(),
             destination: { _, _ in
                 Destination(directory: FileManager.default.temporaryDirectory, note: nil)
             },

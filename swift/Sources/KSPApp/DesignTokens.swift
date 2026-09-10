@@ -239,12 +239,12 @@ enum AppLayout {
     /// The floor, not the size: the window resizes above this, and the width goes to a track name.
     /// One floor for both faces, because both draw the grid and the track list.
     static let minimumWindowWidth: CGFloat = 1020
-    static let minimumWindowHeight: CGFloat = 440
+    /// The idle pane is the one that does not scroll -- the map, then the device card under it --
+    /// so it is what the floor has to clear. Under this the fixed-height band is squeezed instead.
+    static let minimumWindowHeight: CGFloat = 640
     /// What a first launch opens at; afterwards the window restores the size it was left at.
     static let defaultWindowWidth: CGFloat = 1120
-    static let defaultWindowHeight: CGFloat = 600
-    static let sidebarWidth: CGFloat = 220
-    static let dividerWidth: CGFloat = 1
+    static let defaultWindowHeight: CGFloat = 700
     /// The band above the pane carries what the pane used to hold at its top, so the pane
     /// needs less room around it; a narrower gutter also widens ``minimumContentWidth``.
     static let mainPadding: CGFloat = 18
@@ -263,9 +263,11 @@ enum AppLayout {
     /// "Drum" and its capsule padding; at 34 the word truncated to "Dr...".
     static let rowBadgeWidth: CGFloat = 44
     static let labelGap: CGFloat = 8
-    static let cellWidth: CGFloat = 26
+    /// The map is the widest thing the pane draws, so it is the cell that sets
+    /// ``minimumWindowWidth`` rather than the window that leaves the cell what is spare.
+    static let cellWidth: CGFloat = 46
     static let cellSpacing: CGFloat = 3
-    static let cellHeight: CGFloat = 17
+    static let cellHeight: CGFloat = 26
 
     /// The source-track list a dropped MIDI file previews as, column by column.
     static let trackTickWidth: CGFloat = 18
@@ -284,10 +286,10 @@ enum AppLayout {
     static let limitNameWidth: CGFloat = 128
     static let limitFigureWidth: CGFloat = 62
 
-    /// The staged pane at ``minimumWindowWidth`` -- the narrowest it gets beside the sidebar, and
-    /// so the only width at which a row being clipped cannot be resized away.
+    /// The staged pane at ``minimumWindowWidth`` -- the narrowest it gets, and so the only width
+    /// at which a row being clipped cannot be resized away.
     static var minimumContentWidth: CGFloat {
-        minimumWindowWidth - sidebarWidth - dividerWidth - 2 * mainPadding - scrollerAllowance
+        minimumWindowWidth - 2 * mainPadding - scrollerAllowance
     }
 
     /// Where the pattern axis starts, measured from a row's leading edge.
@@ -440,7 +442,42 @@ enum AppLayout {
     static let slotCellHeight: CGFloat = 24
     /// The device card, which the idle pane holds beside nothing else, so it is sized to its own
     /// contents rather than to the pane.
-    static let deviceCardWidth: CGFloat = 520
+    static let deviceCardWidth: CGFloat = 820
+    /// The settings window, which holds nothing wider than a folder path and is sized to read one.
+    static let settingsWidth: CGFloat = 460
+    /// A rule between two groups in the action bar, kept under the bar's own height.
+    static let footerDividerHeight: CGFloat = 24
+    /// The option band under a source, and the rule that separates its two groups.
+    static let bandPadding: CGFloat = 8
+    static let bandDividerHeight: CGFloat = 18
+    static let bandGap: CGFloat = 12
+    /// Every control an option band draws, at the width it is held to. Fixed rather than left to
+    /// AppKit for the reason ``trackColumnWidths`` is: the band is one row inside a pane that
+    /// scrolls vertically only, so a control that outgrows it is clipped in silence.
+    static let splitPickerWidth: CGFloat = 190
+    static let stepSkipPickerWidth: CGFloat = 140
+    static let repeatStepperWidth: CGFloat = 110
+    static let drumsPickerWidth: CGFloat = 200
+    static let drumChannelStepperWidth: CGFloat = 110
+    static let keepLabelWidth: CGFloat = 34
+    /// "Time Shift" is the longest of the three, and "Keep" the label that introduces them.
+    static let keepWidths: [CGFloat] = [74, 62, 86]
+
+    static var keepsWidth: CGFloat {
+        keepLabelWidth + keepWidths.reduce(0, +) + CGFloat(keepWidths.count) * labelGap
+    }
+
+    static var exportBandWidths: [CGFloat] {
+        [splitPickerWidth, stepSkipPickerWidth, repeatStepperWidth, 1, keepsWidth]
+    }
+
+    static var importBandWidths: [CGFloat] {
+        [drumsPickerWidth, drumChannelStepperWidth, 1, keepsWidth]
+    }
+
+    static func bandWidth(_ widths: [CGFloat]) -> CGFloat {
+        widths.reduce(0, +) + CGFloat(widths.count - 1) * bandGap + 2 * (bandPadding + 2)
+    }
     static let deviceCardPadding: CGFloat = 14
     static let cardRadius: CGFloat = 8
 

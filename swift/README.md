@@ -365,7 +365,7 @@ track's name — the 16-column grid stays fixed, because its chain rails are dra
 and a stretching axis would slide them off their cells. The staged pane still scrolls vertically
 only, so a row too wide for it is *silently clipped*; the fit tests are asserted against
 `minimumContentWidth`, the pane at the narrowest the window goes, which is the one width a user
-cannot resize their way out of. Change the sidebar and the test says so. **Every column a track row
+cannot resize their way out of. Change a cell's width and the test says so. **Every column a track row
 draws is in `trackColumnWidths`** — the destination picker was drawn for a release without being
 counted there, and hung 110 pt off the pane in silence until a test counted the columns.
 

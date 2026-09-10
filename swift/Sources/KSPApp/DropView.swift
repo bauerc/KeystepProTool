@@ -14,16 +14,11 @@ struct DropView: View {
         VStack(spacing: 0) {
             band
 
-            HStack(alignment: .top, spacing: 0) {
-                VStack(spacing: 12) {
-                    content
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(AppLayout.mainPadding)
-
-                Divider()
-                options
+            VStack(spacing: 12) {
+                content
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(AppLayout.mainPadding)
 
             Divider()
             actionBar
@@ -34,7 +29,6 @@ struct DropView: View {
         )
         .background(palette.ground)
         .foregroundStyle(palette.ink)
-        .toolbar { ToolbarItem(placement: .principal) { modeSwitch } }
         .dropDestination(for: URL.self) { urls, _ in
             // One file at a time in v1: a second would need its own name field and its own result.
             guard let first = urls.first else { return false }
@@ -103,12 +97,26 @@ struct DropView: View {
         HStack(spacing: 10) {
             landing
             Spacer(minLength: 12)
+            dryRunToggle
             action
         }
         .padding(.horizontal, AppLayout.mainPadding)
         .frame(height: AppLayout.actionBarHeight)
         .frame(maxWidth: .infinity)
         .background(palette.surface)
+    }
+
+    /// Beside Convert, which reads "Dry run" while it is on: what a run will and will not write is
+    /// one decision, so the switch and the button that obeys it are one control group.
+    @ViewBuilder
+    private var dryRunToggle: some View {
+        if case .staged = model.phase {
+            Toggle("Dry run", isOn: $model.settings.dryRun)
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .help("Report what would be written, and write nothing.")
+            Divider().frame(height: AppLayout.footerDividerHeight)
+        }
     }
 
     @ViewBuilder
@@ -177,77 +185,6 @@ struct DropView: View {
         }
     }
 
-    /// In the titlebar, where a view switch belongs and where nothing the pane does can move it.
-    private var modeSwitch: some View {
-        Picker("", selection: $model.mode) {
-            ForEach(Mode.allCases) { Text($0.label).tag($0) }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
-    }
-
-    /// A fixed-width column, so a control added below must push, not widen or clip. Simple keeps
-    /// the destinations, the appearance and the dry run, and drops the groups that reshape a
-    /// conversion: what those do is the part worth choosing a face for.
-    private var options: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                sectionHeader("Destinations")
-                folderRow(.project)
-                folderRow(.midi)
-
-                Divider()
-
-                // Shown under Simple too, unlike every other control here: it says which unit the
-                // app dresses as, not what a conversion does, so Simple's "defaults only" rule
-                // does not reach it.
-                sectionHeader("Appearance")
-                VStack(alignment: .leading, spacing: 4) {
-                    Picker("", selection: $model.appearance) {
-                        ForEach(Appearance.allCases) { Text($0.label).tag($0) }
-                    }
-                    .pickerStyle(.radioGroup)
-                    .labelsHidden()
-                    Text("Standard is the white unit, Chroma the dark one.")
-                        .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                }
-
-                if model.mode == .advanced {
-                    Divider()
-
-                    // One group, never both: the panel writes to the slot ``kind`` names, so a
-                    // control from the other direction would take an edit that slot never reads.
-                    if model.kind == .toMIDI { exportGroup } else { importGroup }
-                }
-
-                Divider()
-
-                sectionHeader("Options")
-
-                // Shown under Simple too: writing nothing is not an advanced thing to ask for, and
-                // Convert reads "Dry run" while it is on, so it cannot be left set unnoticed.
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Dry run", isOn: $model.settings.dryRun)
-                    Text("Report what would be written, and write nothing.")
-                        .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                }
-
-                if model.mode == .advanced {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Toggle("Show every finding", isOn: $model.settings.verbose)
-                        Text("List each finding instead of one line per kind.")
-                            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-        }
-        .toggleStyle(.checkbox)
-        .frame(width: AppLayout.sidebarWidth)
-    }
-
     /// Blue rules a secondary section, after the panel's 63 SHIFT functions in blue silkscreen. It
     /// marks rather than letters: at #16B4E9 the hue cannot carry text on the standard unit's
     /// ground, and no hue in this app is allowed to.
@@ -260,181 +197,150 @@ struct DropView: View {
         }
     }
 
-    @ViewBuilder
-    private var exportGroup: some View {
-        sectionHeader("MIDI export")
-
-        VStack(alignment: .leading, spacing: 4) {
+    /// The controls that reshape the export, in the section that shows what is being exported.
+    /// Every one of them changes the .mid about to be written, which is why it sits here and not
+    /// in a column of its own: a reader should never have to guess which controls reach the file.
+    private var exportOptions: some View {
+        optionBand {
             Picker("", selection: $model.settings.splitPerPattern) {
                 Text("One file for everything").tag(false)
                 Text("One file per pattern slot").tag(true)
             }
-            .pickerStyle(.radioGroup)
             .labelsHidden()
+            .frame(width: AppLayout.splitPickerWidth)
             .onChange(of: model.settings.splitPerPattern) { model.discardPreview() }
-            Text("Each file holds one pattern slot and starts at its own bar 1.")
-                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-        }
-
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Step Skip").font(TypeScale.sectionTitle)
+            .help("One file per pattern slot holds one slot each and starts at its own bar 1.")
 
             Picker("Step Skip", selection: $model.settings.stepSkip) {
                 ForEach(Settings.StepSkip.allCases) { Text($0.label).tag($0) }
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .controlSize(.small)
+            .frame(width: AppLayout.stepSkipPickerWidth)
             .onChange(of: model.settings.stepSkip) { model.discardPreview() }
-
-            Text(
+            .help(
                 "Auto expands the device's 16/32/48/64 cycle to four passes when a note "
                     + "skips part of it; 1 flattens the cycle to a single pass that plays "
                     + "every note whatever its mask. This is the device's own cycle, not "
-                    + "copies of the export."
-            )
-            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-        }
+                    + "copies of the export.")
 
-        VStack(alignment: .leading, spacing: 4) {
             Stepper(value: $model.settings.repeatCount, in: Settings.repeatRange) {
-                Text("Repeat ×\(model.settings.repeatCount)").font(TypeScale.sectionTitle)
+                Text("Repeat ×\(model.settings.repeatCount)")
             }
-            .controlSize(.small)
+            .frame(width: AppLayout.repeatStepperWidth)
             .onChange(of: model.settings.repeatCount) { model.discardPreview() }
-
-            Text(
+            .help(
                 "Lay the whole export down this many times end to end. This one is not the "
-                    + "cycle above: it exists only in the .mid, and the device stores no "
-                    + "such count, so no repeat of it can be written back to a project."
-            )
-            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                    + "cycle beside it: it exists only in the .mid, and the device stores no "
+                    + "such count, so no repeat of it can be written back to a project.")
+
+            bandDivider
+
+            keeps(
+                velocity: \.replaceVelocity,
+                velocityNote: "Untick to write every note and trigger at the fresh-note velocity, "
+                    + "\(MIDIExport.defaultFlatVelocity), instead of the one it stores.",
+                swing: \.replaceSwing,
+                swingNote: "Untick to put every step on a flat grid instead of applying the "
+                    + "delay the pattern's swing asks for.",
+                timeShift: \.replaceTimeShift,
+                timeShiftNote: "Untick to put every step on the grid instead of applying the "
+                    + "offset the note stores.")
         }
-
-        replacements
     }
 
-    @ViewBuilder
-    private var importGroup: some View {
-        sectionHeader("MIDI import")
-
-        drums
-
-        ignores
-    }
-
-    /// The channel row is offered only while a channel is what the import searches: under None
-    /// nothing is searched, and a named source track is found without one.
-    @ViewBuilder
-    private var drums: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Drums").font(TypeScale.sectionTitle)
-
+    /// The same band on the way in, and the reason the two are written apart: swing here means
+    /// fitting the source's groove, not applying a delay the project already stores.
+    private var importOptions: some View {
+        optionBand {
             Picker("Drums", selection: $model.drumChoice) {
                 ForEach(model.drumChoices) { Text($0.label).tag($0) }
             }
-            .pickerStyle(.radioGroup)
-            .labelsHidden()
+            .frame(width: AppLayout.drumsPickerWidth)
             .onChange(of: model.drumChoice) { model.discardPreview() }
-
-            Text(
+            .help(
                 "Automatic searches one channel for a kit; None imports every track melodically. "
-                    + "Sending a source track to Drums in the list names one outright."
-            )
-            .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-        }
+                    + "Sending a source track to Drums in the list above names one outright.")
 
-        if model.drumSense.designation == .auto {
-            VStack(alignment: .leading, spacing: 4) {
+            // Offered only while a channel is what the import searches: under None nothing is
+            // searched, and a named source track is found without one.
+            if model.drumSense.designation == .auto {
                 Stepper(value: $model.settings.drumChannel, in: Settings.drumChannelRange) {
-                    Text("Channel \(model.settings.drumChannel)").font(TypeScale.sectionTitle)
+                    Text("Channel \(model.settings.drumChannel)")
                 }
-                .controlSize(.small)
+                .frame(width: AppLayout.drumChannelStepperWidth)
                 .onChange(of: model.settings.drumChannel) { model.discardPreview() }
-
-                Text(
+                .help(
                     "The source track sitting wholly on this channel becomes the drum track. "
-                        + "General MIDI puts a kit on 10, but a DAW can export one anywhere."
-                )
-                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
+                        + "General MIDI puts a kit on 10, but a DAW can export one anywhere.")
             }
+
+            bandDivider
+
+            keeps(
+                velocity: \.ignoreVelocity,
+                velocityNote: "Untick to write every note and trigger at the fresh-note velocity, "
+                    + "\(MIDIExport.defaultFlatVelocity), instead of the source's own.",
+                swing: \.ignoreSwing,
+                swingNote: "Untick to leave every pattern straight at "
+                    + "\(Constants.swingRangePercent.min)% instead of fitting it to the "
+                    + "source's groove.",
+                timeShift: \.ignoreTimeShift,
+                timeShiftNote: "Untick to quantise every note hard to its step at a time shift "
+                    + "of 0 instead of giving it the leftover it would otherwise keep.")
         }
     }
 
-    /// Swing here is the export's sense: flattening the grid, not declining to fit one to a source.
-    private var replacements: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Replace with defaults").font(TypeScale.sectionTitle)
+    /// The three substitutions, put the way the reader thinks about them rather than the way the
+    /// runner takes them: a ticked box keeps what the file holds, and unticking one writes the
+    /// device's own default over it.
+    @ViewBuilder
+    private func keeps(
+        velocity: WritableKeyPath<Settings, Bool>, velocityNote: String,
+        swing: WritableKeyPath<Settings, Bool>, swingNote: String,
+        timeShift: WritableKeyPath<Settings, Bool>, timeShiftNote: String
+    ) -> some View {
+        Text("Keep")
+            .foregroundStyle(palette.mutedInk)
+            .frame(width: AppLayout.keepLabelWidth, alignment: .leading)
+        keep("Velocity", velocity, help: velocityNote, width: AppLayout.keepWidths[0])
+        keep("Swing", swing, help: swingNote, width: AppLayout.keepWidths[1])
+        keep("Time Shift", timeShift, help: timeShiftNote, width: AppLayout.keepWidths[2])
+    }
 
-            substitution(
-                "Velocity", isOn: $model.settings.replaceVelocity,
-                note: "Every note and trigger at the fresh-note velocity, "
-                    + "\(MIDIExport.defaultFlatVelocity), not the one it stores.")
-            substitution(
-                "Swing", isOn: $model.settings.replaceSwing,
-                note: "Every step on a flat grid, not the delay the pattern's swing applies.")
-            substitution(
-                "Time Shift", isOn: $model.settings.replaceTimeShift,
-                note: "Every step on the grid, not the offset the note stores.")
+    private func keep(
+        _ title: String, _ substituted: WritableKeyPath<Settings, Bool>, help: String,
+        width: CGFloat
+    ) -> some View {
+        Toggle(
+            title,
+            isOn: Binding(
+                get: { !model.settings[keyPath: substituted] },
+                set: {
+                    model.settings[keyPath: substituted] = !$0
+                    model.discardPreview()
+                })
+        )
+        .frame(width: width, alignment: .leading)
+        .help(help)
+    }
+
+    /// One row on its own plate under the thing it changes, so the section reads as source and
+    /// then what may be done to it rather than as two unrelated blocks.
+    private func optionBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        HStack(spacing: AppLayout.bandGap) {
+            content()
+            Spacer(minLength: 0)
         }
+        .font(TypeScale.label)
+        .controlSize(.small)
+        .toggleStyle(.checkbox)
+        .padding(.vertical, AppLayout.bandPadding)
+        .padding(.horizontal, AppLayout.bandPadding + 2)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(palette.surface))
     }
 
-    /// Swing here is the import's sense: declining to fit one to the source, not flattening a grid
-    /// the project already stores.
-    private var ignores: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Ignore in the source").font(TypeScale.sectionTitle)
-
-            substitution(
-                "Velocity", isOn: $model.settings.ignoreVelocity,
-                note: "Every note and trigger written at the fresh-note velocity, "
-                    + "\(MIDIExport.defaultFlatVelocity), not the source's own.")
-            substitution(
-                "Swing Fitting", isOn: $model.settings.ignoreSwing,
-                note: "Every pattern left straight at \(Constants.swingRangePercent.min)%, "
-                    + "not fitted to the source's groove.")
-            substitution(
-                "Time Shift", isOn: $model.settings.ignoreTimeShift,
-                note: "Every note quantised hard to its step at a time shift of 0, not given "
-                    + "the leftover it would otherwise keep.")
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func substitution(_ title: String, isOn: Binding<Bool>, note: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Toggle(title, isOn: isOn)
-                .onChange(of: isOn.wrappedValue) { model.discardPreview() }
-            Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
-        }
-    }
-
-    private func folderRow(_ kind: FolderKind) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(kind.title).font(TypeScale.sectionTitle)
-
-            Text(model.folders.description(of: kind))
-                .font(TypeScale.label).foregroundStyle(palette.mutedInk)
-                .fixedSize(horizontal: false, vertical: true)
-                // `description(of:)` tildes the path, so the full one has to be reachable.
-                .help(model.folders[kind]?.path ?? kind.defaultDescription)
-
-            HStack(spacing: 8) {
-                Button("Choose…") { model.choose(kind) }
-                if model.folders[kind] != nil {
-                    Button("Use default") { model.useDefault(for: kind) }
-                        .buttonStyle(.link)
-                }
-            }
-            .controlSize(.small)
-
-            if kind == .project, let warning = model.mccWarning {
-                Label(warning, systemImage: "exclamationmark.triangle")
-                    .font(TypeScale.label).foregroundStyle(palette.warning)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    private var bandDivider: some View {
+        Divider().frame(height: AppLayout.bandDividerHeight)
     }
 
     @ViewBuilder
@@ -466,7 +372,7 @@ struct DropView: View {
                         "Drop a MIDI file here. Four tracks of sixteen pattern slots.")
                 Text(
                     "Drop a .KeyStepPro instead to get a MIDI file back. "
-                        + "Where each one lands is on the right."
+                        + "Where each one lands is along the foot of the window."
                 )
                 .font(TypeScale.label)
                 .foregroundStyle(palette.mutedInk)
@@ -716,23 +622,29 @@ struct DropView: View {
             refusal(failure)
         case .project(let summary):
             VStack(alignment: .leading, spacing: 12) {
+                sectionHeader("Source")
                 grid(
                     PatternGrid(summary), selection: staged.selection,
                     length: ExportLength(
                         summary, selection: staged.selection,
                         repeatCount: model.settings.repeatCount,
                         isSplit: model.settings.splitPerPattern))
+                exportOptions
                 Divider()
+                sectionHeader("Result")
                 arrangement(staged.arrangement)
             }
         case .song(let summary):
             VStack(alignment: .leading, spacing: 12) {
+                sectionHeader("Source")
                 trackList(
                     SourceTrackList(
                         summary, drums: model.drumSense, selection: staged.sourceSelection),
                     selection: staged.sourceSelection,
                     placements: placements(staged.segmentation))
+                importOptions
                 Divider()
+                sectionHeader("Result")
                 segmentation(staged.segmentation)
             }
         }
@@ -756,7 +668,7 @@ struct DropView: View {
                 segmentationGrid(SegmentationGrid(plan.summary))
                 limits(Limits(plan.summary))
                 findingList(
-                    plan.rows(verbose: model.settings.verbose), count: plan.allRows.count)
+                    plan.rows(verbose: model.verbose), count: plan.allRows.count)
             }
         }
     }
@@ -986,7 +898,7 @@ struct DropView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let note = list.note(verbose: model.settings.verbose) {
+            if let note = list.note(verbose: model.verbose) {
                 Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
             }
 
@@ -1500,7 +1412,7 @@ struct DropView: View {
 
     /// "Finding", not "note": a note is a melodic event (ADR 0001).
     private func findings(_ outcome: Outcome) -> some View {
-        findingList(outcome.rows(verbose: model.settings.verbose), count: outcome.allRows.count)
+        findingList(outcome.rows(verbose: model.verbose), count: outcome.allRows.count)
     }
 
     /// Shared so a plan's findings and a run's read alike; the plan raises them first.

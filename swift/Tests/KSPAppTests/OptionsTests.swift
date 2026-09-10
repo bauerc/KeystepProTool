@@ -4,23 +4,14 @@ import Testing
 
 @testable import KSPApp
 
-/// Simple is the face the app first shipped with, so it is the one a fresh launch opens on.
-@Suite struct ModeTests {
-    @Test func afreshStoreOpensSimpleOnTheDefaults() {
+/// One ``Settings`` per direction, plus the two the app rather than a direction owns.
+@Suite struct SettingsStoreTests {
+    @Test func afreshStoreReadsTheDefaults() {
         withVolatileDefaults { defaults in
             let store = SettingsStore(defaults: defaults)
 
-            #expect(store.loadMode() == .simple)
             for kind in Job.Kind.allCases { #expect(store.load(kind) == Settings()) }
-        }
-    }
-
-    @Test(arguments: Mode.allCases)
-    func thechosenModeSurvivesTheNextLaunch(mode: Mode) {
-        withVolatileDefaults { defaults in
-            SettingsStore(defaults: defaults).save(mode)
-
-            #expect(SettingsStore(defaults: defaults).loadMode() == mode)
+            #expect(!store.loadVerbose())
         }
     }
 
@@ -41,7 +32,7 @@ import Testing
             let store = SettingsStore(defaults: defaults)
             var export = Settings()
             export.repeatCount = 4
-            export.verbose = true
+            export.drumChannel = 12
             var `import` = Settings()
             `import`.ignoreVelocity = true
 
@@ -49,9 +40,9 @@ import Testing
             store.save(`import`, for: .toProject)
 
             #expect(store.load(.toMIDI).repeatCount == 4)
-            #expect(store.load(.toMIDI).verbose)
-            // The one field the two share, which is the whole reason for two slots.
-            #expect(!store.load(.toProject).verbose)
+            // The one key both blobs carry, which is the whole reason for two slots.
+            #expect(store.load(.toMIDI).drumChannel == 12)
+            #expect(store.load(.toProject).drumChannel == Settings().drumChannel)
             #expect(store.load(.toProject).ignoreVelocity)
         }
     }
@@ -110,7 +101,6 @@ import Testing
             #expect(loaded.repeatCount == 9)
             #expect(loaded.ignoreSwing)
             #expect(loaded.stepSkip == .auto)
-            #expect(!loaded.verbose)
         }
     }
 
@@ -142,18 +132,25 @@ import Testing
         }
     }
 
-    @Test func ablobThatNoLongerReadsFallsBackToTheDefaults() {
+    /// How long a finding list is drawn is the app's, not either direction's, so it is kept where
+    /// the two cannot disagree. A build that did store it per direction left the key behind.
+    @Test func theFindingListLengthIsOnePreferenceRatherThanTwo() {
         withVolatileDefaults { defaults in
-            defaults.set(Data("not settings".utf8), forKey: "settings.toMIDI")
+            let store = SettingsStore(defaults: defaults)
+            store.save(verbose: true)
+            defaults.set(Data(#"{"verbose":true,"repeatCount":9}"#.utf8), forKey: "settings.toMIDI")
 
-            #expect(SettingsStore(defaults: defaults).load(.toMIDI) == Settings())
+            #expect(SettingsStore(defaults: defaults).loadVerbose())
+            #expect(!store.load(.toMIDI).verbose)
+            #expect(store.load(.toMIDI).repeatCount == 9)
         }
     }
 }
 
-/// Simple converts on the defaults plus this drop's ticks, and reaches nothing else Advanced set.
+/// One face: every option reaches the conversion, and an untouched app is still the CLI on its
+/// own defaults.
 @MainActor
-@Suite struct AppModelModeTests {
+@Suite struct AppModelOptionsTests {
     private var midiFixture: URL { RepoData.projectFiles.appending(path: "m6-test-file.mid") }
 
     private var projectFixture: URL {
@@ -170,82 +167,12 @@ import Testing
             reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents())
     }
 
-    @Test func afreshAppOpensSimple() throws {
-        let directory = try tempDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-
-        #expect(model(writingInto: directory).mode == .simple)
-    }
-
-    @Test func thechosenFaceSurvivesTheNextLaunch() throws {
-        let directory = try tempDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-
-        withVolatileDefaults { defaults in
-            model(writingInto: directory, over: defaults).mode = .advanced
-
-            #expect(model(writingInto: directory, over: defaults).mode == .advanced)
-        }
-    }
-
-    @Test func simpleConvertsOnTheDefaultsWhateverAdvancedHolds() throws {
-        let directory = try tempDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let model = model(writingInto: directory)
-        model.mode = .advanced
-        model.settings.repeatCount = 6
-        model.settings.verbose = true
-        model.settings.splitPerPattern = true
-
-        model.mode = .simple
-
-        #expect(model.settings == Settings())
-        model.accept(projectFixture)
-        let staged = try #require(model.staged)
-        // Nothing has been unticked, so the selections come to the defaults as well.
-        #expect(model.conversionSettings(staged) == Settings())
-        // The one setting that reaches the plan rather than the runner.
-        #expect(!model.plan(for: staged.job).intoFolder)
-    }
-
-    /// The one option both faces show, so it is the one field that crosses between them.
-    @Test func thedryRunIsTheOneSettingSimpleWritesThrough() throws {
-        let directory = try tempDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let model = model(writingInto: directory)
-        model.mode = .advanced
-        model.settings.repeatCount = 6
-
-        model.mode = .simple
-        model.settings.dryRun = true
-
-        #expect(model.settings.dryRun)
-        // Simple wrote the dry run without taking the defaults it read down with it.
-        model.mode = .advanced
-        #expect(model.settings.dryRun)
-        #expect(model.settings.repeatCount == 6)
-    }
-
-    @Test func whatAdvancedHeldIsStillThereOnTheWayBack() throws {
-        let directory = try tempDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let model = model(writingInto: directory)
-        model.mode = .advanced
-        model.settings.repeatCount = 6
-
-        model.mode = .simple
-        model.mode = .advanced
-
-        #expect(model.settings.repeatCount == 6)
-    }
-
-    /// ``AppModel/kind`` is also what picks the sidebar's one group, so each direction's controls
-    /// are reachable exactly while the slot they write to is the one being edited.
+    /// ``AppModel/kind`` is what picks the direction's options, so each one is edited exactly
+    /// while the slot it writes to is the one being shown.
     @Test func eachDirectionIsEditedApartFromTheOther() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = model(writingInto: directory)
-        model.mode = .advanced
 
         model.accept(midiFixture)
         #expect(model.kind == .toProject)
@@ -260,18 +187,17 @@ import Testing
         #expect(model.settings.ignoreSwing)
         #expect(model.settings.repeatCount == 1)
 
-        // The export group is reachable again, and kept what it was last given.
+        // The export's options are reachable again, and kept what they were last given.
         model.accept(projectFixture)
         #expect(model.settings.repeatCount == 6)
     }
 
-    /// With nothing staged the panel is editing the direction it last showed, so a drop the other
-    /// way swaps the slot under it. The ticks move with it rather than following the file.
-    @Test func asettingMadeBeforeAdropBelongsToTheDirectionThePanelWasShowing() throws {
+    /// With nothing staged the options belong to the direction last shown, so a drop the other way
+    /// swaps the slot under them. They move with it rather than following the file.
+    @Test func asettingMadeBeforeAdropBelongsToTheDirectionThatWasShowing() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = model(writingInto: directory)
-        model.mode = .advanced
         model.settings.ignoreSwing = true
 
         model.accept(projectFixture)
@@ -281,13 +207,26 @@ import Testing
         #expect(model.settings.ignoreSwing)
     }
 
-    /// Both faces draw the segmentation grid and the limits, so both wait on the same plan.
-    @Test(arguments: Mode.allCases)
-    func eitherFacePlansTheImport(mode: Mode) throws {
+    /// Whichever direction is showing reads the one preference, and neither slot swallows it.
+    @Test func theFindingListLengthCrossesBothDirections() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = model(writingInto: directory)
-        model.mode = mode
+
+        model.accept(midiFixture)
+        model.verbose = true
+        #expect(model.settings.verbose)
+
+        model.accept(projectFixture)
+        #expect(model.settings.verbose)
+        model.settings.repeatCount = 6
+        #expect(model.settings.verbose)
+    }
+
+    @Test func adroppedMIDIfilePlansTheImport() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
 
         model.accept(midiFixture)
 
@@ -306,22 +245,7 @@ import Testing
         #expect(model.arrangementKey != nil)
     }
 
-    /// Both faces draw the lanes, so both wait on the same layout.
-    @Test(arguments: Mode.allCases)
-    func eitherFaceLaysOutTheExport(mode: Mode) throws {
-        let directory = try tempDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let model = model(writingInto: directory)
-        model.mode = mode
-
-        model.accept(projectFixture)
-
-        #expect(model.arrangementKey != nil)
-        #expect(model.segmentationKey == nil)
-    }
-
-    /// The point of the whole face: a tick drawn under Simple has to reach the conversion.
-    @Test func simplefollowsTheExportTicks() async throws {
+    @Test func theExportTicksReachTheConversion() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = model(writingInto: directory)
@@ -334,12 +258,12 @@ import Testing
         let settings = model.conversionSettings(staged)
         #expect(!settings.cells.isEmpty)
         #expect(settings.cells[1]?.contains(1) == false)
-        // The ticks alone: no option Advanced holds came with them.
+        // The ticks alone: nothing else has been touched.
         #expect(settings.repeatCount == Settings().repeatCount)
         #expect(!settings.verbose)
     }
 
-    @Test func simplefollowsTheImportTicksAndRoutes() async throws {
+    @Test func theImportTicksAndRoutesReachTheConversion() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = model(writingInto: directory)
@@ -362,24 +286,10 @@ import Testing
         #expect(!settings.ignoreVelocity)
     }
 
-    @Test func switchingFaceDiscardsAdryRunPreview() async throws {
-        let directory = try tempDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let model = model(writingInto: directory)
-        model.mode = .advanced
-        model.accept(projectFixture)
-        model.settings.dryRun = true
-        await model.convert()
-        #expect(model.staged?.preview != nil)
-
-        model.mode = .simple
-
-        #expect(model.staged?.preview == nil)
-    }
-
-    /// The milestone's last claim: every option added since M13 leaves Simple's bytes alone.
+    /// The milestone's last claim, which survives the sidebar going: an app nobody has touched
+    /// writes the bytes the CLI writes on its own defaults.
     @Test(arguments: ["m6-test-file.mid", "project_5.KeyStepPro"])
-    func asimpleConversionIsByteForByteTheCLIonItsDefaults(name: String) async throws {
+    func anUntouchedConversionIsByteForByteTheCLIonItsDefaults(name: String) async throws {
         let appDirectory = try tempDirectory()
         let cliDirectory = try tempDirectory()
         defer {
@@ -389,11 +299,6 @@ import Testing
         let source = RepoData.projectFiles.appending(path: name)
         let model = model(writingInto: appDirectory)
         model.accept(source)
-        // Set against this very drop, so each direction's slot holds a lever that would show.
-        model.mode = .advanced
-        model.settings.repeatCount = 6
-        model.settings.ignoreVelocity = true
-        model.mode = .simple
 
         // The read the staged view starts, so a seeded selection gets its chance to leak.
         await model.summarise()
@@ -410,7 +315,7 @@ import Testing
         #expect(try Data(contentsOf: written) == Data(contentsOf: target))
     }
 
-    /// What the CLI does on nothing but its defaults, which is what Simple claims to reproduce.
+    /// What the CLI does on nothing but its defaults, which is what an untouched app reproduces.
     private func run(_ source: URL, into target: URL) -> RunResult {
         source.pathExtension == "mid"
             ? ConvertRunner.run(
