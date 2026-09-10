@@ -139,7 +139,7 @@ import Testing
             store: FolderStore(defaults: defaults),
             settingsStore: SettingsStore(defaults: defaults),
             destination: { _, _ in Destination(directory: directory, note: nil) },
-            reveal: { _ in }, chooseFolder: { _ in nil })
+            reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents())
     }
 
     @Test func afreshAppOpensSimple() throws {

@@ -1,6 +1,7 @@
 import Foundation
 import KSPKit
 import KSPRun
+import UniformTypeIdentifiers
 
 /// Which direction a dropped file goes.
 enum Job: Sendable, Hashable {
@@ -131,6 +132,18 @@ enum Conversion {
         let intoFolder: Bool
 
         var source: URL { job.source }
+    }
+
+    /// The extensions ``job(for:)`` accepts, which is what the open panel offers.
+    static let openableExtensions = ["mid", "midi", "KeyStepPro"]
+
+    /// `.mid` and `.midi` are one declared type; `.KeyStepPro` is none, so it filters under the
+    /// dynamic type macOS mints from the extension.
+    static var openableTypes: [UTType] {
+        openableExtensions.compactMap { UTType(filenameExtension: $0) }
+            .reduce(into: [UTType]()) { unique, type in
+                if !unique.contains(type) { unique.append(type) }
+            }
     }
 
     static func job(for url: URL) -> Job? {

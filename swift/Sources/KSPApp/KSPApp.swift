@@ -16,6 +16,33 @@ struct KSPApp: App {
         )
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified)
+        .commands { FileCommands(model: .shared) }
+    }
+}
+
+/// The other way in. Drag-and-drop reaches only a mouse; this reaches the keyboard, the Finder's
+/// own browsing, and the file opened twenty minutes ago.
+struct FileCommands: Commands {
+    let model: AppModel
+
+    /// Replacing rather than adding after: a `Window` scene puts nothing in `newItem`, so this is
+    /// the top of File rather than a second group under an empty one.
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("Open…") { model.open() }
+                .keyboardShortcut("o")
+                .disabled(!model.canAccept)
+
+            Menu("Open Recent") {
+                ForEach(model.recentFiles, id: \.self) { url in
+                    Button(url.lastPathComponent) { model.accept(url) }
+                }
+                Divider()
+                Button("Clear Menu") { model.clearRecentFiles() }
+                    .disabled(model.recentFiles.isEmpty)
+            }
+            .disabled(!model.canAccept)
+        }
     }
 }
 

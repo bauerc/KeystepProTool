@@ -54,7 +54,7 @@ three exceptions being addresses that hold nothing on the device — padding pas
 short arrays, which MCC reads anyway and no two of its exports agree on (H3.2).
 See [`ROADMAP.md`](./ROADMAP.md).
 
-There is also a drag-and-drop **macOS app**, *Key Step Pro Plus*, for the common case — see
+There is also a **macOS app**, *Key Step Pro Plus*, for the common case — see
 [The app](#the-app).
 
 ## The app
@@ -64,6 +64,9 @@ go, what the result will be called and where it will land; press **Convert** and
 lands in MIDI Control Center's Templates folder, where the Project Browser will list it. Drop a `.KeyStepPro` instead and
 you get a `.mid` beside it. **Cancel** drops it again without writing anything. One file at a time;
 everything else is the CLI's job.
+
+**Three ways in.** Drag a file onto the window or the Dock icon, **File > Open…** (⌘O), or
+**File > Open Recent**. All three stage the file rather than converting it.
 
 **Simple and Advanced.** A switch in the titlebar picks between the two, and the choice is
 remembered. *Simple* is what a fresh install opens on, and it keeps everything that says what is in
