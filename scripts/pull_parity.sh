@@ -10,10 +10,11 @@
 # file --also-midi writes is held by PullTests, byte for byte.
 set -o pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/parity.sh"
 
 if ! command -v swiftc &> /dev/null; then
     echo "pull_parity: no swiftc on PATH" >&2
-    exit 1
+    exit "$PARITY_BROKEN"
 fi
 
 # The one file both cores' default resolves to; passed explicitly so the comparison names it.
@@ -92,21 +93,24 @@ PYTHON
         continue
     fi
 
-    if ! cmp "$py" "$sw"; then
-        echo "pull_parity: slot $slot differs between the two cores" >&2
-        status=1
-    fi
+    compare "slot $slot" cmp "$py" "$sw"
+    outcome=$?
+    ((outcome == 1)) && echo "pull_parity: slot $slot differs between the two cores" >&2
+    ((outcome > status)) && status=$outcome
 
     if [[ -x $swift_cli ]]; then
         if ! HOME=$sandbox "$swift_cli" export "$sw" --quiet 2> "$warnings"; then
             cat "$warnings" >&2
             echo "pull_parity: the Swift core could not export what it pulled from $tape" >&2
             status=1
-        elif ! diff -u \
-            <(uv run python tools/midi_events.py "${py%.KeyStepPro}.mid") \
-            <(uv run python tools/midi_events.py "${sw%.KeyStepPro}.mid"); then
-            echo "pull_parity: slot $slot's exported MIDI differs between the two cores" >&2
-            status=1
+        else
+            compare "slot $slot's exported MIDI" diff -u \
+                <(uv run python tools/midi_events.py "${py%.KeyStepPro}.mid") \
+                <(uv run python tools/midi_events.py "${sw%.KeyStepPro}.mid")
+            outcome=$?
+            ((outcome == 1)) \
+                && echo "pull_parity: slot $slot's exported MIDI differs between the two cores" >&2
+            ((outcome > status)) && status=$outcome
         fi
     fi
 
@@ -126,5 +130,6 @@ PYTHON
     fi
 done
 
+((status == PARITY_BROKEN)) && parity_broke
 ((status)) || echo "pull_parity: both cores pull the same bytes over $count tapes"
 exit "$status"
