@@ -21,6 +21,12 @@ struct Limits: Equatable {
         let used: Int
         let limit: Int
         let status: Status
+        /// Singular; what this wall is measured in, for the line that says how much went.
+        let unit: String
+        /// How many of ``unit`` the planner refused, which is the only thing that makes a gauge
+        /// exceeded: two of the five walls are ones it can merely truncate to, and they never
+        /// carry a figure here.
+        let excess: Int
         /// The track, and the pattern where there is one, the figure was found at. The track count
         /// is the whole plan's and names nowhere.
         let site: String?
@@ -31,27 +37,38 @@ struct Limits: Equatable {
 
         var figure: String { "\(used) / \(limit)" }
 
-        init(_ name: String, used: Int, limit: Int, site: String? = nil, warnings: [String] = []) {
+        init(
+            _ name: String, used: Int, limit: Int, unit: String, site: String? = nil,
+            excess: Int = 0, warnings: [String] = []
+        ) {
             self.name = name
             self.used = used
             self.limit = limit
+            self.unit = unit
+            self.excess = excess
             self.site = site
             self.warnings = warnings
-            self.status = Self.status(used: used, limit: limit, refused: !warnings.isEmpty)
+            self.status = Self.status(used: used, limit: limit, excess: excess)
         }
 
         /// The planner truncates to the limit, so a figure at the wall has not passed it: only a
         /// refusal says a limit was exceeded. Nor is a figure *on* the wall approaching one -- 64
         /// of 64 steps is the device's stated capability being used, and amber over what the
         /// device is for reads as a fault where there is none.
-        private static func status(used: Int, limit: Int, refused: Bool) -> Status {
-            if refused { return .over }
+        private static func status(used: Int, limit: Int, excess: Int) -> Status {
+            if excess > 0 { return .over }
             guard limit > 0, used < limit, Double(used) / Double(limit) >= Limits.nearThreshold
             else {
                 return .within
             }
             return .near
         }
+    }
+
+    /// The one line the five meters are read under, so the answer arrives before the detail does.
+    struct Verdict: Equatable {
+        let status: Status
+        let text: String
     }
 
     /// One pattern and the track it sits on, which every per-pattern figure is found at.
@@ -65,6 +82,18 @@ struct Limits: Equatable {
     let gauges: [Gauge]
 
     var exceeded: [Gauge] { gauges.filter { $0.status == .over } }
+
+    /// Whether the plan fits, and where it does not, how much of it would not survive the trip.
+    /// A wall passed outranks a wall approached: the question is yes or no, and a refusal is no.
+    var verdict: Verdict {
+        if !exceeded.isEmpty {
+            let phrases = exceeded.map { counted($0.excess, $0.unit) }
+            return Verdict(status: .over, text: "\(listed(phrases)) over")
+        }
+        let close = gauges.filter { $0.status == .near }.count
+        guard close > 0 else { return Verdict(status: .within, text: "Fits") }
+        return Verdict(status: .near, text: "Fits, \(counted(close, "limit")) close")
+    }
 
     init(_ summary: SegmentationSummary) {
         let filled = summary.tracks.filter { !$0.segments.isEmpty }
@@ -80,25 +109,35 @@ struct Limits: Equatable {
         self.gauges = [
             // Counted, not reached: routing can pin a source to one track and leave the rest free.
             Gauge(
-                "Tracks", used: filled.count, limit: Constants.trackItemIDs.count,
+                "Tracks", used: filled.count, limit: Constants.trackItemIDs.count, unit: "track",
+                excess: summary.unplaced.reduce(0) { $0 + $1.droppedParts },
                 warnings: summary.unplaced.map(unplacedWarning)),
             Gauge(
                 "Patterns per track", used: furthest.map(reach) ?? 0,
-                limit: Constants.patternsPerTrack,
+                limit: Constants.patternsPerTrack, unit: "pattern",
                 site: furthest.map { "Track \($0.deviceTrack)" },
+                excess: filled.reduce(0) { $0 + $1.droppedPatterns },
                 warnings: filled.filter { $0.droppedPatterns > 0 }.map(droppedTailWarning)),
             Gauge(
                 "Steps per pattern", used: longest?.segment.stepCount ?? 0,
-                limit: Constants.maxSteps, site: longest?.site),
+                limit: Constants.maxSteps, unit: "step", site: longest?.site),
             Gauge(
                 "Notes per pattern", used: fullest?.segment.noteCount ?? 0,
-                limit: Constants.poolCapacity, site: fullest?.site,
+                limit: Constants.poolCapacity, unit: "note", site: fullest?.site,
+                excess: placed.reduce(0) { $0 + $1.segment.droppedNotes },
                 warnings: placed.filter { $0.segment.droppedNotes > 0 }.map(overflowWarning)),
             Gauge(
                 "Notes per step", used: busiest?.segment.mostNotesOnAStep ?? 0,
-                limit: Constants.maxNotesPerStep, site: busiest?.site),
+                limit: Constants.maxNotesPerStep, unit: "note", site: busiest?.site),
         ]
     }
+}
+
+/// "A", "A and B", "A, B and C" -- the walls named in the order the meters run in.
+private func listed(_ phrases: [String]) -> String {
+    guard let last = phrases.last else { return "" }
+    guard phrases.count > 1 else { return last }
+    return phrases.dropLast().joined(separator: ", ") + " and " + last
 }
 
 /// The pattern a run reaches, not the number it fills: a run starting at pattern 14 has three

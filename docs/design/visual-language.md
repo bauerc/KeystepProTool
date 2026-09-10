@@ -203,10 +203,25 @@ what segmented LED metering is for.
 
 The meter itself is pure quantity: lit segments, unlit segments, and a static cap at the ceiling.
 
-**Only a refusal is marked.** Near (≥75%) takes `warning` and no glyph — the meter already says
-how close the figure sits, so approaching a wall is emphasis on a quantity, not a status. Over
-means the planner refused something, which *is* a status, and it takes `error` and
+**Only a refusal is marked — on a meter.** Near (≥75%) takes `warning` and no glyph, because the
+meter already says how close the figure sits: approaching a wall is emphasis on a quantity, not a
+status. Over means the planner refused something, which *is* a status, and it takes `error` and
 `exclamationmark.triangle` together — rule 2.
+
+### The verdict line
+
+The block leads with one line above the five meters — `Fits`, `Fits, 2 limits close`,
+`3 patterns over` — so the answer arrives before the detail, and what went is counted in the unit
+its own wall is measured in. Only the three walls the planner can refuse at carry a figure here;
+the two it can merely truncate to never do.
+
+It is marked in **all three** states, unlike a meter, and this is not a slip: the line carries no
+quantity of its own, so with the colour removed the glyph is the only thing left to read the
+status off — rule 2 again.
+
+**The limits show on both faces.** Whether a loop fits a 64-step pattern is what a reader who does
+not know the hardware most needs, so Simple keeps the block whole. Advanced adds controls; it
+never takes feedback away.
 
 ### Finding rows
 

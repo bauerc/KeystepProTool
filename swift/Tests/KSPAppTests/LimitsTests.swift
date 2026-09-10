@@ -300,4 +300,129 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
 
         #expect(limits.exceeded.map(\.name) == ["Tracks"])
     }
+
+    // MARK: The verdict the meters are read under
+
+    @Test func aplanClearOfEveryWallFits() {
+        let verdict = Limits(modest()).verdict
+
+        #expect(verdict.status == .within)
+        #expect(verdict.text == "Fits")
+    }
+
+    /// The answer is still yes, so the word is still "Fits"; what a near wall changes is how much
+    /// room is left, and the line has to say so rather than leave amber to say it alone.
+    @Test func aplanNearAWallStillFitsAndCountsTheWallsItIsNear() {
+        let verdict = Limits(modest(steps: 48, notes: 144, perStep: 12, pattern: 12)).verdict
+
+        #expect(verdict.status == .near)
+        #expect(verdict.text == "Fits, 4 limits close")
+    }
+
+    @Test func onenearWallIsCountedInTheSingular() {
+        let verdict = Limits(modest(steps: 48)).verdict
+
+        #expect(verdict.text == "Fits, 1 limit close")
+    }
+
+    /// The issue's own example: what went, in the unit the wall is measured in.
+    @Test func adroppedTailReadsAsTheseManyPatternsOver() {
+        let verdict =
+            Limits(
+                SegmentationSummary(
+                    tracks: [
+                        segmented(
+                            1, source: 3,
+                            patterns: [(pattern: 16, steps: 64, notes: 8, perStep: 1, dropped: 0)],
+                            droppedPatterns: 3)
+                    ])
+            ).verdict
+
+        #expect(verdict.status == .over)
+        #expect(verdict.text == "3 patterns over")
+    }
+
+    @Test func overflowedNotesReadInNotes() {
+        let verdict = Limits(modest(steps: 64, notes: Constants.poolCapacity, dropped: 40)).verdict
+
+        #expect(verdict.text == "40 notes over")
+    }
+
+    /// A source track the plan could not place costs a device track, and one that gave up a
+    /// channel costs one apiece.
+    @Test func unplacedSourcesReadInTracks() {
+        let verdict =
+            Limits(
+                full(unplaced: [
+                    UnplacedSource(sourceTrack: 5, noteCount: 12),
+                    UnplacedSource(sourceTrack: 6, droppedParts: 2, placedParts: 1, noteCount: 3),
+                ])
+            ).verdict
+
+        #expect(verdict.text == "3 tracks over")
+    }
+
+    /// Named in the order the meters are listed in, so the line and the detail below it agree.
+    @Test func severalWallsPassedAreNamedInTheOrderTheMetersRunIn() {
+        let verdict =
+            Limits(
+                SegmentationSummary(
+                    tracks: [
+                        segmented(
+                            1, source: 1,
+                            patterns: [
+                                (
+                                    pattern: 16, steps: 64, notes: Constants.poolCapacity,
+                                    perStep: 4, dropped: 40
+                                )
+                            ],
+                            droppedPatterns: 3)
+                    ],
+                    unplaced: [UnplacedSource(sourceTrack: 5, noteCount: 12)])
+            ).verdict
+
+        #expect(verdict.text == "1 track, 3 patterns and 40 notes over")
+    }
+
+    @Test func twowallsPassedAreJoinedWithoutAComma() {
+        let verdict =
+            Limits(
+                SegmentationSummary(
+                    tracks: [
+                        segmented(
+                            1, source: 1,
+                            patterns: [(pattern: 16, steps: 64, notes: 8, perStep: 1, dropped: 0)],
+                            droppedPatterns: 3)
+                    ],
+                    unplaced: [UnplacedSource(sourceTrack: 5, noteCount: 12)])
+            ).verdict
+
+        #expect(verdict.text == "1 track and 3 patterns over")
+    }
+
+    /// A wall passed outranks a wall approached: the line answers whether the plan fits, and it
+    /// does not.
+    @Test func awallPassedOutranksAWallMerelyApproached() {
+        let verdict =
+            Limits(
+                SegmentationSummary(
+                    tracks: [
+                        segmented(
+                            1, source: 1,
+                            patterns: [(pattern: 16, steps: 48, notes: 8, perStep: 1, dropped: 0)],
+                            droppedPatterns: 3)
+                    ])
+            ).verdict
+
+        #expect(verdict.status == .over)
+        #expect(verdict.text == "3 patterns over")
+    }
+
+    /// The two walls the planner can only truncate to never carry a figure of their own, so a
+    /// full pattern reports nothing over.
+    @Test func thewallsTheDeviceOnlyTruncatesToAreNeverCountedAsOver() {
+        #expect(
+            Limits(modest(steps: Constants.maxSteps, notes: 32, perStep: 16)).verdict.text
+                == "Fits")
+    }
 }
