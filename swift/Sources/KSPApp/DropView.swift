@@ -826,7 +826,7 @@ struct DropView: View {
                 ForEach(grid.rows, id: \.track) { segmentationRow($0) }
             }
 
-            Text(SegmentationGrid.legend).font(TypeScale.smallValue).foregroundStyle(
+            Text(SegmentationGrid.legend).font(TypeScale.legend).foregroundStyle(
                 palette.mutedInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -898,7 +898,7 @@ struct DropView: View {
                 Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
             }
 
-            Text(SourceTrackList.legend).font(TypeScale.smallValue).foregroundStyle(
+            Text(SourceTrackList.legend).font(TypeScale.legend).foregroundStyle(
                 palette.mutedInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1033,9 +1033,9 @@ struct DropView: View {
                 Text(line).font(TypeScale.label).foregroundStyle(palette.mutedInk)
             }
 
-            Text(PatternGrid.legend).font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
+            Text(PatternGrid.legend).font(TypeScale.legend).foregroundStyle(palette.mutedInk)
             if selection != nil {
-                Text(GridSelection.legend).font(TypeScale.smallValue)
+                Text(GridSelection.legend).font(TypeScale.legend)
                     .foregroundStyle(palette.mutedInk)
             }
         }
@@ -1066,7 +1066,7 @@ struct DropView: View {
                 ForEach(lanes.lanes, id: \.track) { lane($0, boundaries: lanes.boundaries) }
             }
 
-            Text(ArrangeLanes.legend).font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
+            Text(ArrangeLanes.legend).font(TypeScale.legend).foregroundStyle(palette.mutedInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

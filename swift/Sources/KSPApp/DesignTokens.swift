@@ -158,12 +158,15 @@ enum Density {
 /// The type rules. Chrome is SF Pro and every value is SF Mono, so the numbers the device shows
 /// read as the device's own -- see docs/design/visual-language.md on device-true numerals.
 enum TypeScale {
-    static let bandTitle = Font.system(.headline, design: .default)
-    static let sectionTitle = Font.system(.subheadline, design: .default).weight(.medium)
-    static let label = Font.system(.caption, design: .default)
+    static let bandTitle = Font.system(.title2, design: .default).weight(.semibold)
+    static let sectionTitle = Font.system(.title3, design: .default).weight(.semibold)
+    static let label = Font.system(.callout, design: .default)
     static let smallLabel = Font.system(.caption2, design: .default)
+    /// A grid's legend, which is a sentence rather than a figure, so it takes the chrome face.
+    static let legend = Font.system(.subheadline, design: .default)
 
     /// Every figure on screen: counts, step lengths, channels, limits, note names, gates.
+    /// The figure sizes hold while ``AppLayout`` fixes a slot cell at 26x17: they set its content.
     static let value = Font.system(.caption, design: .monospaced)
     static let smallValue = Font.system(.caption2, design: .monospaced)
     /// A row's pattern number, in its well.
