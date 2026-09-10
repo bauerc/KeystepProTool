@@ -1,21 +1,13 @@
 import Foundation
 import KSPKit
 
-/// The face the app opens on, the unit it dresses as, and one ``Settings`` per direction, all
-/// remembered between launches.
+/// The unit the app dresses as, how much of a finding list it prints, and one ``Settings`` per
+/// direction, all remembered between launches.
 struct SettingsStore {
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-    }
-
-    func loadMode() -> Mode {
-        defaults.string(forKey: Self.modeKey).flatMap(Mode.init(rawValue:)) ?? .simple
-    }
-
-    func save(_ mode: Mode) {
-        defaults.set(mode.rawValue, forKey: Self.modeKey)
     }
 
     func loadAppearance() -> Appearance {
@@ -37,6 +29,16 @@ struct SettingsStore {
         defaults.set(slot, forKey: Self.slotKey)
     }
 
+    /// A preference rather than a conversion option: it changes how many rows a finding list
+    /// draws, not what is written, so it belongs to the app rather than to either direction.
+    func loadVerbose() -> Bool {
+        defaults.bool(forKey: Self.verboseKey)
+    }
+
+    func save(verbose: Bool) {
+        defaults.set(verbose, forKey: Self.verboseKey)
+    }
+
     func loadAlsoMidi() -> Bool {
         defaults.bool(forKey: Self.alsoMidiKey)
     }
@@ -56,8 +58,8 @@ struct SettingsStore {
         defaults.set(data, forKey: Self.key(kind))
     }
 
-    private static let modeKey = "mode"
     private static let appearanceKey = "appearance"
+    private static let verboseKey = "verbose"
     private static let slotKey = "device.slot"
     private static let alsoMidiKey = "device.alsoMidi"
 

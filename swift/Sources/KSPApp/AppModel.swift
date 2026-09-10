@@ -70,8 +70,8 @@ final class AppModel {
         var arrangement: ArrangementState = .loading
     }
 
-    /// The sidebar's three rows. ``source`` exists only while the track list has sent a track to
-    /// Drums, and is the editor for which track that is.
+    /// The Source section's three rows. ``source`` exists only while the track list has sent a
+    /// track to Drums, and is the editor for which track that is.
     enum DrumChoice: Hashable, Identifiable, Sendable {
         case automatic
         case source(Int)
@@ -90,17 +90,8 @@ final class AppModel {
 
     var phase: Phase = .idle
     var name: String = ""
-    /// A preview drawn under the options is stale the moment they are hidden or brought back.
-    var mode: Mode {
-        get { chosenMode }
-        set {
-            chosenMode = newValue
-            settingsStore.save(newValue)
-            discardPreview()
-        }
-    }
-    /// Which unit the app dresses as. Unlike ``mode`` it changes nothing the app would compute,
-    /// so it leaves a staged preview standing.
+    /// Which unit the app dresses as. It changes nothing the app would compute, so it leaves a
+    /// staged preview standing.
     var appearance: Appearance {
         get { chosenAppearance }
         set {
@@ -111,6 +102,15 @@ final class AppModel {
     }
     /// Which of the device's sixteen the read takes, remembered as the destinations are: a user
     /// who reads project 7 reads it again.
+    /// How much of a finding list is drawn. A preference rather than a direction's option: it
+    /// changes what the reader is shown, not what is written, so a preview survives it.
+    var verbose: Bool {
+        get { chosenVerbose }
+        set {
+            chosenVerbose = newValue
+            settingsStore.save(verbose: newValue)
+        }
+    }
     var slot: Int {
         get { chosenSlot }
         set {
@@ -143,8 +143,8 @@ final class AppModel {
     /// resolving a free name walks the destination folder.
     private(set) var deviceReadPlan: DeviceRead.Plan
 
-    private var chosenMode: Mode
     private var chosenAppearance: Appearance
+    private var chosenVerbose: Bool
     private var chosenSlot: Int
     private var chosenAlsoMidi: Bool
     /// Ticked for the document on screen and cleared with it: a dry run that outlived its document
@@ -190,8 +190,8 @@ final class AppModel {
         let slot = settingsStore.loadSlot()
         let alsoMidi = settingsStore.loadAlsoMidi()
         self.folders = loaded
-        self.chosenMode = settingsStore.loadMode()
         self.chosenAppearance = settingsStore.loadAppearance()
+        self.chosenVerbose = settingsStore.loadVerbose()
         self.chosenSlot = slot
         self.chosenAlsoMidi = alsoMidi
         self.slots = Dictionary(
@@ -205,23 +205,23 @@ final class AppModel {
     /// The direction whose remembered settings the panel is editing.
     var kind: Job.Kind { staged?.job.kind ?? lastKind }
 
-    /// Simple reads as the defaults whatever Advanced holds, but for the dry run: that is the one
-    /// option Simple shows, so it is the one field either face can write.
+    /// The direction's own options, with the two the app rather than a direction owns laid over
+    /// them on the way out and taken back off on the way in.
     var settings: Settings {
         get {
-            var out = mode == .simple ? Settings() : (slots[kind] ?? Settings())
+            var out = slots[kind] ?? Settings()
             out.dryRun = dryRun
+            out.verbose = chosenVerbose
             return out
         }
         set {
             dryRun = newValue.dryRun
+            verbose = newValue.verbose
             // Written to whichever slot ``kind`` names now: a write before a drop lands in the
-            // other one. A Simple write is the defaults it just read, so it writes to no slot at
-            // all and cannot overwrite what Advanced holds.
-            guard mode == .advanced else { return }
+            // other one.
             var kept = newValue
-            // The dry run has one home, and a direction's slot is not it.
             kept.dryRun = false
+            kept.verbose = false
             slots[kind] = kept
             settingsStore.save(kept, for: kind)
         }

@@ -73,18 +73,19 @@ rather than converting it.
 **Choose…** beside it for the folder the staged direction writes into, and Cancel and Convert on
 the right. A file the app could not read says it has no destination rather than promising one.
 
-**Simple and Advanced.** A switch in the titlebar picks between the two, and the choice is
-remembered. *Simple* is what a fresh install opens on, and it keeps everything that says what is in
-the file and what becomes of it: the file, its name, where it will land, the pattern grid over a
-`.KeyStepPro` and the source track list over a `.mid`, both tickable, with the destination beside
-each source track and the import's own preview and limits beneath. It converts on the defaults plus
-whatever you ticked, so an untouched drop is byte for byte what the CLI writes on its own defaults,
-and nothing set under Advanced reaches it. It keeps the **Destinations** and the **Appearance** at
-the top of the sidebar, and **Dry run** below them — writing nothing is not an advanced thing to
-ask for. What Advanced adds is the rest of that sidebar: the groups that reshape a conversion, and
-**Show every finding**. It remembers those separately for each direction, showing the group
-belonging to whichever way the staged file is going — **Repeat** and **Step Skip** over a
-`.KeyStepPro`, the import's own toggles over a `.mid`.
+**One face, and the options beside what they change.** There is no Simple/Advanced switch: with
+each control sitting in the section it acts on there are only five or six per direction, which is
+too few to hide. The window is **Source** then **Result** — the pattern grid over a `.KeyStepPro`
+and the source track list over a `.mid`, both tickable, with the destination beside each source
+track — and under the source sits one row holding everything that reshapes the read of it. Each
+control says what it does on hover. The two directions are remembered separately, and only the row
+belonging to the way the staged file is going is shown. An untouched drop is still byte for byte
+what the CLI writes on its own defaults.
+
+**Settings (⌘,).** What no single conversion decides: the **Appearance**, the default
+**Destinations** for each kind of file, and **Show every finding**, which lists each finding rather
+than one line per kind. Appearance is an OS-level affordance and lives where a Mac user already
+looks for one, not beside the controls that change the file being written.
 
 **What is in it.** A dropped `.KeyStepPro` is read while it sits there, and the staged view lists
 all four tracks against all sixteen of each one's pattern slots. A slot that holds nothing is dimmed
@@ -100,7 +101,7 @@ listed, dimmed and reading *no notes*, so a file whose parts are not where you e
 so before you convert rather than after. The track the import will take for drums is marked
 **Drums**; a second track on the searched channel is marked **Percussion** instead, because the
 device has one drum track and the rest come in melodically. Both badges follow the **Drums** choice
-in the sidebar below, so moving the channel moves them and taking nothing as drums leaves no row
+in the row below, so moving the channel moves them and taking nothing as drums leaves no row
 badged at all. The track carrying the file's tempo and time
 signature but no notes — track 1 of anything this tool exported — is marked **Tempo**, so a
 round-tripped file does not read as though a part went missing. Under the list sits what the read
@@ -130,13 +131,13 @@ routing the ones you never touched would move them. Send two tracks to one devic
 anything but the drums to track 1, and Convert says which two clash rather than letting the run
 refuse it.
 
-**Choosing where the drums come from.** The sidebar's **Drums** section carries the other two
-answers. **Automatic** searches one channel for a kit and offers a stepper for which — General MIDI
-puts one on 10, but a DAW can export one anywhere, and a kit on an ordinary channel would otherwise
-import silently as melodic pitches. **None** takes no track as drums at all. A source track sent to
-**Drums** in the list is the third answer, and shows in the sidebar as **Source track N** while it
-stands; choosing Automatic or None sends that track back to Automatic, so the two can never both be
-set. The three are `--drum-channel`, `--no-drums` and `--drum-track` as the CLI spells them.
+**Choosing where the drums come from.** The **Drums** control under the track list carries the
+other two answers. **Automatic** searches one channel for a kit and offers a stepper for which —
+General MIDI puts one on 10, but a DAW can export one anywhere, and a kit on an ordinary channel
+would otherwise import silently as melodic pitches. **None** takes no track as drums at all. A
+source track sent to **Drums** in the list is the third answer, and reads as **Source track N**
+while it stands; choosing Automatic or None sends that track back to Automatic, so the two can
+never both be set. The three are `--drum-channel`, `--no-drums` and `--drum-track` as the CLI spells them.
 
 **Ticking what is exported.** Every slot starts ticked, and the export follows the ticks. Click a
 slot to leave that one out, a track name to leave out the whole track, a slot number to leave that
@@ -144,21 +145,20 @@ slot out on every track. Any set of cells will do — a slot dropped on one trac
 others — and the result names what was left out. Untick everything and Convert says so rather than
 writing an empty file.
 
-**Options.** The sidebar carries **Dry run** — report what would be written and write nothing,
-which is worth having against a 3.5 MB project, and the one option both faces show — and, under
-Advanced, **Show every finding**, which lists each finding rather than one line per kind. A dry run
+**Dry run.** In the action bar beside Convert, which reads *Dry run* while it is on: report what
+would be written and write nothing, which is worth having against a 3.5 MB project. A dry run
 leaves the file where it is, so switching the toggle off and pressing Convert writes it for real.
 It is ticked for the file on screen and clears with it: opening the next file, or cancelling this
 one, starts again on Convert, so no later conversion inherits a dry run and quietly writes nothing.
 
-Above those, under **MIDI export**, sits **Step Skip**. The device runs a pattern over a cycle of
+In the export's own row sits **Step Skip**. The device runs a pattern over a cycle of
 four sequences — 16, 32, 48 and 64 — and each note carries a mask saying which of them it plays on.
 On *Auto* the export renders four passes whenever a pattern holds a note that skips part of that
 cycle, so every note lands where its mask says; on *1* it renders a single pass and includes every
 note whatever its mask, which flattens the cycle. Either way the result's findings say which
 happened. This is the device's own cycle, not copies of the export.
 
-Under it sits **Repeat**, a 1–10 stepper, and that one *is* copies of the export: it lays the whole
+Beside it sits **Repeat**, a 1–10 stepper, and that one *is* copies of the export: it lays the whole
 thing down again end to end. The line under the grid says what the two come to together — "4
 patterns × 2 repeats — 8 patterns end to end" — so the length is legible before Convert is pressed,
 and it moves as slots are unticked. Repeat exists only in the `.mid`: the device stores no such

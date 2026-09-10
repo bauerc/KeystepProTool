@@ -41,7 +41,7 @@ private final class Revealed {
         let defaults = volatileDefaults()
         FolderStore(defaults: defaults).save(Folders(project: directory, midi: nil))
         return AppModel(
-            store: FolderStore(defaults: defaults), settingsStore: advancedSettings(),
+            store: FolderStore(defaults: defaults), settingsStore: volatileSettings(),
             reveal: { log.files.append($0) }, chooseFolder: { _ in chosenMIDIFolder },
             recents: volatileRecents(),
             pull: pull)

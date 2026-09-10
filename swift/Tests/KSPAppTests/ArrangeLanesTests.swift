@@ -131,8 +131,10 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
     }
 
     @Test func aRegionTooNarrowToReadDropsItsSketchAndItsNumber() {
-        // Sixty-four slots on one axis leaves each under ten points.
-        let patterns = Array(1...16) + Array(1...16) + Array(1...16) + Array(1...16)
+        // Counted off the axis rather than fixed, so widening the map cannot quietly make every
+        // region in this run readable again and leave the test asserting nothing.
+        let count = Int((AppLayout.axisWidth / AppLayout.regionLabelMinimumWidth).rounded(.up)) + 1
+        let patterns = (0..<count).map { $0 % AppLayout.columnCount + 1 }
         let regions = patterns.enumerated().map { region($0.element, at: $0.offset) }
         let lanes = ArrangeLanes(arranged(patterns, regions: [1: regions]))
 
