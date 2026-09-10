@@ -113,6 +113,10 @@ struct DropView: View {
             .keyboardShortcut(.defaultAction)
         case .done(let outcome):
             Button(outcome.againLabel) { model.reset() }
+        case .idle:
+            // Return belongs to the device card's own button here, so this takes no default
+            // action: two of them in one phase is a coin toss over which one Return reaches.
+            Button("Open…") { model.open() }
         default:
             EmptyView()
         }

@@ -122,6 +122,12 @@ displays above the coloured track zones.
 
 It is what stops the light face being a white void with four coloured rows floating in it.
 
+**The action slot is never empty.** The band's right-hand end carries whatever the phase's action
+is — Cancel and Convert while a file is staged, Convert another when one is written, and **Open…**
+while nothing is. An empty window that offers no way to fill it puts the only entrance in the menu
+bar, where a user looking at the window will not find it; the keyboard has ⌘O and the mouse has
+this. Wherever the action bar moves, the idle entrance moves with it.
+
 ### The pattern map
 
 Four tracks down, sixteen pattern slots across. Each row wears its track's colour.
