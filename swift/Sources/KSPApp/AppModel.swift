@@ -98,6 +98,7 @@ final class AppModel {
         set {
             chosenAppearance = newValue
             settingsStore.save(newValue)
+            dress(newValue)
         }
     }
     /// Which of the device's sixteen the read takes, remembered as the destinations are: a user
@@ -146,6 +147,7 @@ final class AppModel {
     private let reveal: ([URL]) -> Void
     private let chooseFolder: @MainActor (URL?) -> URL?
     private let pull: @Sendable (PullRunner.Options) -> RunResult
+    private let dress: @MainActor (Appearance) -> Void
 
     init(
         store: FolderStore = FolderStore(),
@@ -153,7 +155,9 @@ final class AppModel {
         destination: @escaping (Job, Folders) -> Destination = AppModel.destination(for:folders:),
         reveal: @escaping ([URL]) -> Void = { NSWorkspace.shared.activateFileViewerSelecting($0) },
         chooseFolder: @escaping @MainActor (URL?) -> URL? = AppModel.chooseFolder(startingAt:),
-        pull: @escaping @Sendable (PullRunner.Options) -> RunResult = { PullRunner.run($0) }
+        pull: @escaping @Sendable (PullRunner.Options) -> RunResult = { PullRunner.run($0) },
+        // Optional: `NSApp` stands up with the application, and a test builds a model without one.
+        dress: @escaping @MainActor (Appearance) -> Void = { NSApp?.appearance = $0.nsAppearance }
     ) {
         self.store = store
         self.settingsStore = settingsStore
@@ -161,6 +165,7 @@ final class AppModel {
         self.reveal = reveal
         self.chooseFolder = chooseFolder
         self.pull = pull
+        self.dress = dress
         let loaded = store.load()
         let slot = settingsStore.loadSlot()
         let alsoMidi = settingsStore.loadAlsoMidi()
@@ -173,6 +178,7 @@ final class AppModel {
             uniqueKeysWithValues: Job.Kind.allCases.map { ($0, settingsStore.load($0)) })
         self.deviceReadPlan = AppModel.readPlan(
             slot: slot, named: "", folders: loaded, alsoMidi: alsoMidi)
+        dress(chosenAppearance)
     }
 
     /// The direction whose remembered settings the panel is editing.
