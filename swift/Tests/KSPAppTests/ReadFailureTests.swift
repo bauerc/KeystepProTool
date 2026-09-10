@@ -65,7 +65,7 @@ import Testing
         #expect(failure.headline.contains("midi_track counts from 1"))
     }
 
-    /// The band is one line wide, so its reason cannot be the headline.
+    /// The action bar is one line wide, so its reason cannot be the headline.
     @Test func theblockReasonFitsBesideConvert() {
         #expect(failure(.unrecognised).blockReason.count < 60)
     }

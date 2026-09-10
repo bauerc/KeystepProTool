@@ -346,6 +346,9 @@ enum AppLayout {
 
     /// The control band's height, and the well a row's pattern number sits in.
     static let bandHeight: CGFloat = 44
+    /// The action bar under the pane. Fixed, so a phase carrying no action leaves the chassis
+    /// standing rather than dropping the window's foot out.
+    static let actionBarHeight: CGFloat = 56
     static let wellWidth: CGFloat = 26
     static let wellRadius: CGFloat = 3
     static let cellRadius: CGFloat = 3

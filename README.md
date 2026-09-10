@@ -65,9 +65,13 @@ lands in MIDI Control Center's Templates folder, where the Project Browser will 
 you get a `.mid` beside it. **Cancel** drops it again without writing anything. One file at a time;
 everything else is the CLI's job.
 
-**Four ways in.** The **Open…** button at the right of the band, dragging a file onto the window or
-the Dock icon, **File > Open…** (⌘O), or **File > Open Recent**. All four stage the file rather
-than converting it.
+**Four ways in.** The **Open…** button at the right of the action bar, dragging a file onto the
+window or the Dock icon, **File > Open…** (⌘O), or **File > Open Recent**. All four stage the file
+rather than converting it.
+
+**The action bar.** Across the foot of the window: where the result lands on the left, with
+**Choose…** beside it for the folder the staged direction writes into, and Cancel and Convert on
+the right. A file the app could not read says it has no destination rather than promising one.
 
 **Simple and Advanced.** A switch in the titlebar picks between the two, and the choice is
 remembered. *Simple* is what a fresh install opens on, and it keeps everything that says what is in
@@ -172,8 +176,9 @@ The build is unsigned beyond an ad-hoc signature, so it launches on the machine 
 nowhere else yet; a Developer ID build is M14.
 
 **Naming.** The name field is the filename, and the filename is what MCC's Project Browser shows,
-so it is worth setting. It sits in the staged view, above the destination it changes: type the name
-before pressing Convert and the file is written under it, rather than written and then moved.
+so it is worth setting. It sits in the staged view, and the action bar below says where the name it
+takes will land: type the name before pressing Convert and the file is written under it, rather
+than written and then moved.
 
 **It never overwrites.** A name already in use becomes `song 2.KeyStepPro`, and the window says so
 while the file is still staged — MCC's Templates folder holds your own projects under freely chosen
