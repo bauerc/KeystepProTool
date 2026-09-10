@@ -173,8 +173,6 @@ enum TypeScale {
     static let sectionTitle = Font.system(.title3, design: .default).weight(.semibold)
     static let label = Font.system(.callout, design: .default)
     static let smallLabel = Font.system(.caption2, design: .default)
-    /// A grid's legend, which is a sentence rather than a figure, so it takes the chrome face.
-    static let legend = Font.system(.subheadline, design: .default)
 
     /// Every figure on screen: counts, step lengths, channels, limits, note names, gates.
     /// The figure sizes hold while ``AppLayout`` fixes a slot cell at 26x17: they set its content.
@@ -487,6 +485,9 @@ enum AppLayout {
     static let fieldRadius: CGFloat = 5
     static let fieldPadding = EdgeInsets(top: 5, leading: 7, bottom: 5, trailing: 7)
     static let fieldRingWidth: CGFloat = 3
+    /// A tickable cell under the pointer: lighter than a field's ring, with sixteen side by side.
+    static let hoverRingWidth: CGFloat = 1.5
+    static let pressedOpacity: Double = 0.6
 
     /// A severity glyph's column, wide enough that the text beside it starts on one edge.
     static let findingGlyphWidth: CGFloat = 14

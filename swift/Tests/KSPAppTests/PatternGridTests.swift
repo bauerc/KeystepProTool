@@ -40,11 +40,6 @@ import Testing
         #expect(cells[2].isEmpty)
     }
 
-    @Test func theLegendSaysWhichCountTheCellsCarry() {
-        #expect(
-            PatternGrid.legend == "Counts are events switched on. Hover a slot for what it holds.")
-    }
-
     @Test func theHeaderCarriesTempoSwingAndScene() {
         let grid = PatternGrid(
             syntheticSummary(tempoBPM: 128.5, globalSwingPercent: 62, currentScene: 3))

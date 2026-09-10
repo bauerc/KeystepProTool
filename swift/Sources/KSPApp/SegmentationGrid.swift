@@ -5,8 +5,6 @@ import KSPRun
 /// What the import would lay down, drawn as the export grid is: four device tracks down, sixteen
 /// pattern slots across. Every figure comes from the planner; this only arranges them.
 struct SegmentationGrid: Equatable {
-    static let legend = "Counts are steps. Hover a slot for what it will hold."
-
     struct Cell: Equatable {
         /// 1-16.
         let pattern: Int

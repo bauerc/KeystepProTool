@@ -70,14 +70,6 @@ struct Settings: Sendable, Equatable, Codable {
     /// Place every step on the grid instead of applying the offset each Note stores.
     var replaceTimeShift = false
 
-    var replacementNote: String? {
-        var parts: [String] = []
-        if replaceVelocity { parts.append("velocity with \(MIDIExport.defaultFlatVelocity)") }
-        if replaceSwing { parts.append("swing with a flat grid") }
-        if replaceTimeShift { parts.append("time shift with a flat grid") }
-        return note("Replacing: ", parts)
-    }
-
     /// Write every note and trigger at the measured fresh-note velocity instead of the source's.
     var ignoreVelocity = false
     /// Leave every pattern straight instead of fitting the source's groove. Import-only, and in the
@@ -85,18 +77,6 @@ struct Settings: Sendable, Equatable, Codable {
     var ignoreSwing = false
     /// Quantise hard instead of giving each note's leftover to its time shift.
     var ignoreTimeShift = false
-
-    var ignoredNote: String? {
-        var parts: [String] = []
-        if ignoreVelocity { parts.append("velocity, writing \(MIDIExport.defaultFlatVelocity)") }
-        if ignoreSwing { parts.append("swing, leaving every pattern straight") }
-        if ignoreTimeShift { parts.append("time shift, quantising hard") }
-        return note("Ignoring: ", parts)
-    }
-
-    private func note(_ prefix: String, _ parts: [String]) -> String? {
-        parts.isEmpty ? nil : prefix + parts.joined(separator: " · ")
-    }
 
     /// `ConvertRunner`'s `track`/`pattern` are routing, not selection, so the import is untouched.
     func selecting(_ selection: GridSelection) -> Settings {

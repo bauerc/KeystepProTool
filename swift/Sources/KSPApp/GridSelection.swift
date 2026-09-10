@@ -2,8 +2,6 @@ import Foundation
 import KSPRun
 
 struct GridSelection: Sendable, Equatable {
-    static let legend = "Click a slot, a track name or a slot number to leave it out of the export."
-
     struct Cell: Sendable, Hashable {
         let track: Int
         let pattern: Int

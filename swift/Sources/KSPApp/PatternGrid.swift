@@ -4,8 +4,6 @@ import KSPRun
 
 /// The preview grid: four tracks down, sixteen pattern slots across.
 struct PatternGrid: Equatable {
-    static let legend = "Counts are events switched on. Hover a slot for what it holds."
-
     struct Cell: Equatable {
         /// 1-16.
         let pattern: Int
@@ -126,47 +124,27 @@ struct PatternGrid: Equatable {
     }
 }
 
-/// How long the export runs: the pattern slots the grid has ticked, and the repeat count.
+/// The pattern slots the grid has ticked that hold anything. What they come to end to end is the
+/// arrange lanes' header to say, so this speaks only when it is nothing.
 struct ExportLength: Equatable {
     /// Ticked slots that hold something, counted once however many tracks play them.
     let patterns: Int
-    let repeatCount: Int
-    /// Splitting measures the length per file: every file is one pattern long.
-    let isSplit: Bool
     /// Convert already refuses an empty selection in its own words.
     let isBlocked: Bool
 
-    /// What comes out end to end -- of the one file, or of each file when the export splits.
-    var total: Int { (isSplit ? 1 : patterns) * repeatCount }
-
-    /// `nil` only when Convert is already blocked with its own reason.
-    var line: String? {
-        if isBlocked { return nil }
-        // Ticks on nothing but empty slots leave Convert enabled, so only this says so.
-        guard patterns > 0 else {
-            return "No ticked slot holds anything, so nothing would be written."
-        }
-        // No count of files: a split drops any that came out empty, so the number is not known.
-        if isSplit {
-            guard repeatCount > 1 else { return "One pattern per file." }
-            return "One pattern × \(repeatCount) repeats per file. "
-                + "Repeats exist only in the .mid."
-        }
-        let counted = "\(patterns) pattern\(patterns == 1 ? "" : "s")"
-        guard repeatCount > 1 else { return "\(counted) end to end." }
-        return "\(counted) × \(repeatCount) repeats — \(total) patterns end to end. "
-            + "Repeats exist only in the .mid."
+    /// Ticks on nothing but empty slots leave Convert enabled, so only this says so.
+    var warning: String? {
+        guard !isBlocked, patterns == 0 else { return nil }
+        return "No ticked slot holds anything, so nothing would be written."
     }
 
-    init(_ summary: ProjectSummary, selection: GridSelection, repeatCount: Int, isSplit: Bool) {
+    init(_ summary: ProjectSummary, selection: GridSelection) {
         self.patterns = (1...AppLayout.columnCount).count { pattern in
             summary.tracks.contains { track in
                 selection.isTicked(track: track.number, pattern: pattern)
                     && track.patterns.contains { $0.number == pattern && !$0.isEmpty }
             }
         }
-        self.repeatCount = repeatCount
-        self.isSplit = isSplit
         self.isBlocked = selection.blockReason != nil
     }
 }

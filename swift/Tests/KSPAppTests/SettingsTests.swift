@@ -344,34 +344,6 @@ import Testing
         #expect(mapped.fitTimeShift == defaults.fitTimeShift)
     }
 
-    @Test func replacingNothingSaysNothing() {
-        #expect(Settings().replacementNote == nil)
-    }
-
-    @Test func eachReplacementNamesItsSubstitute() {
-        var velocity = Settings()
-        velocity.replaceVelocity = true
-        #expect(
-            velocity.replacementNote == "Replacing: velocity with \(MIDIExport.defaultFlatVelocity)"
-        )
-
-        var swing = Settings()
-        swing.replaceSwing = true
-        #expect(swing.replacementNote == "Replacing: swing with a flat grid")
-
-        var timeShift = Settings()
-        timeShift.replaceTimeShift = true
-        #expect(timeShift.replacementNote == "Replacing: time shift with a flat grid")
-    }
-
-    @Test func allThreeReplacementsReadAsOneLine() {
-        let settings = Settings(replaceVelocity: true, replaceSwing: true, replaceTimeShift: true)
-        #expect(
-            settings.replacementNote
-                == "Replacing: velocity with \(MIDIExport.defaultFlatVelocity) · swing with a "
-                + "flat grid · time shift with a flat grid")
-    }
-
     /// Nothing is ignored until it is asked for, so the app on defaults converts what the CLI on
     /// defaults converts.
     @Test func freshSettingsIgnoreNothing() {
@@ -434,49 +406,5 @@ import Testing
         #expect(mapped.flatVelocity == defaults.flatVelocity)
         #expect(mapped.applySwing == defaults.applySwing)
         #expect(mapped.applyTimeShift == defaults.applyTimeShift)
-    }
-
-    @Test func ignoringNothingSaysNothing() {
-        #expect(Settings().ignoredNote == nil)
-    }
-
-    /// Each choice names the value it substitutes rather than only saying it is off.
-    @Test func eachIgnoredChoiceNamesItsSubstitute() {
-        var velocity = Settings()
-        velocity.ignoreVelocity = true
-        #expect(
-            velocity.ignoredNote == "Ignoring: velocity, writing \(MIDIExport.defaultFlatVelocity)")
-
-        var swing = Settings()
-        swing.ignoreSwing = true
-        #expect(swing.ignoredNote == "Ignoring: swing, leaving every pattern straight")
-
-        var timeShift = Settings()
-        timeShift.ignoreTimeShift = true
-        #expect(timeShift.ignoredNote == "Ignoring: time shift, quantising hard")
-    }
-
-    @Test func allThreeIgnoresReadAsOneLine() {
-        let settings = Settings(ignoreVelocity: true, ignoreSwing: true, ignoreTimeShift: true)
-        #expect(
-            settings.ignoredNote
-                == "Ignoring: velocity, writing \(MIDIExport.defaultFlatVelocity) · swing, "
-                + "leaving every pattern straight · time shift, quantising hard")
-    }
-
-    /// The two panels answer for opposite directions, so a reader must never be able to mistake one
-    /// line for the other: not the verb it opens with, and not the substitute it names.
-    @Test func theTwoPanelsShareNoWording() {
-        let settings = Settings(
-            replaceVelocity: true, replaceSwing: true, replaceTimeShift: true,
-            ignoreVelocity: true, ignoreSwing: true, ignoreTimeShift: true)
-        let exported = settings.replacementNote
-        let imported = settings.ignoredNote
-
-        #expect(exported != imported)
-        #expect(imported?.hasPrefix("Replacing:") == false)
-        #expect(exported?.hasPrefix("Ignoring:") == false)
-        #expect(imported?.contains("with a flat grid") == false)
-        #expect(exported?.contains("leaving every pattern straight") == false)
     }
 }
