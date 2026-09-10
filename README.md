@@ -144,6 +144,8 @@ writing an empty file.
 which is worth having against a 3.5 MB project, and the one option both faces show — and, under
 Advanced, **Show every finding**, which lists each finding rather than one line per kind. A dry run
 leaves the file where it is, so switching the toggle off and pressing Convert writes it for real.
+It is ticked for the file on screen and clears with it: opening the next file, or cancelling this
+one, starts again on Convert, so no later conversion inherits a dry run and quietly writes nothing.
 
 Above those, under **MIDI export**, sits **Step Skip**. The device runs a pattern over a cycle of
 four sequences — 16, 32, 48 and 64 — and each note carries a mask saying which of them it plays on.

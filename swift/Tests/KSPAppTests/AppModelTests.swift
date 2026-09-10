@@ -237,6 +237,62 @@ import Testing
         #expect(written == directory.appending(path: "m6-test-file.KeyStepPro"))
         #expect(FileManager.default.fileExists(atPath: written.path))
     }
+
+    /// Carried over, it would turn every conversion after it into another one that writes
+    /// nothing, and say so nowhere but on the button.
+    @Test func adryRunDoesNotFollowTheNextFile() async throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.accept(midiFixture)
+        model.settings.dryRun = true
+        await model.convert()
+        #expect(try #require(model.staged).preview != nil)
+
+        model.accept(projectFixture)
+
+        #expect(!model.settings.dryRun)
+    }
+
+    /// The file is gone either way, whether it was cancelled or converted.
+    @Test func adryRunDoesNotOutliveTheFileItWasTickedFor() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.accept(midiFixture)
+        model.settings.dryRun = true
+
+        model.cancel()
+
+        #expect(!model.settings.dryRun)
+    }
+
+    /// The other half of the rule: a tick made with nothing open was made for the file that
+    /// follows, so opening one is not the app quietly undoing it.
+    @Test func adryRunTickedWithNothingOpenStandsForTheFileThatFollows() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.settings.dryRun = true
+
+        model.accept(midiFixture)
+
+        #expect(model.settings.dryRun)
+    }
+
+    /// It is the one option both faces show, and it is no longer kept in either direction's slot.
+    @Test func adryRunSurvivesTheFaceAndTheDirectionOfTheFileItIsTickedFor() throws {
+        let directory = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = model(writingInto: directory)
+        model.accept(midiFixture)
+        model.settings.dryRun = true
+
+        model.mode = .advanced
+
+        #expect(model.settings.dryRun)
+        #expect(model.kind == .toProject)
+    }
 }
 
 @MainActor
