@@ -232,7 +232,7 @@ private func list(
     /// The staged pane scrolls vertically only, so anything wider than it is silently clipped.
     /// Measured at the window's floor, which is the one width the user cannot resize away from.
     @Test func thelistFitsTheStagedPaneWithoutTruncatingARow() {
-        #expect(AppLayout.trackRowWidth <= AppLayout.minimumContentWidth)
+        #expect(AppLayout.trackRowWidth <= AppLayout.minimumCardContentWidth)
     }
 
     /// A column drawn but left out of ``AppLayout/trackColumnWidths`` leaves the fit above

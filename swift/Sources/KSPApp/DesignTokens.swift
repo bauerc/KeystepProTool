@@ -54,10 +54,6 @@ enum DeviceColor {
     /// §4.2.9: "the currently playing step, which is lit up in white". The conversion playhead.
     static let now = Color.white
 
-    /// §4.2.14: the 63 SHIFT functions are silkscreened in blue, so blue means secondary function.
-    /// A marker only -- see ``Palette`` on why it never carries text.
-    static let secondary = Color(hex: 0x16_B4E9)
-
     /// Tracks are numbered from 1; a row asks for its own colour by that number.
     static func track(_ number: Int) -> Color {
         track[(number - 1 + track.count) % track.count]
@@ -472,8 +468,7 @@ enum AppLayout {
     static let settingsWidth: CGFloat = 460
     /// A rule between two groups in the action bar, kept under the bar's own height.
     static let footerDividerHeight: CGFloat = 24
-    /// The option band under a source, and the rule that separates its two groups.
-    static let bandPadding: CGFloat = 8
+    /// The rule that separates an option band's two groups.
     static let bandDividerHeight: CGFloat = 18
     static let bandGap: CGFloat = 12
     /// Every control an option band draws, at the width it is held to. Fixed rather than left to
@@ -501,10 +496,18 @@ enum AppLayout {
     }
 
     static func bandWidth(_ widths: [CGFloat]) -> CGFloat {
-        widths.reduce(0, +) + CGFloat(widths.count - 1) * bandGap + 2 * (bandPadding + 2)
+        widths.reduce(0, +) + CGFloat(widths.count - 1) * bandGap
     }
-    static let deviceCardPadding: CGFloat = 14
+    /// The one container, worn by the device panel and by each phase of a conversion alike.
+    static let cardPadding: CGFloat = 12
+    static let cardSpacing: CGFloat = 10
     static let cardRadius: CGFloat = 8
+    /// Between one phase's card and the next heading: the space is what gives a heading its rank.
+    static let sectionSpacing: CGFloat = 22
+
+    /// A card's padding comes out of every row inside it, so a row is held to this rather than to
+    /// the pane: one that fits the pane but not the card is clipped in silence all the same.
+    static var minimumCardContentWidth: CGFloat { minimumContentWidth - 2 * cardPadding }
 
     /// A name field, drawn rather than bezelled. Tighter than a card, because a field sits inside
     /// one, and the ring is heavy enough to read against a fill only a hairline separates from the

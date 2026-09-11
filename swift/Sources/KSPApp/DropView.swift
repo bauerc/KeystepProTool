@@ -175,15 +175,27 @@ struct DropView: View {
         }
     }
 
-    /// Blue rules a secondary section, after the panel's 63 SHIFT functions in blue silkscreen. It
-    /// marks rather than letters: at #16B4E9 the hue cannot carry text on the standard unit's
-    /// ground, and no hue in this app is allowed to.
+    /// Rank from size and the space above it, not a coloured rail: saturated colour is kept for
+    /// what the reader can act on.
     private func sectionHeader(_ title: String) -> some View {
-        HStack(spacing: 6) {
-            Capsule()
-                .fill(DeviceColor.secondary)
-                .frame(width: 3, height: 13)
-            Text(title).font(TypeScale.header)
+        Text(title).font(TypeScale.header)
+    }
+
+    /// The one container: the device panel wears it, and so does each phase of a conversion.
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: AppLayout.cardSpacing) { content() }
+            .padding(AppLayout.cardPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(palette.surface))
+    }
+
+    private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content)
+        -> some View
+    {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader(title)
+            card(content)
         }
     }
 
@@ -313,8 +325,8 @@ struct DropView: View {
         .help(help)
     }
 
-    /// One row on its own plate under the thing it changes, so the section reads as source and
-    /// then what may be done to it rather than as two unrelated blocks.
+    /// One row under a rule, in the card of the thing it changes, so the section reads as source
+    /// and then what may be done to it rather than as two unrelated blocks.
     private func optionBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         HStack(spacing: AppLayout.bandGap) {
             content()
@@ -323,10 +335,7 @@ struct DropView: View {
         .font(TypeScale.label)
         .controlSize(.small)
         .toggleStyle(.checkbox)
-        .padding(.vertical, AppLayout.bandPadding)
-        .padding(.horizontal, AppLayout.bandPadding + 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(palette.surface))
     }
 
     private var bandDivider: some View {
@@ -428,9 +437,7 @@ struct DropView: View {
     /// on the idle pane because it is an alternative to the drop above it, not a mode of its own.
     private var deviceCard: some View {
         let plan = model.deviceReadPlan
-        return VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("Read from the KeyStep Pro")
-
+        return section("Read from the KeyStep Pro") {
             slotPicker
 
             NameField(
@@ -467,10 +474,7 @@ struct DropView: View {
                             + "as it was saved, so save any panel edits first.")
             }
         }
-        .padding(AppLayout.deviceCardPadding)
         .frame(width: AppLayout.deviceCardWidth, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(palette.surface))
     }
 
     /// The device's sixteen on the pattern map's own metrics. The chosen one is a lit readout
@@ -577,27 +581,27 @@ struct DropView: View {
         case .failed(let failure):
             refusal(failure)
         case .project(let summary):
-            VStack(alignment: .leading, spacing: 12) {
-                sectionHeader("Source")
-                grid(
-                    PatternGrid(summary), selection: staged.selection,
-                    length: ExportLength(summary, selection: staged.selection))
-                exportOptions
-                Divider()
-                sectionHeader("Result")
-                arrangement(staged.arrangement)
+            VStack(alignment: .leading, spacing: AppLayout.sectionSpacing) {
+                section("Source") {
+                    grid(
+                        PatternGrid(summary), selection: staged.selection,
+                        length: ExportLength(summary, selection: staged.selection))
+                    Divider()
+                    exportOptions
+                }
+                section("Result") { arrangement(staged.arrangement) }
             }
         case .song(let summary):
-            VStack(alignment: .leading, spacing: 12) {
-                sectionHeader("Source")
-                trackList(
-                    SourceTrackList(
-                        summary, drums: model.drumSense, selection: staged.sourceSelection),
-                    selection: staged.sourceSelection,
-                    placements: placements(staged.segmentation))
-                importOptions
-                Divider()
-                sectionHeader("Result")
+            VStack(alignment: .leading, spacing: AppLayout.sectionSpacing) {
+                section("Source") {
+                    trackList(
+                        SourceTrackList(
+                            summary, drums: model.drumSense, selection: staged.sourceSelection),
+                        selection: staged.sourceSelection,
+                        placements: placements(staged.segmentation))
+                    Divider()
+                    importOptions
+                }
                 segmentation(staged.segmentation)
             }
         }
@@ -609,27 +613,32 @@ struct DropView: View {
     private func segmentation(_ state: SegmentationState) -> some View {
         switch state {
         case .loading:
-            ProgressView("Planning the import…").controlSize(.small)
+            section("Result") { ProgressView("Planning the import…").controlSize(.small) }
         case .failed(let message):
-            // Not drawn as an exceeded limit: an unreadable file and a single-target import fail
-            // the same way, and only the planner's own words say which of the three this is.
-            Label(message, systemImage: "exclamationmark.triangle")
-                .font(TypeScale.label).foregroundStyle(palette.warning).textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+            section("Result") {
+                // Not drawn as an exceeded limit: an unreadable file and a single-target import
+                // fail the same way, and only the planner's own words say which of the three.
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .font(TypeScale.label).foregroundStyle(palette.warning).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         case .ready(let plan):
-            VStack(alignment: .leading, spacing: 12) {
-                segmentationGrid(SegmentationGrid(plan.summary))
-                noteShapes(NoteShape.shapes(plan.summary))
-                limits(Limits(plan.summary))
-                findingList(
-                    plan.rows(verbose: model.verbose), count: plan.allRows.count)
+            VStack(alignment: .leading, spacing: AppLayout.sectionSpacing) {
+                section("Result") {
+                    segmentationGrid(SegmentationGrid(plan.summary))
+                    noteShapes(NoteShape.shapes(plan.summary))
+                }
+                section(Limits.heading) {
+                    limits(Limits(plan.summary))
+                    findingList(
+                        plan.rows(verbose: model.verbose), count: plan.allRows.count)
+                }
             }
         }
     }
 
     /// Feedback, never an option: whether a loop fits the device's walls is the most useful thing
-    /// on screen for a reader who does not know the hardware yet, so both faces show it. Advanced
-    /// adds controls; it never takes feedback away.
+    /// on screen for a reader who does not know the hardware yet.
     private func limits(_ limits: Limits) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             gauges(limits)
@@ -651,11 +660,8 @@ struct DropView: View {
     /// is no need to think about, so all five are drawn whatever the plan holds.
     private func gauges(_ limits: Limits) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(Limits.heading).font(.caption).fontWeight(.medium)
-                    .foregroundStyle(palette.mutedInk)
-                verdictLine(limits.verdict)
-            }
+            // The card's heading names the block, so the answer leads it.
+            verdictLine(limits.verdict)
 
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(limits.gauges) { gauge in
@@ -852,7 +858,7 @@ struct DropView: View {
             Color.clear.frame(width: AppLayout.labelGap, height: 1)
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .topLeading) {
-                    Rectangle().fill(palette.surface)
+                    Rectangle().fill(palette.ground)
                     ForEach(shape.regions, id: \.pattern) { region in
                         noteBlock(
                             track: shape.track, isEmpty: region.isEmpty, marks: region.marks,
@@ -1115,7 +1121,7 @@ struct DropView: View {
             .help(lane.detail)
             Color.clear.frame(width: AppLayout.labelGap, height: 1)
             ZStack(alignment: .topLeading) {
-                Rectangle().fill(palette.surface)
+                Rectangle().fill(palette.ground)
                 ForEach(lane.regions, id: \.slot) {
                     region($0, track: lane.track, middleC: lane.middleC)
                 }
