@@ -1,0 +1,12 @@
+{
+ "label": "user_empty_project.KeyStepPro",
+ "direction": "export",
+ "inputs": [
+  "project_files/user_empty_project.KeyStepPro"
+ ],
+ "flags": [],
+ "exit": 1,
+ "stdout": "",
+ "stderr": "<prog>: project_files/user_empty_project.KeyStepPro: nothing to export (no selected pattern holds notes)\n",
+ "artifacts": {}
+}

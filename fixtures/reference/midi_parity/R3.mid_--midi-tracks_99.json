@@ -1,0 +1,15 @@
+{
+ "label": "R3.mid --midi-tracks 99",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R3.mid"
+ ],
+ "flags": [
+  "--midi-tracks",
+  "99"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: source track 99 was selected; the file has 3 tracks\n",
+ "artifacts": {}
+}

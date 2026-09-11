@@ -1,0 +1,17 @@
+{
+ "label": "R3.mid --midi-track 1 --midi-tracks 1",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R3.mid"
+ ],
+ "flags": [
+  "--midi-track",
+  "1",
+  "--midi-tracks",
+  "1"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: --midi-track and --midi-tracks contradict each other; --midi-track converts one source track into the one pattern the target names, and --midi-tracks reads a selection as a song\n",
+ "artifacts": {}
+}

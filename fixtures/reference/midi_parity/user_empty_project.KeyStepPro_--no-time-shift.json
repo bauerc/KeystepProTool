@@ -1,0 +1,14 @@
+{
+ "label": "user_empty_project.KeyStepPro --no-time-shift",
+ "direction": "export",
+ "inputs": [
+  "project_files/user_empty_project.KeyStepPro"
+ ],
+ "flags": [
+  "--no-time-shift"
+ ],
+ "exit": 1,
+ "stdout": "",
+ "stderr": "<prog>: project_files/user_empty_project.KeyStepPro: nothing to export (no selected pattern holds notes)\n",
+ "artifacts": {}
+}

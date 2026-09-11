@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 CAPTURE = Path("usb_midi_investigation/recall_sysex.jsonl")
-TAPE = Path("tests/fixtures/recall_tape.txt")
+TAPE = Path("fixtures/recall_tape.txt")
 
 ARTURIA = bytes((0xF0, 0x00, 0x20, 0x6B, 0x7F, 0x42))
 REQUESTS = (0x0B, 0x01)

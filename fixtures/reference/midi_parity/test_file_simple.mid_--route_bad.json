@@ -1,0 +1,15 @@
+{
+ "label": "test_file_simple.mid --route bad",
+ "direction": "import",
+ "inputs": [
+  "project_files/test_file_simple.mid"
+ ],
+ "flags": [
+  "--route",
+  "bad"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: --route: 'bad' is not a source:device pair\n",
+ "artifacts": {}
+}

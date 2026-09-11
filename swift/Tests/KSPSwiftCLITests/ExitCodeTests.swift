@@ -240,10 +240,13 @@ import Testing
             ? debug : build.appending(path: "release/ksp-swift-cli")
     }()
 
-    static func run(_ arguments: [String]) throws -> (code: Int32, stdout: String, stderr: String) {
+    static func run(_ arguments: [String], in directory: URL? = nil) throws -> (
+        code: Int32, stdout: String, stderr: String
+    ) {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
+        process.currentDirectoryURL = directory
         // No personal ~/.config drum map: the run has to mean the same thing on every machine.
         process.environment = ["HOME": FileManager.default.temporaryDirectory.path]
 

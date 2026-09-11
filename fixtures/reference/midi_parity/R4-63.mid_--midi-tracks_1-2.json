@@ -1,0 +1,19 @@
+{
+ "label": "R4-63.mid --midi-tracks 1-2",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R4-63.mid"
+ ],
+ "flags": [
+  "--midi-tracks",
+  "1-2"
+ ],
+ "exit": 0,
+ "stdout": "wrote <out>/out.KeyStepPro\n  8 note(s) onto track 1, pattern 1 (32 steps)\n",
+ "stderr": "<prog>: warning: the song starts 120 tick(s) into the file; every track was moved back together so its first note lands on step 1, because a pattern is a loop with nowhere to keep a lead-in\n<prog>: warning: the project tempo was set to the source's 30 BPM\n",
+ "artifacts": {
+  "out.KeyStepPro": {
+   "sha256": "829049f1e1cfa777f9db893db70d3bb1d8c0f005a9c462ad3d3141c762ebc2ac"
+  }
+ }
+}

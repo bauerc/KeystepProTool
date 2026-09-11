@@ -1,0 +1,25 @@
+project_5.KeyStepPro
+  device KeyStepPro   version 2.5.20
+  tempo 120 BPM   swing 50%   scene 1
+
+  Track 1 (item 123)  [drum mode]
+    Pattern 1  [drum]
+      drum map: chromatic from 36 (assumed - not in file)
+      drum: 16 steps, 1/16, swing 50%, forward, mono
+        slot 1
+          note  1  step  1  lane 0 -> C1 (36) Bass Drum 1  vel 127  gate      1  shift -1  rand  80  seq 16,32
+          note  2  step  5  lane 0 -> C1 (36) Bass Drum 1  vel  50  gate      2  shift +1  rand  90  seq 48,64
+  Track 3 (item 125)
+    Pattern 1  [seq]
+      seq: 16 steps, 1/16, swing 50%, forward, poly
+        slot 1
+          note  1  step  1  C2 (48)    vel  60  gate      2  shift +1  rand  10  seq always
+          note  2  step  2  C2 (48)    vel  70  gate    0.5  shift +2  rand  20  seq always
+          note  3  step  3  C2 (48)    vel  90  gate    0.5  shift +3  rand  30  seq always
+          note  4  step  4  C2 (48)    vel 100  gate    0.5  shift +4  rand  40  seq always
+          note  5  step  5  C#2 (49)   vel  60  gate      3  shift -1  rand 100  seq 16,48
+          note  6  step  6  C#2 (49)   vel  70  gate    0.5  shift -2  rand 100  seq 16,48
+          note  7  step  7  C#2 (49)   vel  90  gate    0.5  shift -3  rand 100  seq 32,64
+          note  8  step  8  C#2 (49)   vel 100  gate    0.5  shift -4  rand 100  seq 32,64
+          note  9  step  9  D2 (50)    vel  60  gate      4  shift  0  rand 100  seq 16,32
+          note 10  step 13  D2 (50)    vel 120  gate    3.5  shift +2  rand 100  seq 48,64

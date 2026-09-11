@@ -1,0 +1,15 @@
+{
+ "label": "m6-test-file.mid --midi-tracks 99",
+ "direction": "import",
+ "inputs": [
+  "project_files/m6-test-file.mid"
+ ],
+ "flags": [
+  "--midi-tracks",
+  "99"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: source track 99 was selected; the file has 6 tracks\n",
+ "artifacts": {}
+}

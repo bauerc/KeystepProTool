@@ -1,0 +1,15 @@
+{
+ "label": "m6-test-file.mid --flat-velocity loud",
+ "direction": "import",
+ "inputs": [
+  "project_files/m6-test-file.mid"
+ ],
+ "flags": [
+  "--flat-velocity",
+  "loud"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: --flat-velocity: 'loud' is not 'fresh' or a velocity\n",
+ "artifacts": {}
+}

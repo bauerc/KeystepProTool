@@ -1,0 +1,19 @@
+{
+ "label": "test_file_simple.mid --midi-track 1",
+ "direction": "import",
+ "inputs": [
+  "project_files/test_file_simple.mid"
+ ],
+ "flags": [
+  "--midi-track",
+  "1"
+ ],
+ "exit": 0,
+ "stdout": "wrote <out>/out.KeyStepPro\n  16 note(s) onto track 1, pattern 1 (16 steps)\n",
+ "stderr": "<prog>: warning: the clip starts 1920 tick(s) into the file; its first note was placed on step 1 and the rest moved with it, because a pattern is a loop with nowhere to keep a lead-in\n",
+ "artifacts": {
+  "out.KeyStepPro": {
+   "sha256": "26362ef7549429b3380b39f0d15bcdee94098216377682b100c2c676a4db17b7"
+  }
+ }
+}

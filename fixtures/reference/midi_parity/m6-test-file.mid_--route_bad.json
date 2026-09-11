@@ -1,0 +1,15 @@
+{
+ "label": "m6-test-file.mid --route bad",
+ "direction": "import",
+ "inputs": [
+  "project_files/m6-test-file.mid"
+ ],
+ "flags": [
+  "--route",
+  "bad"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: --route: 'bad' is not a source:device pair\n",
+ "artifacts": {}
+}

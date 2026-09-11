@@ -1,0 +1,14 @@
+{
+ "label": "m6-test-file.mid --route=-1:2",
+ "direction": "import",
+ "inputs": [
+  "project_files/m6-test-file.mid"
+ ],
+ "flags": [
+  "--route=-1:2"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: route counts source tracks from 1, so -1:2 is not one\n",
+ "artifacts": {}
+}

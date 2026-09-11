@@ -1,0 +1,20 @@
+{
+ "label": "R2.mid --drum-channel 3 --no-drums",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R2.mid"
+ ],
+ "flags": [
+  "--drum-channel",
+  "3",
+  "--no-drums"
+ ],
+ "exit": 0,
+ "stdout": "wrote <out>/out.KeyStepPro\n  track 1: 8 note(s), pattern 1 (32 steps)\n  track 2: 8 note(s), pattern 1 (32 steps)\n  no source track was taken as drums\n",
+ "stderr": "<prog>: warning: the song starts 1920 tick(s) into the file; every track was moved back together so its first note lands on step 1, because a pattern is a loop with nowhere to keep a lead-in\n<prog>: warning: track 1 pattern 1 (seq): 8 note length(s) are not on the gate ladder and took the nearest rung; the ladder is coarse above 3 steps\n<prog>: warning: track 2 (seq): 8 note(s) on track 2 did not land on a 1/16 step and were moved to the nearest one\n<prog>: warning: the project tempo was set to the source's 120 BPM\n",
+ "artifacts": {
+  "out.KeyStepPro": {
+   "sha256": "091e91d4aaf89820578d84fc94b1b56a424f2bc725937a91ebf2354a6acc637b"
+  }
+ }
+}

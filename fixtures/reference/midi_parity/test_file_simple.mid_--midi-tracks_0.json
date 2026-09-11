@@ -1,0 +1,15 @@
+{
+ "label": "test_file_simple.mid --midi-tracks 0",
+ "direction": "import",
+ "inputs": [
+  "project_files/test_file_simple.mid"
+ ],
+ "flags": [
+  "--midi-tracks",
+  "0"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: --midi-tracks: 0 is out of range 1-65535\n",
+ "artifacts": {}
+}

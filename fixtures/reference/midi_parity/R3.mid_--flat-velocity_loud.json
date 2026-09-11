@@ -1,0 +1,15 @@
+{
+ "label": "R3.mid --flat-velocity loud",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R3.mid"
+ ],
+ "flags": [
+  "--flat-velocity",
+  "loud"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: --flat-velocity: 'loud' is not 'fresh' or a velocity\n",
+ "artifacts": {}
+}

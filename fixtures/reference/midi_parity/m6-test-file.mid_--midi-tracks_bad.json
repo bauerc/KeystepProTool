@@ -1,0 +1,15 @@
+{
+ "label": "m6-test-file.mid --midi-tracks bad",
+ "direction": "import",
+ "inputs": [
+  "project_files/m6-test-file.mid"
+ ],
+ "flags": [
+  "--midi-tracks",
+  "bad"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: --midi-tracks: 'bad' is not a number or a range\n",
+ "artifacts": {}
+}

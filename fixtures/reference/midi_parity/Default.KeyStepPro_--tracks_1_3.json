@@ -1,0 +1,15 @@
+{
+ "label": "Default.KeyStepPro --tracks 1,3",
+ "direction": "export",
+ "inputs": [
+  "project_files/Default.KeyStepPro"
+ ],
+ "flags": [
+  "--tracks",
+  "1,3"
+ ],
+ "exit": 1,
+ "stdout": "",
+ "stderr": "<prog>: project_files/Default.KeyStepPro: nothing to export (no selected pattern holds notes)\n",
+ "artifacts": {}
+}

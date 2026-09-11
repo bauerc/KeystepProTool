@@ -1,0 +1,17 @@
+{
+ "label": "chords + simple",
+ "direction": "import",
+ "inputs": [
+  "project_files/test_file.mid",
+  "project_files/test_file_simple.mid"
+ ],
+ "flags": [],
+ "exit": 0,
+ "stdout": "wrote <out>/out.KeyStepPro\n  track 1 [source 1, test_file.mid]: 26 note(s), pattern 1 (16 steps)\n  track 2 [source 2, test_file_simple.mid]: 16 note(s), pattern 1 (32 steps)\n",
+ "stderr": "<prog>: warning: the project tempo was set to the source's 120 BPM\n",
+ "artifacts": {
+  "out.KeyStepPro": {
+   "sha256": "00a46ebb2e963a1814d7f29828849b8480a9bccbf184eeb39a6a345d22f31cca"
+  }
+ }
+}

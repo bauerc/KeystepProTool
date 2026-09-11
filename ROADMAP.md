@@ -60,7 +60,7 @@ one left behind, not the story of building it.
 `ksp.lenient_json` / `keys` / `constants` / `model` / `reader`, and `ksp-dump` (`--all`, `--track`,
 `--pattern`, `--json`, `--drum-map`, `-v`) print any project as tracks → patterns → notes.
 
-**The constraint:** the expected values in `tests/fixtures/` are **hand-transcribed from
+**The constraint:** the expected values in `fixtures/` are **hand-transcribed from
 `analysis/project_5_description.txt` and `project_9_tests.txt`**, not generated from the reader.
 That is what makes them independent ground truth and what lets the Swift port (M10) be checked
 against identical files. **Never regenerate them from the code.**
@@ -274,7 +274,7 @@ section keeps.
 anywhere in `ksp/`, so the Swift port swaps in CoreMIDI and reuses all three unchanged.
 
 **Test, and it passes:** replaying a captured MCC Recall To exchange
-(`tests/fixtures/recall_tape.txt`, 8,951 request/reply pairs) reconstructs **all 153,497 keys of
+(`fixtures/recall_tape.txt`, 8,951 request/reply pairs) reconstructs **all 153,497 keys of
 `initial_project.KeyStepPro`** — byte-identical to MCC's export minus the trailing comma this
 writer deliberately omits, and its `ksp2midi` output is byte-identical too. Walking the
 vendor-declared plan also reproduces MCC's 8,951 requests byte-for-byte and in order.
@@ -325,7 +325,7 @@ Three probes changed what later phases should do:
 group, so `sudo ksp-pull OUT.KeyStepPro [--slot N]` reads the coalesced walk by default
 (`--mcc-plan` for MCC's own 8,951-request stream). It is the full-dump CLI Phase 3's H3.1 gates.
 `tests/test_pull_cli.py::test_the_dump_is_byte_identical_to_mcc_s_export` runs it against
-`FakeDevice` fed by `tests/fixtures/recall_tape.txt` and pins the 2,474-request replay figure and
+`FakeDevice` fed by `fixtures/recall_tape.txt` and pins the 2,474-request replay figure and
 byte-for-byte agreement with `initial_project.KeyStepPro`, minus MCC's trailing comma.
 
 **Phase 3 ran on hardware 2026-09-04 (firmware 2.5.20, slot 1) and both gates passed over
@@ -443,7 +443,7 @@ both the tree and `--json`.
   error is 64.
 
 **Test, and this is the milestone's whole point:** `swift/Tests/KSPKitTests/GroundTruthTests.swift`
-and `EmptyProjectsTests.swift` read `tests/fixtures/project_5.expected.json`,
+and `EmptyProjectsTests.swift` read `fixtures/project_5.expected.json`,
 `project_9.expected.json` and `empty_projects.expected.json` — the same files the Python's
 `test_ground_truth.py` and `test_empty_projects.py` read, not translations of them. That is what M1
 wrote those fixtures in JSON for. They stay hand-transcribed from the hardware display and must

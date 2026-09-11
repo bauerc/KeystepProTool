@@ -1,0 +1,19 @@
+{
+ "label": "m6-test-file.mid --steps-per-beat 8",
+ "direction": "import",
+ "inputs": [
+  "project_files/m6-test-file.mid"
+ ],
+ "flags": [
+  "--steps-per-beat",
+  "8"
+ ],
+ "exit": 0,
+ "stdout": "wrote <out>/out.KeyStepPro\n  track 1: 64 note(s), patterns 1-2 (64, 64 steps)\n  track 2: 160 note(s), patterns 1-2 (64, 32 steps)\n  track 3: 3 note(s), pattern 1 (64 steps)\n  track 4: 64 note(s), patterns 1-4 (64, 64, 64, 64 steps)\n",
+ "stderr": "<prog>: warning: 3 tracks run longer than the device's 64-step maximum and were split across consecutive patterns, chained in the current scene so they play as one sequence\n<prog>: warning: the project tempo was set to the source's 120 BPM\n<prog>: 4 warnings collapsed into 2 kinds; --verbose for detail\n",
+ "artifacts": {
+  "out.KeyStepPro": {
+   "sha256": "52ba94cae7b78e082bf87e7a4e78ea5012b1c35aeb17bf106a042a0a7ba00b11"
+  }
+ }
+}

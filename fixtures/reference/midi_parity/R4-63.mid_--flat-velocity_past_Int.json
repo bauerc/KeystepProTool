@@ -1,0 +1,15 @@
+{
+ "label": "R4-63.mid --flat-velocity past Int",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R4-63.mid"
+ ],
+ "flags": [
+  "--flat-velocity",
+  "99999999999999999999"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: flat_velocity must be 1-127; 0 is a MIDI note-off, not a silent note\n",
+ "artifacts": {}
+}

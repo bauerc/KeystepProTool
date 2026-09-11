@@ -1,0 +1,15 @@
+{
+ "label": "R2.mid --route 1:9",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R2.mid"
+ ],
+ "flags": [
+  "--route",
+  "1:9"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: route 1:9 names device track 9; the device has 4 tracks\n",
+ "artifacts": {}
+}

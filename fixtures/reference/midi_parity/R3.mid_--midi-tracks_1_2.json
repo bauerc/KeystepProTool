@@ -1,0 +1,19 @@
+{
+ "label": "R3.mid --midi-tracks 1,2",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R3.mid"
+ ],
+ "flags": [
+  "--midi-tracks",
+  "1,2"
+ ],
+ "exit": 0,
+ "stdout": "wrote <out>/out.KeyStepPro\n  32 note(s) onto track 1, pattern 1 (32 steps)\n",
+ "stderr": "<prog>: warning: the song starts 1920 tick(s) into the file; every track was moved back together so its first note lands on step 1, because a pattern is a loop with nowhere to keep a lead-in\n<prog>: warning: track 1 pattern 1 (seq): 28 note length(s) are not on the gate ladder and took the nearest rung; the ladder is coarse above 3 steps\n<prog>: warning: the project tempo was set to the source's 30 BPM\n",
+ "artifacts": {
+  "out.KeyStepPro": {
+   "sha256": "57dce6252ce32d2335c70ca05eb6cbed33d475547bfbb2f15e8908fd4f055436"
+  }
+ }
+}

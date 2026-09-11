@@ -1,0 +1,15 @@
+{
+ "label": "R4mid.mid --midi-tracks 0",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R4mid.mid"
+ ],
+ "flags": [
+  "--midi-tracks",
+  "0"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: --midi-tracks: 0 is out of range 1-65535\n",
+ "artifacts": {}
+}

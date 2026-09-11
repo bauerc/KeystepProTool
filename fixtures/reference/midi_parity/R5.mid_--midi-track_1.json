@@ -1,0 +1,15 @@
+{
+ "label": "R5.mid --midi-track 1",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R5.mid"
+ ],
+ "flags": [
+  "--midi-track",
+  "1"
+ ],
+ "exit": 1,
+ "stdout": "",
+ "stderr": "<prog>: analysis/captures/R5.mid: no notes to convert\n",
+ "artifacts": {}
+}

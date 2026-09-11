@@ -1,0 +1,17 @@
+{
+ "label": "--tracks bad and --drum-map bad",
+ "direction": "export",
+ "inputs": [
+  "project_files/project_9.KeyStepPro"
+ ],
+ "flags": [
+  "--tracks",
+  "bad",
+  "--drum-map",
+  "garbage"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: --tracks: 'bad' is not a number or a range\n",
+ "artifacts": {}
+}

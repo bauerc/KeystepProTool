@@ -1,0 +1,15 @@
+{
+ "label": "m6-test-file.mid --route 1:2,3:2",
+ "direction": "import",
+ "inputs": [
+  "project_files/m6-test-file.mid"
+ ],
+ "flags": [
+  "--route",
+  "1:2,3:2"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: routes 1:2 and 3:2 both name device track 2; one device track holds one source track\n",
+ "artifacts": {}
+}

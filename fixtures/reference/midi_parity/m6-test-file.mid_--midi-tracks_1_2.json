@@ -1,0 +1,15 @@
+{
+ "label": "m6-test-file.mid --midi-tracks 1,2",
+ "direction": "import",
+ "inputs": [
+  "project_files/m6-test-file.mid"
+ ],
+ "flags": [
+  "--midi-tracks",
+  "1,2"
+ ],
+ "exit": 1,
+ "stdout": "",
+ "stderr": "<prog>: project_files/m6-test-file.mid: no notes to convert\n",
+ "artifacts": {}
+}

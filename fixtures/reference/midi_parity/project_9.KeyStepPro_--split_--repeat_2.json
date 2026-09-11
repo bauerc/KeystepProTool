@@ -1,0 +1,74 @@
+{
+ "label": "project_9.KeyStepPro --split --repeat 2",
+ "direction": "split",
+ "inputs": [
+  "project_files/project_9.KeyStepPro"
+ ],
+ "flags": [
+  "--split",
+  "--repeat",
+  "2"
+ ],
+ "exit": 0,
+ "stdout": "wrote <out>/project_9_track1_pattern2.mid\n  2 note(s) from pattern(s) 2\n  tracks: Track 1 (drum)\n  repeated 2 times end to end\nwrote <out>/project_9_track1_pattern3.mid\n  2 note(s) from pattern(s) 3\n  tracks: Track 1 (drum)\n  repeated 2 times end to end\nwrote <out>/project_9_track3_pattern2.mid\n  2 note(s) from pattern(s) 2\n  tracks: Track 3\n  repeated 2 times end to end\n",
+ "stderr": "<prog>: warning: drum lanes resolved through the chromatic from 36 (assumed - not in file) map on channel 10; the KeyStep Pro drum map is a device global and is not stored in the project file (spec 3.2.1)\n<prog>: warning: track 1 pattern 3 (drum): rendered as 4 repeats so that 1 masked note(s) land on the 16/32/48/64 sequences they play in\n",
+ "artifacts": {
+  "project_9_track1_pattern2.mid": {
+   "events": [
+    "format 1 ticks_per_beat 480 tracks 2",
+    "track 0",
+    "         0 track_name name='project_9.KeyStepPro'",
+    "         0 set_tempo tempo=500000",
+    "         0 time_signature numerator=4 denominator=4 clocks_per_click=24 notated_32nd_notes_per_beat=8",
+    "         0 marker text='pattern 2'",
+    "      1920 marker text='pattern 2'",
+    "      3840 end_of_track",
+    "track 1",
+    "         0 track_name name='Track 1 (drum)'",
+    "         0 note_on channel=9 note=36 velocity=100",
+    "       480 note_off channel=9 note=36 velocity=0",
+    "      1920 note_on channel=9 note=36 velocity=100",
+    "      2400 note_off channel=9 note=36 velocity=0",
+    "      2400 end_of_track"
+   ]
+  },
+  "project_9_track1_pattern3.mid": {
+   "events": [
+    "format 1 ticks_per_beat 480 tracks 2",
+    "track 0",
+    "         0 track_name name='project_9.KeyStepPro'",
+    "         0 set_tempo tempo=500000",
+    "         0 time_signature numerator=4 denominator=4 clocks_per_click=24 notated_32nd_notes_per_beat=8",
+    "         0 marker text='pattern 3'",
+    "      7680 marker text='pattern 3'",
+    "     15360 end_of_track",
+    "track 1",
+    "         0 track_name name='Track 1 (drum)'",
+    "      1920 note_on channel=9 note=36 velocity=100",
+    "      1980 note_off channel=9 note=36 velocity=0",
+    "      9600 note_on channel=9 note=36 velocity=100",
+    "      9660 note_off channel=9 note=36 velocity=0",
+    "      9660 end_of_track"
+   ]
+  },
+  "project_9_track3_pattern2.mid": {
+   "events": [
+    "format 1 ticks_per_beat 480 tracks 2",
+    "track 0",
+    "         0 track_name name='project_9.KeyStepPro'",
+    "         0 set_tempo tempo=500000",
+    "         0 time_signature numerator=4 denominator=4 clocks_per_click=24 notated_32nd_notes_per_beat=8",
+    "         0 marker text='pattern 2'",
+    "      1920 marker text='pattern 2'",
+    "      3840 end_of_track",
+    "track 1",
+    "         0 track_name name='Track 3'",
+    "         0 note_on channel=2 note=60 velocity=100",
+    "       480 note_off channel=2 note=60 velocity=0",
+    "      1920 note_on channel=2 note=60 velocity=100",
+    "      2400 note_off channel=2 note=60 velocity=0",
+    "      2400 end_of_track"
+   ]
+  }
+ }
+}

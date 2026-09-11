@@ -1,0 +1,16 @@
+{
+ "label": "two files --midi-track",
+ "direction": "import",
+ "inputs": [
+  "project_files/test_file_simple.mid",
+  "project_files/test_file.mid"
+ ],
+ "flags": [
+  "--midi-track",
+  "1"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: --midi-track reads one file, and several were given\n",
+ "artifacts": {}
+}

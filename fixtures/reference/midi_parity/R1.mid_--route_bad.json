@@ -1,0 +1,15 @@
+{
+ "label": "R1.mid --route bad",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R1.mid"
+ ],
+ "flags": [
+  "--route",
+  "bad"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: --route: 'bad' is not a source:device pair\n",
+ "artifacts": {}
+}

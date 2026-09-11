@@ -4,7 +4,7 @@ import Testing
 
 @testable import KSPRun
 
-/// `project_5`'s counts are the hand-transcribed ground truth in `tests/fixtures/`.
+/// `project_5`'s counts are the hand-transcribed ground truth in `fixtures/`.
 @Suite struct SummaryTests {
     static func summarise(_ name: String) throws -> ProjectSummary {
         let result = SummaryRunner.run(
@@ -42,7 +42,7 @@ import Testing
     }
 
     @Test func itCountsTheNotesTheDescriptionRecords() throws {
-        // From tests/fixtures/project_5.expected.json.
+        // From fixtures/project_5.expected.json.
         let summary = try Self.summarise("project_5.KeyStepPro")
         let drum = summary.tracks[0].patterns[0]
         #expect(drum.noteCount == 2)

@@ -356,7 +356,7 @@ private final class UnreadableIdentity: PullDevice {
     func exchange(_ request: [UInt8]) throws -> [UInt8] { [] }
 }
 
-/// Every address one of `tests/fixtures/*_tape.txt` delivered, as the device sent it.
+/// Every address one of `fixtures/*_tape.txt` delivered, as the device sent it.
 private func recallTape(named name: String = "recall_tape.txt") throws -> [String: Int] {
     try tapeValues(contentsOf: RepoData.fixtures.appending(path: name))
 }

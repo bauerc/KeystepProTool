@@ -1,0 +1,16 @@
+{
+ "label": "two files --midi-tracks 99",
+ "direction": "import",
+ "inputs": [
+  "project_files/test_file_simple.mid",
+  "project_files/test_file.mid"
+ ],
+ "flags": [
+  "--midi-tracks",
+  "99"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: source track 99 was selected; the 2 files hold 2 tracks between them\n",
+ "artifacts": {}
+}

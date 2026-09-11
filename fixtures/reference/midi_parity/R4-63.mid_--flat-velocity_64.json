@@ -1,0 +1,19 @@
+{
+ "label": "R4-63.mid --flat-velocity 64",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R4-63.mid"
+ ],
+ "flags": [
+  "--flat-velocity",
+  "64"
+ ],
+ "exit": 0,
+ "stdout": "wrote <out>/out.KeyStepPro\n  track 1: 8 note(s), pattern 1 (32 steps)\n  track 2: 8 note(s), pattern 1 (32 steps)\n",
+ "stderr": "<prog>: warning: the song starts 120 tick(s) into the file; every track was moved back together so its first note lands on step 1, because a pattern is a loop with nowhere to keep a lead-in\n<prog>: warning: track 2 (seq): 8 note(s) on track 2 did not land on a 1/16 step and were moved to the nearest one\n<prog>: warning: the project tempo was set to the source's 30 BPM\n",
+ "artifacts": {
+  "out.KeyStepPro": {
+   "sha256": "da297fe3649738ed8cf0eef7d67f4e8084ad0e78fb9e14fd72aa2c284d35d87b"
+  }
+ }
+}

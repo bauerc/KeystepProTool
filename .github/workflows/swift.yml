@@ -10,8 +10,10 @@ name: swift
 # it. Keeping both is the point: Linux still covers `KSPKit` -- the format core and, from M12,
 # `Mutate.swift` -- at 1x, and only the MIDI half pays 10x.
 #
-# What neither job covers is the four parity scripts. They drive both toolchains at once and need
-# `uv` beside Swift, so ./scripts/validate.sh runs them on a dev machine and nowhere else.
+# Neither job runs the four parity scripts, which drive both toolchains at once and need `uv` beside
+# Swift, so ./scripts/validate.sh runs them on a dev machine. What they compare is frozen in
+# `fixtures/reference/`, and `swift-macos` holds the Swift to it through the `ReferenceTests` of
+# KSPRunTests and KSPSwiftCLITests. That is why a change under `fixtures/` runs this workflow.
 #
 # The container image carries swift-format, so no toolchain setup step is needed there.
 #
@@ -33,9 +35,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["swift/**", ".github/workflows/swift.yml"]
+    paths: ["swift/**", "fixtures/**", ".github/workflows/swift.yml"]
   pull_request:
-    paths: ["swift/**", ".github/workflows/swift.yml"]
+    paths: ["swift/**", "fixtures/**", ".github/workflows/swift.yml"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

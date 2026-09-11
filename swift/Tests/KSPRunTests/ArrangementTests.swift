@@ -104,7 +104,7 @@ import Testing
 
         #expect(region.marks.count == region.noteCount)
         #expect(region.marks.allSatisfy { $0.tick >= 0 && $0.tick < region.spanTicks })
-        // The pitches `tests/fixtures/project_5.expected.json` transcribes, which the device shows
+        // The pitches `fixtures/project_5.expected.json` transcribes, which the device shows
         // as C2, C#2 and D2 -- 60 is C3.
         #expect(Set(region.marks.map(\.pitch)).sorted() == [48, 49, 50])
         #expect(region.marks.allSatisfy { $0.durationTicks > 0 })

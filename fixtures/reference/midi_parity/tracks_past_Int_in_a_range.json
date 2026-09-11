@@ -1,0 +1,15 @@
+{
+ "label": "--tracks past Int, in a range",
+ "direction": "export",
+ "inputs": [
+  "project_files/project_9.KeyStepPro"
+ ],
+ "flags": [
+  "--tracks",
+  "3-99999999999999999999"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: --tracks: 5 is out of range 1-4\n",
+ "artifacts": {}
+}

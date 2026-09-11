@@ -1,0 +1,15 @@
+{
+ "label": "baseline.KeyStepPro --passes 1",
+ "direction": "export",
+ "inputs": [
+  "project_files/baseline.KeyStepPro"
+ ],
+ "flags": [
+  "--passes",
+  "1"
+ ],
+ "exit": 1,
+ "stdout": "",
+ "stderr": "<prog>: project_files/baseline.KeyStepPro: nothing to export (no selected pattern holds notes)\n",
+ "artifacts": {}
+}

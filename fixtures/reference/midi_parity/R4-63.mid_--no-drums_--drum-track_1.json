@@ -1,0 +1,16 @@
+{
+ "label": "R4-63.mid --no-drums --drum-track 1",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R4-63.mid"
+ ],
+ "flags": [
+  "--no-drums",
+  "--drum-track",
+  "1"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: --drum-track and --no-drums contradict each other; --drum-track names a source track to write as drums, and --no-drums takes none\n",
+ "artifacts": {}
+}

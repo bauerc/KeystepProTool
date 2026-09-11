@@ -1,0 +1,19 @@
+{
+ "label": "R2.mid --steps-per-beat 8",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R2.mid"
+ ],
+ "flags": [
+  "--steps-per-beat",
+  "8"
+ ],
+ "exit": 0,
+ "stdout": "wrote <out>/out.KeyStepPro\n  track 1: 8 note(s), pattern 1 (64 steps)\n  track 2: 8 note(s), pattern 1 (64 steps)\n",
+ "stderr": "<prog>: warning: the song starts 1920 tick(s) into the file; every track was moved back together so its first note lands on step 1, because a pattern is a loop with nowhere to keep a lead-in\n<prog>: warning: track 1 pattern 1 (seq): 8 note length(s) are not on the gate ladder and took the nearest rung; the ladder is coarse above 3 steps\n<prog>: warning: track 2 (seq): 8 note(s) on track 2 did not land on a 1/32 step and were moved to the nearest one\n<prog>: warning: the project tempo was set to the source's 120 BPM\n",
+ "artifacts": {
+  "out.KeyStepPro": {
+   "sha256": "f352e0fc591a3e31c9b7a506bd382a1379468f235f6fb7846f3020310565cc62"
+  }
+ }
+}

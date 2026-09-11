@@ -1,0 +1,17 @@
+{
+ "label": "R4mid.mid --midi-tracks 1,2 --route 3:1",
+ "direction": "import",
+ "inputs": [
+  "analysis/captures/R4mid.mid"
+ ],
+ "flags": [
+  "--midi-tracks",
+  "1,2",
+  "--route",
+  "3:1"
+ ],
+ "exit": 2,
+ "stdout": "",
+ "stderr": "<prog>: route 3:1 names source track 3, which is not in the selection; a route must name one of the source tracks read\n",
+ "artifacts": {}
+}

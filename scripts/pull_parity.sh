@@ -58,7 +58,7 @@ for case in "recall_tape.txt|1|initial_project.KeyStepPro" "recall_project_2_tap
     py=$sandbox/py/pulled_$slot.KeyStepPro
     sw=$sandbox/sw/pulled_$slot.KeyStepPro
 
-    if ! "$puller" "tests/fixtures/$tape" "$slot" "$template" "$sw"; then
+    if ! "$puller" "fixtures/$tape" "$slot" "$template" "$sw"; then
         echo "pull_parity: the Swift core failed on $tape" >&2
         status=1
         continue
@@ -68,7 +68,7 @@ for case in "recall_tape.txt|1|initial_project.KeyStepPro" "recall_project_2_tap
     # redirected so --also-midi's export never picks up a personal ~/.config drum map, and its
     # warnings are held back rather than printed -- this gate judges files, not streams.
     warnings=$sandbox/warnings_$slot.err
-    if ! HOME=$sandbox uv run python - "tests/fixtures/$tape" "$slot" "$template" "$py" \
+    if ! HOME=$sandbox uv run python - "fixtures/$tape" "$slot" "$template" "$py" \
         2> "$warnings" <<'PYTHON'; then
 import pathlib
 import sys

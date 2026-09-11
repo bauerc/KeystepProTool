@@ -1,0 +1,19 @@
+{
+ "label": "test_file.mid --drum-channel 1",
+ "direction": "import",
+ "inputs": [
+  "project_files/test_file.mid"
+ ],
+ "flags": [
+  "--drum-channel",
+  "1"
+ ],
+ "exit": 0,
+ "stdout": "wrote <out>/out.KeyStepPro\n  26 note(s) onto track 1, pattern 1 (16 steps)\n",
+ "stderr": "<prog>: warning: the project tempo was set to the source's 120 BPM\n",
+ "artifacts": {
+  "out.KeyStepPro": {
+   "sha256": "ec53227553b7f44630e9c8b25c6b9a118fbce68089746aa06d8abbdb1f5b8755"
+  }
+ }
+}

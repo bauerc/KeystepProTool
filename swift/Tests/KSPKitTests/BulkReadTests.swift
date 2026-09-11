@@ -4,12 +4,12 @@ import Testing
 
 @testable import KSPKit
 
-/// Every address `tests/fixtures/recall_tape.txt` delivered, as the device sent it.
+/// Every address `fixtures/recall_tape.txt` delivered, as the device sent it.
 private func recallTape() throws -> [String: Int] {
     try tapeValues(contentsOf: RepoData.fixtures.appending(path: "recall_tape.txt"))
 }
 
-/// `tests/fixtures/bulk_read_walk.txt`, written by `tools/gen_bulk_read_walk_fixture.py`.
+/// `fixtures/bulk_read_walk.txt`, written by `tools/gen_bulk_read_walk_fixture.py`.
 private func pythonWalk() throws -> [ReadRequest] {
     let path = RepoData.fixtures.appending(path: "bulk_read_walk.txt")
     return try String(contentsOf: path, encoding: .utf8).split(separator: "\n").map { line in

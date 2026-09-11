@@ -1,0 +1,16 @@
+{
+ "label": "test_file_simple.mid",
+ "direction": "import",
+ "inputs": [
+  "project_files/test_file_simple.mid"
+ ],
+ "flags": [],
+ "exit": 0,
+ "stdout": "wrote <out>/out.KeyStepPro\n  16 note(s) onto track 1, pattern 1 (16 steps)\n",
+ "stderr": "<prog>: warning: the song starts 1920 tick(s) into the file; every track was moved back together so its first note lands on step 1, because a pattern is a loop with nowhere to keep a lead-in\n<prog>: warning: the project tempo was set to the source's 120 BPM\n",
+ "artifacts": {
+  "out.KeyStepPro": {
+   "sha256": "26362ef7549429b3380b39f0d15bcdee94098216377682b100c2c676a4db17b7"
+  }
+ }
+}

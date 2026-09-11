@@ -1,0 +1,19 @@
+{
+ "label": "m6-test-file.mid --flat-velocity 64",
+ "direction": "import",
+ "inputs": [
+  "project_files/m6-test-file.mid"
+ ],
+ "flags": [
+  "--flat-velocity",
+  "64"
+ ],
+ "exit": 0,
+ "stdout": "wrote <out>/out.KeyStepPro\n  track 1: 64 note(s), pattern 1 (64 steps)\n  track 2: 160 note(s), pattern 1 (48 steps)\n  track 3: 3 note(s), pattern 1 (32 steps)\n  track 4: 64 note(s), patterns 1-2 (64, 64 steps)\n",
+ "stderr": "<prog>: warning: track 4 (seq): track 4 runs 128 steps, past the device's 64; it was split across patterns 1-2 and chained\n<prog>: warning: the project tempo was set to the source's 120 BPM\n",
+ "artifacts": {
+  "out.KeyStepPro": {
+   "sha256": "fcc3a5d3e82f36b65485949c0364df3ac329223e47da03759879a94c9aa7ef9f"
+  }
+ }
+}

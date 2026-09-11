@@ -1,0 +1,15 @@
+{
+ "label": "baseline.KeyStepPro --patterns 1-4",
+ "direction": "export",
+ "inputs": [
+  "project_files/baseline.KeyStepPro"
+ ],
+ "flags": [
+  "--patterns",
+  "1-4"
+ ],
+ "exit": 1,
+ "stdout": "",
+ "stderr": "<prog>: project_files/baseline.KeyStepPro: nothing to export (no selected pattern holds notes)\n",
+ "artifacts": {}
+}

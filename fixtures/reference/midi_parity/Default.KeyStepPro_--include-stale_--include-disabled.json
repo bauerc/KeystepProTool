@@ -1,0 +1,15 @@
+{
+ "label": "Default.KeyStepPro --include-stale --include-disabled",
+ "direction": "export",
+ "inputs": [
+  "project_files/Default.KeyStepPro"
+ ],
+ "flags": [
+  "--include-stale",
+  "--include-disabled"
+ ],
+ "exit": 1,
+ "stdout": "",
+ "stderr": "<prog>: project_files/Default.KeyStepPro: nothing to export (no selected pattern holds notes)\n",
+ "artifacts": {}
+}
