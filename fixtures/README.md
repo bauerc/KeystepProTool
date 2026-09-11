@@ -1,8 +1,7 @@
 # Expected-value fixtures
 
-Expected values live here as **data**, not as hardcoded Python assertions, so
-that the Swift port (M10) can be checked against the identical files rather
-than against a reimplementation of the same expectations. See ROADMAP.md M1.
+Expected values live here as **data**, not as hardcoded assertions, so the
+tests read the same facts the documents cite. See ROADMAP.md M1.
 
 | File | What it pins down |
 |---|---|
@@ -12,30 +11,30 @@ than against a reimplementation of the same expectations. See ROADMAP.md M1.
 | `recall_tape.txt` | MCC's Recall To exchange with the device, 8,951 request/reply frame pairs |
 | `recall_project_2_tape.txt` | The same exchange against **project 2**, so the slot byte is pinned against a second value |
 | `import_project_3_tape.txt` | MCC writing that data back into **project 3** — the write direction, 8,951 write/ack pairs |
-| `bulk_fast_requests.txt` | The 3,511 coalesced read requests, so both cores' plans are held to one sequence |
-| `bulk_read_walk.txt` | The 2,474 of those the gate leaves to ask over `recall_tape.txt`, so both cores skip the same addresses |
+| `bulk_fast_requests.txt` | The 3,399 coalesced read requests, so the plan is held to its last reviewed sequence |
+| `bulk_read_walk.txt` | The 2,169 of those the gate leaves to ask over `recall_tape.txt`, so the gate's skips are held too |
 
-The three tapes are distilled by `tools/make_recall_tape.py` from captures under
-`usb_midi_investigation/`, which are gitignored — the tapes are tracked so the
-replay tests cannot skip silently on a fresh clone. Each line is
+The three tapes were distilled by `tools/make_recall_tape.py`, which lives on in
+the [archive](https://github.com/bauerc/KeystepProTool-python), from captures
+under `usb_midi_investigation/`, which are gitignored. The tapes are tracked so
+the replay tests cannot skip silently on a fresh clone. Each line is
 `<sent> <received>`, whitespace-separated hex.
 
 The import tape's received column can be `-`, meaning the device sent no ack.
 It happens exactly once, and it is a finding rather than a capture glitch: the
 truncated `0xFF` write at `123_117_1` stalled the link and MCC recovered with a
-fresh identity request. Keeping it in the data rather than only in prose is why
-`test_capture_evidence.py` can assert it. See spec section 7.6.
+fresh identity request. Keeping it in the data rather than only in prose is what
+lets a test assert it; the one that did is archived, and #314 ports it. See spec
+section 7.6.
 
 `bulk_fast_requests.txt` and `bulk_read_walk.txt` are the two files here that
-**are** regenerable, and the ones that pin code rather than hardware: `uv run
-python tools/gen_bulk_fast_fixture.py` rewrites the first from
-`ksp.bulk_fast`, `uv run python tools/gen_bulk_read_walk_fixture.py` the second
-from `ksp.bulk_read` over the recall tape. They exist because `KSPKit`
-transcribes `bulk_plan`'s generated table separately, so nothing in Swift would
-notice a regenerated Python one; the walk file adds which of those requests the
-pool gate settles without asking, which agreeing on a count cannot show. Each
-line of both is `<item> <param> <indices|-> <count|->`. See
-[ADR 0003](../docs/adr/0003-the-swift-core-reads-the-fast-plan-only.md).
+**are** regenerable, and the ones that pin code rather than hardware:
+`./scripts/gen_bulk_fixtures.sh` rewrites both from `BulkFast` and from
+`BulkRead` over the recall tape. They pin the plan against its last reviewed
+state, so rewriting them is a reviewed decision rather than a re-run; the walk
+file adds which requests the pool gate settles without asking, which a count
+cannot show. Each line of both is `<item> <param> <indices|-> <count|->`. See
+[ADR 0004](../docs/adr/0004-the-swift-is-the-only-implementation.md).
 
 ## Provenance, and why it matters
 
@@ -58,6 +57,6 @@ Two fields need care when reading them:
 
 Where the description and the file disagree, the fixture records the file's
 value in `notes` (that is what the reader must produce) and the conflict in
-`unresolved`. `test_ground_truth.py` asserts each conflict still holds, so a
+`unresolved`. `GroundTruthTests.swift` asserts each conflict still holds, so a
 disagreement cannot quietly disappear — it stays visible until someone
 re-checks it on the hardware.

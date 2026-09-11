@@ -13,8 +13,8 @@ private func patternOf(_ name: String) -> Int? {
     return parts.count > 2 ? Int(parts[2]) : nil
 }
 
-/// `fixtures/bulk_fast_requests.txt`, written by `ksp.bulk_fast.iter_requests`.
-private func pythonPlan() throws -> [ReadRequest] {
+/// `fixtures/bulk_fast_requests.txt`, the plan as last reviewed (scripts/gen_bulk_fixtures.sh).
+private func reviewedPlan() throws -> [ReadRequest] {
     let path = RepoData.fixtures.appending(path: "bulk_fast_requests.txt")
     return try String(contentsOf: path, encoding: .utf8).split(separator: "\n").map { line in
         let fields = line.split(separator: " ")
@@ -36,11 +36,10 @@ private func number(_ field: Substring) throws -> Int {
 }
 
 @Suite struct BulkFastTests {
-    @Test func theSequenceIsThePythonPlanRequestForRequest() throws {
-        // The whole contract of the port: the same frames, in the same order, or a device read
-        // written against one core desyncs against the other.
+    @Test func theSequenceIsTheReviewedPlanRequestForRequest() throws {
+        // A plan that moves changes every frame a device read sends, so it moves only on review.
         let produced = try BulkFast.iterRequests()
-        let expected = try pythonPlan()
+        let expected = try reviewedPlan()
 
         #expect(produced.count == expected.count)
         let mismatch = zip(produced, expected).enumerated().first { $0.element.0 != $0.element.1 }

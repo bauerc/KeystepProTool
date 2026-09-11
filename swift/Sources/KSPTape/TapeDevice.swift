@@ -1,7 +1,7 @@
 import Foundation
 
-// scripts/pull_parity.sh compiles this file into one module with KSPKit's own sources, where
-// KSPKit is not a module there is anything to import; under SwiftPM it is.
+// scripts/gen_bulk_fixtures.sh compiles this file into one module with KSPKit's own sources,
+// where KSPKit is not a module there is anything to import; under SwiftPM it is.
 #if canImport(KSPKit)
     import KSPKit
 #endif

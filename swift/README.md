@@ -53,8 +53,8 @@ error messages more often than you type it.
 
 `KSPDevice` reaches the hardware through CoreMIDI, a system framework in every toolchain above:
 **no root, no `sudo`, no `libusb`, no entitlement and no privileged helper.** It needs no extra
-install either — unlike Python's `ksp-pull`, which claims USB interface 2 directly and so has to
-run under `sudo` with `pyusb` and `libusb` present. The two paths reach the same wire, and going
+install either — unlike the archived Python's `ksp-pull`, which claimed USB interface 2 directly
+and so had to run under `sudo` with `pyusb` and `libusb` present. The two paths reach the same wire, and going
 through `MIDIServer` rather than around it costs nothing measurable (spec 7.9). The one thing the
 CoreMIDI path does not carry is a `0xFF` byte, which `KSPDevice` repairs; spec 7.9.1 says why.
 
@@ -242,7 +242,7 @@ Eight targets:
 
 | Target | Is | Depends on | Builds on Linux |
 |---|---|---|---|
-| `KSPKit` | the format core; port of `src/ksp/` minus MIDI | **nothing** | yes |
+| `KSPKit` | the format core, minus MIDI | **nothing** | yes |
 | `KSPTape` | the fake device a captured exchange answers from | `KSPKit` | yes |
 | `KSPMIDI` | the Standard MIDI File layer | `KSPKit`, `SwiftMIDIFile` | no |
 | `KSPDevice` | the transport: the attached device over CoreMIDI | `KSPKit`, `CoreMIDI` | no |
@@ -265,17 +265,18 @@ does run on Linux, but it is declared inside the same `#else` because `KSPSwiftC
 target that wants it and that target is gated off there anyway — no reason to make the Linux job
 fetch a package it cannot use.
 
-The same rule decides where a *ported module* goes rather than only where a dependency does:
-`mutate.py` imports no `mido`, so `Mutate.swift` is in `KSPKit`; `midi_export.py` and
-`midi_import.py` both do, so they are in `KSPMIDI` whole. From M12 `swift.yml` runs a second job on
+The same rule decides where code goes rather than only where a dependency does: `Mutate.swift`
+needs no MIDI library, so it is in `KSPKit`; export and import both do, so they are in `KSPMIDI`
+whole. From M12 `swift.yml` runs a second job on
 `macos-latest`, because it is the only one that can see `KSPMIDI` and above at all.
 
 `KSPTape` is the one target nothing ships. Its request decoder, reply builder and tape-driven
 responder were hand-written four times over — once per test target that needed them and once more
-in `tools/pull_tape.swift` — and because each copy was only ever compared against a fixture, never
-against another copy, three of the four could be updated and nothing would fail (#262). It is a
-sibling of `KSPKit` rather than part of it because a shipped library has no business carrying a
-fake device. Two things follow from where it sits. `scripts/pull_parity.sh` compiles it *with*
+in a tape driver under `tools/` — and because each copy was only ever compared against a fixture,
+never against another copy, three of the four could be updated and nothing would fail (#262). It
+is a sibling of `KSPKit` rather than part of it because a shipped library has no business carrying
+a fake device. Two things follow from where it sits. `scripts/gen_bulk_fixtures.sh` compiles it
+*with*
 `KSPKit`'s own sources into a single module, where `KSPKit` is not a module there is anything to
 import — hence the `#if canImport(KSPKit)` around its import, which is what keeps that compile
 warning-free. And it cannot name `KSPRun`'s `PullDevice`, so `TapeDevice` answers the identity
@@ -288,10 +289,9 @@ request and `KSPRunTests` is where the one-line conformance to it lives.
 one at all. So every line that lived in `KSPSwiftCLI` was reachable from exactly one place: the
 `ksp-swift-cli` binary.
 
-That was fine until M13. The app has to run the *same* `convert` the CLI runs — the parity scripts
-compare the Swift against the Python byte for byte, and a second implementation in the app would be
-outside that net on the day it drifted. So the command bodies moved down into `KSPRun` and both
-faces call them:
+That was fine until M13. The app has to run the *same* `convert` the CLI runs, and a second
+implementation in the app would drift from the first with nothing to notice. So the command bodies
+moved down into `KSPRun` and both faces call them:
 
 ```
 KSPKit  <-  KSPMIDI  <-  KSPRun  <-  KSPSwiftCLI   (@main, ArgumentParser)
@@ -315,26 +315,24 @@ from a CLT install, and a hand-assembled bundle needs none of them. `bundle_app.
 **not** in `validate.sh`, which compiles the target through `KSPAppTests` instead.
 
 `actool` being missing is also why the icon is drawn rather than compiled from an `.xcassets`
-catalog: `tools/make_app_icon.py` renders the ladder and `iconutil` packs it, from
-`bundle_app.sh`. Nothing binary is checked in, and `tests/test_app_icon.py` holds the drawing to
-the four track hues at every size on the ladder.
+catalog: `tools/make_app_icon.swift` renders the ladder and `iconutil` packs it, from
+`bundle_app.sh`. Nothing binary is checked in.
 
 `RunResult` carries the run twice over. `stdout`/`stderr`/`code` are the terminal's view, rendered
 inside `KSPRun` so the CLI stays a shell — `emit(_:)` in `KSPSwiftCLI` is the only place they reach
-a stream — and so the parity scripts keep comparing text this module produced. `diagnostics` (a
+a stream. `diagnostics` (a
 `KSPKit.Report`) and `destinations` are the same run said structurally, for a caller with no
 terminal: M13.2's app lists findings through `Report.render(verbose:)` and reveals what was
 written, rather than re-parsing `stderr` or re-deriving the destination rule.
 
 The model serialises through `JSONNode` rather than `Encodable`: `JSONEncoder` controls neither key
 order nor the `120` vs `120.0` rendering of a whole-numbered `Double`, and both are load-bearing on
-the parity contract.
+the CLI's output.
 
 `KSPRun` carries one resource: `Resources/Default.KeyStepPro`, MCC's factory default, which
-`convert` overwrites when the user names no `--template`. The real bytes live there and
-`src/ksp_cli/templates/Default.KeyStepPro` is a symlink to them, not the other way round — SwiftPM
-copies a symlink *as a symlink* (measured, with both `.copy` and `.process`), which would leave a
-dangling link in the bundle, while Python and hatchling follow one transparently.
+`convert` overwrites when the user names no `--template`. Keep it a real file: SwiftPM copies a
+symlink *as a symlink* (measured, with both `.copy` and `.process`), which would leave a dangling
+link in the bundle.
 
 ### Inside `KSPApp`
 
@@ -351,9 +349,8 @@ and `RunResult` are for; so does the staged view's read of a dropped project, wh
 `.task` asks `AppModel.summarise()`, which asks `Conversion.summarise` for a `SummaryState`.
 
 **`SummaryRunner` is the deliberate exception to `RunResult`.** It returns a `ProjectSummary` and
-renders no text at all. No CLI output to compare means no Python mirror and no parity gate, which
-is the whole reason the preview work is affordable — so **a preview must never add a CLI flag**
-(#115); giving it a subcommand would forfeit the exemption and pay full parity. Its counts say
+renders no text at all, so it has no CLI output contract to keep, which is what keeps the preview
+work affordable — so **a preview must never add a CLI flag** (#115). Its counts say
 *enabled*, never *audible*: they answer the two reasons a note is switched off, not the spec's six
 reasons one might not play.
 

@@ -1,5 +1,10 @@
 # The Swift core reads the fast plan only
 
+> **Partly superseded by [ADR 0004](0004-the-swift-is-the-only-implementation.md).** The Python is
+> archived at `python-final`, and the proof below stands as it was made there. `BulkPlan.swift` is
+> now generated directly by `tools/gen_bulk_plan.swift`, so the drift described under Consequences
+> can no longer happen, and the two bulk fixtures pin the Swift against its last reviewed state.
+
 Reading a project off the device exists twice in Python. `bulk_plan.iter_requests` reproduces MIDI
 Control Center's own stream — 8,951 requests, one value each — and `bulk_fast.iter_requests`
 coalesces the identical addresses into 3,511, then lets the melodic existence array settle the

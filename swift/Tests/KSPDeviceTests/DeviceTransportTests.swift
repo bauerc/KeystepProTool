@@ -12,8 +12,7 @@ private let identityReply = "f07e7f060200206b0200090025140502f7"
         ScriptedPort(answer: answer)
     }
 
-    @Test func theTimeoutIsPythons() {
-        // ksp_cli.usb_transport.DEFAULT_TIMEOUT_MS, so both cores wait the same.
+    @Test func theTimeoutIsOneSecond() {
         #expect(DeviceTransport.defaultTimeoutMs == 1000)
     }
 
@@ -33,7 +32,6 @@ private let identityReply = "f07e7f060200206b0200090025140502f7"
         let request = try patternRequest(from: 1, count: 16)
         let device = DeviceTransport(port: port { _ in [] }, timeoutMs: 250)
 
-        // ksp_cli.usb_transport keeps these two apart, and so does this.
         #expect(throws: DeviceError.timedOut(after: 250)) { try device.exchange(request) }
     }
 

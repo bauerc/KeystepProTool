@@ -3,8 +3,8 @@ import KSPKit
 
 /// The device as `BulkRead` wants it, over any port that carries whole SysEx frames.
 public final class DeviceTransport: Transport {
-    /// `ksp_cli.usb_transport.DEFAULT_TIMEOUT_MS`: long enough for the device to answer, short
-    /// enough that a mute one is a failure rather than a hang.
+    /// Long enough for the device to answer, short enough that a mute one is a failure rather
+    /// than a hang.
     public static let defaultTimeoutMs = 1000
 
     private let port: any SysExPort

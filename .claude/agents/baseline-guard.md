@@ -1,6 +1,6 @@
 ---
 name: baseline-guard
-description: Audits a diff for damage to the repository's irreplaceable data — project_files/*.KeyStepPro, analysis/*.txt, fixtures/*.expected.json, fixtures/*_tape.txt and the shipped template in src/ksp_cli/templates/. Use before committing any change that touched those paths, or when a format-invariant test fails. Do not use as a general code reviewer.
+description: Audits a diff for damage to the repository's irreplaceable data — project_files/*.KeyStepPro, analysis/*.txt, fixtures/*.expected.json, fixtures/*_tape.txt and the bundled template in swift/Sources/KSPRun/Resources/. Use before committing any change that touched those paths, or when a format-invariant test fails. Do not use as a general code reviewer.
 tools: Bash, Read, Grep
 model: haiku
 color: red
@@ -19,22 +19,22 @@ independent ground truth the tests have. **The fix for a failure here is never i
   **Cannot be regenerated without the device.**
 - **`fixtures/*.expected.json`** — hand-transcribed from `analysis/project_5_description.txt`
   and `project_9_tests.txt`, *not* generated from the reader. That is what makes them independent
-  ground truth, and what lets the Swift port be checked against identical files. **Never
-  regenerated from the code**, no matter how obviously the reader "would produce" them.
+  ground truth. **Never regenerated from the code**, no matter how obviously the reader "would
+  produce" them.
 - **`fixtures/*_tape.txt`** — captured request/reply exchanges.
-- **`src/ksp_cli/templates/Default.KeyStepPro`** — must stay **byte-identical** to
-  `project_files/Default.KeyStepPro`.
+- **`swift/Sources/KSPRun/Resources/Default.KeyStepPro`** — the template `convert` ships with; must
+  stay **byte-identical** to `project_files/Default.KeyStepPro`.
 
-`.pre-commit-config.yaml` excludes all of these deliberately (see its `exclude:` line). An excluded
-path is not an oversight to correct.
+No formatter is meant to touch any of these. swift-format owns the `.swift` files under `swift/`
+and nothing else, so a tidied file here is damage, not a fix.
 
 ## What to check
 
 ```sh
 git status --short                                    # anything unexpected staged?
-git diff --stat main -- project_files/ analysis/ fixtures/ src/ksp_cli/templates/
-cmp project_files/Default.KeyStepPro src/ksp_cli/templates/Default.KeyStepPro
-uv run pytest tests/test_format_invariants.py tests/test_ground_truth.py tests/test_package.py
+git diff --stat main -- project_files/ analysis/ fixtures/ swift/Sources/KSPRun/Resources/
+cmp project_files/Default.KeyStepPro swift/Sources/KSPRun/Resources/Default.KeyStepPro
+./scripts/validate.sh   # FormatInvariantsTests and GroundTruthTests fail on exactly this damage
 ```
 
 For any protected file that *is* modified, characterise the damage without reading the file — it
