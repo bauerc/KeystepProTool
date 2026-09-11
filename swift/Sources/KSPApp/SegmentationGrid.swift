@@ -18,6 +18,8 @@ struct SegmentationGrid: Equatable {
         /// The Pattern in miniature, in the cell's own points, on its track's pitch window.
         let thumbnail: [NoteMark]
         let detail: String
+        /// ``detail`` without the slot's name, which is what the cell is labelled with.
+        let spoken: String
 
         init(pattern: Int, segment: Segment?, track: SegmentedTrack?, window: PitchWindow) {
             self.pattern = pattern
@@ -26,7 +28,9 @@ struct SegmentationGrid: Equatable {
             self.noteCount = segment?.noteCount ?? 0
             self.stepCount = segment?.stepCount ?? 0
             self.thumbnail = segment.map { Self.thumbnail($0, window: window) } ?? []
-            self.detail = Self.detail(pattern, segment: segment, track: track)
+            let body = Self.body(segment: segment, track: track)
+            self.detail = "Pattern \(pattern) — \(body)"
+            self.spoken = aloud(body)
         }
 
         /// Across the Pattern's own steps, whatever its length: the rule under it says that.
@@ -43,16 +47,14 @@ struct SegmentationGrid: Equatable {
             }
         }
 
-        private static func detail(
-            _ pattern: Int, segment: Segment?, track: SegmentedTrack?
-        ) -> String {
-            guard let segment, let track else { return "Pattern \(pattern) — empty" }
-            var detail = "Pattern \(pattern) — \(counted(segment.stepCount, "step"))"
+        private static func body(segment: Segment?, track: SegmentedTrack?) -> String {
+            guard let segment, let track else { return "empty" }
+            var body = counted(segment.stepCount, "step")
             // Only a split run has somewhere to resume from, and that is what makes it worth saying.
             if track.isSplit {
-                detail += ", steps \(segment.firstStep)-\(segment.lastStep) of the run"
+                body += ", steps \(segment.firstStep)-\(segment.lastStep) of the run"
             }
-            return detail
+            return body
         }
     }
 
@@ -68,6 +70,8 @@ struct SegmentationGrid: Equatable {
         let cells: [Cell]
         let runs: [AppLayout.Rail]
         let isEmpty: Bool
+
+        var spoken: String { aloud(detail) }
 
         init(track: Int, plan: SegmentedTrack?) {
             let byPattern = Dictionary(

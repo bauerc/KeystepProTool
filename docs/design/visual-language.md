@@ -389,6 +389,30 @@ there when wanted. What the app *found* is not explanation, and stays in the win
 refusal, a warning that nothing would be written, a folder it fell back to. Nobody hovers to learn
 that something went wrong.
 
+## What is spoken
+
+VoiceOver reads the window in the window's own words, with the drawing said aloud.
+
+**A label names; a value says what is drawn.** A slot cell is labelled `Pattern 3`, and its value is
+what its fill, figure and length rule show: `76 notes held, 8 switched on, 16 steps`. A limit meter
+is its name and `48 of 64, close to the limit` — the status its colour and glyph carry, in words,
+because rule 2 has to hold for a reader who sees neither. The models write these as `spoken`,
+beside the tooltip each is read off, and `aloud` turns a tooltip's `·` and `—` into pauses and
+`1-2` into `1 to 2`.
+
+**A track is one group.** A row of the pattern map, a lane, a source track and a row of the
+import's grid are each one element, labelled with the track's whole line — `Track 1, drum, on
+pattern 1, 2 patterns, 32 triggers switched on` — so a reader moves track by track. Its cells stay
+inside it, so whatever can be clicked is still reachable one by one.
+
+**Help is the hint.** `.help` sets the accessibility hint as well as the tooltip, so a control's
+hover text is spoken on focus. An element assembled from drawn parts has no control underneath to
+lend it one, which is why its value carries the tooltip's facts.
+
+**Decoration is hidden.** Rails, meter segments, grid lines, marks and the figures over a grid that
+cannot be clicked are left out of the tree: the row or the value already says what they draw, and a
+stop that says nothing new is a stop in the way.
+
 ## Motion
 
 **One thing moves: a white playhead across the pattern map while a conversion runs.** White is what

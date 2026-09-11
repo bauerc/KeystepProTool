@@ -31,20 +31,33 @@ struct SourceTrackList: Equatable {
         let isEmpty: Bool
         /// The row's tooltip.
         let detail: String
+        /// Every column but the controls, said as one line.
+        let spoken: String
 
         init(_ track: SourceTrackSummary, badge: Badge?, drums: DrumSense) {
-            self.number = track.number
-            self.name = sourceTrackName(track)
-            self.badge = badge
-            self.channels =
-                track.channels.isEmpty
-                ? "—" : "ch " + track.channels.map(String.init).joined(separator: ", ")
-            self.counts =
+            let channels = track.channels.map(String.init).joined(separator: ", ")
+            let counts =
                 track.isEmpty
                 ? "no notes"
                 : "\(counted(track.noteCount, "note")) · \(counted(track.bars, "bar"))"
+            self.number = track.number
+            self.name = sourceTrackName(track)
+            self.badge = badge
+            self.channels = track.channels.isEmpty ? "—" : "ch " + channels
+            self.counts = counts
             self.isEmpty = track.isEmpty
             self.detail = Self.detail(track, badge: badge, drums: drums)
+            self.spoken = aloud(
+                [
+                    "Source track \(track.number)", track.name.isEmpty ? nil : track.name,
+                    badge?.text,
+                    // "and", not a comma: "channels 1, 2, 8 notes" is heard as three channels.
+                    track.channels.isEmpty
+                        ? nil
+                        : "channel\(track.channels.count == 1 ? "" : "s") "
+                            + listed(track.channels.map(String.init)),
+                    counts,
+                ].compactMap { $0 }.joined(separator: " · "))
         }
 
         private static func detail(_ track: SourceTrackSummary, badge: Badge?, drums: DrumSense)

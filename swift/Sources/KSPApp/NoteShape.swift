@@ -115,6 +115,12 @@ struct NoteShape: Equatable {
     let middleC: CGFloat?
     let labels: [PitchLabel]
 
+    /// Everything drawn beside the name and under the shape, brackets included.
+    var spoken: String {
+        let range = range.map { ["pitches \($0)"] } ?? []
+        return aloud(([detail] + range + regions.map(\.bracket)).joined(separator: " · "))
+    }
+
     init(_ track: SegmentedTrack, stepsAcross: Int) {
         let pitches = track.segments.flatMap { $0.notes.map(\.pitch) }
         let window = PitchWindow(pitches)

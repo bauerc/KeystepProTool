@@ -25,6 +25,8 @@ struct ArrangeLanes: Equatable {
         /// every bar accented.
         let grid: [GridLine]
         let detail: String
+        /// ``detail`` without the Pattern's name, which is what the region is labelled with.
+        let spoken: String
 
         init(
             _ region: ArrangedRegion, slot: Int, total: Int, ticksPerBeat: Int,
@@ -44,7 +46,9 @@ struct ArrangeLanes: Equatable {
             self.grid =
                 showsMarks
                 ? Self.ruling(region, total: total, every: beatStride * ticksPerBeat) : []
-            self.detail = Self.detail(region, ticksPerBeat: ticksPerBeat)
+            let facts = Self.facts(region, ticksPerBeat: ticksPerBeat)
+            self.detail = (["Pattern \(region.patternNumber)"] + facts).joined(separator: " · ")
+            self.spoken = facts.joined(separator: ", ")
         }
 
         /// Scaled against the whole run, as the region itself is, then held inside the region: a
@@ -76,19 +80,19 @@ struct ArrangeLanes: Equatable {
             ) { AppLayout.x(ofTick: $0, in: total) - origin }
         }
 
-        private static func detail(_ region: ArrangedRegion, ticksPerBeat: Int) -> String {
-            var parts = ["Pattern \(region.patternNumber)"]
-            parts.append(
+        private static func facts(_ region: ArrangedRegion, ticksPerBeat: Int) -> [String] {
+            var parts = [
                 region.isEmpty
-                    ? "held, every event switched off" : counted(region.noteCount, "event"))
-            parts.append("from beat \(beat(region.startTick, ticksPerBeat: ticksPerBeat))")
+                    ? "held, every event switched off" : counted(region.noteCount, "event"),
+                "from beat \(beat(region.startTick, ticksPerBeat: ticksPerBeat))",
+            ]
             if region.gapTicks > 0 {
                 // The unequal case said in words as well as drawn, because the gap is the point.
                 parts.append(
                     "loops back \(beats(region.gapTicks, ticksPerBeat: ticksPerBeat)) before the "
                         + "next pattern")
             }
-            return parts.joined(separator: " · ")
+            return parts
         }
     }
 
@@ -112,6 +116,8 @@ struct ArrangeLanes: Equatable {
         let range: String?
         let middleC: CGFloat?
         let regions: [Region]
+
+        var spoken: String { aloud(range.map { "\(detail) · pitches \($0)" } ?? detail) }
 
         init(_ lane: ArrangedLane, total: Int, ticksPerBeat: Int, beatStride: Int) {
             let pitches = lane.regions.flatMap { $0.marks.map(\.pitch) }
