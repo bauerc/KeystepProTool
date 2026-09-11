@@ -18,7 +18,7 @@
 #                      the wheel so midi2ksp works installed. Same bytes, same
 #                      dialect -- and at 3.5 MB it trips check-added-large-files,
 #                      which is excluded here rather than raised repo-wide.
-#   tests/fixtures/*_tape.txt
+#   fixtures/*_tape.txt
 #                      Hardware captures distilled to sent/received frame
 #                      pairs. The originals are gitignored, so these cannot be
 #                      regenerated on a machine that does not hold them.
@@ -27,7 +27,7 @@
 # formatter owns that tree, and it is swift-format (see `swift/.swift-format`).
 # trailing-whitespace and end-of-file-fixer would fight it, and check-yaml and
 # check-toml have nothing to say about a Package.swift.
-exclude: ^(project_files/|analysis/.*\.txt$|src/ksp_cli/templates/|tests/fixtures/.*_tape\.txt$|swift/)
+exclude: ^(project_files/|analysis/.*\.txt$|src/ksp_cli/templates/|fixtures/.*_tape\.txt$|swift/)
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit

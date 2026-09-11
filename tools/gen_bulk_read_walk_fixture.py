@@ -1,4 +1,4 @@
-"""Regenerate tests/fixtures/bulk_read_walk.txt, the gated walk both cores are held to.
+"""Regenerate fixtures/bulk_read_walk.txt, the gated walk both cores are held to.
 
 The plan fixture pins what may be asked; this one pins what the gate leaves unasked over
 the recall tape, which no count agreement can establish. Run it after either changes, then
@@ -18,8 +18,8 @@ from gen_bulk_fast_fixture import line  # noqa: E402
 
 from conftest import DeviceModel, tape_values  # noqa: E402
 
-TAPE = ROOT / "tests/fixtures/recall_tape.txt"
-TARGET = ROOT / "tests/fixtures/bulk_read_walk.txt"
+TAPE = ROOT / "fixtures/recall_tape.txt"
+TARGET = ROOT / "fixtures/bulk_read_walk.txt"
 
 
 def asked() -> list[ReadRequest]:

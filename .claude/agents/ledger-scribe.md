@@ -45,7 +45,7 @@ Match what is already on the page. The consistent habits:
 
 - `analysis/*.txt` and `analysis/gate_ladder.txt` are transcribed from the hardware display and
   **cannot be regenerated** — never reformat, re-indent or add a trailing newline to one.
-- `project_files/` and `tests/fixtures/*.expected.json` are data, not documents. Out of scope.
+- `project_files/` and `fixtures/*.expected.json` are data, not documents. Out of scope.
 - Do not edit code. If the write-up implies a code change, say so and stop.
 
 ## What to return

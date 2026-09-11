@@ -13,7 +13,7 @@ private func patternOf(_ name: String) -> Int? {
     return parts.count > 2 ? Int(parts[2]) : nil
 }
 
-/// `tests/fixtures/bulk_fast_requests.txt`, written by `ksp.bulk_fast.iter_requests`.
+/// `fixtures/bulk_fast_requests.txt`, written by `ksp.bulk_fast.iter_requests`.
 private func pythonPlan() throws -> [ReadRequest] {
     let path = RepoData.fixtures.appending(path: "bulk_fast_requests.txt")
     return try String(contentsOf: path, encoding: .utf8).split(separator: "\n").map { line in

@@ -25,7 +25,7 @@ device-read command, when one lands, has no `--mcc-plan` to expose.
 
 **The two tables can drift, and a fixture is what catches it.** `tools/gen_bulk_plan.py`
 regenerates the Python table from Arturia's descriptor on a firmware update; `BulkPlan.swift` is a
-transcription and would not notice. `tests/fixtures/bulk_fast_requests.txt` is the whole coalesced
+transcription and would not notice. `fixtures/bulk_fast_requests.txt` is the whole coalesced
 sequence as the Python plan produces it, and both suites assert against it — Python in
 `test_bulk_fast.py`, Swift in `BulkFastTests.swift` — so a regenerated table that has not reached
 Swift fails on both sides. The three parity scripts cannot help here: they diff CLI output, and the

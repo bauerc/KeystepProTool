@@ -1,4 +1,4 @@
-"""Regenerate tests/fixtures/bulk_fast_requests.txt, the plan both cores are held to.
+"""Regenerate fixtures/bulk_fast_requests.txt, the plan both cores are held to.
 
 KSPKit carries its own transcription of bulk_plan's table, so nothing in Swift would
 notice a regenerated Python one. Re-run this after tools/gen_bulk_plan.py, then run the
@@ -10,7 +10,7 @@ from pathlib import Path
 from ksp.bulk_fast import iter_requests
 from ksp.sysex import ReadRequest
 
-TARGET = Path("tests/fixtures/bulk_fast_requests.txt")
+TARGET = Path("fixtures/bulk_fast_requests.txt")
 
 
 def line(request: ReadRequest) -> str:

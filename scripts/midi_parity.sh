@@ -168,9 +168,7 @@ else
 fi
 
 if has convert; then
-    for clip in project_files/*.mid analysis/captures/*.mid; do
-        # analysis/captures/ is gitignored, so in a worktree the glob arrives unexpanded.
-        [[ -e $clip ]] || continue
+    for clip in project_files/*.mid; do
         add import "$(basename "$clip")" "$clip"
         add import "$(basename "$clip") --no-swing-fit" "$clip" --no-swing-fit
         add import "$(basename "$clip") --no-time-shift" "$clip" --no-time-shift

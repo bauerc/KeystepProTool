@@ -15,7 +15,7 @@ enum RepoData {
     static let projectFiles = root.appending(path: "project_files")
 
     /// Hand-transcribed from the hardware display. **Never regenerate them from the code.**
-    static let fixtures = root.appending(path: "tests/fixtures")
+    static let fixtures = root.appending(path: "fixtures")
 }
 
 /// Parsed once each per run; `Project` and `RawProject` are immutable, so sharing is safe.

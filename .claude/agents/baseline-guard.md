@@ -1,6 +1,6 @@
 ---
 name: baseline-guard
-description: Audits a diff for damage to the repository's irreplaceable data — project_files/*.KeyStepPro, analysis/*.txt, tests/fixtures/*.expected.json, tests/fixtures/*_tape.txt and the shipped template in src/ksp_cli/templates/. Use before committing any change that touched those paths, or when a format-invariant test fails. Do not use as a general code reviewer.
+description: Audits a diff for damage to the repository's irreplaceable data — project_files/*.KeyStepPro, analysis/*.txt, fixtures/*.expected.json, fixtures/*_tape.txt and the shipped template in src/ksp_cli/templates/. Use before committing any change that touched those paths, or when a format-invariant test fails. Do not use as a general code reviewer.
 tools: Bash, Read, Grep
 model: haiku
 color: red
@@ -17,11 +17,11 @@ independent ground truth the tests have. **The fix for a failure here is never i
   newline**. All three look like defects to a formatter and are not.
 - **`analysis/*.txt`** (including `gate_ladder.txt`) — transcribed from the hardware display.
   **Cannot be regenerated without the device.**
-- **`tests/fixtures/*.expected.json`** — hand-transcribed from `analysis/project_5_description.txt`
+- **`fixtures/*.expected.json`** — hand-transcribed from `analysis/project_5_description.txt`
   and `project_9_tests.txt`, *not* generated from the reader. That is what makes them independent
   ground truth, and what lets the Swift port be checked against identical files. **Never
   regenerated from the code**, no matter how obviously the reader "would produce" them.
-- **`tests/fixtures/*_tape.txt`** — captured request/reply exchanges.
+- **`fixtures/*_tape.txt`** — captured request/reply exchanges.
 - **`src/ksp_cli/templates/Default.KeyStepPro`** — must stay **byte-identical** to
   `project_files/Default.KeyStepPro`.
 
@@ -32,7 +32,7 @@ path is not an oversight to correct.
 
 ```sh
 git status --short                                    # anything unexpected staged?
-git diff --stat main -- project_files/ analysis/ tests/fixtures/ src/ksp_cli/templates/
+git diff --stat main -- project_files/ analysis/ fixtures/ src/ksp_cli/templates/
 cmp project_files/Default.KeyStepPro src/ksp_cli/templates/Default.KeyStepPro
 uv run pytest tests/test_format_invariants.py tests/test_ground_truth.py tests/test_package.py
 ```

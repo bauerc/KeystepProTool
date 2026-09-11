@@ -83,7 +83,7 @@ def fixtures_dir() -> Path:
     """Expected-value fixtures, stored as data so a future Swift port can consume the identical
     files.
     """
-    return Path(__file__).resolve().parent / "fixtures"
+    return REPO_ROOT / "fixtures"
 
 
 @pytest.fixture(params=SAMPLE_NAMES, scope="session")

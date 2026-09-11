@@ -35,7 +35,7 @@ transcribes `bulk_plan`'s generated table separately, so nothing in Swift would
 notice a regenerated Python one; the walk file adds which of those requests the
 pool gate settles without asking, which agreeing on a count cannot show. Each
 line of both is `<item> <param> <indices|-> <count|->`. See
-[ADR 0003](../../docs/adr/0003-the-swift-core-reads-the-fast-plan-only.md).
+[ADR 0003](../docs/adr/0003-the-swift-core-reads-the-fast-plan-only.md).
 
 ## Provenance, and why it matters
 
