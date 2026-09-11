@@ -715,7 +715,7 @@ So it is a repeatable track, tracked in issue #10, split into four self-containe
 
 | | |
 |---|---|
-| **R1** | Developer ID identity and hardened runtime |
+| **R1** | Developer ID identity and hardened runtime, over both binaries in the bundle |
 | **R2** | notarise and staple |
 | **R3** | assemble the `.dmg` |
 | **R4** | versioned release automation |

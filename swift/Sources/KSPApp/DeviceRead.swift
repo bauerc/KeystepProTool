@@ -39,7 +39,7 @@ enum DeviceRead {
             slot: slot, target: target, alsoMidi: alsoMidi, note: note.isEmpty ? nil : note)
     }
 
-    /// What `ksp-swift-cli pull` would be run with. `force` stays false for the reason a
+    /// What `kspplus pull` would be run with. `force` stays false for the reason a
     /// conversion's does: a free name was found, so the runner's guard is a backstop.
     static func options(_ plan: Plan, verbose: Bool) -> PullRunner.Options {
         PullRunner.Options(

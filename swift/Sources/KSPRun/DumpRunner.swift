@@ -28,7 +28,7 @@ public enum DumpRunner {
         }
     }
 
-    public static let prog = "ksp-swift-cli dump"
+    public static let prog = "kspplus dump"
 
     static func fail(_ message: String, code: Int32) -> RunResult {
         .failure(prog, message, code: code)

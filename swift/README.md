@@ -247,7 +247,7 @@ Eight targets:
 | `KSPMIDI` | the Standard MIDI File layer | `KSPKit`, `SwiftMIDIFile` | no |
 | `KSPDevice` | the transport: the attached device over CoreMIDI | `KSPKit`, `CoreMIDI` | no |
 | `KSPRun` | the command bodies and the bundled template | `KSPMIDI`, `KSPDevice` | no |
-| `KSPSwiftCLI` | the `ksp-swift-cli` binary: arguments and `@main` | `KSPRun`, `ArgumentParser` | no |
+| `KSPSwiftCLI` | the `kspplus` binary: arguments and `@main` | `KSPRun`, `ArgumentParser` | no |
 | `KSPApp` | the `ksp-app` binary: the SwiftUI drop window | `KSPRun`, `SwiftUI`, `AppKit` | no |
 | `KSPKitTests` … `KSPAppTests` | tests for each | | respectively |
 
@@ -287,7 +287,7 @@ request and `KSPRunTests` is where the one-line conformance to it lives.
 **SwiftPM forbids a non-test target from depending on an executable target.** A test target may
 `@testable import` one, which is why `KSPSwiftCLITests` works, but an ordinary target cannot link
 one at all. So every line that lived in `KSPSwiftCLI` was reachable from exactly one place: the
-`ksp-swift-cli` binary.
+`kspplus` binary.
 
 That was fine until M13. The app has to run the *same* `convert` the CLI runs, and a second
 implementation in the app would drift from the first with nothing to notice. So the command bodies
@@ -310,7 +310,9 @@ product, not just a target, so both faces link it by name.
 `KSPApp` turned out to need no Xcode at all. The Command Line Tools SDK ships `SwiftUI.framework`,
 `AppKit.framework` and `UniformTypeIdentifiers.framework`, and a `.app` is a directory with an
 `Info.plist` — so the GUI is an ordinary `executableTarget` and `scripts/bundle_app.sh` does the
-wrapping and the ad-hoc signing. `xcodebuild`, `actool` and `ibtool` are the only things missing
+wrapping and the ad-hoc signing. It carries `kspplus` into `Contents/MacOS` beside the app's own
+binary — signed on its own first, because a nested Mach-O is code rather than a resource — so one
+install ships both faces and `make install-cli` has something on disk to link at. `xcodebuild`, `actool` and `ibtool` are the only things missing
 from a CLT install, and a hand-assembled bundle needs none of them. `bundle_app.sh` is deliberately
 **not** in `validate.sh`, which compiles the target through `KSPAppTests` instead.
 
@@ -333,6 +335,14 @@ the CLI's output.
 `convert` overwrites when the user names no `--template`. Keep it a real file: SwiftPM copies a
 symlink *as a symlink* (measured, with both `.copy` and `.process`), which would leave a dangling
 link in the bundle.
+
+**`Bundle.module` is not what finds it at run time.** The accessor SwiftPM generates looks for the
+resource bundle beside `Bundle.main.bundleURL` and then at the absolute build directory the package
+was compiled in — so inside a `.app` it looks at the bundle root rather than `Contents/Resources`,
+through a symlink on `PATH` it looks beside the link, and the only candidate left is a path that
+exists on the build machine alone. `TemplateLocation` looks beside the running binary instead,
+resolving the link first and stepping `Contents/MacOS` → `Contents/Resources`, with `Bundle.module`
+kept as the fallback for a build tree.
 
 ### Inside `KSPApp`
 

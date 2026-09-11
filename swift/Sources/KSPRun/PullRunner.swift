@@ -63,7 +63,7 @@ public enum PullRunner {
         }
     }
 
-    public static let prog = "ksp-swift-cli pull"
+    public static let prog = "kspplus pull"
 
     static func fail(_ message: String, code: Int32) -> RunResult {
         .failure(prog, message, code: code)

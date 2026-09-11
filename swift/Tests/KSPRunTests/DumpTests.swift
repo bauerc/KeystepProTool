@@ -122,7 +122,7 @@ import Testing
     }
 
     @Test func aBadMapIsAUsageError() {
-        // 2, the same as ksp2midi: a bad flag is a usage error, not a bad file.
+        // 2: a bad flag is a usage error, not a bad file.
         let result = Self.run("project_5.KeyStepPro", drumMap: "chromatic:200")
         #expect(result.code == 2)
         #expect(result.stderr.contains("drum map:"))
@@ -142,7 +142,7 @@ import Testing
                 path: URL(filePath: "/nonexistent/nope.KeyStepPro"),
                 configPath: noPersonalConfig))
         #expect(result.code == 1)
-        #expect(result.stderr.hasPrefix("ksp-swift-cli dump:"))
+        #expect(result.stderr.hasPrefix("kspplus dump:"))
     }
 
     @Test func aFileThatIsNotAProjectIsAFormatFailure() throws {
