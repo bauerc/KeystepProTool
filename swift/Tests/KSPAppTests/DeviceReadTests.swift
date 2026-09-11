@@ -168,7 +168,7 @@ private final class Revealed {
                 """)
     }
 
-    @Test func areadRevealsBothFilesAndOffersAnother() async throws {
+    @Test func areadRevealsBothFilesWhenAskedAndOffersAnother() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let project = directory.appending(path: "Project 1.KeyStepPro")
@@ -188,6 +188,11 @@ private final class Revealed {
         #expect(outcome.written == [project, midi])
         #expect(outcome.resultLine == "2 files written")
         #expect(outcome.againLabel == "Read another")
+        #expect(outcome.document == "Project 1")
+        #expect(outcome.direction == DeviceRead.direction)
+        #expect(revealed.files.isEmpty)
+
+        model.revealWritten()
         #expect(revealed.files == [[project, midi]])
     }
 
@@ -215,6 +220,7 @@ private final class Revealed {
         #expect(outcome.written == [project])
         #expect(outcome.headline == refused)
         #expect(outcome.resultLine == "Project 1.KeyStepPro")
+        model.revealWritten()
         #expect(revealed.files == [[project]])
     }
 
@@ -240,6 +246,7 @@ private final class Revealed {
         #expect(outcome.failed)
         #expect(outcome.headline == mute)
         #expect(outcome.resultLine == "Nothing was read")
+        model.revealWritten()
         #expect(revealed.files.isEmpty)
     }
 

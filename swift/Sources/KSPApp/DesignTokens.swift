@@ -173,6 +173,8 @@ enum TypeScale {
     static let sectionTitle = Font.system(.title3, design: .default).weight(.semibold)
     static let label = Font.system(.callout, design: .default)
     static let smallLabel = Font.system(.caption2, design: .default)
+    /// The status glyph a finished run leads with, set above everything it heads.
+    static let resultMark = Font.system(.largeTitle)
 
     /// Every figure on screen: counts, step lengths, channels, limits, note names, gates.
     /// The figure sizes hold while ``AppLayout`` fixes a slot cell at 26x17: they set its content.

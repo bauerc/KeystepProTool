@@ -195,6 +195,11 @@ import Testing
             outcome.written.first, "conversion failed: \(outcome.headline)")
         #expect(outcome.wroteFile)
         #expect(FileManager.default.fileExists(atPath: written.path))
+        #expect(outcome.document == "m6-test-file.mid")
+        #expect(outcome.direction == Job.toProject(midiFixture).direction)
+        #expect(log.revealed.isEmpty)
+
+        model.revealWritten()
         #expect(log.revealed == [outcome.written])
     }
 

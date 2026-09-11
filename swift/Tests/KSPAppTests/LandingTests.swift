@@ -1,4 +1,5 @@
 import Foundation
+import KSPKit
 import Testing
 
 @testable import KSPApp
@@ -51,6 +52,36 @@ private func plan(
             plan(.toProject(URL(filePath: "/tmp/take 3.mid")), named: "take 3", into: "/tmp/out"))
 
         #expect(landing.spoken == "Writes to /tmp/out/take 3.KeyStepPro")
+    }
+
+    /// Once written, the bar says only where: the result above it has named the file already.
+    @Test func aFinishedRunLandsInTheFolderBesideWhatItWrote() throws {
+        let outcome = Outcome(
+            written: [URL(filePath: "/tmp/out/take 3.KeyStepPro")], headline: "",
+            report: Report(), note: nil)
+        let landing = try #require(Landing(outcome))
+
+        #expect(landing.folder == "/tmp")
+        #expect(landing.name == "out")
+        #expect(landing.spoken == "Written into /tmp/out")
+    }
+
+    @Test func aFinishedSplitRunLandsInTheFolderItFilled() throws {
+        let folder = URL(filePath: "/tmp/out/song")
+        let outcome = Outcome(
+            written: [
+                folder.appending(path: "song-track-1.mid"),
+                folder.appending(path: "song-track-2.mid"),
+            ],
+            headline: "", report: Report(), note: nil, folder: folder)
+        let landing = try #require(Landing(outcome))
+
+        #expect(landing.name == "song")
+        #expect(landing.spoken == "Written into /tmp/out/song")
+    }
+
+    @Test func aFailedRunLandsNowhere() {
+        #expect(Landing(Outcome(written: [], headline: "", report: Report(), note: nil)) == nil)
     }
 
     @Test func choosingFromTheBarEditsTheFolderTheJobWritesInto() {
