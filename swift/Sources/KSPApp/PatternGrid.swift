@@ -17,6 +17,8 @@ struct PatternGrid: Equatable {
         /// Where this Pattern plays in its Chain, 1-based, in play order; empty when in none.
         let positions: [Int]
         let detail: String
+        /// ``detail`` without the slot's name, which is what the cell is labelled with.
+        let spoken: String
 
         init(_ pattern: PatternSummary, mode: TrackMode, positions: [Int]) {
             self.pattern = pattern.number
@@ -25,23 +27,25 @@ struct PatternGrid: Equatable {
             self.noteCount = pattern.noteCount
             self.stepCount = pattern.stepCount
             self.positions = positions
-            self.detail = Self.detail(pattern, mode: mode, positions: positions)
+            let body = Self.body(pattern, mode: mode, positions: positions)
+            self.detail = "Pattern \(pattern.number) — \(body)"
+            self.spoken = aloud(body)
         }
 
-        private static func detail(
+        private static func body(
             _ pattern: PatternSummary, mode: TrackMode, positions: [Int]
         ) -> String {
-            var detail = "Pattern \(pattern.number) — empty"
+            var body = "empty"
             if !pattern.isEmpty {
                 let noun = mode == .drum ? "triggers" : "notes"
-                detail =
-                    "Pattern \(pattern.number) — \(pattern.noteCount) \(noun) held, "
+                body =
+                    "\(pattern.noteCount) \(noun) held, "
                     + "\(pattern.enabledNoteCount) switched on, \(pattern.stepCount) steps"
             }
-            guard !positions.isEmpty else { return detail }
+            guard !positions.isEmpty else { return body }
             // Where a rail cannot be drawn -- a Chain that jumps -- this says the cell is in one.
             let places = positions.map(String.init).joined(separator: " and ")
-            return detail + " · Chain place\(positions.count == 1 ? "" : "s") \(places)"
+            return body + " · Chain place\(positions.count == 1 ? "" : "s") \(places)"
         }
     }
 
@@ -57,20 +61,27 @@ struct PatternGrid: Equatable {
         let detail: String
         /// The Chain in play order, or nil when the track is in none.
         let chainDetail: String?
+        /// The badge, the well, the tooltip and the Chain, said after the name as one line.
+        let spoken: String
         let cells: [Cell]
         let runs: [AppLayout.Rail]
 
         init(_ track: TrackSummary) {
             let chain = track.chain
             let places = Self.places(in: chain)
+            let playing = chain.first ?? track.patterns.first { !$0.isEmpty }?.number
             self.track = track.number
             self.name = "Track \(track.number)"
-            self.readout = patternReadout(
-                chain.first ?? track.patterns.first { !$0.isEmpty }?.number)
+            self.readout = patternReadout(playing)
             self.isDrum = track.mode == .drum
             self.detail = "\(track.name) · " + Self.detail(track)
             self.chainDetail =
                 chain.isEmpty ? nil : "Chain: " + chain.map(String.init).joined(separator: " → ")
+            self.spoken = [
+                track.mode == .drum ? "drum" : nil, playing.map { "on pattern \($0)" },
+                aloud(Self.detail(track)),
+                chain.isEmpty ? nil : "chain " + chain.map(String.init).joined(separator: " then "),
+            ].compactMap { $0 }.joined(separator: ", ")
             self.cells = track.patterns.map {
                 Cell($0, mode: track.mode, positions: places[$0.number] ?? [])
             }

@@ -204,7 +204,7 @@ struct DropView: View {
     /// in a column of its own: a reader should never have to guess which controls reach the file.
     private var exportOptions: some View {
         optionBand {
-            Picker("", selection: $model.settings.splitPerPattern) {
+            Picker("Files", selection: $model.settings.splitPerPattern) {
                 Text("One file for everything").tag(false)
                 Text("One file per pattern slot").tag(true)
             }
@@ -449,6 +449,7 @@ struct DropView: View {
                 Text(plan.target.path).font(.callout).textSelection(.enabled)
                     .lineLimit(2).truncationMode(.middle)
             }
+            .accessibilityElement(children: .combine)
 
             if let note = plan.note {
                 Text(note).font(TypeScale.label).foregroundStyle(palette.mutedInk)
@@ -484,6 +485,8 @@ struct DropView: View {
             ForEach(Array(DeviceRead.slots), id: \.self) { slot in slotCell(slot) }
         }
         .frame(width: AppLayout.slotPickerWidth, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Project slots")
     }
 
     private func slotCell(_ slot: Int) -> some View {
@@ -508,6 +511,7 @@ struct DropView: View {
         .buttonStyle(.plain)
         .help("Project \(slot)")
         .accessibilityLabel("Project \(slot)")
+        .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 
     /// The walk reports no position, so the progress is the system's own indeterminate view --
@@ -647,10 +651,12 @@ struct DropView: View {
                 HStack(alignment: .firstTextBaseline, spacing: AppLayout.labelGap) {
                     Image(systemName: StatusMark.error).font(.caption2)
                         .frame(width: AppLayout.findingGlyphWidth, alignment: .leading)
+                        .accessibilityLabel("Error")
                     figured(warning, font: TypeScale.label)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .foregroundStyle(palette.error)
+                .accessibilityElement(children: .combine)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -686,6 +692,9 @@ struct DropView: View {
                         }
                     }
                     .foregroundStyle(style(gauge.status).colour)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(gauge.name)
+                    .accessibilityValue(gauge.spoken)
                 }
             }
         }
@@ -786,6 +795,8 @@ struct DropView: View {
                         }
                     }
                 }
+                // Each cell names its own slot, so a figure over it would say it twice.
+                .accessibilityHidden(true)
                 ForEach(grid.rows, id: \.track) { segmentationRow($0) }
             }
         }
@@ -798,6 +809,7 @@ struct DropView: View {
                 readout: row.readout, name: row.name, isDrum: row.isDrum, dimmed: row.isEmpty
             )
             .help(row.detail)
+            .accessibilityHidden(true)
             Color.clear.frame(width: AppLayout.labelGap, height: 1)
             HStack(spacing: AppLayout.cellSpacing) {
                 ForEach(row.cells, id: \.pattern) { segmentationSlot($0, track: row.track) }
@@ -806,6 +818,8 @@ struct DropView: View {
         .padding(.bottom, 4)
         // Under the cells for the reason the Chain rail is: a rail behind them would band.
         .overlay(alignment: .bottomLeading) { rails(row.runs, track: row.track) }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(row.name), \(row.spoken)")
     }
 
     private func segmentationSlot(_ cell: SegmentationGrid.Cell, track: Int) -> some View {
@@ -823,6 +837,9 @@ struct DropView: View {
         .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
         .background(slotBackground(fill: fill, ink: ink, steps: cell.stepCount))
         .help(cell.detail)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Pattern \(cell.pattern)")
+        .accessibilityValue(cell.spoken)
     }
 
     private func noteShapes(_ shapes: [NoteShape]) -> some View {
@@ -886,6 +903,9 @@ struct DropView: View {
                     alignment: .topLeading)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(shape.name)
+        .accessibilityValue(shape.spoken)
     }
 
     /// Ticked at both ends, so two Patterns side by side cannot read as one.
@@ -954,38 +974,44 @@ struct DropView: View {
     ) -> some View {
         HStack(spacing: AppLayout.trackColumnGap) {
             Toggle(
-                "",
+                "Import",
                 isOn: Binding(
                     get: { ticked }, set: { _ in model.toggle(sourceTrack: row.number) })
             )
             .toggleStyle(.checkbox)
             .labelsHidden()
             .frame(width: AppLayout.trackTickWidth, alignment: .leading)
-            numberChip(row.number, destination: destination)
-            Text(row.name)
-                .font(.caption).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
-                .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.secondary : .primary)
-                .strikethrough(!ticked)
-                .frame(
-                    minWidth: AppLayout.trackNameMinWidth, maxWidth: .infinity,
-                    alignment: .leading)
-            badge(row.badge)
-                .frame(width: AppLayout.trackBadgeWidth, alignment: .leading)
-            // Kept where counts drops it: a track can carry all sixteen channels, and no fixed
-            // width holds that. The whole list is in the row's help.
-            Text(row.channels)
-                .font(TypeScale.value).lineLimit(1).minimumScaleFactor(0.7)
-                .foregroundStyle(.secondary)
-                .frame(width: AppLayout.trackChannelsWidth, alignment: .leading)
-            Text(row.counts)
-                .font(TypeScale.value).lineLimit(1)
-                .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.tertiary : .secondary)
-                .frame(width: AppLayout.trackCountsWidth, alignment: .leading)
+            // The row's label says every one of these, which would otherwise be a stop each.
+            Group {
+                numberChip(row.number, destination: destination)
+                Text(row.name)
+                    .font(.caption).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
+                    .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.secondary : .primary)
+                    .strikethrough(!ticked)
+                    .frame(
+                        minWidth: AppLayout.trackNameMinWidth, maxWidth: .infinity,
+                        alignment: .leading)
+                badge(row.badge)
+                    .frame(width: AppLayout.trackBadgeWidth, alignment: .leading)
+                // Kept where counts drops it: a track can carry all sixteen channels, and no fixed
+                // width holds that. The whole list is in the row's help.
+                Text(row.channels)
+                    .font(TypeScale.value).lineLimit(1).minimumScaleFactor(0.7)
+                    .foregroundStyle(.secondary)
+                    .frame(width: AppLayout.trackChannelsWidth, alignment: .leading)
+                Text(row.counts)
+                    .font(TypeScale.value).lineLimit(1)
+                    .foregroundStyle(row.isEmpty ? HierarchicalShapeStyle.tertiary : .secondary)
+                    .frame(width: AppLayout.trackCountsWidth, alignment: .leading)
+            }
+            .accessibilityHidden(true)
             destinationPicker(row, destination: destination, placement: placement)
                 .frame(width: AppLayout.trackDestinationWidth, alignment: .leading)
         }
         .opacity(row.isEmpty ? 0.6 : 1)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(row.spoken + (ticked ? "" : ", not imported"))
         .help(row.detail + (ticked ? "" : " · unticked, so it will not be imported"))
     }
 
@@ -1013,7 +1039,7 @@ struct DropView: View {
             Color.clear.frame(height: 1)
         } else {
             Picker(
-                "",
+                "Send to",
                 selection: Binding(
                     get: { destination },
                     set: { model.send(sourceTrack: row.number, to: $0) })
@@ -1119,6 +1145,7 @@ struct DropView: View {
                 }
             }
             .help(lane.detail)
+            .accessibilityHidden(true)
             Color.clear.frame(width: AppLayout.labelGap, height: 1)
             ZStack(alignment: .topLeading) {
                 Rectangle().fill(palette.ground)
@@ -1137,6 +1164,8 @@ struct DropView: View {
             .frame(width: AppLayout.axisWidth, height: AppLayout.laneHeight, alignment: .topLeading)
             .clipped()
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(lane.name), \(lane.spoken)")
     }
 
     /// Fill is identity and held-or-empty; the marks are the rhythm. Density stays in the map's
@@ -1159,6 +1188,9 @@ struct DropView: View {
         .clipped()
         .offset(x: region.x)
         .help(region.detail)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Pattern \(region.pattern)")
+        .accessibilityValue(region.spoken)
     }
 
     /// One stretch of either shape. Everything over the wash is in the block's ink rather than
@@ -1218,17 +1250,23 @@ struct DropView: View {
     }
 
     @ViewBuilder
-    private func tickable<Label: View>(_ label: Label, help: String, toggle: (() -> Void)?)
-        -> some View
-    {
+    private func tickable<Label: View>(
+        _ label: Label, named name: String, value: String, help: String,
+        toggle: (() -> Void)?
+    ) -> some View {
         if let toggle {
             Button(action: toggle) {
                 label.contentShape(Rectangle())
             }
             .buttonStyle(TickStyle())
             .help(help)
+            .accessibilityLabel(name)
+            .accessibilityValue(value)
         } else {
             label.help(help)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(name)
+                .accessibilityValue(value)
         }
     }
 
@@ -1242,7 +1280,12 @@ struct DropView: View {
             : (state == .on
                 ? "Pattern slot \(column) — click to untick it on every track."
                 : "Pattern slot \(column) — click to tick it on every track.")
-        return tickable(columnLabel(column, state: state), help: help, toggle: toggle)
+        return tickable(
+            columnLabel(column, state: state), named: "Pattern slot \(column)",
+            value: state.spoken, help: help, toggle: toggle
+        )
+        // Each cell names its own slot, so a figure that cannot be clicked would say it twice.
+        .accessibilityHidden(toggle == nil)
     }
 
     private func columnLabel(_ column: Int, state: GridSelection.Tick) -> some View {
@@ -1274,8 +1317,11 @@ struct DropView: View {
                 Text(chain)
                     .font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
                     .padding(.leading, AppLayout.gridOrigin)
+                    .accessibilityHidden(true)
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(row.name), \(row.spoken)")
     }
 
     private func trackHead(_ row: PatternGrid.Row, state: GridSelection.Tick, ticking: Bool)
@@ -1292,7 +1338,11 @@ struct DropView: View {
                     : " · Click to tick this whole track.")
             : row.detail
         return tickable(
-            head, help: help, toggle: ticking ? { model.toggle(track: row.track) } : nil)
+            head, named: row.name, value: state.spoken, help: help,
+            toggle: ticking ? { model.toggle(track: row.track) } : nil
+        )
+        // The row says what a head that cannot be clicked would.
+        .accessibilityHidden(!ticking)
     }
 
     /// A chain that jumps gets no bar; the caption says the order instead. The rail is the only
@@ -1339,8 +1389,13 @@ struct DropView: View {
             toggle == nil
             ? cell.detail
             : cell.detail + (ticked ? "" : " · unticked, so it will not be exported")
+        let value =
+            toggle == nil
+            ? cell.spoken
+            : "\(cell.spoken), \((ticked ? GridSelection.Tick.on : .off).spoken)"
         return tickable(
-            slotFace(cell, track: track, ticked: ticked), help: help, toggle: toggle)
+            slotFace(cell, track: track, ticked: ticked), named: "Pattern \(cell.pattern)",
+            value: value, help: help, toggle: toggle)
     }
 
     private func slotFace(_ cell: PatternGrid.Cell, track: Int, ticked: Bool) -> some View {
@@ -1535,11 +1590,14 @@ struct DropView: View {
                                 .font(.caption2)
                                 .foregroundStyle(style(finding.severity).colour)
                                 .frame(width: AppLayout.findingGlyphWidth, alignment: .leading)
+                                .accessibilityLabel(
+                                    finding.severity == .error ? "Error" : "Warning")
                             figured(finding.text, font: .caption)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .accessibilityElement(children: .combine)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

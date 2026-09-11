@@ -37,6 +37,18 @@ struct Limits: Equatable {
 
         var figure: String { "\(used) / \(limit)" }
 
+        /// The figure, the status its meter's colour and glyph carry, and where it was found.
+        var spoken: String {
+            var parts = ["\(used) of \(limit)"]
+            switch status {
+            case .within: break
+            case .near: parts.append("close to the limit")
+            case .over: parts.append("\(counted(excess, unit)) over")
+            }
+            if let site { parts.append(site) }
+            return parts.joined(separator: ", ")
+        }
+
         init(
             _ name: String, used: Int, limit: Int, unit: String, site: String? = nil,
             excess: Int = 0, warnings: [String] = []
@@ -138,13 +150,6 @@ struct Limits: Equatable {
                 limit: Constants.maxNotesPerStep, unit: "note", site: busiest?.site),
         ]
     }
-}
-
-/// "A", "A and B", "A, B and C" -- the walls named in the order the meters run in.
-private func listed(_ phrases: [String]) -> String {
-    guard let last = phrases.last else { return "" }
-    guard phrases.count > 1 else { return last }
-    return phrases.dropLast().joined(separator: ", ") + " and " + last
 }
 
 /// The pattern a run reaches, not the number it fills: a run starting at pattern 14 has three

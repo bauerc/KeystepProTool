@@ -11,6 +11,15 @@ struct GridSelection: Sendable, Equatable {
         case on
         case off
         case mixed
+
+        /// What the stroke says, which is all a tick changes about a cell.
+        var spoken: String {
+            switch self {
+            case .on: return "exported"
+            case .off: return "not exported"
+            case .mixed: return "partly exported"
+            }
+        }
     }
 
     private let tracks: [Int]
