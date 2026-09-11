@@ -1,5 +1,0 @@
-user_empty_project.KeyStepPro
-  device KeyStepPro   version 2.5.20
-  tempo 120 BPM   swing 50%   scene 1
-
-  (no patterns hold notes)

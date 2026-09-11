@@ -1,7 +1,0 @@
-Default.KeyStepPro
-  device KeyStepPro   version (none)
-  tempo 120 BPM   swing 50%   scene 1
-
-  (no patterns hold notes)
-
-  ! no 'version' key (factory template rather than a saved project)

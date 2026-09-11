@@ -37,30 +37,6 @@ pool gate settles without asking, which agreeing on a count cannot show. Each
 line of both is `<item> <param> <indices|-> <count|->`. See
 [ADR 0003](../docs/adr/0003-the-swift-core-reads-the-fast-plan-only.md).
 
-## `reference/`: the Python's answers, frozen
-
-The four parity gates compared `ksp-swift-cli` against the Python CLI live. These files are what
-the Python answered, so the Swift is still held to it once the Python is gone. **Never edit one by
-hand.** One command rewrites the whole directory:
-
-```sh
-uv run python tools/gen_reference.py
-```
-
-| Path | What it pins | Held by |
-|---|---|---|
-| `port_parity/<project>.txt`, `.json` | `ksp-dump`'s stdout for each sample, as a tree and as `--json`: 12 | `ReferenceTests.dump` |
-| `writer_parity/<project>.json` | Each sample loaded and written back by the lenient-JSON writer: 6 | `ReferenceTests.writer` |
-| `midi_parity/<case>.json` | Each `ksp2midi` and `midi2ksp` case's exit code, stdout, stderr and the files it wrote: 431 | `ReferenceTests.conversion`; the 175 usage refusals (exit 2) in `KSPSwiftCLITests`' `ReferenceTests.refusal` |
-| `pull_parity/slot_<n>.json` | The project pulled over each tape, and the MIDI `--also-midi` wrote beside it: 2 | `ReferenceTests.pull` |
-| `projects/<sha256>.json` | `ksp-dump --json` of each distinct `.KeyStepPro` any case wrote | The failure message when a hash does not match |
-
-Both streams are scrubbed as the gates scrubbed them: the output directory reads `<out>/`, and a
-leading program name reads `<prog>:`, so renaming the CLI changes no reference. A `.mid` is stored
-as `tools/midi_events.py`'s lines, because mido writes running status and `swift-midi-file` does
-not. A `.KeyStepPro` is stored as its SHA-256, or as `same_as` a tracked file it equals byte for
-byte.
-
 ## Provenance, and why it matters
 
 `project_5.expected.json` and `project_9.expected.json` are **hand-transcribed

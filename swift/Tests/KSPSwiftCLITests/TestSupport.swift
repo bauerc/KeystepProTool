@@ -9,5 +9,4 @@ enum RepoData {
         .deletingLastPathComponent()
 
     static let projectFiles = root.appending(path: "project_files")
-    static let fixtures = root.appending(path: "fixtures")
 }
