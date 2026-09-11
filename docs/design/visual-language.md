@@ -101,11 +101,12 @@ the **Chroma** — a dark grey shell with icy blue indicators. Both authored; ne
 |---|---|---|
 | `ground` | `#E8E9ED` | `#1C1D20` |
 | `surface` | `#DADDE0` | `#242629` |
-| `band` | `#0D0D0D` | `#0C0A0B` |
-| `bandInk` | `#E9F0FF` | `#E9F0FF` |
+| `well` | `#0D0D0D` | `#0C0A0B` |
+| `wellInk` | `#E9F0FF` | `#E9F0FF` |
 | `ink` | `#14161A` | `#E7E9EC` |
 | `mutedInk` | `#5A6068` | `#9199A1` |
 | `rule` | `#C4C8CE` | `#34373C` |
+| `laneWash` | `0.7` | `0.18` |
 
 The appearance control offers **Standard / Chroma / System**, not light / dark: both are real
 products, and the question is which unit is on the user's desk. It follows the system by default.
@@ -114,13 +115,14 @@ products, and the question is which unit is on the user's desk. It follows the s
 
 Named from device vocabulary, never from shape — see `CONTEXT.md`.
 
-### The control band
+### The title bar
 
-A dark strip across the top of the content area carrying the file name and the direction. It
-mirrors the panel's own matte black band, which holds the OLED, the knobs and the four track
-displays above the coloured track zones.
+The file name and the direction are the window's own title and subtitle, which is where macOS
+names a document. **No strip crosses the top of the content.** A band skinned as the panel's matte
+black, under a native toolbar, is chrome dressed as the device — the one thing the stance rules out
+— and on the standard face it read as white, then black, then white.
 
-It is what stops the light face being a white void with four coloured rows floating in it.
+The panel's black survives where the device earns it: a lit readout well.
 
 It names the **document** in every phase, the finished one included. What the run made is the
 pane's to announce; the band saying it as well would say it twice.
@@ -228,7 +230,7 @@ axis and decides nothing about where a Pattern falls.
 | Channel | Means | Never means |
 |---|---|---|
 | **Position and width** | the geometry — a region starts at its slot's boundary and runs the length **its own track** plays | anything about export |
-| **Fill** | identity, and held versus empty — the track hue washed over the ground, `inert` where the Pattern renders no event | density |
+| **Fill** | identity, and held versus empty — the track hue washed over the ground at the face's `laneWash`, `inert` where the Pattern renders no event | density |
 | **Marks** | rhythm — one bar per event, placed by tick and by pitch | a pitch a reader can name |
 | **The figure** | which Pattern the region is, SF Mono | |
 | **Boundary rules** | where one Pattern gives way to the next, drawn over the regions | |
@@ -244,6 +246,12 @@ ink, not the track hue, so they stay legible on either face, and they are **drop
 below a width where they would outnumber the points available. Nothing here is editable, and no
 mark is ever labelled with a note name.
 
+**The wash is authored per face, not shared.** A hue washed at `0.18` over the Chroma's dark grey
+keeps nearly all its saturation — dark teal, olive — and over the standard unit's off-white the
+same wash is a pastel that reads as no track at all. The standard face's `0.7` is the least at
+which every track wears its hue at least as strongly as it does on the Chroma, while all four still
+take dark ink. `DesignTokensTests` holds both halves of that.
+
 ### Row heads
 
 A two-digit **pattern-number readout** in a dark well, after the hardware's four 7-segment displays
@@ -251,6 +259,10 @@ sitting above each coloured track zone.
 
 **SF Mono, not a seven-segment face.** The placement and the role are the fidelity; imitating LCD
 glyphs with dead segments is where this becomes costume.
+
+**A well is lit only while it has something to read out.** A track playing no Pattern shows `--` in
+an unlit well — `surface`, a `rule` round it, `mutedInk` — so an idle map, or a project that uses
+two tracks, does not hang four black pills down the edge of the standard face.
 
 Track 1 in drum mode is **badged on the row**; its cells are not restyled. Row 1 stays green
 whether it is sequencing or drumming — that is what the device does.
@@ -340,7 +352,7 @@ else to show.
 
 ## The icon
 
-Four rows of steps in the four track colours on the black band — a miniature of the app's own
+Four rows of steps in the four track colours on the panel's black band — a miniature of the app's own
 pattern map and of the panel. Green-orange-yellow-red stays distinctive when the shapes blur at
 16pt.
 

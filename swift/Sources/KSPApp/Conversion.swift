@@ -16,7 +16,7 @@ enum Job: Sendable, Hashable {
 }
 
 struct Outcome: Sendable, Equatable {
-    /// Which run produced it. The window asks only so the band can say "read" over a read; every
+    /// Which run produced it. The window asks only so its title can say "read" over a read; every
     /// other part of an outcome means the same thing whichever way it was made.
     enum Source: Sendable {
         case conversion
@@ -31,7 +31,7 @@ struct Outcome: Sendable, Equatable {
     let folder: URL?
     let dryRun: Bool
     let source: Source
-    /// What the band names over the result, as it named it while the run was being set up.
+    /// What the title bar names over the result, as it named it while the run was being set up.
     var document = ""
     var direction = ""
 

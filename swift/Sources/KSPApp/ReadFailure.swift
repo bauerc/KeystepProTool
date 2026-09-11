@@ -10,8 +10,8 @@ struct ReadFailure: Equatable {
     let headline: String
     let path: String
 
-    /// The band's line while this stands. It says the same thing as ``headline`` because Convert
-    /// is where the promise was made, and it is one line wide.
+    /// The action bar's line while this stands. It says the same thing as ``headline`` because
+    /// Convert is where the promise was made, and it is one line wide.
     var blockReason: String { "This file can't be read, so there is nothing to convert." }
 
     /// The type's own words never reach the window, so they are logged here: without this line a

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import KSPKit
 import SwiftUI
@@ -10,6 +11,11 @@ private func contrast(_ one: Color, _ other: Color) -> Double {
     let high = max(one.relativeLuminance, other.relativeLuminance)
     let low = min(one.relativeLuminance, other.relativeLuminance)
     return (high + 0.05) / (low + 0.05)
+}
+
+/// HSB saturation: how much of a hue a fill still wears, whatever ground it was washed over.
+private func saturation(_ color: Color) -> Double {
+    NSColor(color).usingColorSpace(.sRGB).map { Double($0.saturationComponent) } ?? 0
 }
 
 @Suite struct DesignTokensTests {
@@ -131,6 +137,37 @@ private func contrast(_ one: Color, _ other: Color) -> Double {
                     #expect(ratio >= 4.5, "track \(track) at \(alpha) reads at \(ratio):1")
                 }
             }
+        }
+    }
+
+    /// Rule 1 on the arrange lanes: a region's figure sits on its face's own wash, and a mark is
+    /// held to WCAG's 3:1 for a graphic rather than text's 4.5:1.
+    @Test func everyLaneRegionTakesAReadableInkAndMarksThatReadOnIt() {
+        for palette in [Palette.standard, Palette.chroma] {
+            for track in 1...4 {
+                let fill = DeviceColor.track(track).over(palette.ground, alpha: palette.laneWash)
+                let ink = DeviceColor.ink(on: fill)
+                let mark = ink.over(fill, alpha: AppLayout.markInkOpacity)
+                #expect(contrast(ink, fill) >= 4.5, "track \(track) figure")
+                #expect(contrast(mark, fill) >= 3, "track \(track) marks")
+            }
+        }
+    }
+
+    /// The Chroma's wash keeps a hue's saturation over its dark ground and turns it to a pastel over
+    /// the standard one, so the standard lane is held to the Chroma's rather than sharing its wash.
+    @Test func thestandardLaneWearsEachHueAtLeastAsStronglyAsTheChroma() {
+        for track in 1...4 {
+            let washed = { (palette: Palette) in
+                saturation(DeviceColor.track(track).over(palette.ground, alpha: palette.laneWash))
+            }
+            #expect(washed(.standard) >= washed(.chroma), "track \(track)")
+        }
+    }
+
+    @Test func alitWellsDigitsReadInBothFaces() {
+        for palette in [Palette.standard, Palette.chroma] {
+            #expect(contrast(palette.wellInk, palette.well) >= 4.5)
         }
     }
 
