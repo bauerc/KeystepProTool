@@ -85,14 +85,12 @@ enum DeviceColor {
 struct Palette: Sendable {
     /// The window behind everything.
     let ground: Color
-    /// A recessed panel the pattern map and the meters sit in.
+    /// A recessed panel the pattern map and the meters sit in, and a well with nothing to read out.
     let surface: Color
-    /// The dark strip across the top, after the panel's own matte band.
-    let band: Color
-    /// Text and figures on ``band`` and in a readout well.
-    let bandInk: Color
-    /// The dark well behind a row's pattern number, after the four 7-segment displays.
+    /// The lit well behind a row's pattern number, after the four 7-segment displays.
     let well: Color
+    /// The digits in a lit ``well``.
+    let wellInk: Color
     /// Primary text.
     let ink: Color
     /// Supporting text, and an unticked slot cell's figure.
@@ -108,36 +106,39 @@ struct Palette: Sendable {
     let error: Color
     /// Success, which no track colour claims.
     let success: Color
+    /// How much of its track's hue a held arrange-lane region wears over ``ground``. Per face, not
+    /// shared: the Chroma's wash over the standard ground is a pastel that no longer reads as a hue.
+    let laneWash: Double
 
     /// The standard unit: an off-white metal wedge with a matte black control band.
     static let standard = Palette(
         ground: Color(hex: 0xE8_E9ED),  // body white, lit upper face
         surface: Color(hex: 0xDA_DDE0),  // body white, shaded front face
-        band: Color(hex: 0x0D_0D0D),  // the matte black control band
-        bandInk: Color(hex: 0xE9_F0FF),  // the lit 7-segment digits
-        well: Color(hex: 0x0D_0D0D),
+        well: Color(hex: 0x0D_0D0D),  // the panel's matte black band
+        wellInk: Color(hex: 0xE9_F0FF),  // the lit 7-segment digits
         ink: Color(hex: 0x14_161A),  // the panel's near-black primary legends
         mutedInk: Color(hex: 0x5A_6068),
         rule: Color(hex: 0xC4_C8CE),
         inert: Color(hex: 0xCB_CFD5),
         warning: Color(hex: 0xA8_630A),
         error: Color(hex: 0x9E_1420),
-        success: Color(hex: 0x1B_7A4B))
+        success: Color(hex: 0x1B_7A4B),
+        laneWash: 0.7)
 
     /// The Chroma: a dark grey shell with icy blue indicators.
     static let chroma = Palette(
         ground: Color(hex: 0x1C_1D20),  // the dark grey shell
         surface: Color(hex: 0x24_2629),
-        band: Color(hex: 0x0C_0A0B),  // an unlit panel, sampled from a powered unit
-        bandInk: Color(hex: 0xE9_F0FF),
-        well: Color(hex: 0x0C_0A0B),
+        well: Color(hex: 0x0C_0A0B),  // an unlit panel, sampled from a powered unit
+        wellInk: Color(hex: 0xE9_F0FF),
         ink: Color(hex: 0xE7_E9EC),
         mutedInk: Color(hex: 0x91_99A1),
         rule: Color(hex: 0x34_373C),
         inert: Color(hex: 0x3A_3D42),
         warning: Color(hex: 0xF2_B33C),
         error: Color(hex: 0xFF_7B86),
-        success: Color(hex: 0x4E_D092))
+        success: Color(hex: 0x4E_D092),
+        laneWash: 0.18)
 
     static func resolved(for scheme: ColorScheme) -> Palette {
         scheme == .dark ? chroma : standard
@@ -169,7 +170,7 @@ enum Density {
 /// The type rules. Chrome is SF Pro and every value is SF Mono, so the numbers the device shows
 /// read as the device's own -- see docs/design/visual-language.md on device-true numerals.
 enum TypeScale {
-    static let bandTitle = Font.system(.title2, design: .default).weight(.semibold)
+    static let header = Font.system(.title2, design: .default).weight(.semibold)
     static let sectionTitle = Font.system(.title3, design: .default).weight(.semibold)
     static let label = Font.system(.callout, design: .default)
     static let smallLabel = Font.system(.caption2, design: .default)
@@ -240,13 +241,12 @@ enum AppLayout {
     /// One floor for both faces, because both draw the grid and the track list.
     static let minimumWindowWidth: CGFloat = 1020
     /// The idle pane is the one that does not scroll -- the map, then the device card under it --
-    /// so it is what the floor has to clear. Under this the fixed-height band is squeezed instead.
+    /// so it is what the floor has to clear.
     static let minimumWindowHeight: CGFloat = 640
     /// What a first launch opens at; afterwards the window restores the size it was left at.
     static let defaultWindowWidth: CGFloat = 1120
     static let defaultWindowHeight: CGFloat = 700
-    /// The band above the pane carries what the pane used to hold at its top, so the pane
-    /// needs less room around it; a narrower gutter also widens ``minimumContentWidth``.
+    /// A narrower gutter widens ``minimumContentWidth``.
     static let mainPadding: CGFloat = 18
     /// "Show scroll bars: Always" gives the staged view's `ScrollView` a scroller that takes width.
     static let scrollerAllowance: CGFloat = 15
@@ -346,8 +346,6 @@ enum AppLayout {
         return rails
     }
 
-    /// The control band's height, and the well a row's pattern number sits in.
-    static let bandHeight: CGFloat = 44
     /// The action bar under the pane. Fixed, so a phase carrying no action leaves the chassis
     /// standing rather than dropping the window's foot out.
     static let actionBarHeight: CGFloat = 56

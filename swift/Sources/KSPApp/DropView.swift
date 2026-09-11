@@ -12,8 +12,6 @@ struct DropView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            band
-
             VStack(spacing: 12) {
                 content
             }
@@ -29,6 +27,8 @@ struct DropView: View {
         )
         .background(palette.ground)
         .foregroundStyle(palette.ink)
+        .navigationTitle(windowTitle)
+        .navigationSubtitle(windowSubtitle)
         .dropDestination(for: URL.self) { urls, _ in
             // One file at a time in v1: a second would need its own name field and its own result.
             guard let first = urls.first else { return false }
@@ -51,44 +51,25 @@ struct DropView: View {
     private var scheme: ColorScheme { model.appearance.colorScheme ?? systemScheme }
     private var palette: Palette { Palette.resolved(for: scheme) }
 
-    /// After the panel's matte black band, which carries the display and the four track readouts
-    /// above the coloured track zones. It is what keeps the standard unit's face from being a
-    /// white void with four coloured rows floating in it.
-    private var band: some View {
-        HStack(spacing: 10) {
-            bandTitle
-            Spacer()
-        }
-        .padding(.horizontal, AppLayout.mainPadding)
-        .frame(height: AppLayout.bandHeight)
-        .frame(maxWidth: .infinity)
-        .background(palette.band)
-        .foregroundStyle(palette.bandInk)
-    }
-
-    @ViewBuilder
-    private var bandTitle: some View {
+    /// The document, in the title bar where macOS names one.
+    private var windowTitle: String {
         switch model.phase {
-        case .idle:
-            Text("Key Step Pro Plus").font(TypeScale.bandTitle)
-        case .staged(let staged):
-            Text(model.plan(for: staged.job).source.lastPathComponent)
-                .font(TypeScale.bandTitle).lineLimit(1).truncationMode(.middle)
-            Text(staged.job.direction)
-                .font(TypeScale.label).foregroundStyle(palette.bandInk.opacity(0.65))
-        case .working(let filename):
-            Text(filename).font(TypeScale.bandTitle).lineLimit(1).truncationMode(.middle)
-        case .reading(let slot):
-            Text("Project \(slot)").font(TypeScale.bandTitle)
-            Text(DeviceRead.direction)
-                .font(TypeScale.label).foregroundStyle(palette.bandInk.opacity(0.65))
+        case .idle: return "Key Step Pro Plus"
+        case .staged(let staged): return model.plan(for: staged.job).source.lastPathComponent
+        case .working(let filename): return filename
+        case .reading(let slot): return "Project \(slot)"
         // Still the document, not the result: the result leads the pane below, and said here
         // too it would be said twice.
-        case .done(let outcome):
-            Text(outcome.document)
-                .font(TypeScale.bandTitle).lineLimit(1).truncationMode(.middle)
-            Text(outcome.direction)
-                .font(TypeScale.label).foregroundStyle(palette.bandInk.opacity(0.65))
+        case .done(let outcome): return outcome.document
+        }
+    }
+
+    private var windowSubtitle: String {
+        switch model.phase {
+        case .idle, .working: return ""
+        case .staged(let staged): return staged.job.direction
+        case .reading: return DeviceRead.direction
+        case .done(let outcome): return outcome.direction
         }
     }
 
@@ -202,7 +183,7 @@ struct DropView: View {
             Capsule()
                 .fill(DeviceColor.secondary)
                 .frame(width: 3, height: 13)
-            Text(title).font(TypeScale.bandTitle)
+            Text(title).font(TypeScale.header)
         }
     }
 
@@ -508,7 +489,7 @@ struct DropView: View {
         } label: {
             Text(patternReadout(slot))
                 .font(TypeScale.readout)
-                .foregroundStyle(chosen ? palette.bandInk : palette.mutedInk)
+                .foregroundStyle(chosen ? palette.wellInk : palette.mutedInk)
                 .frame(width: AppLayout.cellWidth, height: AppLayout.slotCellHeight)
                 .background(
                     RoundedRectangle(cornerRadius: AppLayout.cellRadius)
@@ -1056,9 +1037,8 @@ struct DropView: View {
     /// Fill is identity and held-or-empty; the marks are the rhythm. Density stays in the map's
     /// cells above, which is the one place a count per step is known.
     private func region(_ region: ArrangeLanes.Region, track: Int) -> some View {
-        let fill =
-            region.isEmpty
-            ? palette.inert : DeviceColor.track(track).over(palette.ground, alpha: Density.floor)
+        let hue = DeviceColor.track(track).over(palette.ground, alpha: palette.laneWash)
+        let fill = region.isEmpty ? palette.inert : hue
         let ink = DeviceColor.ink(on: fill)
         return ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: AppLayout.regionRadius).fill(fill)
@@ -1241,16 +1221,24 @@ struct DropView: View {
     }
 
     /// The pattern readout in its well, the track name, and the drum badge. Both grids draw it, so
-    /// the two read as the same object seen in each direction.
+    /// the two read as the same object seen in each direction. A track playing no Pattern has
+    /// nothing to read out, so its well stays unlit.
     private func rowHead(
         readout: String, name: String, isDrum: Bool, struck: Bool = false, dimmed: Bool = false
     ) -> some View {
-        HStack(spacing: AppLayout.labelGap) {
+        let lit = readout != patternReadout(nil)
+        return HStack(spacing: AppLayout.labelGap) {
             Text(readout)
-                .font(TypeScale.readout).foregroundStyle(palette.bandInk)
+                .font(TypeScale.readout).foregroundStyle(lit ? palette.wellInk : palette.mutedInk)
                 .frame(width: AppLayout.wellWidth, height: AppLayout.cellHeight)
                 .background(
-                    RoundedRectangle(cornerRadius: AppLayout.wellRadius).fill(palette.well))
+                    RoundedRectangle(cornerRadius: AppLayout.wellRadius)
+                        .fill(lit ? palette.well : palette.surface)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: AppLayout.wellRadius)
+                        .strokeBorder(palette.rule.opacity(lit ? 0 : 1), lineWidth: 1)
+                }
             Text(name)
                 .font(.caption).fontWeight(.medium).lineLimit(1).minimumScaleFactor(0.8)
                 .foregroundStyle(dimmed ? palette.mutedInk : palette.ink)
@@ -1302,7 +1290,7 @@ struct DropView: View {
                 .accessibilityLabel(outcome.failed ? "Failed" : "Done")
             VStack(alignment: .leading, spacing: 4) {
                 Text(outcome.resultLine)
-                    .font(TypeScale.bandTitle).lineLimit(1).truncationMode(.middle)
+                    .font(TypeScale.header).lineLimit(1).truncationMode(.middle)
                 headline(outcome, font: TypeScale.label, figures: TypeScale.headlineValue)
                     .foregroundStyle(outcome.failed ? palette.ink : palette.mutedInk)
                     .textSelection(.enabled)

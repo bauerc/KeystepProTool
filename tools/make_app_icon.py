@@ -13,7 +13,7 @@ from tempfile import TemporaryDirectory
 
 Rgb = tuple[int, int, int]
 
-#: The matte black control band, DesignTokens.swift ``Face.standard.band``.
+#: The panel's matte black band, DesignTokens.swift ``Palette.standard.well``.
 BAND: Rgb = (0x0D, 0x0D, 0x0D)
 #: Manual 2.5.2 §1.4, in track order; DesignTokens.swift ``DeviceColor.track``.
 TRACKS: list[Rgb] = [(0x01, 0xA9, 0x86), (0xFB, 0x5C, 0x26), (0xFA, 0xCC, 0x00), (0xE0, 0x00, 0x2E)]

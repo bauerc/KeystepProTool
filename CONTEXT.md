@@ -122,11 +122,6 @@ _Avoid_: chain bar, chain line
 One gauge of how close a conversion sits to one of the device's hard limits.
 _Avoid_: gauge, limit bar
 
-**Control band**:
-The dark strip across the top of the app's content area, after the panel's own matte black band —
-the one carrying the display, the knobs and the four track displays above the coloured track zones.
-_Avoid_: header, toolbar, title bar
-
 **Action bar**:
 The bar across the foot of the app's content area, carrying where the result lands and the action
 that writes it.
