@@ -9,8 +9,8 @@ private func recallTape() throws -> [String: Int] {
     try tapeValues(contentsOf: RepoData.fixtures.appending(path: "recall_tape.txt"))
 }
 
-/// `fixtures/bulk_read_walk.txt`, written by `tools/gen_bulk_read_walk_fixture.py`.
-private func pythonWalk() throws -> [ReadRequest] {
+/// `fixtures/bulk_read_walk.txt`, the gated walk as last reviewed (scripts/gen_bulk_fixtures.sh).
+private func reviewedWalk() throws -> [ReadRequest] {
     let path = RepoData.fixtures.appending(path: "bulk_read_walk.txt")
     return try String(contentsOf: path, encoding: .utf8).split(separator: "\n").map { line in
         let fields = line.split(separator: " ")
@@ -47,12 +47,11 @@ private func templateKeys() throws -> [String] {
         #expect(replayed.count == 153_497)
     }
 
-    @Test func theGateSkipsTheAddressesPythonSkips() throws {
-        // Both cores asking 2,169 times is not both asking the same 2,169 times, and only the
-        // second is the port being right.
+    @Test func theGateSkipsTheReviewedAddresses() throws {
+        // Asking 2,169 times is not asking the same 2,169 times, and a count cannot show which.
         let device = TapeDevice(try recallTape())
         _ = try BulkRead.readRaw(device, templateKeys: [String]())
-        let expected = try pythonWalk()
+        let expected = try reviewedWalk()
 
         #expect(device.asked.count == 2_169)
         #expect(device.asked.count == expected.count)

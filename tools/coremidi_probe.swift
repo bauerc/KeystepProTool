@@ -14,7 +14,7 @@ let ack: [UInt8] = header + [0x1C, 0x00, end]
 let identityRequest: [UInt8] = [0xF0, 0x7E, 0x7F, 0x06, 0x01, end]
 
 /// Where a three-index long reply's values start: header 6, command, slot, param, index count,
-/// item, three indices, count. `src/ksp/sysex.py` parses the same offset as `12 + n_indices`.
+/// item, three indices, count. `KSPKit`'s `Sysex` parses the same offset as `12 + n_indices`.
 let longReplyValues = 15
 
 /// `01 <slot> 25 78` -- 120_37, the first read of MCC's own plan, and the frame `usb_probe scalar`

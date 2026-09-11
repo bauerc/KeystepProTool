@@ -50,10 +50,11 @@ if [[ ${#bundles[@]} -eq 0 ]]; then
 fi
 cp -R "${bundles[@]}" "$contents/Resources/"
 
-# Drawn rather than checked in: the generator is stdlib-only, and the four hues it reads are the
-# ones DesignTokens.swift paints the pattern map with.
+# Drawn rather than checked in: the four hues it reads are the ones DesignTokens.swift paints the
+# pattern map with.
 echo "==> Drawing the icon"
-python3 "$root/tools/make_app_icon.py" "$contents/Resources/AppIcon.icns"
+swiftc -O "$root/tools/make_app_icon.swift" -o "$root/swift/.build/make_app_icon"
+"$root/swift/.build/make_app_icon" "$contents/Resources/AppIcon.icns"
 
 cat > "$contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>

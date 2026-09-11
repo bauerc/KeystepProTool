@@ -23,7 +23,7 @@ guard arguments.count >= 2, let slot = Int(arguments[0]) else {
 }
 let outputPath = arguments[1]
 let templatePath =
-    arguments.count > 2 ? arguments[2] : "src/ksp_cli/templates/Default.KeyStepPro"
+    arguments.count > 2 ? arguments[2] : "swift/Sources/KSPRun/Resources/Default.KeyStepPro"
 
 do {
     let template = try LenientJSON.load(contentsOf: URL(fileURLWithPath: templatePath))

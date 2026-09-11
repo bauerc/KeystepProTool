@@ -14,7 +14,7 @@ case "${1-}" in
         ;;
 esac
 
-# The tracked samples, as tests/conftest.py:SAMPLE_NAMES lists them. project_files/captures/ is
+# The tracked samples, as TestSupport.swift's Samples.names lists them. project_files/captures/ is
 # gitignored, so a worktree or CI has only these to measure.
 samples=(
     Default.KeyStepPro
@@ -25,13 +25,21 @@ samples=(
     user_empty_project.KeyStepPro
 )
 
+bench=swift/.build/bench_read
+mkdir -p "$(dirname "$bench")" || exit 1
+if ! swiftc -O swift/Sources/KSPKit/*.swift tools/bench_read.swift -o "$bench"; then
+    echo "bench_read.swift did not compile" >&2
+    exit 1
+fi
+
 readings=$(mktemp) || exit 1
 trap 'rm -f "$readings"' EXIT
 
 echo "machine:  $(uname -srm)"
-echo "python:   $(uv run python -V 2>&1)"
+echo "swift:    $(swiftc --version 2>&1 | head -n 1)"
 echo
 
+# One process per file, so a peak-memory figure belongs to one file and not the one before it.
 for sample in "${samples[@]}"; do
     file="project_files/$sample"
     if [[ ! -f $file ]]; then
@@ -40,8 +48,8 @@ for sample in "${samples[@]}"; do
     fi
     echo "reading $sample ..." >&2
 
-    if ! uv run python tools/bench_read.py --json "$file" >> "$readings"; then
-        echo "bench_read.py failed on $sample" >&2
+    if ! "$bench" --json "$file" >> "$readings"; then
+        echo "bench_read failed on $sample" >&2
         exit 1
     fi
 done
@@ -52,7 +60,7 @@ if [[ ! -s $readings ]]; then
 fi
 
 echo
-uv run python tools/bench_read.py --render < "$readings"
+"$bench" --render < "$readings"
 
 if ((emit_json)); then
     echo

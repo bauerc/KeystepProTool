@@ -8,8 +8,8 @@ extension UInt8 {
 }
 
 /// MCC's dialect scanned by hand rather than through `JSONDecoder`, which cost 88 % of a read
-/// (Read_Cost.md §4). Indexes a raw pointer: in the debug builds the parity scripts run, a
-/// bounds-checked subscript costs more than the scan does.
+/// (Read_Cost.md §4). Indexes a raw pointer: in a debug build a bounds-checked subscript costs
+/// more than the scan does.
 struct JSONScanner {
     enum Failure: Error {
         case notAnObject(String)

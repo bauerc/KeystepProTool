@@ -167,7 +167,7 @@ public enum ExportRunner {
     }
 
     /// Shared with the arrangement preview, so the two cannot render under different options. The
-    /// wording of a refusal stays with each caller, which is what keeps this off the parity gate.
+    /// wording of a refusal stays with each caller.
     static func exportOptions(_ options: Options, drumMap: DrumMap) throws -> ExportOptions {
         try ExportOptions(
             ticksPerBeat: options.ticksPerBeat, drumMap: drumMap,

@@ -41,8 +41,8 @@ import PackageDescription
         //
         // SwiftPM forbids a non-test target from depending on an executable target, so anything
         // living in KSPSwiftCLI can only ever be reached by the CLI. M13's app needs the same
-        // `convert` that `ksp-swift-cli convert` runs -- byte for byte, or the parity scripts stop
-        // meaning anything -- so the runners sit here and both faces call them.
+        // `convert` that `ksp-swift-cli convert` runs, byte for byte, so the runners sit here and
+        // both faces call them.
         .target(
             name: "KSPRun",
             dependencies: ["KSPMIDI", "KSPDevice"],

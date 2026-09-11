@@ -3,9 +3,7 @@
     "allow": [
       "command:plutil -extract CFBundleDocumentTypes json -o - '/Applications/Arturia/MIDI Control Center.app/Contents/Info.plist'",
       "command:plutil -extract CFBundleShortVersionString raw -o - '/Applications/Arturia/MIDI Control Center.app/Contents/Info.plist'",
-      "read_file:/Applications/Arturia/MIDI Control Center.app/Contents/Resources/**",
-      "command:uv sync",
-      "command:uv run"
+      "read_file:/Applications/Arturia/MIDI Control Center.app/Contents/Resources/**"
     ]
   },
   "hooks": {
