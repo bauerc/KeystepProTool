@@ -3,7 +3,7 @@ import Foundation
 
 struct RootCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ksp-swift-cli",
+        commandName: "kspplus",
         abstract: "Convert between Standard MIDI files and Arturia KeyStep Pro projects.",
         subcommands: [Dump.self, Export.self, Convert.self, Pull.self])
 
@@ -15,8 +15,7 @@ struct RootCommand: ParsableCommand {
     }
 }
 
-/// The codes are load-bearing and shared with the Python CLI: **0 success, 1 file or format
-/// failure, 2 usage failure**.
+/// The codes are load-bearing: **0 success, 1 file or format failure, 2 usage failure**.
 struct ExitStatus: Error {
     let code: Int32
 }

@@ -15,7 +15,7 @@ import Testing
     @Test func aMissingFileIsOne() throws {
         let result = try Self.run(["dump", "/nonexistent/nope.KeyStepPro"])
         #expect(result.code == 1)
-        #expect(result.stderr.hasPrefix("ksp-swift-cli dump:"))
+        #expect(result.stderr.hasPrefix("kspplus dump:"))
     }
 
     @Test func anOutOfRangeSelectionIsTwo() throws {
@@ -28,13 +28,13 @@ import Testing
         let result = try Self.run(["export", Self.project, "--tracks", "bad"])
         #expect(result.code == 2)
         #expect(
-            result.stderr == "ksp-swift-cli export: --tracks: 'bad' is not a number or a range\n")
+            result.stderr == "kspplus export: --tracks: 'bad' is not a number or a range\n")
     }
 
     @Test(arguments: ["0", "11"]) func aRepeatCountOutsideItsRangeIsTwo(_ count: String) throws {
         let result = try Self.run(["export", Self.project, "--repeat", count])
         #expect(result.code == 2)
-        #expect(result.stderr == "ksp-swift-cli export: repeat must be 1-10\n")
+        #expect(result.stderr == "kspplus export: repeat must be 1-10\n")
     }
 
     @Test func flatVelocityFreshSucceeds() throws {
@@ -49,7 +49,7 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr
-                == "ksp-swift-cli export: --flat-velocity: 'loud' is not 'fresh' or a velocity\n")
+                == "kspplus export: --flat-velocity: 'loud' is not 'fresh' or a velocity\n")
     }
 
     @Test(arguments: ["0", "128"]) func flatVelocityOutsideItsRangeIsTwo(_ value: String) throws {
@@ -57,7 +57,7 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr
-                == "ksp-swift-cli export: flat_velocity must be 1-127; "
+                == "kspplus export: flat_velocity must be 1-127; "
                 + "0 is a MIDI note-off, not a silent note\n")
     }
 
@@ -73,7 +73,7 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr
-                == "ksp-swift-cli convert: --flat-velocity: 'loud' is not 'fresh' or a velocity\n")
+                == "kspplus convert: --flat-velocity: 'loud' is not 'fresh' or a velocity\n")
     }
 
     @Test(arguments: ["0", "128"])
@@ -82,7 +82,7 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr
-                == "ksp-swift-cli convert: flat_velocity must be 1-127; "
+                == "kspplus convert: flat_velocity must be 1-127; "
                 + "0 is a MIDI note-off, not a silent note\n")
     }
 
@@ -91,7 +91,7 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr
-                == "ksp-swift-cli convert: --midi-tracks: 'bad' is not a number or a range\n")
+                == "kspplus convert: --midi-tracks: 'bad' is not a number or a range\n")
     }
 
     @Test func aMidiTracksTheFileLacksIsTwo() throws {
@@ -99,7 +99,7 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr
-                == "ksp-swift-cli convert: source track 99 was selected; the file has "
+                == "kspplus convert: source track 99 was selected; the file has "
                 + "1 tracks\n")
     }
 
@@ -108,7 +108,7 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr.hasPrefix(
-                "ksp-swift-cli convert: --midi-track and --midi-tracks contradict each other"))
+                "kspplus convert: --midi-track and --midi-tracks contradict each other"))
     }
 
     @Test func noDrumsWithADrumTrackIsTwo() throws {
@@ -116,7 +116,7 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr
-                == "ksp-swift-cli convert: --drum-track and --no-drums contradict each other; "
+                == "kspplus convert: --drum-track and --no-drums contradict each other; "
                 + "--drum-track names a source track to write as drums, and --no-drums "
                 + "takes none\n")
     }
@@ -156,7 +156,7 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr
-                == "ksp-swift-cli convert: --midi-track reads one file, and several were given\n")
+                == "kspplus convert: --midi-track reads one file, and several were given\n")
     }
 
     @Test func aSelectionPastSeveralFilesCountsThemAll() throws {
@@ -164,7 +164,7 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr
-                == "ksp-swift-cli convert: source track 99 was selected; the 2 files hold "
+                == "kspplus convert: source track 99 was selected; the 2 files hold "
                 + "2 tracks between them\n")
     }
 
@@ -195,7 +195,7 @@ import Testing
         #expect(result.code == 1)
         #expect(
             result.stderr
-                == "ksp-swift-cli pull: \(Self.project) already exists (use --force to "
+                == "kspplus pull: \(Self.project) already exists (use --force to "
                 + "overwrite)\n")
     }
 
@@ -205,7 +205,7 @@ import Testing
         #expect(result.code == 2)
         #expect(
             result.stderr
-                == "ksp-swift-cli pull: --also-midi cannot write /nonexistent/pulled.mid: the "
+                == "kspplus pull: --also-midi cannot write /nonexistent/pulled.mid: the "
                 + "project and its MIDI would be the same file; name the project .KeyStepPro\n")
     }
 
@@ -235,9 +235,9 @@ import Testing
     /// From the package directory, not `Bundle`: under the CLT `Bundle.main` is the swiftpm helper.
     static let executable: URL = {
         let build = RepoData.root.appending(path: "swift/.build")
-        let debug = build.appending(path: "debug/ksp-swift-cli")
+        let debug = build.appending(path: "debug/kspplus")
         return FileManager.default.isExecutableFile(atPath: debug.path)
-            ? debug : build.appending(path: "release/ksp-swift-cli")
+            ? debug : build.appending(path: "release/kspplus")
     }()
 
     static func run(_ arguments: [String]) throws -> (code: Int32, stdout: String, stderr: String) {

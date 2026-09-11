@@ -18,14 +18,14 @@ import PackageDescription
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
     ]
     let midiProducts: [Product] = [
-        .executable(name: "ksp-swift-cli", targets: ["KSPSwiftCLI"]),
+        .executable(name: "kspplus", targets: ["KSPSwiftCLI"]),
         // The GUI. SwiftPM builds the binary; scripts/bundle_app.sh wraps it in the .app, which is
         // a directory with an Info.plist and needs no Xcode to assemble.
         .executable(name: "ksp-app", targets: ["KSPApp"]),
         // A product, not just a target, so the runners are linkable by name from both faces.
         .library(name: "KSPRun", targets: ["KSPRun"]),
     ]
-    // KSPSwiftCLI, not ksp-swift-cli: a hyphen is legal in a product name but mangles a module name.
+    // The target is KSPSwiftCLI and the product kspplus: a product name is the binary's filename.
     let midiTargets: [Target] = [
         .target(
             name: "KSPMIDI",
@@ -41,7 +41,7 @@ import PackageDescription
         //
         // SwiftPM forbids a non-test target from depending on an executable target, so anything
         // living in KSPSwiftCLI can only ever be reached by the CLI. M13's app needs the same
-        // `convert` that `ksp-swift-cli convert` runs, byte for byte, so the runners sit here and
+        // `convert` that `kspplus convert` runs, byte for byte, so the runners sit here and
         // both faces call them.
         .target(
             name: "KSPRun",

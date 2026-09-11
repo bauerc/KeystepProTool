@@ -66,7 +66,7 @@ public enum ConvertRunner {
         }
     }
 
-    public static let prog = "ksp-swift-cli convert"
+    public static let prog = "kspplus convert"
 
     static func fail(_ message: String, code: Int32) -> RunResult {
         .failure(prog, message, code: code)
@@ -74,7 +74,14 @@ public enum ConvertRunner {
 
     /// MCC's factory default, as shipped in this target's resource bundle.
     public static func defaultTemplate() -> URL? {
-        Bundle.module.url(forResource: "Default", withExtension: "KeyStepPro")
+        // Beside the running binary first: `Bundle.module` falls back to the build directory the
+        // package was compiled in, which is a path that exists on the build machine alone.
+        if let executable = Bundle.main.executableURL,
+            let beside = TemplateLocation.find(forExecutableAt: executable)
+        {
+            return beside
+        }
+        return Bundle.module.url(forResource: "Default", withExtension: "KeyStepPro")
     }
 
     /// Shared with the preview, so it plans under the options the conversion will run under.

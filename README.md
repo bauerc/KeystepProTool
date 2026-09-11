@@ -24,35 +24,37 @@ the Command Line Tools; **not** a full Xcode install. No `sudo` on a stock macOS
 
 ```sh
 make app     # build it without installing, into swift/.build/app/
-make check   # format, typecheck, test and parity-check both toolchains
+make check   # lint and test the Swift package
 make         # list the targets
 ```
 
-**The command line tools.** Requires Python 3.13 and [uv](https://docs.astral.sh/uv/):
+**The command line.** `kspplus` rides inside the app bundle, so one command installs both and puts
+the command on your `PATH`:
 
 ```sh
-uv sync
+make install-cli
 ```
 
-That puts `ksp-dump`, `ksp2midi`, `midi2ksp` and `kspplus` on your path. Reading a project off the
-device with `ksp-pull` additionally needs the optional USB extra:
+That installs the app as `make install` does, then links `/usr/local/bin/kspplus` at the copy
+inside it — so the next `make install` moves the command along with the app. Name a directory of
+your own with `BINDIR=~/bin make install-cli`; where the directory cannot be written the command
+says so rather than leaving half a link behind.
 
-```sh
-uv sync --extra usb   # and: brew install libusb
-```
+Reading a project off the device needs nothing further. `kspplus pull` goes through CoreMIDI, so
+there is no `libusb` to install and no `sudo` to remember.
 
 ## Status
 
 Both directions work end to end, and both are **verified on the hardware** — files this tool wrote
 loaded in MIDI Control Center, transferred to a KeyStep Pro, and played what they said they would.
-Four commands ship: `ksp-dump` reads a project, `ksp2midi` exports one as MIDI, `midi2ksp`
-converts a MIDI clip into a playable pattern, and `ksp-pull` reads a project straight off the
-device over USB. `kspplus` gathers all four under one name.
+One command ships, `kspplus`, with four subcommands: `dump` reads a project, `export` writes one
+out as MIDI, `convert` turns a MIDI clip into a playable pattern, and `pull` reads a project
+straight off the device.
 
-`midi2ksp` converts a whole file: every note-bearing track onto the device's four, chords, a drum
+`convert` converts a whole file: every note-bearing track onto the device's four, chords, a drum
 track, note lengths, tempo, and sequences too long for one pattern split and chained.
 
-`ksp-pull` is newer than the rest. Its acceptance gate closed on 2026-09-04: a full read off the
+`pull` is newer than the rest. Its acceptance gate closed on 2026-09-04: a full read off the
 device matches MIDI Control Center's own export of the same slot on 153,494 of 153,497 keys, the
 three exceptions being addresses that hold nothing on the device — padding past the end of two
 short arrays, which MCC reads anyway and no two of its exports agree on (H3.2).
@@ -190,30 +192,24 @@ names, so a clash is as likely to be something else's as a re-run of this one.
 **If MCC is not installed**, `/Library/Arturia/MIDI Control Center/Templates/KeyStepPro/` will not
 be there and the file goes to `~/Downloads` instead, with a message saying where to move it.
 
-The app calls exactly the same `convert` and `export` that `ksp-swift-cli` calls — on the same
+The app calls exactly the same `convert` and `export` that `kspplus` calls — on the same
 selection its output is byte-identical, and there is no second implementation to drift.
 
 
 ## `kspplus`
 
-Every command is reachable two ways: under its own name, or as a `kspplus` subcommand. They are the
-same command — same options, same output — so these two lines do the same thing:
+One command with four subcommands: `dump`, `export`, `convert` and `pull`. `kspplus --help` lists
+them, and `kspplus <subcommand> --help` gives that subcommand's own options.
 
-```sh
-uv run ksp2midi project_files/project_5.KeyStepPro -o project_5.mid
-uv run kspplus ksp2midi project_files/project_5.KeyStepPro -o project_5.mid
-```
+The examples below run the installed command. Straight out of a build it is
+`swift/.build/debug/kspplus` instead, and nothing else differs.
 
-`kspplus --help` lists the four, and `kspplus <command> --help` gives that command's options
-grouped by what they affect — selection, timing, drum mapping, output. The rest of this README uses
-the standalone form for brevity; prefix any of it with `kspplus` and it still works.
-
-## `ksp-dump`
+## `kspplus dump`
 
 Print what is actually in a project file, without opening MIDI Control Center:
 
 ```sh
-uv run ksp-dump project_files/project_5.KeyStepPro
+kspplus dump project_files/project_5.KeyStepPro
 ```
 
 ```
@@ -224,15 +220,16 @@ project_5.KeyStepPro
   Track 1 (item 123)  [drum mode]
     Pattern 1  [drum]
       drum map: chromatic from 36 (assumed - not in file)
-      drum: 16 steps, swing 50%
+      drum: 16 steps, 1/16, swing 50%, forward, mono
         slot 1
-          note  1  step  1  lane 0 -> C1 (36) Bass Drum 1  vel 127  gate    1  shift -1  rand  80  seq 16,32
-          note  2  step  5  lane 0 -> C1 (36) Bass Drum 1  vel  50  gate    2  shift +1  rand  90  seq 48,64
+          note  1  step  1  lane 0 -> C1 (36) Bass Drum 1  vel 127  gate      1  shift -1  rand  80  seq 16,32
+          note  2  step  5  lane 0 -> C1 (36) Bass Drum 1  vel  50  gate      2  shift +1  rand  90  seq 48,64
   Track 3 (item 125)
     Pattern 1  [seq]
-      seq: 16 steps, swing 50%
+      seq: 16 steps, 1/16, swing 50%, forward, poly
         slot 1
-          note  1  step  1  C2 (48)    vel  60  gate    2  shift +1  rand  10  seq always
+          note  1  step  1  C2 (48)    vel  60  gate      2  shift +1  rand  10  seq always
+          note  2  step  2  C2 (48)    vel  70  gate    0.5  shift +2  rand  20  seq always
           ...
 ```
 
@@ -265,18 +262,18 @@ Gates print as a length in steps, from 0.0625 up to 64. All 128 encoder position
 (spec §6.1), so a gate printed as `?(200)` means the file holds a value outside 0–127 — the tool
 prints the raw number rather than rounding it to the nearest real one.
 
-## `ksp2midi`
+## `kspplus export`
 
 Turn a project into a Standard MIDI file. MIDI Control Center can push patterns *to* the device
 but has no way of getting them off as a `.mid`, so this direction is useful on its own:
 
 ```sh
-uv run ksp2midi project_files/project_5.KeyStepPro -o project_5.mid
+kspplus export project_files/project_5.KeyStepPro -o project_5.mid
 ```
 
 ```
 wrote project_5.mid
-  12 note(s) from pattern(s) 1
+  32 note(s) from pattern(s) 1
   tracks: Track 1 (drum), Track 3
 ```
 
@@ -297,7 +294,7 @@ same point on every track. `--no-markers` leaves them out.
 starting at its own tick 0:
 
 ```sh
-uv run ksp2midi project_files/project_9.KeyStepPro --split -o out/
+kspplus export project_files/project_9.KeyStepPro --split -o out/
 ```
 
 ```
@@ -318,7 +315,7 @@ wrote out/project_9_track1_pattern3.mid
 | `--repeat N` | Lay the whole export down N times end to end, 1–10 (default 1) |
 | `--flat-velocity VALUE` | Render every note at one velocity instead of its stored value — `fresh` for the measured fresh-note velocity (100), or 1–127 |
 | `--ticks-per-beat N` | MIDI resolution (default 480) |
-| `--drum-map SPEC` | Same grammar and config file as `ksp-dump` (default `chromatic:36`) |
+| `--drum-map SPEC` | Same grammar and config file as `dump` (default `chromatic:36`) |
 | `--default-gate STEPS` | Length used where a gate value is outside the measured 0–127 ladder (default 0.5) |
 | `--drum-channel N` | MIDI channel for drum lanes (default 10) |
 | `--include-stale` | Export both note sets of a pattern that holds both |
@@ -335,7 +332,7 @@ Anything the export had to decide for itself is printed to stderr as a warning. 
 needs is not in the project file at all:
 
 - **The drum map** is a device-global setting, not project data. The export names the map it
-  assumed every time. Unlike `ksp-dump`, `--drum-map none` is refused: a MIDI file has to name a
+  assumed every time. Unlike `dump`, `--drum-map none` is refused: a MIDI file has to name a
   note for every lane, so there is no honest way to leave a lane unresolved.
 
 **Gate lengths and step size** used to be two more. The full 128-rung gate ladder is measured, so
@@ -370,10 +367,10 @@ A real project raises the same finding in a dozen patterns, so warnings are grou
 counted:
 
 ```
-$ ksp2midi initial_project.KeyStepPro --dry-run
-ksp2midi: warning: 10 patterns hold pooled notes with no step-active flag (116 notes); they do not sound on the device
-ksp2midi: warning: drum lanes resolved through the chromatic from 36 (assumed - not in file) map on channel 10; ...
-ksp2midi: 27 warnings collapsed into 9 kinds; --verbose for detail
+$ kspplus export initial_project.KeyStepPro --dry-run
+kspplus export: warning: 10 patterns hold pooled notes with no step-active flag (116 notes); they do not sound on the device
+kspplus export: warning: drum lanes resolved through the chromatic from 36 (assumed - not in file) map on channel 10; ...
+kspplus export: 27 warnings collapsed into 9 kinds; --verbose for detail
 ```
 
 `--verbose` lists every instance with the track and pattern it came from. The collapsed view
@@ -387,18 +384,18 @@ warning when it does. Expanding the cycle needs to know whether those four seque
 of a short pattern or *pages* of a 64-step one, and the project files contradict the obvious
 reading — see protocol test T5.8.
 
-## `midi2ksp`
+## `kspplus convert`
 
 Turn one or more MIDI files into KeyStep Pro patterns:
 
 ```sh
-uv run midi2ksp my_song.mid --drum-track 3 -o my_song.KeyStepPro
+kspplus convert my_song.mid --drum-track 3 -o my_song.KeyStepPro
 ```
 
 ```
-midi2ksp: warning: no drum map was given, so one was fitted to the source: chromatic from 31 (assumed - not in file). The real map is a device setting the project file does not carry
-midi2ksp: warning: track 4 (seq): track 4 runs 128 steps, past the device's 64; it was split across patterns 1-2 and chained
-midi2ksp: warning: the project tempo was set to the source's 120 BPM
+kspplus convert: warning: no drum map was given, so one was fitted to the source: chromatic from 31 (assumed - not in file). The real map is a device setting the project file does not carry
+kspplus convert: warning: track 4 (seq): track 4 runs 128 steps, past the device's 64; it was split across patterns 1-2 and chained
+kspplus convert: warning: the project tempo was set to the source's 120 BPM
 wrote my_song.KeyStepPro
   track 1 [drum]: 64 note(s), pattern 1 (64 steps)
   track 2: 160 note(s), pattern 1 (48 steps)
@@ -433,7 +430,7 @@ it appears in the Project Browser ready to send to the device.
 | `-v`, `--verbose` | List every warning, instead of one summary line per kind |
 
 **A project file is never built from scratch.** Its key set is fixed at 153,495 numeric keys, so
-`midi2ksp` loads a template and overwrites values in it. The default is MCC's own factory project,
+`convert` loads a template and overwrites values in it. The default is MCC's own factory project,
 shipped with this tool. Point `--template` at one of your own projects instead and everything else
 in it is kept, which is how a clip goes into a spare pattern of something you are already working
 on. The target pattern has to be empty — appending to a pattern that already holds notes would
@@ -465,7 +462,7 @@ interleave two takes.
     track 1 [drum, source 4]: 64 note(s), pattern 1 (64 steps)
     track 2 [source 3]: 160 note(s), pattern 1 (48 steps)
   ```
-- **Several files merge in argument order.** `midi2ksp bass.mid drums.mid` fills the device from
+- **Several files merge in argument order.** `kspplus convert bass.mid drums.mid` fills the device from
   both, `bass.mid`'s tracks first. Source tracks are numbered on continuously through the files —
   the first file's tracks, then the second's — so `--midi-tracks`, `--route` and `--drum-track`
   address any track of any file with no new spelling. `--midi-track` is the exception: it converts
@@ -516,7 +513,7 @@ interleave two takes.
 Pitch and velocity pass through unchanged; both are 7-bit on each side.
 
 **Drums need a map, and the map is not in the file.** A trigger stores a *lane*, and which MIDI
-note a lane plays is a global device setting (see `ksp-dump` above). Reading one back can fall
+note a lane plays is a global device setting (see `dump` above). Reading one back can fall
 through to Arturia's default and say so; writing one cannot, because a source whose drums sit
 anywhere but 36–59 would have every trigger dropped. So an unconfigured import **fits** a chromatic
 map to the source's own pitches and reports which one it used. `--drum-map` overrides it, and a map
@@ -529,22 +526,22 @@ melodically. Plenty of files put drums on an ordinary channel instead, and for t
 `--no-drums` takes nothing, so a channel 10 part comes in as ordinary notes on a sequencer track.
 
 **Name the output file what you want the project called.** MCC's Project Browser lists the
-*filename*, so `midi2ksp song.mid -o "Y Control.KeyStepPro"` appears as `Y Control`. The project
+*filename*, so `kspplus convert song.mid -o "Y Control.KeyStepPro"` appears as `Y Control`. The project
 also carries an internal name, stored as an integer parameter whose encoding is undecoded and
 therefore inherited from the template — but that is not what the browser shows, and it is not
 worth working around.
 
-## `ksp-pull`
+## `kspplus pull`
 
 Read a project off the device itself, with no MIDI Control Center in the way:
 
 ```sh
-sudo uv run ksp-pull my_project.KeyStepPro --slot 3
+kspplus pull my_project.KeyStepPro --slot 3
 ```
 
 MCC is otherwise the only way to get a `.KeyStepPro` file, and it wants a Recall To and an export
 for every project. This asks the hardware directly and writes the same file, in about ten seconds.
-What comes back feeds straight into the rest of the tool, so `ksp-pull` then `ksp2midi` turns what
+What comes back feeds straight into the rest of the tool, so `pull` then `export` turns what
 is on the device into a MIDI file.
 
 It reports what it did and how long it took:
@@ -563,36 +560,25 @@ The request count is the walk's own, so it can be compared against the figure in
 `--also-midi` writes the `.mid` as well, from the same read:
 
 ```sh
-sudo uv run ksp-pull my_project.KeyStepPro --slot 3 --also-midi
+kspplus pull my_project.KeyStepPro --slot 3 --also-midi
 ```
 
 It goes beside the project, `my_project.mid`, and it is byte for byte the file
-`ksp2midi my_project.KeyStepPro` would have written — same defaults, same drum map, same warnings.
-It saves the second command; it does not export differently, so reach for `ksp2midi` whenever you
-want anything but the defaults. Both destinations are checked before the device is touched and
+`kspplus export my_project.KeyStepPro` would have written — same defaults, same drum map, same
+warnings. It saves the second command; it does not export differently, so reach for `export`
+whenever you want anything but the defaults. Both destinations are checked before the device is touched and
 `--force` covers both; naming the project itself `.mid` is refused, because the two files would be
 one and the export would land on the project. A project whose patterns hold no notes still writes
 the `.KeyStepPro` and then fails: a MIDI file with nothing in it would look like success.
 
-This is the one command that needs the USB extra from [Installation](#installation); the raw-USB
-dependency is optional because most people converting files have no reason to install libusb. The
-Swift CLI reaches the same wire through CoreMIDI instead, so it wants neither the extra nor `sudo`:
-
-```sh
-swift/.build/debug/ksp-swift-cli pull my_project.KeyStepPro --slot 3
-```
-
-Same options, same summary, same bytes: `scripts/pull_parity.sh` holds both cores to one
-`.KeyStepPro` over the captured exchange, and both cores' `--also-midi` to one event stream — the
-exported `.mid` is the documented exception to the byte-for-byte contract. One option is Python's
-alone, `--mcc-plan`, because the Swift core carries one walk and no flag to choose another
+The read reaches the device through CoreMIDI, so it wants no `libusb`, no extra install and no
+`sudo`. It walks one plan, the coalesced one, and carries no flag to choose another
 ([ADR 0003](docs/adr/0003-the-swift-core-reads-the-fast-plan-only.md)).
 
 Three things about the read:
 
-- **It needs root on macOS.** The system binds its own USB-MIDI driver to the interface that
-  answers SysEx reads and will not release it to an unprivileged process, so the command is run
-  under `sudo`. Close MIDI Control Center first; it holds the same device.
+- **Close MIDI Control Center first.** It holds the same device, and the two cannot read it at
+  once.
 - **`--slot` needs no help from the panel.** Slots are numbered as the device numbers them, 1–16.
   The read selects the slot itself.
 - **A slot is read as it was saved.** Panel edits you have not saved are not in the file. A slot
@@ -601,11 +587,10 @@ Three things about the read:
 | option | what it does |
 | --- | --- |
 | `--slot N` | which of the sixteen projects to read (default 1) |
-| `--also-midi` | also write the `.mid` beside the project, as `ksp2midi` with no options would |
+| `--also-midi` | also write the `.mid` beside the project, as `export` with no options would |
 | `--force` | overwrite an existing output file |
 | `--quiet`, `-v` | suppress the summary; list every diagnostic |
 | `--timeout MS` | how long to wait for each reply (default 1000) |
-| `--mcc-plan` | walk MCC's own 8,951-request stream instead of the coalesced one. Same file, about four times slower |
 | `--no-identity` | skip the identity request and write the firmware version this tool already knows |
 | `--template P` | take the file's full key set from `P` instead of the shipped factory default |
 
@@ -617,24 +602,18 @@ speedup.
 ## Development
 
 ```sh
-uv run pytest          # tests
-uv run ruff check .    # lint
-uv run mypy            # types
+./scripts/validate.sh   # lint and test — the one command to run before pushing
 ```
 
-Tests marked `hardware` need a physical KeyStep Pro and are skipped in CI
-(`uv run pytest -m "not hardware"`).
+Run it rather than `swift test`, which needs three extra flags to find Swift Testing on a machine
+without Xcode; `validate.sh` adds them when it detects a Command Line Tools install.
 
-Tests marked `slow` are the whole-file round-trip sweeps. CI runs them;
-`scripts/validate.sh` does not, so **a green `validate.sh` is not full
-round-trip coverage** — run `uv run pytest -m "not hardware"` before pushing.
-Each sweep keeps one always-on instance, so a byte-level regression still fails
-locally.
+`swift/` is the whole implementation: one SwiftPM package, built with Swift 6.2 and the Command
+Line Tools rather than a full Xcode.
 
-`swift/` holds the Swift port of the core (M8–M12), built with Swift 6.2 and the
-Command Line Tools. `./scripts/validate.sh` runs both toolchains and skips the
-Swift half where `swift` is not on `PATH`; run it rather than `swift test`,
-which needs extra flags to find Swift Testing on a machine without Xcode.
+The hardware checks are the exception to a green run. Nothing in this repo can prove what the
+device does, so **a green `validate.sh` is not verification on hardware** — see
+[`analysis/Hardware_Test_Protocol.md`](./analysis/Hardware_Test_Protocol.md).
 
 **New to the Mac toolchain?** [`swift/README.md`](./swift/README.md) explains
 it from a Python/Java starting point — toolchain, SwiftPM, dependencies and

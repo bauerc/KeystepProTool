@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
 #
-# Wrap the built ksp-app binary in a launchable .app.
+# Wrap the built ksp-app binary, and the kspplus CLI beside it, in a launchable .app.
 #
 #   ./scripts/bundle_app.sh             build it under swift/.build/app/
 #   ./scripts/bundle_app.sh --install   build it and put it in /Applications
+#   ./scripts/bundle_app.sh --link-cli  that, and link kspplus into $BINDIR (default /usr/local/bin)
 set -euo pipefail
 
 install=false
+link_cli=false
 for arg in "$@"; do
     case "$arg" in
         --install) install=true ;;
+        # Linking names the installed copy, so it installs too rather than pointing at .build/.
+        --link-cli)
+            install=true
+            link_cli=true
+            ;;
         *)
-            echo "usage: ${BASH_SOURCE[0]##*/} [--install]" >&2
+            echo "usage: ${BASH_SOURCE[0]##*/} [--install | --link-cli]" >&2
             exit 2
             ;;
     esac
@@ -29,8 +36,9 @@ exe_name="KeyStepProPlus"
 bundle="$root/swift/.build/app/$app_name.app"
 contents="$bundle/Contents"
 
-echo "==> Building ksp-app (release)"
+echo "==> Building ksp-app and kspplus (release)"
 swift build -c release --product ksp-app
+swift build -c release --product kspplus
 
 build_dir=$(swift build -c release --show-bin-path)
 
@@ -39,9 +47,13 @@ rm -rf "$bundle"
 mkdir -p "$contents/MacOS" "$contents/Resources"
 cp "$build_dir/ksp-app" "$contents/MacOS/$exe_name"
 
-# `Bundle.module` looks in `Bundle.main.resourceURL`, which for an app is Contents/Resources.
-# Globbed rather than named, so renaming the package cannot quietly ship an app that builds, runs
-# and then cannot find its template.
+# The CLI rides inside the bundle, so the same .dmg carries both faces and `kspplus` finds the
+# template through the app's own Contents/Resources.
+cp "$build_dir/kspplus" "$contents/MacOS/kspplus"
+
+# Contents/Resources is where `TemplateLocation` looks for it -- `Bundle.module` looks beside the
+# bundle root instead, and finds nothing here. Globbed rather than named, so renaming the package
+# cannot quietly ship an app that builds, runs and then cannot find its template.
 shopt -s nullglob
 bundles=("$build_dir"/*.bundle)
 if [[ ${#bundles[@]} -eq 0 ]]; then
@@ -95,6 +107,8 @@ PLIST
 # No entitlements file, deliberately: the App Sandbox would confine writes to the app's own
 # container, and writing into MIDI Control Center's Templates folder is exactly what that forbids.
 echo "==> Signing (ad-hoc)"
+# The nested CLI is code, not a resource, so it is signed on its own before the bundle seals it.
+codesign --force --sign - "$contents/MacOS/kspplus"
 codesign --force --sign - "$bundle"
 codesign --verify --strict "$bundle"
 
@@ -126,3 +140,20 @@ fi
 echo
 echo "Installed $installed"
 echo "Run it with:  open -a '$app_name'"
+
+if [[ $link_cli == false ]]; then
+    exit 0
+fi
+
+# A link rather than a copy, so the next install moves the command along with the app.
+bin_dir="${BINDIR:-/usr/local/bin}"
+echo
+echo "==> Linking $bin_dir/kspplus"
+if ! mkdir -p "$bin_dir" 2>/dev/null \
+    || ! ln -sf "$installed/Contents/MacOS/kspplus" "$bin_dir/kspplus"; then
+    echo "error: could not write $bin_dir -- retry with: sudo $0 --link-cli, or name a" >&2
+    echo "       directory of your own: BINDIR=~/bin $0 --link-cli" >&2
+    exit 1
+fi
+
+echo "Run it with:  kspplus --help"

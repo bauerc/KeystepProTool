@@ -474,7 +474,7 @@ to hold end to end. Neither entry below has run on hardware yet.
 ### H3.1 — Full dump
 
 - [x] **run 2026-09-04 — CONFIRMED over CoreMIDI; the raw-USB half is still owed.** Slot 1,
-  firmware 2.5.20, through `ksp-swift-cli pull`: **153,497 keys, 2,474 requests, 11.4 s**, parsing
+  firmware 2.5.20, through `kspplus pull`: **153,497 keys, 2,474 requests, 11.4 s**, parsing
   to 817 notes at 132 BPM over three tracks — what the panel shows for that slot. Two consecutive
   reads were byte-identical at 3,523,191 bytes, and `--also-midi` wrote the same `.mid` a separate
   `export` of the pulled file writes. **What is not done: `sudo ksp-pull` and the `cmp` of the two
@@ -500,7 +500,7 @@ to hold end to end. Neither entry below has run on hardware yet.
   the wire, and it costs one more read:
 
   ```sh
-  swift/.build/debug/ksp-swift-cli pull project_files/captures/H3-pull-swift.KeyStepPro --slot <N>
+  swift/.build/debug/kspplus pull project_files/captures/H3-pull-swift.KeyStepPro --slot <N>
   ```
 
   `--also-midi` on either core writes the `.mid` beside the project from the same read. It costs no
@@ -508,9 +508,9 @@ to hold end to end. Neither entry below has run on hardware yet.
   makes, and `tools/midi_events.py` compares the two cores' across the running-status difference:
 
   ```sh
-  swift/.build/debug/ksp-swift-cli pull project_files/captures/H3-pull-swift.KeyStepPro \
+  swift/.build/debug/kspplus pull project_files/captures/H3-pull-swift.KeyStepPro \
       --slot <N> --also-midi --force
-  swift/.build/debug/ksp-swift-cli export project_files/captures/H3-pull-swift.KeyStepPro \
+  swift/.build/debug/kspplus export project_files/captures/H3-pull-swift.KeyStepPro \
       -o /tmp/separate.mid
   cmp project_files/captures/H3-pull-swift.mid /tmp/separate.mid
   ```
@@ -523,7 +523,7 @@ to hold end to end. Neither entry below has run on hardware yet.
 ### H3.2 — Byte-diff against MCC's export
 
 - [x] **run 2026-09-04 — CONFIRMED for the walk; three keys differ, and they are not the walk's.**
-  Slot 1 read with `ksp-swift-cli pull` against MCC's own export of the same slot taken the evening
+  Slot 1 read with `kspplus pull` against MCC's own export of the same slot taken the evening
   before (`Project 1 2026_09_03 21.26.28.KeyStepPro`, 3,523,192 bytes). **3 keys differ of
   153,497** — `120_55_5`, `120_56_4` and `120_56_5`, where MCC holds `100` and `bulk_read`
   substitutes the hard-coded `127` of `MCC_CONSTANTS`. Every other address matches, and the
@@ -744,7 +744,7 @@ One probe, and it was what stood between the Swift port and a read the app could
   launch-on-demand, so the `ioreg` line above reads as though nothing owns interface 2 unless
   something is holding a MIDI client open while you run it — `sniff` in another shell does.
 
-- **Reading a whole project over CoreMIDI** is the end of the chain. `ksp-swift-cli pull` is the
+- **Reading a whole project over CoreMIDI** is the end of the chain. `kspplus pull` is the
   command that does it now; the bare driver below is what the figures were measured through, and it
   needs `KSPKit` linked because it drives `BulkRead.readRaw` rather than replaying frames:
 
@@ -761,7 +761,7 @@ One probe, and it was what stood between the Swift port and a read the app could
   2026-09-04 — same slot, 2,474 requests, 11.4 s — and H3.2's diff over this transport has since
   been taken.
 
-- **Debug vs. release build, run 2026-09-06.** A release-build `ksp-swift-cli pull` of slot 1 reads
+- **Debug vs. release build, run 2026-09-06.** A release-build `kspplus pull` of slot 1 reads
   the same 2,474 requests in **10.1 s — 4.08 ms per exchange** — against the 3.999 ms wire floor
   `cadence`/`grid` establish; a debug build takes 10.5 s (4.24 ms). Time the release binary. Two
   pulls taken before and after all of the cadence/grid/pipeline probing are byte-identical, so none

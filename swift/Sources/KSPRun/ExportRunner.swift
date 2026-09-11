@@ -71,7 +71,7 @@ public enum ExportRunner {
         }
     }
 
-    public static let prog = "ksp-swift-cli export"
+    public static let prog = "kspplus export"
 
     static func fail(_ message: String, code: Int32) -> RunResult {
         .failure(prog, message, code: code)

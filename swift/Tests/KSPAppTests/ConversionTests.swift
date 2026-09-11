@@ -296,7 +296,7 @@ import Testing
         #expect(outcome.failed)
         #expect(outcome.written.isEmpty)
         #expect(!outcome.wroteFile)
-        #expect(!outcome.headline.hasPrefix("ksp-swift-cli"))
+        #expect(!outcome.headline.hasPrefix("kspplus"))
         #expect(!outcome.headline.isEmpty)
     }
 

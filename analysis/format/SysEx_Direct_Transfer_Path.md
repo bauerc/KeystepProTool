@@ -396,7 +396,7 @@ probe's real-time filter compiled out entirely, return byte-identical truncated 
 Not a frame count and not a projection — the file. The transport is `KSPDevice` (#246), a
 `KSPKit.Transport` over CoreMIDI carrying the 7.9.1 repair, handed straight to `BulkRead.readRaw`
 and `LenientJSON.write`; no format logic of its own, so what it exercises is the transport.
-`ksp-swift-cli pull` (#247) is the command that reads a project with it;
+`kspplus pull` (#247) is the command that reads a project with it;
 `tools/coremidi_read.swift` is the bare driver the figures below were measured through.
 
 ```
@@ -421,7 +421,7 @@ through a transport that cannot carry the byte. That is the sharpest evidence he
 restores the value rather than merely filling a hole.
 
 **Two consecutive reads of the same slot are byte-identical** (3,523,191 bytes), and the result
-parses: `ksp-swift-cli dump` renders it as a project — 132 BPM, sixteen-note patterns, drum mode —
+parses: `kspplus dump` renders it as a project — 132 BPM, sixteen-note patterns, drum mode —
 not as a well-formed sheet of filler.
 
 **The byte-diff has since been run, and it found a defect that is not the transport's.** Against a
@@ -437,7 +437,7 @@ So 7.9.2 establishes what it set out to — the transport carries a whole projec
 at the projected cost.
 
 **The corrected walk has since been run, and it closes the gap.** Slot 1, 2026-09-04, through
-`ksp-swift-cli pull`: 153,497 keys in **2,474 requests, 11.4 s**, two consecutive reads
+`kspplus pull`: 153,497 keys in **2,474 requests, 11.4 s**, two consecutive reads
 byte-identical. Against MCC's own export of the same slot it differs on **3 keys of 153,497**, all
 three `MCC_CONSTANTS` — where the pre-#255 walk, read from the same slot in the same session,
 differed on 114 and exported 446 notes against MCC's 628. Every #255 family is clean. The remaining

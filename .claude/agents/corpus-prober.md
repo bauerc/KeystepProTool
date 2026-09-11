@@ -1,6 +1,6 @@
 ---
 name: corpus-prober
-description: Answers empirical questions about the sample projects in project_files/ by running this repo's own reader and returning aggregates — counts, ranges, which patterns hold notes, whether any sample uses a non-default value. Use instead of running ksp-dump or ad-hoc scripts in the main conversation, where the output is tens of thousands of tokens. Do not use to change code or to interpret the format spec.
+description: Answers empirical questions about the sample projects in project_files/ by running this repo's own reader and returning aggregates — counts, ranges, which patterns hold notes, whether any sample uses a non-default value. Use instead of running `kspplus dump` or ad-hoc scripts in the main conversation, where the output is tens of thousands of tokens. Do not use to change code or to interpret the format spec.
 tools: Bash, Read, Grep
 model: haiku
 color: magenta
@@ -18,8 +18,8 @@ Run from the repo root. Build the CLI once, then pipe `dump --json` — the deco
 `Project` the app reads — through `jq`:
 
 ```sh
-swift build --package-path swift --product ksp-swift-cli
-ksp="$(swift build --package-path swift --show-bin-path)/ksp-swift-cli"
+swift build --package-path swift --product kspplus
+ksp="$(swift build --package-path swift --show-bin-path)/kspplus"
 "$ksp" dump --json project_files/project_9.KeyStepPro \
     | jq '[.tracks[] | .patterns[] | select(.has_data) | {notes: (.notes | length), steps: .seq_step_count}]'
 ```

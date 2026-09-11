@@ -158,8 +158,8 @@ struct Export: ParsableCommand {
                 patterns, option: "--patterns", limit: Constants.patternsPerTrack)
             parsedFlatVelocity = try parseFlatVelocity(flatVelocity)
         } catch {
-            // The runner's failure shape, not `ValidationError`: only it matches `ksp2midi` byte
-            // for byte.
+            // The runner's failure shape, not `ValidationError`: only it matches the CLI's
+            // byte-for-byte output contract.
             return try emit(RunResult.failure(ExportRunner.prog, "\(error)", code: 2))
         }
 

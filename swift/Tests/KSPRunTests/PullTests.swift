@@ -5,7 +5,7 @@ import Testing
 
 @testable import KSPRun
 
-/// `ksp-swift-cli pull` end to end, over the captured exchange rather than over the device.
+/// `kspplus pull` end to end, over the captured exchange rather than over the device.
 @Suite struct PullTests {
     @Test func theProjectIsByteIdenticalToMCCsExport() throws {
         let device = TapeDevice(try recallTape())
@@ -104,7 +104,7 @@ import Testing
             attach: { device })
 
         #expect(result.code == 1)
-        #expect(result.stderr.hasPrefix("ksp-swift-cli pull: template: "))
+        #expect(result.stderr.hasPrefix("kspplus pull: template: "))
         #expect(device.asked.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: written.path))
     }
@@ -119,7 +119,7 @@ import Testing
             PullRunner.Options(output: written, slot: 3), attach: { device })
 
         #expect(result.code == 1)
-        #expect(result.stderr.hasPrefix("ksp-swift-cli pull: slot 3: "))
+        #expect(result.stderr.hasPrefix("kspplus pull: slot 3: "))
         #expect(!FileManager.default.fileExists(atPath: written.path))
     }
 
@@ -132,7 +132,7 @@ import Testing
         }
 
         #expect(result.code == 1)
-        #expect(result.stderr.hasPrefix("ksp-swift-cli pull: "))
+        #expect(result.stderr.hasPrefix("kspplus pull: "))
         #expect(!FileManager.default.fileExists(atPath: written.path))
     }
 
@@ -251,7 +251,7 @@ import Testing
             attach: { device })
 
         #expect(result.code == 1)
-        #expect(result.stderr.hasPrefix("ksp-swift-cli pull: "))
+        #expect(result.stderr.hasPrefix("kspplus pull: "))
         // The tape's read earns five kinds of warning, and Python prints none of them here.
         #expect(!result.stderr.contains("warning:"))
         #expect(!result.diagnostics.render(verbose: false).isEmpty)
@@ -302,7 +302,7 @@ import Testing
             PullRunner.Options(output: written, slot: 5), attach: { UnreadableIdentity() })
 
         #expect(result.code == 1)
-        #expect(result.stderr == "ksp-swift-cli pull: slot 5: \(UnreadableIdentity.message)\n")
+        #expect(result.stderr == "kspplus pull: slot 5: \(UnreadableIdentity.message)\n")
         #expect(!FileManager.default.fileExists(atPath: written.path))
     }
 
@@ -338,7 +338,7 @@ private func templateValues() throws -> [String: Int] {
 /// A destination that does not exist yet, in a directory the run has to create.
 private func scratch() throws -> URL {
     FileManager.default.temporaryDirectory
-        .appending(path: "ksp-pull-\(UUID().uuidString)")
+        .appending(path: "kspplus-pull-\(UUID().uuidString)")
         .appending(path: "pulled.KeyStepPro")
 }
 
