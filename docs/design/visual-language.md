@@ -66,15 +66,14 @@ convention.
 The device's grammar is: **track colour = identity · white = now · blue = secondary function ·
 red = unsaved edits**.
 
-Adopted: track colours (a row's track), white (the conversion playhead, §4.2.9 — *"the currently
-playing step, which is lit up in white"*), blue (Advanced options, §4.2.14 — the 63 SHIFT functions
-are silkscreened blue).
+Adopted: track colours (a row's track) and white (the conversion playhead, §4.2.9 — *"the
+currently playing step, which is lit up in white"*).
 
-Not adopted: **red**. Nothing in this app is ever in an unsaved state. Do not invent one to justify
-the colour.
-
-Blue is a **marker**, not lettering — `#16B4E9` on the light ground fails contrast as text, so it
-rules or dots a secondary section while the label stays in `ink`.
+Not adopted: **red** and **blue**. Nothing in this app is ever in an unsaved state; do not invent
+one to justify red. Blue marked the Advanced options while there was a mode to mark. Once every
+option was drawn beside what it changes (#287), blue had nothing left to say, and a blue rail
+beside a heading only competed with the system accent, which is what the reader acts on. A heading
+holds its rank by size and the space above it. Do not bring either colour back as decoration.
 
 ## The palette
 
@@ -168,11 +167,26 @@ status, and the one the app exists for, so rule 2 holds as it does for a refusal
 it and the colour agrees. A failure takes `error` and the triangle, and its account stays in
 `ink` — nobody should have to squint at what went wrong.
 
+### Cards
+
+**One container, worn everywhere.** The device-read panel and each phase of a conversion sit on one
+card: the `surface` fill at `cardRadius`. The phases are the **Source** the app reads, the
+**Result** it would write, and, on the way in, the **Device limits** it would cost. The review
+found the panel wearing a card and the main screen wearing nothing, so a reader met two structural
+languages in one app. Now the shape of the task shows before a word of it is read.
+
+A heading stands **above** its card, in `TypeScale.header`, and holds its rank by size and the
+space above it — never by a coloured rail. Inside a card, the arrange lanes and the note shapes
+recess their axis to `ground`, so the span a track leaves unplayed still reads against the card.
+
+The card's padding comes out of every row inside it, which is why those rows are held to
+`minimumCardContentWidth` rather than to the pane.
+
 ### The option band
 
-One row on a surface plate directly under the source it acts on: the drum designation and channel
-under a source track list, the split, Step Skip and Repeat under a pattern grid, and in both cases
-**Keep — Velocity, Swing, Time Shift** after a rule.
+One row under a rule inside the Source card, directly under the source it acts on: the drum
+designation and channel under a source track list, the split, Step Skip and Repeat under a pattern
+grid, and in both cases **Keep — Velocity, Swing, Time Shift** after a rule.
 
 **A control sits inside what it changes.** A column of options beside the window says nothing about
 which of them reach the file; a control under the thing it reshapes says it by structure, and needs

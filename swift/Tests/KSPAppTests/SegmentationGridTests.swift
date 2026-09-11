@@ -171,7 +171,7 @@ private func segmented(
     }
 
     @Test func thegridFitsTheStagedPaneWithoutTruncatingARow() {
-        #expect(AppLayout.gridWidth <= AppLayout.minimumContentWidth)
+        #expect(AppLayout.gridWidth <= AppLayout.minimumCardContentWidth)
     }
 
     @Test func itnamesWhereThePlannerPutEachSourceTrack() {

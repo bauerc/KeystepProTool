@@ -45,16 +45,18 @@ private func saturation(_ color: Color) -> Double {
             AppLayout.labelWidth
                 == AppLayout.wellWidth + AppLayout.labelGap + AppLayout.rowNameWidth
                 + AppLayout.labelGap + AppLayout.rowBadgeWidth)
-        #expect(AppLayout.gridWidth <= AppLayout.minimumContentWidth)
-        #expect(AppLayout.limitRowWidth <= AppLayout.minimumContentWidth)
+        #expect(AppLayout.gridWidth <= AppLayout.minimumCardContentWidth)
+        #expect(AppLayout.limitRowWidth <= AppLayout.minimumCardContentWidth)
     }
 
     /// The options sit beside what they change, which puts each direction's whole set on one row
     /// inside a pane that scrolls vertically only. A control added to a band and left out of its
     /// widths would be clipped in silence.
     @Test func eitherDirectionsOptionBandFitsThePane() {
-        #expect(AppLayout.bandWidth(AppLayout.exportBandWidths) <= AppLayout.minimumContentWidth)
-        #expect(AppLayout.bandWidth(AppLayout.importBandWidths) <= AppLayout.minimumContentWidth)
+        #expect(
+            AppLayout.bandWidth(AppLayout.exportBandWidths) <= AppLayout.minimumCardContentWidth)
+        #expect(
+            AppLayout.bandWidth(AppLayout.importBandWidths) <= AppLayout.minimumCardContentWidth)
         #expect(AppLayout.keepWidths.count == 3)
     }
 
@@ -78,8 +80,14 @@ private func saturation(_ color: Color) -> Double {
     @Test func adeviceCardFitsThePaneAndItsSlotRowFitsTheCard() {
         #expect(AppLayout.deviceCardWidth <= AppLayout.minimumContentWidth)
         #expect(
-            AppLayout.slotPickerWidth + 2 * AppLayout.deviceCardPadding
-                <= AppLayout.deviceCardWidth)
+            AppLayout.slotPickerWidth + 2 * AppLayout.cardPadding <= AppLayout.deviceCardWidth)
+    }
+
+    /// The map is the widest row a card holds, so it is the one that sets how much padding a
+    /// card can spend at the window's floor.
+    @Test func acardLeavesTheMapRoomAtTheSmallestWindow() {
+        #expect(AppLayout.minimumCardContentWidth < AppLayout.minimumContentWidth)
+        #expect(AppLayout.gridWidth <= AppLayout.minimumCardContentWidth)
     }
 
     /// The meter is quantity and nothing else: a figure at all lights a segment, the wall lights

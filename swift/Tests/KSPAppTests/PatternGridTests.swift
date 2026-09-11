@@ -155,7 +155,7 @@ import Testing
     /// A grid wider than the pane is clipped in silence, so the fit is asserted as arithmetic,
     /// at the window's floor because that is the narrowest the pane ever gets.
     @Test func thegridFitsTheStagedPaneWithoutTruncatingThePatternAxis() {
-        #expect(AppLayout.gridWidth <= AppLayout.minimumContentWidth)
+        #expect(AppLayout.gridWidth <= AppLayout.minimumCardContentWidth)
         #expect(AppLayout.columnCount == 16)
     }
 
