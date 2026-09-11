@@ -368,11 +368,12 @@ enum AppLayout {
     /// The arrange lanes, on the map's own origin so a lane sits under the row it belongs to. The
     /// whole run scales into this, which is what keeps the pane scrolling vertically only.
     static var axisWidth: CGFloat { gridWidth - gridOrigin }
-    static let laneHeight: CGFloat = 30
+    /// Tall enough for an octave's twelve pitches to stand apart. A note shape is drawn to it too.
+    static let laneHeight: CGFloat = 56
     static let laneSpacing: CGFloat = 3
     static let regionRadius: CGFloat = 3
     static let boundaryWidth: CGFloat = 1
-    static let markHeight: CGFloat = 2
+    static let markHeight: CGFloat = 3
     /// A sixteenth at the default division is under a point wide once a long run is scaled down.
     static let markMinWidth: CGFloat = 1.5
     /// The block's ink, held off full so a mark reads as content rather than as lettering.
@@ -383,9 +384,27 @@ enum AppLayout {
     /// A single digit at ``TypeScale/smallValue``, which is the narrowest a number stays a number.
     static let regionLabelMinimumWidth: CGFloat = 11
     static let regionLabelInset: CGFloat = 2
-    /// Clamped into rather than scaled to the file's own range, for the reason ``Density`` clamps.
-    /// The device shows these as C1 to C6.
-    static let markPitchWindow = 36...96
+    /// The narrowest range a shape is drawn across, so one held pitch sits mid-lane and a fifth
+    /// does not fill it the way two octaves would.
+    static let pitchWindowMinimumSpan = 12
+    /// Closer than this, beat lines are a texture rather than a grid.
+    static let beatLineMinimumSpacing: CGFloat = 8
+    /// Fainter than a mark: a beat line is where a note on the grid would start, not a note.
+    static let beatInkOpacity = 0.2
+    static let middleCInkOpacity = 0.45
+    /// "C#-1" is the longest a pitch reads.
+    static let pitchLabelWidth: CGFloat = 30
+    static let pitchLabelHeight: CGFloat = 12
+    /// What the map's row head leaves beside the pitch labels, for the track a shape is of.
+    static var shapeHeadWidth: CGFloat { gridOrigin - labelGap - pitchLabelWidth }
+    /// The bracket under a note shape saying which Pattern each stretch of it becomes.
+    static let bracketHeight: CGFloat = 14
+    static let bracketTickHeight: CGFloat = 5
+    /// "pattern 16 · 64 steps" at ``TypeScale/smallValue``, and the rule either side of it.
+    static let bracketLabelMinimumWidth: CGFloat = 150
+    /// A slot cell's picture of its own Pattern, inset clear of the corners and the length rule.
+    static let thumbnailInset: CGFloat = 3
+    static let thumbnailMarkHeight: CGFloat = 1.5
 
     /// Where a tick falls on the axis, and how wide a run of ticks draws. A run of no length
     /// scales nothing, so the whole axis is left empty rather than divided by zero.
@@ -399,12 +418,13 @@ enum AppLayout {
         return axisWidth * CGFloat(min(ticks, totalTicks)) / CGFloat(totalTicks)
     }
 
-    /// A mark's height in its lane, high pitch at the top, clamped into ``markPitchWindow``.
-    static func y(ofPitch pitch: Int) -> CGFloat {
-        let clamped = min(max(pitch, markPitchWindow.lowerBound), markPitchWindow.upperBound)
-        let position =
-            CGFloat(clamped - markPitchWindow.lowerBound) / CGFloat(markPitchWindow.count - 1)
-        return (laneHeight - markHeight) * (1 - position)
+    /// How many beats apart the lines fall: every beat, else every fourth, else every sixteenth --
+    /// the first that leaves ``beatLineMinimumSpacing`` between two. None where a beat has no width.
+    static func beatStride(beatWidth: CGFloat) -> Int {
+        guard beatWidth > 0 else { return 0 }
+        var stride = 1
+        while CGFloat(stride) * beatWidth < beatLineMinimumSpacing { stride *= 4 }
+        return stride
     }
 
     /// One segment of a limit meter, and the gap between two.

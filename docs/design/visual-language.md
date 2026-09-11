@@ -214,9 +214,15 @@ Three orthogonal channels, so no combination of states turns to mud:
 
 Chain membership lives on the **chain rail** beneath the row, never inside a cell.
 
-A slot cell **cannot show rhythm**. The project summary carries density, length and kind and
-nothing finer, and a cell 26 points wide could not draw 64 steps if it did. Do not add per-step
-plumbing to make a cell prettier — where rhythm belongs is the arrange lanes below.
+On the export map a slot cell **cannot show rhythm**. The project summary carries density, length
+and kind and nothing finer. Do not add per-step plumbing to make a cell prettier — where rhythm
+belongs is the arrange lanes below.
+
+The import side is the exception, because the plan it is read off holds every note it places. A
+held cell there **draws its own Pattern** in place of a figure: a thumbnail in the cell's ink,
+across the Pattern's own steps, on one pitch window for the whole run so the halves of a split
+meet at the same height. The length rule still says how long it runs. An empty cell keeps its em
+dash.
 
 ### The arrange lanes
 
@@ -231,7 +237,9 @@ axis and decides nothing about where a Pattern falls.
 |---|---|---|
 | **Position and width** | the geometry — a region starts at its slot's boundary and runs the length **its own track** plays | anything about export |
 | **Fill** | identity, and held versus empty — the track hue washed over the ground at the face's `laneWash`, `inert` where the Pattern renders no event | density |
-| **Marks** | rhythm — one bar per event, placed by tick and by pitch | a pitch a reader can name |
+| **Marks** | the notes — one bar per event, placed by the tick it is written at and by pitch | velocity |
+| **Beat lines** | the run's own clock, a beat apart | a step of any one Pattern |
+| **C3 line** | MIDI 60, where the lane's window reaches it | |
 | **The figure** | which Pattern the region is, SF Mono | |
 | **Boundary rules** | where one Pattern gives way to the next, drawn over the regions | |
 
@@ -239,12 +247,39 @@ axis and decides nothing about where a Pattern falls.
 looping shorter than its neighbours is the instrument working, and the gap it leaves is the whole
 reason these lanes exist — the same thing the `track-lengths-differ` finding says in prose.
 
-The marks are a **sketch, not a piano roll**: pitch maps through a fixed window (MIDI 36–96, `C1`
-to `C6` in the device's numerals) and clamps at its edges, for the reason density clamps rather
-than scales — a region means the same thing in every project. They are drawn in the block's own
-ink, not the track hue, so they stay legible on either face, and they are **dropped entirely**
-below a width where they would outnumber the points available. Nothing here is editable, and no
-mark is ever labelled with a note name.
+**The marks are where the file puts the notes, not where the grid does.** Swing and time shift are
+baked into the written ticks, so a Pattern stored as a clean sixteen steps can land a note a whole
+beat late — `project_5.KeyStepPro`'s third kick is written at tick 4321, not 3840. The beat lines
+are what make that visible: they run on the run's clock, not restarted per Pattern, and thin to
+every fourth beat, then every sixteenth, where a beat is narrower than 8 points.
+
+Pitch is **fitted to each lane**, never narrower than an octave, and the range is named under the
+track in the device's numerals — `C2–D2` — so a mark's height means what the words beside it say.
+A fixed window drew a track of three neighbouring pitches as one flat line. Marks are drawn in the
+block's own ink, not the track hue, so they stay legible on either face, and they are **dropped
+entirely** below a width where they would outnumber the points available. Nothing here is
+editable, and no mark is ever labelled with a note name.
+
+### The note shape
+
+What the import would lay down, drawn under the grid that counts it: one per device track the plan
+fills, **pitch up, steps across**, a region per Pattern and a bracket under each —
+`pattern 1 · 16 steps` — so a run needing three Patterns reads as three.
+
+It is the arrange lane's object seen from the other side, and draws the same way: the track's wash,
+ink marks, beat lines under them and the C3 line through them. Three things differ, each because
+the import has something the export does not.
+
+- **Steps, not ticks.** A note sits on the step the planner put it on, held for its gate. Beat
+  lines count from each Pattern's own first step, as the device counts them.
+- **The pitch labels stand beside it** where the map's drum badge would, naming the lowest pitch,
+  the highest and `C3`. `C3` is placed first, since it names the one line across the shape; a
+  label that would overprint one already placed is dropped and left to the range under the name.
+- **Every shape of a plan shares one step axis.** The longest run fills the map's width and a
+  shorter one is drawn shorter, for the reason a lane region is never stretched.
+
+A note is held inside its own Pattern: the device loops at the last step rather than sustaining
+into the next.
 
 **The wash is authored per face, not shared.** A hue washed at `0.18` over the Chroma's dark grey
 keeps nearly all its saturation — dark teal, olive — and over the standard unit's off-white the

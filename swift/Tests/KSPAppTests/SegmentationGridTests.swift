@@ -35,15 +35,51 @@ private func segmented(
         #expect(grid.rows.allSatisfy { $0.cells.count == AppLayout.columnCount })
     }
 
-    @Test func afilledSlotCountsItsStepsAndAnEmptyOneSaysNothing() {
+    @Test func afilledSlotDrawsItsPatternRatherThanACountAndAnEmptyOneSaysSo() {
         let grid = SegmentationGrid(
             SegmentationSummary(tracks: [segmented(1, source: 3, patterns: [(1, 48)])]))
 
         let row = grid.rows[0]
-        #expect(row.cells[0].label == "48")
+        #expect(row.cells[0].label == nil)
         #expect(!row.cells[0].isEmpty)
         #expect(row.cells[1].label == "—")
         #expect(row.cells[1].isEmpty)
+        #expect(row.cells[1].thumbnail.isEmpty)
+    }
+
+    /// One window for the whole run, so a pitch sits at one height in both halves of a split.
+    @Test func athumbnailDrawsEveryNoteInsideItsCellOnTheRunsOwnWindow() {
+        let segments = [
+            Segment(
+                pattern: 1, stepCount: 64, noteCount: 2,
+                notes: [
+                    SegmentNote(step: 1, pitch: 36), SegmentNote(step: 64, pitch: 72, length: 4),
+                ]
+            ),
+            Segment(
+                pattern: 2, stepCount: 16, firstStep: 65, noteCount: 1,
+                notes: [SegmentNote(step: 1, pitch: 72)]),
+        ]
+        let grid = SegmentationGrid(
+            SegmentationSummary(tracks: [
+                SegmentedTrack(deviceTrack: 1, noteCount: 3, segments: segments)
+            ]))
+
+        let cells = grid.rows[0].cells
+        let inset = AppLayout.thumbnailInset
+        #expect(cells[0].thumbnail.count == 2)
+        #expect(cells[0].thumbnail[0].x == inset)
+        #expect(cells[0].thumbnail[1].y < cells[0].thumbnail[0].y)
+        #expect(cells[1].thumbnail[0].y == cells[0].thumbnail[1].y)
+        let marks = cells[0].thumbnail + cells[1].thumbnail
+        #expect(
+            marks.allSatisfy { $0.x >= inset && $0.x + $0.width <= AppLayout.cellWidth - inset })
+        #expect(
+            marks.allSatisfy {
+                $0.y >= inset
+                    && $0.y + AppLayout.thumbnailMarkHeight
+                        <= AppLayout.cellHeight - inset - AppLayout.lengthRuleHeight
+            })
     }
 
     @Test func atrackTheImportWillNotFillReadsEmpty() {

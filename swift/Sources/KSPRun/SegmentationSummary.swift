@@ -68,7 +68,9 @@ public struct SegmentedTrack: Sendable, Hashable {
                     pattern: placement.pattern, stepCount: placement.stepCount, firstStep: step,
                     noteCount: placement.notes.count,
                     mostNotesOnAStep: mostNotesOnAStep(placement.notes),
-                    droppedNotes: droppedNotes[placement.pattern] ?? 0))
+                    droppedNotes: droppedNotes[placement.pattern] ?? 0,
+                    notes: placement.notes.map(SegmentNote.init),
+                    stepsPerBeat: placement.stepsPerBeat))
             step += placement.stepCount
         }
         self.init(
@@ -96,11 +98,15 @@ public struct Segment: Sendable, Hashable {
     public let mostNotesOnAStep: Int
     /// Never part of ``noteCount``: the plan holds only what fit, so this is what would be lost.
     public let droppedNotes: Int
+    /// What the pattern will hold, as the planner placed it, for a preview that draws it.
+    public let notes: [SegmentNote]
+    public let stepsPerBeat: Int
 
     public init(
         pattern: Int, stepCount: Int, firstStep: Int = 1, noteCount: Int = 0,
         mostNotesOnAStep: Int = 0,
-        droppedNotes: Int = 0
+        droppedNotes: Int = 0, notes: [SegmentNote] = [],
+        stepsPerBeat: Int = Constants.defaultStepsPerBeat
     ) {
         self.pattern = pattern
         self.stepCount = stepCount
@@ -108,9 +114,32 @@ public struct Segment: Sendable, Hashable {
         self.noteCount = noteCount
         self.mostNotesOnAStep = mostNotesOnAStep
         self.droppedNotes = droppedNotes
+        self.notes = notes
+        self.stepsPerBeat = stepsPerBeat
     }
 
     public var lastStep: Int { firstStep + stepCount - 1 }
+}
+
+/// One note of a pattern: the step it sits on, its pitch, and how many steps it holds.
+public struct SegmentNote: Sendable, Hashable {
+    /// Counting the pattern's own steps from 1, not the run's.
+    public let step: Int
+    public let pitch: Int
+    /// In steps, read off the gate ladder the device stores it on.
+    public let length: Double
+
+    public init(step: Int, pitch: Int, length: Double = Constants.defaultGateLength) {
+        self.step = step
+        self.pitch = pitch
+        self.length = length
+    }
+
+    init(_ note: PlacedNote) {
+        self.init(
+            step: note.step, pitch: note.pitch,
+            length: Constants.decodeGate(note.gate) ?? Constants.defaultGateLength)
+    }
 }
 
 /// A source track the import will read and then have nowhere to put, in whole or in the part of

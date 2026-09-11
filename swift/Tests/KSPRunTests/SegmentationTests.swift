@@ -205,6 +205,25 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(split.segments.reduce(0) { $0 + $1.noteCount } == split.noteCount)
     }
 
+    /// The note shape draws what the planner placed, so the notes are read off the plan rather
+    /// than placed a second time.
+    @Test func everySegmentCarriesTheNotesThePlannerPlaced() throws {
+        let (song, plan) = try m6()
+
+        let summary = SegmentationSummary(song: song, plan: plan)
+
+        for (track, planned) in zip(summary.tracks, plan.tracks) {
+            for (segment, placement) in zip(track.segments, planned.placements) {
+                #expect(segment.notes.map(\.step) == placement.notes.map(\.step))
+                #expect(segment.notes.map(\.pitch) == placement.notes.map(\.pitch))
+                #expect(
+                    segment.notes.map(\.length)
+                        == placement.notes.map { Constants.decodeGate($0.gate) ?? -1 })
+                #expect(segment.stepsPerBeat == placement.stepsPerBeat)
+            }
+        }
+    }
+
     @Test func themostNotesOnAStepIsTheMostNotesOnAnyOneOfThemNotAnAverage() throws {
         let chord = song([chords(source: 1, steps: 4, pitches: 3)])
 

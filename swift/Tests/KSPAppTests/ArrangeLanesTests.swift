@@ -142,6 +142,7 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
         #expect(drawn.width < AppLayout.marksMinimumWidth)
         #expect(!drawn.showsMarks)
         #expect(!drawn.showsLabel)
+        #expect(drawn.beatLines.isEmpty)
         // The block still carries the geometry, which is what the view is for.
         #expect(drawn.width > 0)
         // A repeated run plays one Pattern many times, so the number cannot be the identity.
@@ -150,15 +151,34 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
         #expect(Set(lanes.boundaries.map(\.slot)).count == lanes.boundaries.count)
     }
 
-    @Test func pitchIsClampedIntoTheWindowRatherThanScaledToTheFile() {
-        #expect(
-            AppLayout.y(ofPitch: 0) == AppLayout.y(ofPitch: AppLayout.markPitchWindow.lowerBound))
-        #expect(
-            AppLayout.y(ofPitch: 127) == AppLayout.y(ofPitch: AppLayout.markPitchWindow.upperBound))
-        #expect(AppLayout.y(ofPitch: AppLayout.markPitchWindow.upperBound) == 0)
-        #expect(
-            AppLayout.y(ofPitch: AppLayout.markPitchWindow.lowerBound)
-                == AppLayout.laneHeight - AppLayout.markHeight)
+    /// Fitted rather than clamped: three neighbouring pitches spread over the lane instead of
+    /// drawing one flat line, and the lane names the range it was fitted to.
+    @Test func aLaneFitsItsPitchWindowToWhatItPlays() {
+        let marks = [48, 49, 50].enumerated().map {
+            ArrangedMark(tick: $0.offset * 240, durationTicks: 120, pitch: $0.element)
+        }
+        let lanes = ArrangeLanes(arranged([1], regions: [1: [region(1, at: 0, marks: marks)]]))
+
+        let lane = lanes.lanes[0]
+        let ys = lane.regions[0].marks.map(\.y)
+        #expect(ys[0] > ys[1])
+        #expect(ys[1] > ys[2])
+        #expect(ys[0] - ys[2] > AppLayout.markHeight)
+        #expect(lane.range == "C2–D2")
+        #expect(lane.middleC == nil)
+        #expect(lanes.lanes[1].range == nil)
+        #expect(lanes.lanes[1].middleC == nil)
+    }
+
+    /// On the run's own clock, so a note the export moved off the grid is seen to sit off it --
+    /// `project_5.KeyStepPro`'s third kick lands at tick 4321, a beat past where its step says.
+    @Test func aRegionIsRuledABeatApartOnTheRunsClock() {
+        let lanes = ArrangeLanes(
+            arranged([1, 2], regions: [1: [region(1, at: 0), region(2, at: 1)]]))
+        let beat = AppLayout.axisWidth / 4
+
+        #expect(lanes.lanes[0].regions[0].beatLines == [beat])
+        #expect(lanes.lanes[0].regions[1].beatLines == [beat])
     }
 
     @Test func aProjectHoldingNothingDrawsNoAxisAtAll() {
