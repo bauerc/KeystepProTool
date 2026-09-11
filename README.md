@@ -1,4 +1,8 @@
 # KeystepProTool
+
+A frozen copy of the Python implementation, as of the `python-final` tag, is archived at
+[`bauerc/KeystepProTool-python`](https://github.com/bauerc/KeystepProTool-python).
+
 A tool that aims to take Keystep Pro project files and transform them into midi files and vice versa
 
 The `.KeyStepPro` format is decoded and hardware-validated — see
