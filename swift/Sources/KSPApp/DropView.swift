@@ -619,6 +619,7 @@ struct DropView: View {
         case .ready(let plan):
             VStack(alignment: .leading, spacing: 12) {
                 segmentationGrid(SegmentationGrid(plan.summary))
+                noteShapes(NoteShape.shapes(plan.summary))
                 limits(Limits(plan.summary))
                 findingList(
                     plan.rows(verbose: model.verbose), count: plan.allRows.count)
@@ -805,12 +806,101 @@ struct DropView: View {
         let fill = slotFill(
             track: track, notes: cell.noteCount, steps: cell.stepCount, isEmpty: cell.isEmpty)
         let ink = DeviceColor.ink(on: fill)
-        return Text(cell.label)
-            .font(TypeScale.smallValue)
-            .foregroundStyle(cell.isEmpty ? palette.mutedInk : ink)
-            .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
-            .background(slotBackground(fill: fill, ink: ink, steps: cell.stepCount))
-            .help(cell.detail)
+        return ZStack {
+            noteMarks(
+                cell.thumbnail, height: AppLayout.thumbnailMarkHeight,
+                colour: ink.opacity(AppLayout.markInkOpacity))
+            if let label = cell.label {
+                Text(label).font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
+            }
+        }
+        .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
+        .background(slotBackground(fill: fill, ink: ink, steps: cell.stepCount))
+        .help(cell.detail)
+    }
+
+    private func noteShapes(_ shapes: [NoteShape]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(shapes, id: \.track) { noteShape($0) }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The pitch labels stand where the map's drum badge does, so the shape starts on the map's
+    /// own origin and its steps line up under the columns they become.
+    private func noteShape(_ shape: NoteShape) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(shape.name).font(.caption).fontWeight(.medium).foregroundStyle(palette.ink)
+                if let range = shape.range {
+                    Text(range).font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
+                }
+            }
+            .frame(width: AppLayout.shapeHeadWidth, alignment: .leading)
+            .help(shape.detail)
+            ZStack(alignment: .topTrailing) {
+                ForEach(shape.labels, id: \.text) { label in
+                    Text(label.text)
+                        .font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
+                        .frame(height: AppLayout.pitchLabelHeight)
+                        .offset(y: label.y)
+                }
+            }
+            .frame(
+                width: AppLayout.pitchLabelWidth, height: AppLayout.laneHeight,
+                alignment: .topTrailing)
+            Color.clear.frame(width: AppLayout.labelGap, height: 1)
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack(alignment: .topLeading) {
+                    Rectangle().fill(palette.surface)
+                    ForEach(shape.regions, id: \.pattern) { region in
+                        noteBlock(
+                            track: shape.track, isEmpty: region.isEmpty, marks: region.marks,
+                            grid: region.grid, middleC: shape.middleC
+                        )
+                        .frame(width: region.width, height: AppLayout.laneHeight)
+                        .offset(x: region.x)
+                    }
+                    ForEach(shape.regions.dropFirst(), id: \.pattern) { region in
+                        Rectangle()
+                            .fill(palette.rule)
+                            .frame(width: AppLayout.boundaryWidth, height: AppLayout.laneHeight)
+                            .offset(x: region.x)
+                    }
+                }
+                .frame(
+                    width: AppLayout.axisWidth, height: AppLayout.laneHeight, alignment: .topLeading
+                )
+                .clipped()
+                ZStack(alignment: .topLeading) {
+                    ForEach(shape.regions, id: \.pattern) { bracket($0) }
+                }
+                .frame(
+                    width: AppLayout.axisWidth, height: AppLayout.bracketHeight,
+                    alignment: .topLeading)
+            }
+        }
+    }
+
+    /// Ticked at both ends, so two Patterns side by side cannot read as one.
+    private func bracket(_ region: NoteShape.Region) -> some View {
+        let tick = Rectangle().fill(palette.rule)
+            .frame(width: 1, height: AppLayout.bracketTickHeight)
+        return HStack(spacing: 4) {
+            Rectangle().fill(palette.rule).frame(height: 1)
+            if region.showsBracket {
+                Text(region.bracket)
+                    .font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
+                    .lineLimit(1).fixedSize()
+                Rectangle().fill(palette.rule).frame(height: 1)
+            }
+        }
+        .overlay(alignment: .leading) { tick }
+        .overlay(alignment: .trailing) { tick }
+        .padding(.horizontal, 1)
+        .frame(width: region.width, height: AppLayout.bracketHeight)
+        .offset(x: region.x)
+        .help(region.bracket)
     }
 
     /// Where the planner put each source track, for the pickers to show as their automatic answer.
@@ -1011,15 +1101,24 @@ struct DropView: View {
 
     /// The row head the map draws, so a lane and the row above it read as one track seen twice.
     private func lane(_ lane: ArrangeLanes.Lane, boundaries: [ArrangeLanes.Boundary]) -> some View {
-        HStack(spacing: 0) {
-            rowHead(
-                readout: lane.readout, name: lane.name, isDrum: lane.isDrum, dimmed: lane.isEmpty
-            )
+        HStack(alignment: .top, spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                rowHead(
+                    readout: lane.readout, name: lane.name, isDrum: lane.isDrum,
+                    dimmed: lane.isEmpty)
+                if let range = lane.range {
+                    Text(range)
+                        .font(TypeScale.smallValue).foregroundStyle(palette.mutedInk)
+                        .padding(.leading, AppLayout.wellWidth + AppLayout.labelGap)
+                }
+            }
             .help(lane.detail)
             Color.clear.frame(width: AppLayout.labelGap, height: 1)
             ZStack(alignment: .topLeading) {
                 Rectangle().fill(palette.surface)
-                ForEach(lane.regions, id: \.slot) { region($0, track: lane.track) }
+                ForEach(lane.regions, id: \.slot) {
+                    region($0, track: lane.track, middleC: lane.middleC)
+                }
                 // Over the regions: a boundary is where one Pattern gives way to the next, and a
                 // region drawn short of it would otherwise hide the line that says so.
                 ForEach(boundaries, id: \.slot) { boundary in
@@ -1036,23 +1135,13 @@ struct DropView: View {
 
     /// Fill is identity and held-or-empty; the marks are the rhythm. Density stays in the map's
     /// cells above, which is the one place a count per step is known.
-    private func region(_ region: ArrangeLanes.Region, track: Int) -> some View {
-        let hue = DeviceColor.track(track).over(palette.ground, alpha: palette.laneWash)
-        let fill = region.isEmpty ? palette.inert : hue
-        let ink = DeviceColor.ink(on: fill)
-        return ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: AppLayout.regionRadius).fill(fill)
-            if region.showsMarks {
-                ForEach(region.marks.indices, id: \.self) { index in
-                    // Drawn in the ink rather than the hue: the block already says which track
-                    // this is, and a mark has to stay legible on either face. Its width is taken
-                    // as given -- widening one here would undo the hold at the region's edge.
-                    Rectangle()
-                        .fill(ink.opacity(AppLayout.markInkOpacity))
-                        .frame(width: region.marks[index].width, height: AppLayout.markHeight)
-                        .offset(x: region.marks[index].x, y: region.marks[index].y)
-                }
-            }
+    private func region(_ region: ArrangeLanes.Region, track: Int, middleC: CGFloat?) -> some View {
+        let ink = DeviceColor.ink(on: blockFill(track: track, isEmpty: region.isEmpty))
+        return noteBlock(
+            track: track, isEmpty: region.isEmpty, marks: region.showsMarks ? region.marks : [],
+            grid: region.grid, middleC: region.showsMarks ? middleC : nil
+        )
+        .overlay(alignment: .topLeading) {
             if region.showsLabel {
                 Text(region.label)
                     .font(TypeScale.smallValue)
@@ -1064,6 +1153,62 @@ struct DropView: View {
         .clipped()
         .offset(x: region.x)
         .help(region.detail)
+    }
+
+    /// One stretch of either shape. Everything over the wash is in the block's ink rather than
+    /// the hue: the block already says which track this is, and a mark has to read on either face.
+    private func noteBlock(
+        track: Int, isEmpty: Bool, marks: [NoteMark], grid: [GridLine], middleC: CGFloat?
+    ) -> some View {
+        let fill = blockFill(track: track, isEmpty: isEmpty)
+        let ink = DeviceColor.ink(on: fill)
+        return ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: AppLayout.regionRadius).fill(fill)
+            drawGrid(grid, ink: ink)
+            if let middleC {
+                Rectangle()
+                    .fill(ink.opacity(AppLayout.middleCInkOpacity))
+                    .frame(height: 1)
+                    .offset(y: middleC - 0.5)
+            }
+            noteMarks(
+                marks, height: AppLayout.markHeight, colour: ink.opacity(AppLayout.markInkOpacity))
+        }
+    }
+
+    private func blockFill(track: Int, isEmpty: Bool) -> Color {
+        isEmpty
+            ? palette.inert : DeviceColor.track(track).over(palette.ground, alpha: palette.laneWash)
+    }
+
+    /// Drawn rather than laid out: a Pattern holds up to 192 notes, and a grid of sixteen cells
+    /// would otherwise be thousands of views. A mark's width is taken as given -- widening one
+    /// here would undo the hold at its Pattern's edge.
+    private func noteMarks(_ marks: [NoteMark], height: CGFloat, colour: Color) -> some View {
+        Canvas { context, _ in
+            for mark in marks {
+                context.fill(
+                    Path(CGRect(x: mark.x, y: mark.y, width: mark.width, height: height)),
+                    with: .color(colour))
+            }
+        }
+    }
+
+    /// Two weights, so a run reads in groups at a glance: the accent is what the eye counts by,
+    /// and the faint lines between are what an off-grid note is seen against.
+    private func drawGrid(_ lines: [GridLine], ink: Color) -> some View {
+        Canvas { context, size in
+            for line in lines {
+                let width = line.accented ? AppLayout.gridAccentWidth : 1
+                let opacity =
+                    line.accented ? AppLayout.gridAccentInkOpacity : AppLayout.gridInkOpacity
+                context.fill(
+                    Path(
+                        CGRect(
+                            x: line.x + (1 - width) / 2, y: 0, width: width, height: size.height)),
+                    with: .color(ink.opacity(opacity)))
+            }
+        }
     }
 
     @ViewBuilder

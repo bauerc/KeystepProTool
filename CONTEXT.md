@@ -118,6 +118,11 @@ _Avoid_: grid cell, tile, square
 The bar drawn beneath a Pattern map row showing the span its Chain covers.
 _Avoid_: chain bar, chain line
 
+**Note shape**:
+One device track's Notes as an import would lay them down, pitch against step, a region per
+Pattern. Named after what it shows, the Notes' shape, rather than the shape of the drawing.
+_Avoid_: piano roll, roll, preview
+
 **Limit meter**:
 One gauge of how close a conversion sits to one of the device's hard limits.
 _Avoid_: gauge, limit bar
