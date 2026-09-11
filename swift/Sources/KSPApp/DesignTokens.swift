@@ -387,10 +387,15 @@ enum AppLayout {
     /// The narrowest range a shape is drawn across, so one held pitch sits mid-lane and a fifth
     /// does not fill it the way two octaves would.
     static let pitchWindowMinimumSpan = 12
-    /// Closer than this, beat lines are a texture rather than a grid.
-    static let beatLineMinimumSpacing: CGFloat = 8
-    /// Fainter than a mark: a beat line is where a note on the grid would start, not a note.
-    static let beatInkOpacity = 0.2
+    /// Closer than this, grid lines are a texture rather than a grid.
+    static let gridLineMinimumSpacing: CGFloat = 8
+    /// Fainter than a mark: a grid line is where a note on the grid would start, not a note. The
+    /// accent opening each group is what the eye counts a run by, so it is the heavier of the two.
+    static let gridInkOpacity = 0.14
+    static let gridAccentInkOpacity = 0.5
+    static let gridAccentWidth: CGFloat = 1.5
+    /// The export writes 4/4, so its bar is four beats.
+    static let beatsPerBar = 4
     static let middleCInkOpacity = 0.45
     /// "C#-1" is the longest a pitch reads.
     static let pitchLabelWidth: CGFloat = 30
@@ -418,12 +423,14 @@ enum AppLayout {
         return axisWidth * CGFloat(min(ticks, totalTicks)) / CGFloat(totalTicks)
     }
 
-    /// How many beats apart the lines fall: every beat, else every fourth, else every sixteenth --
-    /// the first that leaves ``beatLineMinimumSpacing`` between two. None where a beat has no width.
-    static func beatStride(beatWidth: CGFloat) -> Int {
-        guard beatWidth > 0 else { return 0 }
+    /// How many units apart the lines fall: every unit, else every `group` of them, else every
+    /// group of groups -- the first that leaves ``gridLineMinimumSpacing``. None where a unit has
+    /// no width.
+    static func gridStride(unitWidth: CGFloat, group: Int) -> Int {
+        guard unitWidth > 0 else { return 0 }
+        let factor = max(group, 2)
         var stride = 1
-        while CGFloat(stride) * beatWidth < beatLineMinimumSpacing { stride *= 4 }
+        while CGFloat(stride) * unitWidth < gridLineMinimumSpacing { stride *= factor }
         return stride
     }
 

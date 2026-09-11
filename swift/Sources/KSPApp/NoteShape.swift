@@ -9,6 +9,26 @@ struct NoteMark: Equatable {
     let y: CGFloat
 }
 
+/// One line of a shape's grid, in its region's own points. An accented line opens a group: a beat
+/// of an import's steps, a bar of an export's beats.
+struct GridLine: Equatable {
+    let x: CGFloat
+    let accented: Bool
+}
+
+/// A line every `stride` units after `start` and short of `end`, accented where it lands on a
+/// multiple of `stride * group`. Counted from unit 0 rather than from `start`, so a region inside
+/// a run keeps the run's grid.
+func gridLines(
+    after start: Int, before end: Int, stride: Int, group: Int, x: (Int) -> CGFloat
+) -> [GridLine] {
+    guard stride > 0 else { return [] }
+    let accent = stride * max(group, 1)
+    return Swift.stride(from: (start / stride + 1) * stride, to: end, by: stride).map {
+        GridLine(x: x($0), accented: $0 % accent == 0)
+    }
+}
+
 /// The pitches a shape is drawn across: fitted to what it holds, because its range is named beside
 /// it, rather than clamped into one window for every file.
 struct PitchWindow: Equatable {
@@ -72,8 +92,9 @@ struct NoteShape: Equatable {
         let width: CGFloat
         let isEmpty: Bool
         let marks: [NoteMark]
-        /// Counted from the Pattern's own first step, as the device counts its steps.
-        let beatLines: [CGFloat]
+        /// Every step, with every beat accented, counted from the Pattern's own first step as the
+        /// device counts them.
+        let grid: [GridLine]
         let bracket: String
         /// Narrower than its words, a bracket is drawn bare and says them on hover.
         let showsBracket: Bool
@@ -129,16 +150,17 @@ struct NoteShape: Equatable {
                     $0, step: step, width: width, height: AppLayout.laneHeight,
                     markHeight: AppLayout.markHeight, window: window)
             },
-            beatLines: ruled(segment, step: step),
+            grid: ruling(segment, step: step),
             bracket: "pattern \(segment.pattern) · \(counted(segment.stepCount, "step"))",
             showsBracket: width >= AppLayout.bracketLabelMinimumWidth)
     }
 
-    private static func ruled(_ segment: Segment, step: CGFloat) -> [CGFloat] {
-        let apart = AppLayout.beatStride(beatWidth: CGFloat(segment.stepsPerBeat) * step)
-        let every = apart * segment.stepsPerBeat
-        guard every > 0 else { return [] }
-        return stride(from: every, to: segment.stepCount, by: every).map { CGFloat($0) * step }
+    private static func ruling(_ segment: Segment, step: CGFloat) -> [GridLine] {
+        let group = segment.stepsPerBeat
+        return gridLines(
+            after: 0, before: segment.stepCount,
+            stride: AppLayout.gridStride(unitWidth: step, group: group), group: group
+        ) { CGFloat($0) * step }
     }
 
     /// C3 first, because it names the one line across the shape, then the two ends of the range. A

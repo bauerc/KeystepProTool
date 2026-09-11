@@ -70,13 +70,14 @@ private func run(_ patterns: [(steps: Int, notes: [SegmentNote])], track: Int = 
         #expect(pitchRange([]) == nil)
     }
 
-    @Test func beatLinesThinOutByFoursRatherThanCrowd() {
-        let spacing = AppLayout.beatLineMinimumSpacing
+    @Test func gridLinesThinOutByTheirOwnGroupRatherThanCrowd() {
+        let spacing = AppLayout.gridLineMinimumSpacing
 
-        #expect(AppLayout.beatStride(beatWidth: spacing) == 1)
-        #expect(AppLayout.beatStride(beatWidth: spacing / 2) == 4)
-        #expect(AppLayout.beatStride(beatWidth: spacing / 10) == 16)
-        #expect(AppLayout.beatStride(beatWidth: 0) == 0)
+        #expect(AppLayout.gridStride(unitWidth: spacing, group: 4) == 1)
+        #expect(AppLayout.gridStride(unitWidth: spacing / 2, group: 4) == 4)
+        #expect(AppLayout.gridStride(unitWidth: spacing / 10, group: 4) == 16)
+        #expect(AppLayout.gridStride(unitWidth: spacing / 2, group: 3) == 3)
+        #expect(AppLayout.gridStride(unitWidth: 0, group: 4) == 0)
     }
 }
 
@@ -96,12 +97,16 @@ private func run(_ patterns: [(steps: Int, notes: [SegmentNote])], track: Int = 
         #expect(shape.range == "C2–C5")
     }
 
-    /// The pattern's own first step is where the region starts, so the first line is the next beat.
-    @Test func aBeatLineFallsEveryFourStepsAfterThePatternsStart() {
+    /// Sixteen steps read as four groups of four: a line on every step after the Pattern's own
+    /// first, and the ones opening steps 5, 9 and 13 accented.
+    @Test func everyStepIsRuledAndEveryBeatAccented() {
         let shape = NoteShape(run([(16, [note(1, 60)])]), stepsAcross: 16)
         let step = AppLayout.axisWidth / 16
 
-        #expect(shape.regions[0].beatLines == [4 * step, 8 * step, 12 * step])
+        let grid = shape.regions[0].grid
+        let accents = grid.filter { $0.accented }.map(\.x)
+        #expect(grid.map(\.x) == (1..<16).map { CGFloat($0) * step })
+        #expect(accents == [4 * step, 8 * step, 12 * step])
     }
 
     /// `m6-test-file.mid`'s 127-step track: two Patterns, each counting its beats and its notes
@@ -114,7 +119,7 @@ private func run(_ patterns: [(steps: Int, notes: [SegmentNote])], track: Int = 
         #expect(shape.regions.map(\.pattern) == [1, 2])
         #expect(shape.regions[1].x == 64 * step)
         #expect(shape.regions[1].marks[0].x == 0)
-        #expect(shape.regions[1].beatLines.first == 4 * step)
+        #expect(shape.regions[1].grid.first?.x == 4 * step)
         #expect(
             shape.regions.map(\.bracket) == ["pattern 1 · 64 steps", "pattern 2 · 63 steps"])
         #expect(shape.regions.allSatisfy { $0.showsBracket })
@@ -151,16 +156,15 @@ private func run(_ patterns: [(steps: Int, notes: [SegmentNote])], track: Int = 
         #expect(shape.regions[0].bracket == "pattern 1 · 16 steps")
     }
 
-    @Test func aRunTooLongToRuleEveryBeatIsRuledEveryFourth() {
+    /// Both weights step out by fours where a step is too narrow to rule: here every fourth beat,
+    /// and a 64-step Pattern holds no accent of its own at that spacing.
+    @Test func aRunTooLongToRuleEveryStepThinsOutByFours() {
         let shape = NoteShape(run([(64, [])]), stepsAcross: 1024)
         let step = AppLayout.axisWidth / 1024
 
-        let beats = shape.regions[0].beatLines
-        #expect(beats.first == 16 * step)
-        #expect(
-            zip(beats, beats.dropFirst()).allSatisfy {
-                $1 - $0 >= AppLayout.beatLineMinimumSpacing
-            })
+        let grid = shape.regions[0].grid
+        #expect(grid.map(\.x) == [16 * step, 32 * step, 48 * step])
+        #expect(grid.allSatisfy { !$0.accented })
     }
 
     /// C3 names the one line across the shape, so it is placed first; C#3 a semitone above it

@@ -856,7 +856,7 @@ struct DropView: View {
                     ForEach(shape.regions, id: \.pattern) { region in
                         noteBlock(
                             track: shape.track, isEmpty: region.isEmpty, marks: region.marks,
-                            beats: region.beatLines, middleC: shape.middleC
+                            grid: region.grid, middleC: shape.middleC
                         )
                         .frame(width: region.width, height: AppLayout.laneHeight)
                         .offset(x: region.x)
@@ -1139,7 +1139,7 @@ struct DropView: View {
         let ink = DeviceColor.ink(on: blockFill(track: track, isEmpty: region.isEmpty))
         return noteBlock(
             track: track, isEmpty: region.isEmpty, marks: region.showsMarks ? region.marks : [],
-            beats: region.beatLines, middleC: region.showsMarks ? middleC : nil
+            grid: region.grid, middleC: region.showsMarks ? middleC : nil
         )
         .overlay(alignment: .topLeading) {
             if region.showsLabel {
@@ -1158,13 +1158,13 @@ struct DropView: View {
     /// One stretch of either shape. Everything over the wash is in the block's ink rather than
     /// the hue: the block already says which track this is, and a mark has to read on either face.
     private func noteBlock(
-        track: Int, isEmpty: Bool, marks: [NoteMark], beats: [CGFloat], middleC: CGFloat?
+        track: Int, isEmpty: Bool, marks: [NoteMark], grid: [GridLine], middleC: CGFloat?
     ) -> some View {
         let fill = blockFill(track: track, isEmpty: isEmpty)
         let ink = DeviceColor.ink(on: fill)
         return ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: AppLayout.regionRadius).fill(fill)
-            beatLines(beats, colour: ink.opacity(AppLayout.beatInkOpacity))
+            drawGrid(grid, ink: ink)
             if let middleC {
                 Rectangle()
                     .fill(ink.opacity(AppLayout.middleCInkOpacity))
@@ -1194,11 +1194,19 @@ struct DropView: View {
         }
     }
 
-    private func beatLines(_ xs: [CGFloat], colour: Color) -> some View {
+    /// Two weights, so a run reads in groups at a glance: the accent is what the eye counts by,
+    /// and the faint lines between are what an off-grid note is seen against.
+    private func drawGrid(_ lines: [GridLine], ink: Color) -> some View {
         Canvas { context, size in
-            for x in xs {
+            for line in lines {
+                let width = line.accented ? AppLayout.gridAccentWidth : 1
+                let opacity =
+                    line.accented ? AppLayout.gridAccentInkOpacity : AppLayout.gridInkOpacity
                 context.fill(
-                    Path(CGRect(x: x, y: 0, width: 1, height: size.height)), with: .color(colour))
+                    Path(
+                        CGRect(
+                            x: line.x + (1 - width) / 2, y: 0, width: width, height: size.height)),
+                    with: .color(ink.opacity(opacity)))
             }
         }
     }

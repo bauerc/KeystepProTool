@@ -142,7 +142,7 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
         #expect(drawn.width < AppLayout.marksMinimumWidth)
         #expect(!drawn.showsMarks)
         #expect(!drawn.showsLabel)
-        #expect(drawn.beatLines.isEmpty)
+        #expect(drawn.grid.isEmpty)
         // The block still carries the geometry, which is what the view is for.
         #expect(drawn.width > 0)
         // A repeated run plays one Pattern many times, so the number cannot be the identity.
@@ -171,14 +171,33 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
     }
 
     /// On the run's own clock, so a note the export moved off the grid is seen to sit off it --
-    /// `project_5.KeyStepPro`'s third kick lands at tick 4321, a beat past where its step says.
+    /// `project_5.KeyStepPro`'s third kick lands at tick 4321, a beat past the bar it opens.
     @Test func aRegionIsRuledABeatApartOnTheRunsClock() {
         let lanes = ArrangeLanes(
             arranged([1, 2], regions: [1: [region(1, at: 0), region(2, at: 1)]]))
         let beat = AppLayout.axisWidth / 4
 
-        #expect(lanes.lanes[0].regions[0].beatLines == [beat])
-        #expect(lanes.lanes[0].regions[1].beatLines == [beat])
+        #expect(lanes.lanes[0].regions[0].grid == [GridLine(x: beat, accented: false)])
+        #expect(lanes.lanes[0].regions[1].grid == [GridLine(x: beat, accented: false)])
+    }
+
+    /// Two bars in one region: the line opening the second -- the fifth beat -- is the accent, so
+    /// a run reads in bars at a glance.
+    @Test func theLineOpeningEachBarIsAccented() {
+        let bar = AppLayout.beatsPerBar * 480
+        let held = ArrangedRegion(
+            patternNumber: 1, startTick: 0, spanTicks: 2 * bar, lengthTicks: 2 * bar, noteCount: 4)
+        let summary = ArrangementSummary(
+            lengthTicks: 2 * bar, ticksPerBeat: 480,
+            slots: [ArrangedSlot(patternNumber: 1, startTick: 0, lengthTicks: 2 * bar)],
+            tracks: (1...Constants.trackItemIDs.count).map {
+                ArrangedLane(trackNumber: $0, regions: $0 == 1 ? [held] : [])
+            })
+
+        let grid = ArrangeLanes(summary).lanes[0].regions[0].grid
+        let beat = AppLayout.axisWidth / 8
+        #expect(grid.map(\.x) == (1..<8).map { CGFloat($0) * beat })
+        #expect(grid.map(\.accented) == [false, false, false, true, false, false, false])
     }
 
     @Test func aProjectHoldingNothingDrawsNoAxisAtAll() {

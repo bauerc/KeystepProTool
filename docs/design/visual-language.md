@@ -238,7 +238,7 @@ axis and decides nothing about where a Pattern falls.
 | **Position and width** | the geometry — a region starts at its slot's boundary and runs the length **its own track** plays | anything about export |
 | **Fill** | identity, and held versus empty — the track hue washed over the ground at the face's `laneWash`, `inert` where the Pattern renders no event | density |
 | **Marks** | the notes — one bar per event, placed by the tick it is written at and by pitch | velocity |
-| **Beat lines** | the run's own clock, a beat apart | a step of any one Pattern |
+| **Grid lines** | the run's own clock: a faint line every beat, an accented one every bar | a step of any one Pattern |
 | **C3 line** | MIDI 60, where the lane's window reaches it | |
 | **The figure** | which Pattern the region is, SF Mono | |
 | **Boundary rules** | where one Pattern gives way to the next, drawn over the regions | |
@@ -249,9 +249,12 @@ reason these lanes exist — the same thing the `track-lengths-differ` finding s
 
 **The marks are where the file puts the notes, not where the grid does.** Swing and time shift are
 baked into the written ticks, so a Pattern stored as a clean sixteen steps can land a note a whole
-beat late — `project_5.KeyStepPro`'s third kick is written at tick 4321, not 3840. The beat lines
-are what make that visible: they run on the run's clock, not restarted per Pattern, and thin to
-every fourth beat, then every sixteenth, where a beat is narrower than 8 points.
+beat late — `project_5.KeyStepPro`'s third kick is written at tick 4321, not 3840. The grid is
+what makes that visible, and it has **two weights**: a faint line every beat and an accented one
+every bar — four beats, the 4/4 the export writes — so sixteen beats read as four groups at a
+glance and a kick a beat late sits plainly past the bar line it belongs on. It runs on the run's
+clock, not restarted per Pattern, and where lines would crowd closer than 8 points both weights
+step out by fours.
 
 Pitch is **fitted to each lane**, never narrower than an octave, and the range is named under the
 track in the device's numerals — `C2–D2` — so a mark's height means what the words beside it say.
@@ -267,11 +270,13 @@ fills, **pitch up, steps across**, a region per Pattern and a bracket under each
 `pattern 1 · 16 steps` — so a run needing three Patterns reads as three.
 
 It is the arrange lane's object seen from the other side, and draws the same way: the track's wash,
-ink marks, beat lines under them and the C3 line through them. Three things differ, each because
+ink marks, the two-weight grid under them and the C3 line through them. Three things differ, each because
 the import has something the export does not.
 
-- **Steps, not ticks.** A note sits on the step the planner put it on, held for its gate. Beat
-  lines count from each Pattern's own first step, as the device counts them.
+- **Steps, not ticks.** A note sits on the step the planner put it on, held for its gate. The
+  grid rules every step and accents every beat, so a sixteen-step Pattern reads as four groups of
+  four — steps 5, 9 and 13 open them — counted from each Pattern's own first step, as the device
+  counts them.
 - **The pitch labels stand beside it** where the map's drum badge would, naming the lowest pitch,
   the highest and `C3`. `C3` is placed first, since it names the one line across the shape; a
   label that would overprint one already placed is dropped and left to the range under the name.

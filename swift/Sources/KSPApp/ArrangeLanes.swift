@@ -21,8 +21,9 @@ struct ArrangeLanes: Equatable {
         let showsMarks: Bool
         let marks: [NoteMark]
         /// On the run's own clock rather than restarted per Pattern, so a note the export moved
-        /// off the grid -- by swing or by time shift -- is seen to sit off it.
-        let beatLines: [CGFloat]
+        /// off the grid -- by swing or by time shift -- is seen to sit off it. Every beat, with
+        /// every bar accented.
+        let grid: [GridLine]
         let detail: String
 
         init(
@@ -40,8 +41,9 @@ struct ArrangeLanes: Equatable {
             self.showsLabel = width >= AppLayout.regionLabelMinimumWidth
             self.showsMarks = showsMarks
             self.marks = Self.marks(region, total: total, width: width, window: window)
-            self.beatLines =
-                showsMarks ? Self.ruled(region, total: total, every: beatStride * ticksPerBeat) : []
+            self.grid =
+                showsMarks
+                ? Self.ruling(region, total: total, every: beatStride * ticksPerBeat) : []
             self.detail = Self.detail(region, ticksPerBeat: ticksPerBeat)
         }
 
@@ -64,13 +66,14 @@ struct ArrangeLanes: Equatable {
         }
 
         /// The region's own start is a boundary, drawn already, so the first line is the next one.
-        private static func ruled(_ region: ArrangedRegion, total: Int, every: Int) -> [CGFloat] {
-            guard every > 0 else { return [] }
+        private static func ruling(_ region: ArrangedRegion, total: Int, every: Int)
+            -> [GridLine]
+        {
             let origin = AppLayout.x(ofTick: region.startTick, in: total)
-            return stride(
-                from: (region.startTick / every + 1) * every,
-                to: region.startTick + region.lengthTicks, by: every
-            ).map { AppLayout.x(ofTick: $0, in: total) - origin }
+            return gridLines(
+                after: region.startTick, before: region.startTick + region.lengthTicks,
+                stride: every, group: AppLayout.beatsPerBar
+            ) { AppLayout.x(ofTick: $0, in: total) - origin }
         }
 
         private static func detail(_ region: ArrangedRegion, ticksPerBeat: Int) -> String {
@@ -156,8 +159,9 @@ struct ArrangeLanes: Equatable {
                 slot: $0.offset, pattern: $0.element.patternNumber,
                 x: AppLayout.x(ofTick: $0.element.startTick, in: total))
         }
-        let beatStride = AppLayout.beatStride(
-            beatWidth: AppLayout.width(ofTicks: summary.ticksPerBeat, in: total))
+        let beatStride = AppLayout.gridStride(
+            unitWidth: AppLayout.width(ofTicks: summary.ticksPerBeat, in: total),
+            group: AppLayout.beatsPerBar)
         self.lanes = summary.tracks.map {
             Lane($0, total: total, ticksPerBeat: summary.ticksPerBeat, beatStride: beatStride)
         }
