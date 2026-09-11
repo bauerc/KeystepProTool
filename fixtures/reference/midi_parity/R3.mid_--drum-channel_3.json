@@ -2,7 +2,7 @@
  "label": "R3.mid --drum-channel 3",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R3.mid"
+  "project_files/R3.mid"
  ],
  "flags": [
   "--drum-channel",

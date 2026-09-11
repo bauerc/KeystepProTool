@@ -2,7 +2,7 @@
  "label": "R2.mid --no-drums --drum-track 1",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R2.mid"
+  "project_files/R2.mid"
  ],
  "flags": [
   "--no-drums",

@@ -2,7 +2,7 @@
  "label": "R5.mid --midi-tracks bad",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R5.mid"
+  "project_files/R5.mid"
  ],
  "flags": [
   "--midi-tracks",

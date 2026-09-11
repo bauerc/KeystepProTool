@@ -2,7 +2,7 @@
  "label": "R1.mid --midi-tracks 1,2 --route 3:1",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R1.mid"
+  "project_files/R1.mid"
  ],
  "flags": [
   "--midi-tracks",

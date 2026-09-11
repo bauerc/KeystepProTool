@@ -8,7 +8,7 @@ import Testing
         #expect(Refusal.recorded.count == 175)
     }
 
-    @Test(arguments: Refusal.present) func refusal(_ reference: Refusal) throws {
+    @Test(arguments: Refusal.recorded) func refusal(_ reference: Refusal) throws {
         let directory = FileManager.default.temporaryDirectory.appending(
             path: "ksp-reference-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -56,13 +56,6 @@ struct Refusal: Decodable, Sendable, CustomTestStringConvertible {
         }
         .filter { $0.exit == 2 }
     }()
-
-    /// A gitignored capture that is absent drops out, as it did from the gate.
-    static let present = recorded.filter { reference in
-        reference.inputs.allSatisfy {
-            FileManager.default.fileExists(atPath: RepoData.root.appending(path: $0).path)
-        }
-    }
 
     var testDescription: String { label }
 }

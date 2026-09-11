@@ -2,7 +2,7 @@
  "label": "R3.mid --flat-velocity 64",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R3.mid"
+  "project_files/R3.mid"
  ],
  "flags": [
   "--flat-velocity",

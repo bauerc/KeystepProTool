@@ -2,7 +2,7 @@
  "label": "R5.mid --drum-channel 1 --drum-track 1",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R5.mid"
+  "project_files/R5.mid"
  ],
  "flags": [
   "--drum-channel",

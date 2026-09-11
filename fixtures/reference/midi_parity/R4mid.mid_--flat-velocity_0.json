@@ -2,7 +2,7 @@
  "label": "R4mid.mid --flat-velocity 0",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R4mid.mid"
+  "project_files/R4mid.mid"
  ],
  "flags": [
   "--flat-velocity",

@@ -2,7 +2,7 @@
  "label": "R4mid.mid --drum-channel 3 --no-drums",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R4mid.mid"
+  "project_files/R4mid.mid"
  ],
  "flags": [
   "--drum-channel",

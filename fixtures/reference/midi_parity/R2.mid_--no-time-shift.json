@@ -2,7 +2,7 @@
  "label": "R2.mid --no-time-shift",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R2.mid"
+  "project_files/R2.mid"
  ],
  "flags": [
   "--no-time-shift"

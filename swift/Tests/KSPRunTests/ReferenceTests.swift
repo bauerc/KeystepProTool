@@ -10,6 +10,7 @@ import Testing
         #expect(DumpCase.all.count == 12)
         #expect(WriterCase.all.count == 6)
         #expect(MidiCase.all.count == 431)
+        #expect(MidiCase.throughTheRunners.count == 256)
         #expect(PullCase.all.count == 2)
     }
 

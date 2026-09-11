@@ -47,9 +47,6 @@ hand.** One command rewrites the whole directory:
 uv run python tools/gen_reference.py
 ```
 
-It refuses to run without the gitignored `analysis/captures/*.mid`, whose cases would otherwise
-drop out of the references.
-
 | Path | What it pins | Held by |
 |---|---|---|
 | `port_parity/<project>.txt`, `.json` | `ksp-dump`'s stdout for each sample, as a tree and as `--json`: 12 | `ReferenceTests.dump` |
@@ -63,9 +60,6 @@ leading program name reads `<prog>:`, so renaming the CLI changes no reference. 
 as `tools/midi_events.py`'s lines, because mido writes running status and `swift-midi-file` does
 not. A `.KeyStepPro` is stored as its SHA-256, or as `same_as` a tracked file it equals byte for
 byte.
-
-238 of the `midi_parity` cases convert the gitignored captures. Where those are absent, as in CI
-and a fresh worktree, their tests drop out, just as the gate's cases did.
 
 ## Provenance, and why it matters
 

@@ -2,7 +2,7 @@
  "label": "R4.mid --no-time-shift",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R4.mid"
+  "project_files/R4.mid"
  ],
  "flags": [
   "--no-time-shift"

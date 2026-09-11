@@ -2,7 +2,7 @@
  "label": "R4-63.mid --drum-channel 1",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R4-63.mid"
+  "project_files/R4-63.mid"
  ],
  "flags": [
   "--drum-channel",

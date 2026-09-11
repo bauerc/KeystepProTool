@@ -2,7 +2,7 @@
  "label": "R1.mid --flat-velocity past Int",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R1.mid"
+  "project_files/R1.mid"
  ],
  "flags": [
   "--flat-velocity",

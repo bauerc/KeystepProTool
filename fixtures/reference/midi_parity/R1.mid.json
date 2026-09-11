@@ -2,7 +2,7 @@
  "label": "R1.mid",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R1.mid"
+  "project_files/R1.mid"
  ],
  "flags": [],
  "exit": 0,

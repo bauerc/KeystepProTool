@@ -2,7 +2,7 @@
  "label": "R4mid.mid --drum-track 1",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R4mid.mid"
+  "project_files/R4mid.mid"
  ],
  "flags": [
   "--drum-track",

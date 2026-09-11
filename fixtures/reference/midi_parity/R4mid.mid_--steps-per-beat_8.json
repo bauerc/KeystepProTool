@@ -2,7 +2,7 @@
  "label": "R4mid.mid --steps-per-beat 8",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R4mid.mid"
+  "project_files/R4mid.mid"
  ],
  "flags": [
   "--steps-per-beat",

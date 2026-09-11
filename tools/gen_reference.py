@@ -144,7 +144,7 @@ def midi_cases() -> Iterator[Case]:
             yield Case("split", f"{name} {flags}", (project,), tuple(flags.split()))
     for label, flags in EXPORT_REFUSALS:
         yield Case("export", label, ("project_files/project_9.KeyStepPro",), tuple(flags.split()))
-    for clip in samples("project_files/*.mid") + samples("analysis/captures/*.mid"):
+    for clip in samples("project_files/*.mid"):
         name = Path(clip).name
         for entry in IMPORT_FLAGS:
             suffix, flags = entry if isinstance(entry, tuple) else (entry, entry)
@@ -304,13 +304,6 @@ def midi_parity(store: Store, sandbox: Sandbox) -> int:
 
 
 def main() -> int:
-    if not samples("analysis/captures/*.mid"):
-        print(
-            "gen_reference: analysis/captures/*.mid is gitignored and absent here, so its cases "
-            "would drop out of the references; run from a checkout that holds the captures",
-            file=sys.stderr,
-        )
-        return 1
     with tempfile.TemporaryDirectory() as temporary:
         sandbox = Sandbox(Path(temporary))
         os.environ["HOME"] = temporary

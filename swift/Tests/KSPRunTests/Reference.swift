@@ -83,16 +83,10 @@ struct MidiCase: Decodable, Sendable, CustomTestStringConvertible {
     static let all: [MidiCase] = Reference.records("midi_parity")
 
     /// A usage refusal is argument parsing, which only the executable shows, so the refusals
-    /// run in `KSPSwiftCLITests`. A gitignored capture that is absent drops out, as in the gate.
-    static let throughTheRunners = all.filter { $0.exit != 2 && $0.inputsArePresent }
+    /// run in `KSPSwiftCLITests`.
+    static let throughTheRunners = all.filter { $0.exit != 2 }
 
     var testDescription: String { label }
-
-    var inputsArePresent: Bool {
-        inputs.allSatisfy {
-            FileManager.default.fileExists(atPath: RepoData.root.appending(path: $0).path)
-        }
-    }
 
     var prog: String { direction == "import" ? ConvertRunner.prog : ExportRunner.prog }
 

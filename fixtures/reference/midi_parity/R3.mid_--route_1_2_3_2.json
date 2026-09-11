@@ -2,7 +2,7 @@
  "label": "R3.mid --route 1:2,3:2",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R3.mid"
+  "project_files/R3.mid"
  ],
  "flags": [
   "--route",

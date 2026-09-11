@@ -2,7 +2,7 @@
  "label": "R4.mid --midi-track 1 --midi-tracks 1",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R4.mid"
+  "project_files/R4.mid"
  ],
  "flags": [
   "--midi-track",

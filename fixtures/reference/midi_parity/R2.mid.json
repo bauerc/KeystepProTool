@@ -2,7 +2,7 @@
  "label": "R2.mid",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R2.mid"
+  "project_files/R2.mid"
  ],
  "flags": [],
  "exit": 0,

@@ -2,7 +2,7 @@
  "label": "R2.mid --route 1:9",
  "direction": "import",
  "inputs": [
-  "analysis/captures/R2.mid"
+  "project_files/R2.mid"
  ],
  "flags": [
   "--route",

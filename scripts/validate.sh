@@ -132,7 +132,7 @@ if command -v swift &> /dev/null; then
     parity_stamp=swift/.build/parity/gates.sha
     parity_fingerprint=$(
         {
-            find src tools swift/Sources project_files analysis/captures -type f -print0 2> /dev/null \
+            find src tools swift/Sources project_files -type f -print0 2> /dev/null \
                 | sort -z | xargs -0 shasum
             shasum swift/Package.swift pyproject.toml uv.lock \
                 scripts/port_parity.sh scripts/writer_parity.sh scripts/midi_parity.sh \
