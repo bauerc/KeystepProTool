@@ -141,15 +141,9 @@ struct Convert: ParsableCommand {
     var verbose = false
 
     func validate() throws {
-        if !(1...Constants.trackItemIDs.count ~= track) {
-            throw ValidationError("'--track' must be in 1...\(Constants.trackItemIDs.count)")
-        }
-        if !(1...Constants.patternsPerTrack ~= pattern) {
-            throw ValidationError("'--pattern' must be in 1...\(Constants.patternsPerTrack)")
-        }
-        if !(1...16 ~= drumChannel) {
-            throw ValidationError("'--drum-channel' must be in 1...16")
-        }
+        try checkBound("track", track, in: 1...Constants.trackItemIDs.count)
+        try checkBound("pattern", pattern, in: 1...Constants.patternsPerTrack)
+        try checkBound("drum-channel", drumChannel, in: KSPMIDI.channels)
     }
 
     func run() throws {

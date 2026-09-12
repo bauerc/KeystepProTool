@@ -1,5 +1,6 @@
 import Foundation
 import KSPMIDI
+import KSPTestSupport
 import Testing
 
 @testable import KSPRun

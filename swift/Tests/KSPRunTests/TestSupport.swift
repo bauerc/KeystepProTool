@@ -1,17 +1,5 @@
 import Foundation
 
-/// A twin per target: SwiftPM cannot share a source file between two test targets.
-enum RepoData {
-    static let root = URL(filePath: #filePath)
-        .deletingLastPathComponent()  // KSPRunTests
-        .deletingLastPathComponent()  // Tests
-        .deletingLastPathComponent()  // swift
-        .deletingLastPathComponent()
-
-    static let projectFiles = root.appending(path: "project_files")
-    static let fixtures = root.appending(path: "fixtures")
-}
-
 /// A drum-map config path that cannot exist, so a run never picks up a personal one.
 let noPersonalConfig = URL(filePath: "/nonexistent/keysteppro/drum_map.json")
 

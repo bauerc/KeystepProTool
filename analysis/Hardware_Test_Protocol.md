@@ -12,6 +12,20 @@ export back out.
 > in [`KeyStepPro_Format_Spec.md`](./KeyStepPro_Format_Spec.md), which is the authoritative record —
 > never here.
 
+> **Which commands below still run.** The Python was archived
+> ([ADR 0004](../docs/adr/0004-the-swift-is-the-only-implementation.md)), so `uv`, `ksp-pull`,
+> `ksp-dump` and everything under `tools/*.py` are gone from this repository and live on in
+> [`python-final`](https://github.com/bauerc/KeystepProTool-python). What runs here is `kspplus`,
+> `tools/coremidi_probe.swift` (`list`, `exchange`, `slots`, `throughput`, `cadence`, `pipeline`,
+> `grid`, `handshake`, `space`, `rollover`, `lone`, `pipereplay`, `replay`, `sniff`) and
+> `tools/coremidi_read.swift`, each with its build line in its own header comment.
+>
+> A step still written as `uv run …` is marked **[archived tooling]** below. It is kept because it
+> records how that tier *was* run and what the probe had to do, not because it can be run as
+> written: `usb_probe.py`'s phase probes, `usb_push_test.py` and `midi_events.py` have no Swift
+> successor yet, and the marker-gated `pytest -m hardware` suite is waiting on #314. Porting one is
+> the price of re-running that tier.
+
 **The baseline every test below starts from** is `B0-baseline.KeyStepPro` — an initialised,
 untouched project, already captured. Where a test says "from the baseline", start by loading or
 re-initialising to that state; do not re-derive it.
@@ -21,10 +35,11 @@ this programme opened has been answered, and the procedures have been removed as
 What is left below is the method — how to run a capture, the export and import routes, the device
 operating notes, the rules — kept because the next format question will need all of it, and because
 reconstructing it from memory is exactly how a capture gets taken wrongly. Phase 3 (below) ran on
-2026-09-04: H3.1 and H3.2 are confirmed over CoreMIDI. One item stays open — the raw-USB half of
-H3.1 (`sudo ksp-pull`, and the `cmp` of the two cores on the wire). The three `MCC_CONSTANTS` keys
-H3.2 turned up are overrun padding past two short arrays, not parameters
-([§3.4](./format/Parameters_Scenes_Tracks_And_Project.md)).
+2026-09-04: H3.1 and H3.2 are confirmed over CoreMIDI. The raw-USB half of H3.1 — `ksp-pull` on
+the wire, and the `cmp` of the two cores — can no longer be run: the Python was the other core,
+and it is archived. CoreMIDI is the only transport this repository has, and H3.1 is confirmed over
+it. The three `MCC_CONSTANTS` keys H3.2 turned up are overrun padding past two short arrays, not
+parameters ([§3.4](./format/Parameters_Scenes_Tracks_And_Project.md)).
 
 **Tiers 7 and 8 are complete and have been removed.** Tier 7 (2026-08-05) measured the Time Shift
 range and linearity, the swing encoding and scope, and the meaning of randomness. Tier 8
@@ -74,7 +89,8 @@ the captures are local evidence, and the finding has to reach the spec to surviv
 Its mirror, for any test that puts a file we generated _onto_ the device. Tiers M4 and M5 used it;
 so does every future write test.
 
-1. **Generate the candidates at the desk**, before the session:
+1. **Generate the candidates at the desk**, before the session — **[archived tooling]**, the
+   marker-gated suite is waiting on #314:
 
    ```sh
    uv run pytest -m hardware
@@ -168,7 +184,9 @@ Two things to design against, both of which bit Tier 2:
 
 ### Diffing
 
-No tooling needs to exist first. This is enough:
+No tooling needs to exist first. `kspplus dump --json` on each file and a diff of the two
+outputs answers the same question; the snippet below is how it was done at the time
+(**[archived tooling]**):
 
 ```python
 # uv run python - <<'EOF'
@@ -248,6 +266,9 @@ and the export route above do not apply. Design and phase numbering live in
 **Before you start.** Quit MIDI Control Center; it holds the device and the probes will not get
 it. On macOS the system binds its own USB-MIDI driver to interface 2 and will not release it to an
 unprivileged process, so every command below needs `sudo`. Each probe is a few seconds.
+
+**[archived tooling]** — `coremidi_probe` covers `list`, `exchange`, `slots` and `throughput`
+over CoreMIDI without `sudo`; the capture-saving probes below have no successor yet.
 
 ```sh
 sudo uv run python tools/usb_probe.py <probe> [--save project_files/captures/H1-x.jsonl]
@@ -433,7 +454,8 @@ MIDI export of one pattern, checked against what H2.1 puts on the panel by hand.
 4's probe, below) rode along in the same run — once the transport is open there is nothing left
 to pay to also flip byte 7 and re-read.
 
-One command, over one open transport, runs H2.2, H2.3, H2.4 and H4.1:
+One command, over one open transport, runs H2.2, H2.3, H2.4 and H4.1 — **[archived tooling]**,
+`phase2` has no Swift successor:
 
 ```sh
 sudo uv run python tools/usb_probe.py \
@@ -486,6 +508,9 @@ to hold end to end. Neither entry below has run on hardware yet.
   sixteen-slot sweep of one field, never all 117,783 addresses in one run.
 - **Command:**
 
+  **[archived tooling]** — the raw-USB reader was the Python's. `kspplus pull` below is the
+  command this repository has.
+
   ```sh
   sudo ksp-pull project_files/captures/H3-pull.KeyStepPro --slot <N>
   ```
@@ -505,7 +530,8 @@ to hold end to end. Neither entry below has run on hardware yet.
 
   `--also-midi` on either core writes the `.mid` beside the project from the same read. It costs no
   extra read to check, because the file it writes is the one a separate `export` of that project
-  makes, and `tools/midi_events.py` compares the two cores' across the running-status difference:
+  makes. (`tools/midi_events.py`, which compared the two cores' across the running-status
+  difference, was **archived tooling**; with one core left there is nothing to compare.)
 
   ```sh
   swift/.build/debug/kspplus pull project_files/captures/H3-pull-swift.KeyStepPro \
@@ -601,6 +627,9 @@ One probe, and it was the last thing standing between the read path and a projec
 - **Command:** the sixteen-slot sweep, `slots`. As with every probe here, every option goes
   **before** the probe name:
 
+  **[archived tooling]** — `coremidi_probe slots "KeyStep Pro"` runs the same sweep without
+  saving a capture.
+
   ```sh
   sudo uv run python tools/usb_probe.py --save project_files/captures/slots.jsonl slots
   ```
@@ -631,6 +660,9 @@ phases; this one starts at `.2`.)
 - **The mode is the finding.** `--mode ack` stalls waiting for acks that do not come; `no-ack` is
   the one that works. This probe takes no positional name, so the option-ordering trap that catches
   the Phase 1 and Phase 2 probes does not apply here:
+
+  **[archived tooling]** — no Swift successor; the write direction wants re-confirming over
+  CoreMIDI anyway (#89).
 
   ```sh
   sudo uv run python tools/usb_push_test.py --mode no-ack --slot 8 \
@@ -716,13 +748,13 @@ One probe, and it was what stood between the Swift port and a read the app could
   `replay` reports any reply carrying fewer values than its echoed count:
 
   ```sh
-  uv run python -c "
-  from ksp import bulk_fast
-  from ksp.sysex import build_read_request
-  print('\n'.join(build_read_request(r, 1).hex() for r in bulk_fast.iter_requests()))
-  " > /tmp/plan.txt
+  swiftc -O swift/Sources/KSPKit/*.swift tools/read_plan.swift -o /tmp/read_plan
+  /tmp/read_plan 1 > /tmp/plan.txt          # 3,399 frames, BulkFast.requestCount
   /tmp/coremidi_probe replay "KeyStep Pro" 1 /tmp/plan.txt
   ```
+
+  The plan is 3,399 frames where a real walk sends ~2,474: `BulkRead` reuses a value already
+  settled by an earlier reply rather than asking again, and `replay` has no such state.
 
 - **Which process holds interface 2** is the question behind the question, and `ioreg` answers it
   without the device being busy:

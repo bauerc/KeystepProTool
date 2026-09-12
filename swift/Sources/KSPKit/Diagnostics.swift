@@ -109,7 +109,7 @@ public struct Site: Sendable, Hashable {
 }
 
 extension Site {
-    /// No `scene` key: the JSON output is a contract, so both ports omit it together.
+    /// No `scene` key: the JSON output is a contract and has never carried one.
     public func toJSON() -> JSONNode {
         .object([
             ("track", track.map { JSONNode.int($0) } ?? .null),
@@ -286,7 +286,7 @@ public final class Collector {
     }
 }
 
-/// The summary table, one entry per ``Code``. Both ports carry the same wording verbatim.
+/// The summary table, one entry per ``Code``. The wording is pinned by the CLI's tests.
 public enum Diagnostics {
     public static let summaries: [Code: Summary] = [
         .noVersionKey: Summary(

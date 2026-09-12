@@ -15,7 +15,7 @@ public struct ReadRequest: Sendable, Hashable {
 }
 
 extension ReadRequest: CustomStringConvertible {
-    /// Python's dataclass repr, so a desynchronised read reads the same out of either core.
+    /// The wording a desynchronised read is reported in; pinned by the CLI's output contract.
     public var description: String {
         let joined = indices.map(String.init).joined(separator: ", ")
         let tuple = indices.count == 1 ? "(\(joined),)" : "(\(joined))"
@@ -178,7 +178,7 @@ public enum Sysex {
         return frame[start..<terminator].map(Int.init)
     }
 
-    /// Python's `{value:#04x}`, so a byte reads the same in either core's diagnostics.
+    /// `0x` and two lower-case digits, as every byte in a diagnostic is written.
     static func hexByte(_ value: UInt8) -> String {
         "0x" + (value < 0x10 ? "0" : "") + String(value, radix: 16)
     }

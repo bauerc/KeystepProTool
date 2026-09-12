@@ -1,5 +1,6 @@
 import Foundation
 import KSPRun
+import KSPTestSupport
 import Testing
 
 @testable import KSPApp

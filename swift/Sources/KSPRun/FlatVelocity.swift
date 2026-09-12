@@ -11,7 +11,7 @@ public func parseFlatVelocity(_ text: String?) throws -> Int? {
     guard !text.isEmpty, text.allSatisfy({ $0.isASCII && $0.isNumber }) else {
         throw KSPError.value("--flat-velocity: '\(text)' is not 'fresh' or a velocity")
     }
-    // Python's ints are unbounded, so a numeral too big for `Int` must still reach the range
-    // message rather than this one. Saturating to `.max` puts this side there too.
+    // A numeral too big for `Int` is still a number, so it earns the range message rather than
+    // this one. Saturating to `.max` sends it there.
     return Int(text) ?? .max
 }

@@ -9,11 +9,10 @@ struct DrumSense: Equatable, Sendable {
 }
 
 struct Settings: Sendable, Equatable, Codable {
-    /// A deliberate twin of `MIDIExport.maxRepeat`; a test pins the two together.
-    static let repeatRange = 1...10
+    /// What the stepper offers, taken from what the export accepts rather than twinned with it.
+    static let repeatRange = 1...MIDIExport.maxRepeat
 
-    /// A deliberate twin of the CLI's own `--drum-channel` check; a test pins the two together.
-    static let drumChannelRange = 1...16
+    static let drumChannelRange = KSPMIDI.channels
 
     /// The two designations the Source section owns. A source track is the track list's to name.
     enum Drums: String, CaseIterable, Identifiable, Codable, Sendable {

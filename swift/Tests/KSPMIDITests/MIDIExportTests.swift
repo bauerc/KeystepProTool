@@ -1,5 +1,6 @@
 import Foundation
 import KSPKit
+import KSPTestSupport
 import SwiftMIDIFile
 import Testing
 
@@ -20,9 +21,11 @@ private let project5RampTicks = [1, 2, 4, 5, -1, -2, -4, -5, 0, 2]
 
 private let rampedStarts = zip(project5Steps, project5RampTicks).map { $0 * ticksPerStep + $1 }
 
-private func project5() throws -> Project { try Samples.project("project_5") }
-private func project9() throws -> Project { try Samples.project("project_9") }
-private func initialProject() throws -> Project { try Samples.project("initial_project") }
+private func project5() throws -> Project { try Samples.project("project_5.KeyStepPro") }
+private func project9() throws -> Project { try Samples.project("project_9.KeyStepPro") }
+private func initialProject() throws -> Project {
+    try Samples.project("initial_project.KeyStepPro")
+}
 
 private func exported5() throws -> ExportResult {
     try MIDIExport.exportProject(project5(), options: onePass())
@@ -63,7 +66,7 @@ private func exported5Flat() throws -> ExportResult {
         let notes = try played(exported5().midi, "Track 3")
         #expect(notes[8].start == 8 * ticksPerStep)
         #expect(notes[8].duration == 4 * ticksPerStep)
-        #expect(notes[9].duration == Arithmetic.pyRound(3.5 * Double(ticksPerStep)))
+        #expect(notes[9].duration == Arithmetic.roundHalfToEven(3.5 * Double(ticksPerStep)))
     }
 
     @Test func aGateRunningIntoTheNextNoteIsShortenedNotOverlapped() throws {
@@ -226,7 +229,7 @@ private func exported5Flat() throws -> ExportResult {
         )
         #expect(
             rendering.notes.allSatisfy {
-                $0.durationTicks == Arithmetic.pyRound(0.5 * Double(ticksPerStep))
+                $0.durationTicks == Arithmetic.roundHalfToEven(0.5 * Double(ticksPerStep))
             })
     }
 
@@ -291,7 +294,7 @@ private func exported5Flat() throws -> ExportResult {
     }
 
     @Test func anEmptyProjectExportsNothing() throws {
-        let result = try MIDIExport.exportProject(Samples.project("Default"))
+        let result = try MIDIExport.exportProject(Samples.project("Default.KeyStepPro"))
         #expect(result.isEmpty)
         #expect(result.trackNames.isEmpty)
     }
@@ -454,7 +457,8 @@ private func exported5Flat() throws -> ExportResult {
             project5().track(3).pattern(1), trackNumber: 3, kind: .seq, options: onePass())
         #expect(rendering.notes[8].durationTicks == 4 * ticksPerStep)
         #expect(
-            rendering.notes[9].durationTicks == Arithmetic.pyRound(3.5 * Double(ticksPerStep)))
+            rendering.notes[9].durationTicks
+                == Arithmetic.roundHalfToEven(3.5 * Double(ticksPerStep)))
     }
 
     @Test func theDrumSetRendersOntoTheDrumChannel() throws {
@@ -625,7 +629,7 @@ private func exported5Flat() throws -> ExportResult {
     }
 
     @Test func anEmptyProjectProducesNoFiles() throws {
-        #expect(try MIDIExport.exportSplit(Samples.project("Default")).isEmpty)
+        #expect(try MIDIExport.exportSplit(Samples.project("Default.KeyStepPro")).isEmpty)
     }
 }
 

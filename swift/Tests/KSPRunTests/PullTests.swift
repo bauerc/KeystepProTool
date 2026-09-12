@@ -1,6 +1,7 @@
 import Foundation
 import KSPKit
 import KSPTape
+import KSPTestSupport
 import Testing
 
 @testable import KSPRun
@@ -237,7 +238,7 @@ import Testing
         #expect(result.destinations == [written])
     }
 
-    /// The `.mid` cannot be written over a directory, and Python prints no report on that path.
+    /// The `.mid` cannot be written over a directory, and no report is printed on that path.
     @Test func amidiThatCannotBeWrittenStillNamesTheProjectThatWas() throws {
         let device = TapeDevice(try recallTape())
         let written = try scratch()
@@ -252,7 +253,7 @@ import Testing
 
         #expect(result.code == 1)
         #expect(result.stderr.hasPrefix("kspplus pull: "))
-        // The tape's read earns five kinds of warning, and Python prints none of them here.
+        // The tape's read earns five kinds of warning, and none of them are printed here.
         #expect(!result.stderr.contains("warning:"))
         #expect(!result.diagnostics.render(verbose: false).isEmpty)
         #expect(result.destinations == [written])
@@ -292,8 +293,8 @@ import Testing
         #expect(device.asked.isEmpty)
     }
 
-    /// Python wraps the identity parse failure in the slot it was reading, and the wire's own
-    /// silences are what it leaves unwrapped.
+    /// The identity parse failure is wrapped in the slot it was reading; the wire's own
+    /// silences are what stay unwrapped.
     @Test func anUnreadableIdentityIsNamedWithTheSlotItWasReading() throws {
         let written = try scratch()
         defer { try? FileManager.default.removeItem(at: written) }

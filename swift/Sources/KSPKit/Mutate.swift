@@ -335,7 +335,7 @@ public enum Mutate {
     }
 
     public static func setTempo(_ raw: RawProject, bpm: Double) throws -> RawProject {
-        let hundredths = Arithmetic.pyRound(bpm * Double(Constants.tempoScale))
+        let hundredths = Arithmetic.roundHalfToEven(bpm * Double(Constants.tempoScale))
         let limit = Constants.tempoChunk * Constants.tempoChunk * Constants.tempoChunk
         guard 0..<limit ~= hundredths else {
             throw KSPError.value(

@@ -58,7 +58,7 @@ import Testing
         #expect(refusal(nil, "65536") == "--midi-tracks: 65536 is out of range 1-65535")
     }
 
-    /// Python's ints are unbounded and Swift's saturate; both must print these digits.
+    /// The numeral is printed as written, not as the saturated value it parsed to.
     @Test func anOversizedNumeralIsPrintedAsWritten() {
         #expect(
             refusal(nil, "99999999999999999999")

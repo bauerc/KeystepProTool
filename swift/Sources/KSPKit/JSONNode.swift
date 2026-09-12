@@ -8,7 +8,7 @@ public enum JSONNode: Sendable {
     case string(String)
     case array([JSONNode])
 
-    /// In the order written, not sorted, matching the Python dict's insertion order.
+    /// In the order written, not sorted: the key order is part of the output contract.
     indirect case object([(String, JSONNode)])
 
     public func serialised() -> String {
@@ -26,7 +26,7 @@ public enum JSONNode: Sendable {
         case .int(let value):
             out += String(value)
         case .double(let value):
-            // `description` keeps the `.0` on whole numbers, as Python's `repr` does.
+            // `description` keeps the `.0` on whole numbers, which the output contract wants.
             out += value.description
         case .string(let value):
             out += Self.quoted(value)
@@ -63,7 +63,7 @@ public enum JSONNode: Sendable {
         String(repeating: " ", count: depth * 2)
     }
 
-    /// Python's `py_encode_basestring_ascii`: lower-case `\uXXXX` outside printable ASCII.
+    /// Lower-case `\uXXXX` outside printable ASCII, as the files and `dump --json` are written.
     static func quoted(_ value: String) -> String {
         var out = "\""
         for unit in value.utf16 {
@@ -91,6 +91,7 @@ public enum JSONNode: Sendable {
     }
 }
 
+/// Nothing in the product compares two nodes; the tests assert a built tree against a literal one.
 extension JSONNode: Equatable {
     public static func == (lhs: JSONNode, rhs: JSONNode) -> Bool {
         switch (lhs, rhs) {

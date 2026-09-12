@@ -62,9 +62,7 @@ struct Pull: ParsableCommand {
     var verbose = false
 
     func validate() throws {
-        if !(1...Constants.projectSlots ~= slot) {
-            throw ValidationError("'--slot' must be in 1...\(Constants.projectSlots)")
-        }
+        try checkBound("slot", slot, in: 1...Constants.projectSlots)
         if timeoutMs < 1 {
             throw ValidationError("'--timeout' must be at least 1")
         }

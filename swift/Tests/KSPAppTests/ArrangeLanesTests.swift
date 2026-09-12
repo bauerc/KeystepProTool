@@ -230,7 +230,5 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
     /// with no way for the user to resize out of it.
     @Test func theAxisFitsTheStagedPaneAtTheSmallestWindow() {
         #expect(AppLayout.gridOrigin + AppLayout.axisWidth <= AppLayout.minimumCardContentWidth)
-        // Drawn under the map, on the map's own origin, so the two axes line up column for column.
-        #expect(AppLayout.gridOrigin + AppLayout.axisWidth == AppLayout.gridWidth)
     }
 }

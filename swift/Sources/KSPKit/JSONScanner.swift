@@ -107,7 +107,7 @@ struct JSONScanner {
     }
 
     /// Every value the format holds is an integer, so a number no `Int` represents -- a fraction,
-    /// an exponent, or one too large -- takes the name Python would give it and is rejected above.
+    /// an exponent, or one too large -- takes its ``JSONValue/typeName`` and is rejected above.
     private mutating func number() throws -> JSONValue {
         let start = index
         let negative = bytes[index] == UInt8(ascii: "-")

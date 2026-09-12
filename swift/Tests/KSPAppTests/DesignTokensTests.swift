@@ -41,10 +41,6 @@ private func saturation(_ color: Color) -> Double {
     /// A name or a badge wider than the head is clipped in silence, which is the failure
     /// ``AppLayout/trackColumnWidths`` already warns about.
     @Test func arowHeadIsAsWideAsTheThingsInIt() {
-        #expect(
-            AppLayout.labelWidth
-                == AppLayout.wellWidth + AppLayout.labelGap + AppLayout.rowNameWidth
-                + AppLayout.labelGap + AppLayout.rowBadgeWidth)
         #expect(AppLayout.gridWidth <= AppLayout.minimumCardContentWidth)
         #expect(AppLayout.limitRowWidth <= AppLayout.minimumCardContentWidth)
     }

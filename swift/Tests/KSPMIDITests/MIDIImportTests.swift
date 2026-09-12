@@ -1,5 +1,6 @@
 import Foundation
 import KSPKit
+import KSPTestSupport
 import SwiftMIDIFile
 import Testing
 
@@ -37,7 +38,7 @@ private func intAt(_ raw: RawProject, _ name: String) -> Int? {
 }
 
 private enum EventKind: Int {
-    // Python sorts note_off before note_on at the same tick; the rank keeps that order.
+    // A note-off sorts before a note-on at the same tick, so a repeated pitch closes first.
     case off = 0
     case on = 1
 }
@@ -145,7 +146,7 @@ private func swung(_ percent: Int, steps: Int = 16) -> MusicalMIDI1File {
     for step in 0..<steps {
         let delay =
             step % 2 == 0
-            ? 0 : Arithmetic.pyRound(Double(ticksPerStep) * (2 * Double(percent) / 100 - 1))
+            ? 0 : Arithmetic.roundHalfToEven(Double(ticksPerStep) * (2 * Double(percent) / 100 - 1))
         events.append((step * ticksPerStep + delay, 60, 100))
     }
     return songOf([events])
@@ -186,6 +187,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
 
 @Suite struct ImportRecipeTests {
     /// The note is half a step long because that is the gate a freshly placed one carries.
+    /// The recipe holds no pattern bitfield, which is how the default step size reads.
     @Test func oneNoteWritesExactlyTheM4Recipe() throws {
         let base = try Samples.raw("baseline.KeyStepPro")
         let result = try MIDIImport.convert(
@@ -205,13 +207,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(
             changedTo(base, result.raw) == placementRecipe.merging([bits: 28]) { _, new in new })
         #expect(Constants.stepDenominator(28) == 32)
-    }
-
-    @Test func theDefaultStepSizeLeavesTheBitfieldAlone() throws {
-        let base = try Samples.raw("baseline.KeyStepPro")
-        let result = try MIDIImport.convert(
-            clipOf([(0, 60, 100)], length: ticksPerStep / 2), base, track: 2, pattern: 1)
-        #expect(changedTo(base, result.raw) == placementRecipe)
     }
 
     @Test func conversionNeverAddsOrRemovesAKey() throws {

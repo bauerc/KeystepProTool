@@ -22,7 +22,7 @@ extension DeviceError {
         "the KeyStep Pro is not answering -- quit MIDI Control Center, and if that does not "
             + "help, run 'killall MIDIServer'")
 
-    /// Python's two silences, kept apart as `usb_transport` keeps them: nothing came back at all.
+    /// One of the two silences, kept apart from ``noReply``: nothing came back at all.
     static func timedOut(after milliseconds: Int) -> DeviceError {
         DeviceError("timed out after \(milliseconds) ms waiting for a reply")
     }
@@ -53,7 +53,7 @@ extension DeviceError {
     }
 }
 
-/// Python's `bytes.hex()`, so a frame reads the same out of either core's diagnostics.
+/// Two lower-case digits a byte, unseparated: how every frame in a diagnostic is written.
 func hex(_ frame: [UInt8]) -> String {
     frame.map { ($0 < 0x10 ? "0" : "") + String($0, radix: 16) }.joined()
 }

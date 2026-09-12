@@ -79,7 +79,7 @@ import Testing
             performing: { try parseSelection("99", option: "--patterns", limit: 16) })
     }
 
-    /// Python's ints are unbounded, so an oversized numeral is out of range, not unparseable.
+    /// An oversized numeral is still a number, so it is out of range rather than unparseable.
     @Test func aNumeralTooBigForIntIsStillOutOfRange() {
         #expect(
             refusal("99999999999999999999") == "--tracks: 99999999999999999999 is out of range 1-4")

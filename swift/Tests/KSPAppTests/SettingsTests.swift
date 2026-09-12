@@ -140,10 +140,6 @@ import Testing
         #expect(settings.exportOptions(source: output, output: source).repeatCount == count)
     }
 
-    @Test func theStepperCannotOfferMoreThanTheExportAccepts() {
-        #expect(Settings.repeatRange == 1...MIDIExport.maxRepeat)
-    }
-
     @Test func thegridsTicksReachTheExport() {
         var selection = GridSelection(syntheticSummary())
         selection.toggle(track: 3)

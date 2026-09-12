@@ -1,4 +1,5 @@
 import Foundation
+import KSPTestSupport
 import Testing
 
 @Suite struct ExitCodeTests {
@@ -230,7 +231,6 @@ import Testing
     static let project = RepoData.projectFiles.appending(path: "project_5.KeyStepPro").path
     static let clip = RepoData.projectFiles.appending(path: "test_file_simple.mid").path
     static let chords = RepoData.projectFiles.appending(path: "test_file.mid").path
-    static let song = RepoData.projectFiles.appending(path: "m6-test-file.mid").path
 
     /// From the package directory, not `Bundle`: under the CLT `Bundle.main` is the swiftpm helper.
     static let executable: URL = {

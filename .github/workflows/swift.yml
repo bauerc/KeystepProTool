@@ -1,14 +1,12 @@
 name: swift
 
-# On Linux at 1x, not macOS at 10x, and that is what the package split buys. `KSPKit` -- the format
-# core, M9-M11, and the bulk of the port -- takes no third-party dependencies, so it builds and
-# tests anywhere Swift runs. See the comment in swift/Package.swift.
+# On Linux at 1x, not macOS at 10x, and that is what the package split buys. `KSPKit`, the format
+# core, takes no third-party dependencies, so it builds and tests anywhere Swift runs. See the
+# comment in swift/Package.swift.
 #
 # `Package.swift` gates `KSPMIDI`, `KSPSwiftCLI` and their test targets off on Linux, because
-# swift-midi-file supports Apple platforms only, so the Linux job cannot see them. M8 said M12 would
-# need a macos-latest job beside it once the MIDI layer had real code, and `swift-macos` below is
-# it. Keeping both is the point: Linux still covers `KSPKit` -- the format core and, from M12,
-# `Mutate.swift` -- at 1x, and only the MIDI half pays 10x.
+# swift-midi-file supports Apple platforms only, so the Linux job cannot see them. Keeping both
+# jobs is the point: Linux covers the format core at 1x, and only the MIDI half pays 10x.
 #
 # The container image carries swift-format, so no toolchain setup step is needed there.
 #
@@ -75,9 +73,9 @@ jobs:
       - name: Test
         run: swift test
 
-  # The only job that sees KSPMIDI and KSPSwiftCLI at all: everything M12 adds beyond Mutate.swift
-  # is invisible to the Linux job above. Xcode's toolchain ships Swift Testing on the search paths,
-  # so none of validate.sh's Command Line Tools bridging flags are needed here.
+  # The only job that sees KSPMIDI, KSPSwiftCLI and KSPApp at all; they are invisible to the Linux
+  # job above. Xcode's toolchain ships Swift Testing on the search paths, so none of validate.sh's
+  # Command Line Tools bridging flags are needed here.
   swift-macos:
     if: github.event_name == 'pull_request'
     runs-on: macos-latest

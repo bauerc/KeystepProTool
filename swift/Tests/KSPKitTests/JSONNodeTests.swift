@@ -4,7 +4,7 @@ import Testing
 
 /// `JSONEncoder` cannot do this: it synthesises key order, and it renders `120.0` as `120`.
 @Suite struct JSONNodeTests {
-    @Test func scalarsRenderAsPythonWritesThem() {
+    @Test func scalarsRenderAsTheContractWritesThem() {
         #expect(JSONNode.null.serialised() == "null")
         #expect(JSONNode.bool(true).serialised() == "true")
         #expect(JSONNode.bool(false).serialised() == "false")
@@ -42,10 +42,10 @@ import Testing
                 """)
     }
 
-    @Test func stringsEscapeTheWayPythonDoes() {
+    @Test func stringsEscapeToTheContract() {
         #expect(JSONNode.string("a\"b\\c").serialised() == "\"a\\\"b\\\\c\"")
         #expect(JSONNode.string("\n\t\r").serialised() == "\"\\n\\t\\r\"")
-        // A forward slash is left alone, which some JSON writers escape and Python does not.
+        // A forward slash is left alone, which some JSON writers escape and this one does not.
         #expect(JSONNode.string("/").serialised() == "\"/\"")
     }
 
@@ -54,7 +54,7 @@ import Testing
         #expect(JSONNode.string("\u{1F}").serialised() == "\"\\u001f\"")
     }
 
-    @Test func nonASCIIIsEscapedBecausePythonDefaultsToEnsureASCII() {
+    @Test func nonASCIIIsEscapedSoTheOutputStaysASCII() {
         #expect(JSONNode.string("\u{E9}").serialised() == "\"\\u00e9\"")
     }
 

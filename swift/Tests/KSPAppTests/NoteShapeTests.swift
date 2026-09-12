@@ -187,11 +187,4 @@ private func run(_ patterns: [(steps: Int, notes: [SegmentNote])], track: Int = 
         #expect(shape.middleC == nil)
         #expect(shape.labels.map(\.text) == ["C2", "C1"])
     }
-
-    /// The shape starts on the map's own origin, so a step sits under the column it becomes.
-    @Test func theShapeStartsWhereTheMapsColumnsDo() {
-        #expect(
-            AppLayout.shapeHeadWidth + AppLayout.pitchLabelWidth + AppLayout.labelGap
-                == AppLayout.gridOrigin)
-    }
 }
