@@ -31,8 +31,6 @@ import Testing
     }
 
     @Test func theRoundTripIsExact() throws {
-        // Build a request, dress it as the reply the device would send, parse it back to the
-        // request we started from.
         let request = ReadRequest(item: 126, param: 50, indices: [16, 3, 49], count: 16)
         let frame = try Sysex.buildReadRequest(request)
         let reply =

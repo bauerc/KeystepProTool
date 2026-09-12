@@ -1,7 +1,5 @@
 import CoreMIDI
 
-/// A failure at the wire. The wording lives here rather than at each throw, because naming the
-/// fix is the whole value of this layer over an `OSStatus`.
 public struct DeviceError: Error, Equatable, CustomStringConvertible {
     public let description: String
 

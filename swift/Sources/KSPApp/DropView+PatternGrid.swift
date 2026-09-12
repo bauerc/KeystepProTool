@@ -4,10 +4,7 @@ import KSPMIDI
 import KSPRun
 import SwiftUI
 
-/// The pattern map -- four track rows by sixteen pattern slots.
 extension DropView {
-    /// Not scrolled: the staged view already scrolls, and a scroller inside one traps the wheel.
-    /// No selection is the read-only preview: every slot as it stands, and nothing to click.
     func grid(_ grid: PatternGrid, selection: GridSelection?, length: ExportLength?)
         -> some View
     {
@@ -68,7 +65,6 @@ extension DropView {
             columnLabel(column, state: state), named: "Pattern slot \(column)",
             value: state.spoken, help: help, toggle: toggle
         )
-        // Each cell names its own slot, so a figure that cannot be clicked would say it twice.
         .accessibilityHidden(toggle == nil)
     }
 
@@ -80,7 +76,6 @@ extension DropView {
             .frame(width: AppLayout.cellWidth)
     }
 
-    /// One track: its name, its cells, the rails joining whatever it chains, and the chain beneath.
     private func trackRow(_ row: PatternGrid.Row, selection: GridSelection?) -> some View {
         let state = selection?.state(ofTrack: row.track) ?? .on
         return VStack(alignment: .leading, spacing: 1) {
@@ -94,7 +89,6 @@ extension DropView {
                 }
             }
             .padding(.bottom, 4)
-            // Under the cells, not behind them: a rail and a cell's tint would otherwise band.
             .overlay(alignment: .bottomLeading) { rails(row.runs, track: row.track) }
 
             if let chain = row.chainDetail {
@@ -125,12 +119,9 @@ extension DropView {
             head, named: row.name, value: state.spoken, help: help,
             toggle: ticking ? { model.toggle(track: row.track) } : nil
         )
-        // The row says what a head that cannot be clicked would.
         .accessibilityHidden(!ticking)
     }
 
-    /// A chain that jumps gets no bar; the caption says the order instead. The rail is the only
-    /// place Chain membership shows: inside a cell it would fight the content channel.
     func rails(_ runs: [AppLayout.Rail], track: Int) -> some View {
         let color = DeviceColor.track(track)
         return ForEach(runs.indices, id: \.self) { index in
@@ -141,16 +132,12 @@ extension DropView {
         }
     }
 
-    /// The content channel. Blended over the ground rather than drawn translucent, so the ink can
-    /// be chosen from what the eye will actually see; a slot that holds anything keeps the floor,
-    /// which is what lets a held pattern with every step off still read as held.
     func slotFill(track: Int, notes: Int, steps: Int, isEmpty: Bool) -> Color {
         guard !isEmpty else { return palette.inert }
         let density = max(Density.opacity(notes: notes, steps: steps), Density.floor)
         return DeviceColor.track(track).over(palette.ground, alpha: density)
     }
 
-    /// The fill with the length rule on its bottom edge, clipped so the rule follows the corner.
     func slotBackground(fill: Color, ink: Color, steps: Int) -> some View {
         ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: AppLayout.cellRadius).fill(fill)
@@ -187,18 +174,13 @@ extension DropView {
         let ink = DeviceColor.ink(on: fill)
         return Text(cell.label)
             .font(TypeScale.value)
-            // Shrunk rather than truncated: a count reading "1…" would be worse than small.
             .lineLimit(1).minimumScaleFactor(0.7)
-            // An empty slot takes the muted ink rather than the fill's, so a grid of them
-            // cannot shout over the two cells that actually hold something.
             .foregroundStyle(cell.isEmpty ? palette.mutedInk : ink)
             .frame(width: AppLayout.cellWidth, height: AppLayout.cellHeight)
             .background(
                 slotBackground(
                     fill: fill, ink: ink, steps: cell.isEmpty ? 0 : cell.stepCount)
             )
-            // The whole export channel: solid exports, dashed does not, and nothing else about
-            // the cell moves with the tick.
             .overlay {
                 RoundedRectangle(cornerRadius: AppLayout.cellRadius)
                     .strokeBorder(
@@ -209,9 +191,6 @@ extension DropView {
             }
     }
 
-    /// The pattern readout in its well, the track name, and the drum badge. Both grids draw it, so
-    /// the two read as the same object seen in each direction. A track playing no Pattern has
-    /// nothing to read out, so its well stays unlit.
     func rowHead(
         readout: String, name: String, isDrum: Bool, struck: Bool = false, dimmed: Bool = false
     ) -> some View {

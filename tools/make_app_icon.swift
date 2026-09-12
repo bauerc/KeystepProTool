@@ -19,8 +19,7 @@ let tracks: [RGB] = [
 let steps = [4, 2, 3, 2]
 let columns = 4
 
-// Proportions of the 1024 grid. The body is Apple's rounded square, inset for the shadow the
-// system draws around it; everything else is a fraction of the square it sits in.
+// Proportions of the 1024 grid.
 let bodyInset = 100.0
 let bodyRadius = 185.4
 let contentInset = 112.0

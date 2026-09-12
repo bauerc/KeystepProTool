@@ -1,7 +1,6 @@
 import Foundation
 import KSPKit
 
-/// Where a user's own drum map lives, if they have one.
 public let drumMapConfigPath = FileManager.default.homeDirectoryForCurrentUser
     .appending(path: ".config/keysteppro/drum_map.json")
 
@@ -30,7 +29,6 @@ private func int(_ text: some StringProtocol, _ what: String) throws -> Int {
     return value
 }
 
-/// Pick the drum map: the flag wins, then the config file, then the default.
 func resolveDrumMap(_ spec: String?, configPath: URL) throws -> DrumMap? {
     if let spec { return try parseDrumMap(spec) }
     guard let data = try? Data(contentsOf: configPath) else {
@@ -41,13 +39,12 @@ func resolveDrumMap(_ spec: String?, configPath: URL) throws -> DrumMap? {
     } catch let error as KSPError {
         throw error
     } catch {
-        // Named, because it is the config file rather than the flag that is malformed.
         throw KSPError.value("\(configPath.path): \(error.localizedDescription)")
     }
 }
 
-/// The same `--drum-map` choice as `export`, except that unset means *fit to the source*: a source
-/// whose drums sit anywhere but 36-59 would otherwise have every hit dropped as unmapped.
+/// As `export`'s, except that unset means *fit to the source*: drums outside 36-59 would
+/// otherwise be dropped as unmapped.
 func resolveImportDrumMap(_ spec: String?, configPath: URL) throws -> DrumMap? {
     if spec == "none" {
         throw KSPError.value(

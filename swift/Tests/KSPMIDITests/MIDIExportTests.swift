@@ -657,7 +657,6 @@ private func exported5Flat() throws -> ExportResult {
                 == Array(repeating: MIDIExport.defaultFlatVelocity, count: 10))
     }
 
-    /// `minVelocity` only rescues a stored velocity that is being kept.
     @Test(arguments: [0, 1]) func aStoredFloorValueIsReplacedRatherThanClamped(_ value: Int) throws
     {
         let quiet = try withVelocity(project5().track(3).pattern(1), value)

@@ -15,7 +15,6 @@ private func mixedTrackFile(
     file([namedTrack(events, name: name, length: length)])
 }
 
-/// Several tracks, which is what it takes to have a second percussion track to be wrong about.
 private func file(_ tracks: [MusicalMIDI1File.Track]) -> MusicalMIDI1File {
     MusicalMIDI1File(
         format: .singleTrack, timebase: .init(ticksPerQuarterNote: UInt16(ticksPerBeat)),
@@ -51,7 +50,6 @@ private func namedTrack(
     return track
 }
 
-/// A track carrying the timing a conductor track carries, and whatever notes are asked of it.
 private func timingTrack(
     _ events: [(tick: Int, pitch: Int, channel: Int)] = [], name: String
 ) -> MusicalMIDI1File.Track {
@@ -66,7 +64,6 @@ private func timingTrack(
     return track
 }
 
-/// The counts are the ones the reading layer yields, cross-checked against the files themselves.
 @Suite struct SongSummaryTests {
     static func summarise(_ name: String) throws -> SongSummary {
         let result = SummaryRunner.song(
@@ -125,7 +122,6 @@ private func timingTrack(
         #expect(!tracks[1].isConductor)
     }
 
-    /// A type 0 file puts the timing and every note in one track, which is music, not bookkeeping.
     @Test func atrackCarryingBothTheTimingAndNotesIsNotTheConductor() throws {
         let midi = file([timingTrack([(0, 60, 0)], name: "Everything")])
 
@@ -135,7 +131,6 @@ private func timingTrack(
         #expect(tracks[0].noteCount == 1)
     }
 
-    /// An unused instrument track holds nothing either, but carries no timing to make it the one.
     @Test func anemptyTrackCarryingNoTimingIsNotTheConductor() throws {
         let midi = file([timingTrack(name: "Song"), namedTrack([], name: "Unused")])
 
@@ -146,7 +141,6 @@ private func timingTrack(
         #expect(!tracks[1].isConductor)
     }
 
-    /// What this tool exports, read back: track 1 is the conductor and the rest are the music.
     @Test func aroundTrippedExportNamesItsFirstTrackTheConductor() throws {
         let summary = try Self.summarise("m6-test-file.mid")
 
@@ -176,8 +170,6 @@ private func timingTrack(
         #expect(melodic.noteCount == 26)
     }
 
-    /// `apply` takes the first percussion *clip*, so the summary must name the track it came from
-    /// -- the device has one drum track, and a second percussion part is imported melodically.
     @Test func itNamesOnlyTheTrackTheImportWouldTakeForDrums() throws {
         let midi = file([
             namedTrack([(0, 60, 0)], name: "Bass"),
@@ -190,7 +182,6 @@ private func timingTrack(
         #expect(tracks.map(\.isDrumTrack) == [false, true, false])
     }
 
-    /// A track carrying channel 10 among others still gives that clip up to the drum track.
     @Test func asplitTrackIsNamedTheDrumTrackForItsChannelTenPart() throws {
         let midi = file([
             namedTrack([(0, 60, 0), (0, 36, 9)], name: "Mixed"),
@@ -208,7 +199,6 @@ private func timingTrack(
     @Test func itKeepsAMultiChannelTrackAsOneRow() throws {
         let midi = mixedTrackFile(
             [(0, 60, 0), (480, 62, 0), (960, 64, 0), (0, 36, 9), (1920, 38, 9)], name: "Mixed")
-        // Import splits that one track into a clip -- and so a device track -- per channel.
         #expect(try MIDIImport.readSong(midi).clips.count == 2)
 
         let track = try SongSummary(midi, sourceName: "mixed.mid").tracks[0]
@@ -216,7 +206,6 @@ private func timingTrack(
         #expect(track.channels == [1, 10])
         #expect(track.noteCount == 5)
         #expect(track.bars == 2)
-        // Percussion because channel 10 is in it, which is what the import reads as drums.
         #expect(track.isPercussion)
     }
 
@@ -228,7 +217,6 @@ private func timingTrack(
         #expect(entry.detail.contains("source track(s) 1"))
         #expect(entry.detail.contains("the first percussion channel the drum track"))
 
-        // A file whose tracks each hold one channel has nothing to say.
         #expect(try Self.summarise("m6-test-file.mid").diagnostics.entries.isEmpty)
     }
 
@@ -238,8 +226,6 @@ private func timingTrack(
         track.events.insert(.timeSignature(numerator: 0, denominator: 2), at: 1)
         midi.tracks[0] = track
 
-        // A bar of one tick, as `Song.stepsPerBar` clamps such a file to a bar of one step: the
-        // count is nonsense either way, but the preview reports it rather than trapping.
         #expect(try SongSummary(midi, sourceName: "odd.mid").tracks[0].bars == 120)
     }
 

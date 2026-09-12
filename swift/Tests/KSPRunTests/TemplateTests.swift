@@ -19,7 +19,6 @@ import Testing
         #expect(try Data(contentsOf: bundled) == Data(contentsOf: resource))
     }
 
-    /// A throwaway tree shaped like the one `scripts/bundle_app.sh` assembles.
     private static func laidOut(executable: String, resource: String) throws -> (
         root: URL, executable: URL
     ) {

@@ -4,7 +4,6 @@ import KSPMIDI
 import KSPRun
 import SwiftUI
 
-/// What a finished conversion reports.
 extension DropView {
     @ViewBuilder
     func dryRunPreview(_ preview: Outcome) -> some View {
@@ -28,8 +27,6 @@ extension DropView {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// What the run made, leading the window a size above everything it heads. The glyph carries
-    /// the status and the colour only agrees: Track 2 is orange and Track 4 is red.
     private func resultHeader(_ outcome: Outcome) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 14) {
             Image(systemName: outcome.failed ? StatusMark.error : StatusMark.success)
@@ -69,8 +66,6 @@ extension DropView {
         .task(id: model.readPreview?.project) { await model.previewRead() }
     }
 
-    /// What the read wrote, drawn as a dropped project is drawn but with nothing to tick: the
-    /// files are written already, so a selection here would decide nothing.
     @ViewBuilder
     private func readBack(_ preview: AppModel.ReadPreview) -> some View {
         Divider()
@@ -85,13 +80,11 @@ extension DropView {
                 Divider()
                 arrangement(preview.arrangement)
             }
-        // A project never summarises as a song; a read writes nothing else.
         case .song:
             EmptyView()
         }
     }
 
-    /// A split run names its own files, so the name reaches the folder they land in instead.
     func nameHelp(_ plan: Conversion.Plan) -> String {
         if plan.intoFolder {
             return "This names the folder the files land in. Each file is named after the "
@@ -120,7 +113,6 @@ extension DropView {
         findingList(outcome.rows(verbose: model.verbose), count: outcome.allRows.count)
     }
 
-    /// Shared so a plan's findings and a run's read alike; the plan raises them first.
     @ViewBuilder
     func findingList(_ findings: [Finding], count: Int) -> some View {
         if count > 0 {

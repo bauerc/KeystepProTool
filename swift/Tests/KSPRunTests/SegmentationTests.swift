@@ -36,7 +36,6 @@ private func song(_ clips: [Clip]) -> Song {
     Song(clips: clips, ticksPerBeat: ticksPerBeat, tempoBPM: 120, beatsPerBar: 4)
 }
 
-/// The planner, then the reading of it: the summary is never built any other way.
 private func summarise(
     _ song: Song, firstPattern: Int = 1, firstTrack: Int = 1
 ) throws -> SegmentationSummary {
@@ -54,8 +53,6 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
 }
 
 @Suite struct SegmentationTests {
-    /// The whole point of the type: a preview that disagrees with the conversion is worse than no
-    /// preview, so every figure is asserted against the planner's own rather than a second sum.
     @Test func everyFigureIsThePlannersOwn() throws {
         let (song, plan) = try m6()
 
@@ -84,7 +81,6 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(summary.unplaced.isEmpty)
     }
 
-    /// Where the split falls, which is what a reader cannot get from a pattern count alone.
     @Test func arunPastTheDevicesMaximumSplitsAndTheNextPatternSaysWhereItResumes() throws {
         let (song, plan) = try m6()
 
@@ -106,7 +102,6 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(summary.tracks[0].droppedPatterns == 0)
     }
 
-    /// The acceptance criterion: shown as such rather than omitted.
     @Test func asourceTrackWithNowhereToGoIsNamedRatherThanDropped() throws {
         let six = song((1...6).map { clip(source: $0, notes: 4, channel: $0 - 1) })
 
@@ -117,8 +112,6 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(summary.unplaced.map(\.noteCount) == [4, 4])
     }
 
-    /// A source track carrying several channels becomes a device track apiece, so part of one can
-    /// fail to fit while the rest of it lands -- and the part that did not must still be said.
     @Test func achannelOfAsourceTrackThatDoesNotFitIsStillReported() throws {
         let multi = song([
             clip(source: 1, notes: 1, channel: 0),
@@ -154,7 +147,6 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(summary.unplaced.map(\.sourceFile) == ["six.mid", "six.mid"])
     }
 
-    /// A tail past the last pattern is dropped by the planner; the preview says how much.
     @Test func atailPastTheLastPatternIsCountedRatherThanHidden() throws {
         let past = Constants.patternsPerTrack * Constants.maxSteps * ticksPerStep
         let long = song([
@@ -192,8 +184,6 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(drum.sourceTrack == 1)
     }
 
-    /// The pool limits are counted per pattern, so the split has to carry them: a run's total says
-    /// nothing about whether either of its halves fits.
     @Test func everySegmentCountsItsOwnNotesRatherThanTheRuns() throws {
         let (song, plan) = try m6()
 
@@ -206,8 +196,6 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(split.segments.reduce(0) { $0 + $1.noteCount } == split.noteCount)
     }
 
-    /// The note shape draws what the planner placed, so the notes are read off the plan rather
-    /// than placed a second time.
     @Test func everySegmentCarriesTheNotesThePlannerPlaced() throws {
         let (song, plan) = try m6()
 
@@ -251,7 +239,6 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(segment.droppedNotes == Constants.maxSteps * 4 - Constants.poolCapacity)
     }
 
-    /// A pattern filled to the brim has dropped nothing, and must not read as though it had.
     @Test func apatternExactlyAtThePoolDropsNothing() throws {
         let brim = song([chords(source: 1, steps: Constants.maxSteps, pitches: 3)])
 
@@ -262,7 +249,6 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(segment.droppedNotes == 0)
     }
 
-    /// Counted per pattern, not per track: the planner names both in the site it raises.
     @Test func whatOverflowedIsChargedToThePatternItOverflowed() throws {
         let full = song([chords(source: 1, steps: Constants.maxSteps, pitches: 4)])
         let plan = try MIDIImport.planSong(full)
@@ -275,8 +261,6 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
             summary.tracks.flatMap { $0.segments }.reduce(0) { $0 + $1.droppedNotes } == counted)
     }
 
-    /// The one limit the planner refuses outright rather than truncating to, so it leaves no plan
-    /// for a gauge to read. Its refusal has to name the limit and where on its own.
     @Test func toomanyNotesOnAstepIsRefusedInWordsThatNameTheLimitAndWhere() throws {
         let crowded = song([chords(source: 1, steps: 2, pitches: Constants.maxNotesPerStep + 1)])
 
@@ -289,7 +273,6 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(message.contains("pattern 1"))
     }
 
-    /// Exactly at the limit is not past it, so the same shape plans rather than being refused.
     @Test func exactlySixteenNotesOnAstepIsPlannedRatherThanRefused() throws {
         let brim = song([chords(source: 1, steps: 2, pitches: Constants.maxNotesPerStep)])
 
@@ -298,7 +281,6 @@ private func m6() throws -> (song: Song, plan: SongPlan) {
         #expect(summary.tracks[0].segments[0].mostNotesOnAStep == Constants.maxNotesPerStep)
     }
 
-    /// The planner counts what it dropped; the summary names which tracks they were.
     @Test func whatTheplannerCountsAsDroppedIsWhatTheSummaryNames() throws {
         let six = song((1...6).map { clip(source: $0, notes: 4, channel: $0 - 1) })
         let plan = try MIDIImport.planSong(six)

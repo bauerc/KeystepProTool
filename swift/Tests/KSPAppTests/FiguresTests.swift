@@ -8,8 +8,6 @@ import Testing
         Figures.split(text).filter(\.isFigure).map(\.text)
     }
 
-    /// The property the view depends on: a run is a slice of the string, so rebuilding the line
-    /// from its runs cannot lose or invent a character.
     @Test func acutStringJoinsBackIntoItself() {
         let corpus =
             Diagnostics.summaries.values.map(\.template) + [
@@ -39,8 +37,6 @@ import Testing
         #expect(Figures.split("").isEmpty)
     }
 
-    /// A note letter is a figure's head only where a word does not run into it, so the digit alone
-    /// is taken out of a word that happens to end in one.
     @Test func adigitInsideAWordIsNotGivenANoteLetter() {
         #expect(figures(in: "M6") == ["6"])
         #expect(figures(in: "mid2") == ["2"])

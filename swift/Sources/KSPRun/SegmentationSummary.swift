@@ -2,12 +2,8 @@ import Foundation
 import KSPKit
 import KSPMIDI
 
-/// What an import would lay down, said before anything is written: the device tracks it fills, the
-/// patterns each one takes, and the source tracks that will not fit at all.
 public struct SegmentationSummary: Sendable, Hashable {
-    /// In the plan's own order, which is device track order.
     public let tracks: [SegmentedTrack]
-    /// Source tracks holding notes that the plan gave no device track.
     public let unplaced: [UnplacedSource]
 
     public init(tracks: [SegmentedTrack], unplaced: [UnplacedSource] = []) {
@@ -17,8 +13,6 @@ public struct SegmentationSummary: Sendable, Hashable {
 
     public var isEmpty: Bool { tracks.isEmpty }
 
-    /// Every figure is read off the plan the conversion would run on. Nothing here re-decides what
-    /// `planTrack` decided, because a preview that disagrees with the conversion is worse than none.
     init(song: Song, plan: SongPlan) {
         let dropped = droppedPatterns(plan.diagnostics)
         let overflowed = droppedNotes(plan.diagnostics)
@@ -32,16 +26,13 @@ public struct SegmentationSummary: Sendable, Hashable {
     }
 }
 
-/// One device track's worth of the import: the patterns it fills, in play order.
 public struct SegmentedTrack: Sendable, Hashable {
     public let deviceTrack: Int
-    /// A clip merged from several source tracks has no one source track, so it gets no number.
     public let sourceTrack: Int?
     public let sourceFile: String
     public let isDrum: Bool
     public let noteCount: Int
     public let segments: [Segment]
-    /// Patterns the run needed past the last one free, which the planner dropped the tail of.
     public let droppedPatterns: Int
 
     public init(
@@ -58,8 +49,6 @@ public struct SegmentedTrack: Sendable, Hashable {
     }
 
     init(_ plan: TrackPlan, droppedPatterns: Int, droppedNotes: [Int: Int] = [:]) {
-        // A running total of the planner's own step counts, so where the cut falls is reported
-        // rather than recomputed from the 64-step rule.
         var step = 1
         var segments: [Segment] = []
         for placement in plan.placements {
@@ -86,19 +75,14 @@ public struct SegmentedTrack: Sendable, Hashable {
     public var isSplit: Bool { segments.count > 1 }
 }
 
-/// One pattern of a run, and where in the run it picks up. The pool limits are counted per pattern,
-/// so a split run carries them here rather than on the track.
 public struct Segment: Sendable, Hashable {
     public let pattern: Int
     public let stepCount: Int
     /// Counting the run's own steps from 1: the split point, where this is not the first.
     public let firstStep: Int
     public let noteCount: Int
-    /// The most notes on any one step, which is what the 16-per-step limit is measured in.
     public let mostNotesOnAStep: Int
-    /// Never part of ``noteCount``: the plan holds only what fit, so this is what would be lost.
     public let droppedNotes: Int
-    /// What the pattern will hold, as the planner placed it, for a preview that draws it.
     public let notes: [SegmentNote]
     public let stepsPerBeat: Int
 
@@ -121,12 +105,10 @@ public struct Segment: Sendable, Hashable {
     public var lastStep: Int { firstStep + stepCount - 1 }
 }
 
-/// One note of a pattern: the step it sits on, its pitch, and how many steps it holds.
 public struct SegmentNote: Sendable, Hashable {
     /// Counting the pattern's own steps from 1, not the run's.
     public let step: Int
     public let pitch: Int
-    /// In steps, read off the gate ladder the device stores it on.
     public let length: Double
 
     public init(step: Int, pitch: Int, length: Double = Constants.defaultGateLength) {
@@ -142,16 +124,11 @@ public struct SegmentNote: Sendable, Hashable {
     }
 }
 
-/// A source track the import will read and then have nowhere to put, in whole or in the part of
-/// it one channel makes.
 public struct UnplacedSource: Sendable, Hashable {
     public let sourceTrack: Int
     public let sourceFile: String
-    /// Counted in parts, one per channel: a source track carrying several becomes a device track
-    /// apiece, and the device can run out between them.
     public let droppedParts: Int
     public let placedParts: Int
-    /// Notes across the whole source track, which is what it loses only where none of it landed.
     public let noteCount: Int
 
     public init(
@@ -173,16 +150,14 @@ public struct UnplacedSource: Sendable, Hashable {
 private func droppedPatterns(_ report: Report) -> [Int: Int] {
     var dropped: [Int: Int] = [:]
     for entry in report where entry.code == .pastPatternEnd {
-        // Load-bearing, not defensive: `quantise` raises this code counting dropped *notes* and
-        // names no track, while `planTrack` counts dropped *patterns* and names one.
+        // Load-bearing, not defensive: `quantise` raises this code counting dropped *notes*,
+        // `planTrack` counting dropped *patterns*.
         guard let track = entry.site.track else { continue }
         dropped[track, default: 0] += entry.subjects
     }
     return dropped
 }
 
-/// Track and then pattern: the pool is per pattern, so a split run can overflow one half of itself
-/// while the other comes nowhere near.
 private func droppedNotes(_ report: Report) -> [Int: [Int: Int]] {
     var dropped: [Int: [Int: Int]] = [:]
     for entry in report where entry.code == .poolOverflow {
@@ -200,8 +175,6 @@ private func mostNotesOnAStep(_ notes: [PlacedNote]) -> Int {
     return held.values.max() ?? 0
 }
 
-/// The parts the planner read against the parts it gave a device track. Counted per part rather
-/// than per source track, or a track that gave up one channel and kept another would read as whole.
 private func unplacedSources(_ song: Song, _ plan: SongPlan) -> [UnplacedSource] {
     var placed: [Int: Int] = [:]
     for track in plan.tracks {

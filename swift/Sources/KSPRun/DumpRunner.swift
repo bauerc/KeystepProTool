@@ -12,7 +12,6 @@ public enum DumpRunner {
         public var verbose: Bool
         public var configPath: URL
 
-        // Spelled out because a public struct's memberwise initialiser is internal.
         public init(
             path: URL, showAll: Bool = false, tracks: Set<Int> = [], patterns: Set<Int> = [],
             asJSON: Bool = false, drumMapSpec: String? = nil, verbose: Bool = false, configPath: URL

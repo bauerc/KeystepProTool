@@ -4,11 +4,7 @@ import KSPMIDI
 import KSPRun
 import SwiftUI
 
-/// The two option bands, one per direction.
 extension DropView {
-    /// The controls that reshape the export, in the section that shows what is being exported.
-    /// Every one of them changes the .mid about to be written, which is why it sits here and not
-    /// in a column of its own: a reader should never have to guess which controls reach the file.
     var exportOptions: some View {
         optionBand {
             Picker("Files", selection: $model.settings.splitPerPattern) {
@@ -56,8 +52,6 @@ extension DropView {
         }
     }
 
-    /// The same band on the way in, and the reason the two are written apart: swing here means
-    /// fitting the source's groove, not applying a delay the project already stores.
     var importOptions: some View {
         optionBand {
             Picker("Drums", selection: $model.drumChoice) {
@@ -69,8 +63,6 @@ extension DropView {
                 "Automatic searches one channel for a kit; None imports every track melodically. "
                     + "Sending a source track to Drums in the list above names one outright.")
 
-            // Offered only while a channel is what the import searches: under None nothing is
-            // searched, and a named source track is found without one.
             if model.drumSense.designation == .auto {
                 Stepper(value: $model.settings.drumChannel, in: Settings.drumChannelRange) {
                     Text("Channel \(model.settings.drumChannel)")
@@ -98,9 +90,6 @@ extension DropView {
         }
     }
 
-    /// The three substitutions, put the way the reader thinks about them rather than the way the
-    /// runner takes them: a ticked box keeps what the file holds, and unticking one writes the
-    /// device's own default over it.
     @ViewBuilder
     func keeps(
         velocity: WritableKeyPath<Settings, Bool>, velocityNote: String,

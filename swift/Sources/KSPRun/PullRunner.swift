@@ -3,15 +3,12 @@ import KSPDevice
 import KSPKit
 import KSPMIDI
 
-/// What the pull needs of a device: the walk's transport, and the identity request that is the
-/// only place the firmware version comes from.
 public protocol PullDevice: Transport {
     func identify() throws -> String
 }
 
 extension DeviceTransport: PullDevice {}
 
-/// The transport, with its requests counted for the summary.
 private final class Counted: Transport {
     private let inner: any Transport
     private(set) var requests = 0
@@ -43,7 +40,6 @@ public enum PullRunner {
         public var verbose: Bool
         public var configPath: URL
 
-        // Spelled out because a public struct's memberwise initialiser is internal.
         public init(
             output: URL, slot: Int = Sysex.defaultSlot, noIdentity: Bool = false,
             timeoutMs: Int = DeviceTransport.defaultTimeoutMs, template: URL? = nil,
@@ -74,7 +70,6 @@ public enum PullRunner {
         String(format: "%.1f", interval)
     }
 
-    /// Where `--also-midi`'s export goes, and how it is rendered.
     struct MidiPlan {
         var destination: URL
         var options: ExportOptions
@@ -85,13 +80,10 @@ public enum PullRunner {
         case refusal(RunResult)
     }
 
-    /// `export`'s own destination and options for the project about to be written, so the flag
-    /// cannot render a different file from the command it stands in for.
     static func midiPlan(_ options: Options) -> MidiPlanning {
         let export = ExportRunner.Options(path: options.output, configPath: options.configPath)
         let destination = ExportRunner.defaultDestination(export.path)
-        // Case-folded: the volume this writes to is case-insensitive by default, where
-        // `Foo.MID` and the `Foo.mid` beside it are one file.
+        // Case-folded: on a case-insensitive volume `Foo.MID` and `Foo.mid` are one file.
         if options.output.pathExtension.lowercased() == "mid" {
             return .refusal(
                 fail(
@@ -100,7 +92,6 @@ public enum PullRunner {
         }
         let drumMap: DrumMap?
         do {
-            // The map is a usage error, so the config file is read before the walk, not after.
             drumMap = try resolveDrumMap(nil, configPath: options.configPath)
         } catch {
             return .refusal(fail("drum map: \(error)", code: 2))
@@ -121,16 +112,11 @@ public enum PullRunner {
         }
     }
 
-    /// `attach` stands in for the device under a replay or a test; nil takes the one on the wire.
     public static func run(
         _ options: Options, attach: (() throws -> any PullDevice)? = nil
     ) -> RunResult {
-        // From the top, not from the first frame: the 3.5 MB template parse and the write of the
-        // same size are most of a run that is not at the device.
         let began = Date()
 
-        // Everything that can refuse the run happens here: a read costs ten seconds of the
-        // operator's attention, and refusing it afterwards wastes them.
         var midi: MidiPlan?
         if options.alsoMidi {
             switch midiPlan(options) {
@@ -166,7 +152,6 @@ public enum PullRunner {
         let requests: Int
         do {
             let device = try attach?() ?? KeyStepPro.attach(timeoutMs: options.timeoutMs)
-            // Outside the count: the summary reports the size of the walk.
             let version = options.noIdentity ? BulkRead.defaultVersion : try device.identify()
             let counted = Counted(device)
             raw = try BulkRead.readRaw(
@@ -175,16 +160,12 @@ public enum PullRunner {
         } catch let error as DeviceError {
             return fail("\(error)", code: 1)
         } catch {
-            // A well-formed frame that answered the wrong question, or a slot with nothing saved
-            // in it. BulkRead's messages already say which.
             return fail("slot \(options.slot): \(error)", code: 1)
         }
         let reading = Date().timeIntervalSince(opened)
 
-        // What was read has to parse as a project before it is worth writing.
         let project: Project
         do {
-            // The bare name, as `Reader.load` gives it: it becomes the MIDI track name.
             project = try Reader.readProject(raw, sourceName: options.output.lastPathComponent)
         } catch {
             return fail("the device's answer is not a readable project: \(error)", code: 1)
@@ -244,9 +225,6 @@ public enum PullRunner {
         return result
     }
 
-    /// A failure once the project is on disk: it names the project as written, because the file
-    /// is there whatever happened next. `reporting` draws the line -- the warnings a read
-    /// earned reach stderr ahead of an export that had nothing to write, and no other.
     static func refused(
         _ message: String, report: Report, options: Options, reporting: Bool = false
     ) -> RunResult {

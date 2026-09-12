@@ -5,8 +5,6 @@ import Testing
 @testable import KSPApp
 
 @Suite struct FindingTests {
-    /// Two codes of each severity, interleaved, so both the sort and its stability have something
-    /// to get wrong. Nothing in the repo raises an error today; these are synthetic.
     private var mixed: Report {
         Report([
             Diagnostic(code: .notesQuantised, detail: "first warning", site: Site(track: 1)),
@@ -20,8 +18,6 @@ import Testing
         ])
     }
 
-    /// The lockstep guard: the app shows the report's own lines, reordered and nothing more, so a
-    /// later change to ``Report/render(verbose:)`` cannot leave this copy behind.
     @Test func arowIsARenderedLineAtEitherSetting() {
         for verbose in [false, true] {
             let rows = mixed.rows(verbose: verbose).map(\.text)
@@ -47,8 +43,6 @@ import Testing
                 == ["track 2: first error", "track 4: second error"])
     }
 
-    /// ``Group/severity`` is its first entry's, so a collapsed row reads the group's own entries:
-    /// a kind raised as an error anywhere in it is an error on the row that stands for it.
     @Test func acollapsedRowTakesTheGravestSeverityInItsGroup() {
         let report = Report([
             Diagnostic(code: .notesQuantised, detail: "one", site: Site(track: 1)),

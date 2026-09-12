@@ -5,7 +5,6 @@ import Testing
 
 /// The messages are compared exactly: they are part of the two CLIs' byte-for-byte contract.
 @Suite struct MidiTracksOptionTests {
-    /// The message from a refusal, or `nil` if it was accepted.
     private func refusal(_ single: Int?, _ listed: String?) -> String? {
         do {
             _ = try resolveMidiTracks(single, listed)
@@ -23,7 +22,6 @@ import Testing
         #expect(try resolveMidiTracks(3, nil) == [3])
     }
 
-    /// ImportOptions words the refusal for --midi-track, as it did before --midi-tracks existed.
     @Test func theSingleSpellingKeepsAnOutOfRangeNumber() throws {
         #expect(try resolveMidiTracks(0, nil) == [0])
     }

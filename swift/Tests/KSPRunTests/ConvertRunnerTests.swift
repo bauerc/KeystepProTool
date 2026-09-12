@@ -37,7 +37,6 @@ private func options(
         #expect(!result.stdout.contains("no source track was taken as drums"))
     }
 
-    /// The single-target shape returned before the tail line existed.
     @Test func nodrumsReachesTheSingleTargetSummary() {
         let result = ConvertRunner.run(
             options("test_file_simple.mid", noDrums: true, midiTrack: 1))

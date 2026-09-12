@@ -20,7 +20,6 @@ public enum MIDIExport {
 
     public static let maxRepeat = 10
 
-    /// Shared by both directions; `nil` means "leave every velocity alone".
     public static func checkFlatVelocity(_ velocity: Int?) throws {
         if let velocity, !(MIDIExport.minVelocity...MIDIExport.maxVelocity ~= velocity) {
             throw KSPError.value(

@@ -4,8 +4,6 @@ import Testing
 
 @testable import KSPApp
 
-/// The wording a refused file gets. #282: the window showed the log line -- an absolute path and
-/// a Swift case with its parentheses and nested quotes -- and offered no way out of it.
 @Suite struct ReadFailureTests {
     private let path = URL(filePath: "/Users/someone/Music/bogus.mid")
 
@@ -26,7 +24,6 @@ import Testing
         #expect(!failure.headline.contains("("))
     }
 
-    /// The headline is a sentence, so the path it is about belongs on its own line beneath.
     @Test func thepathIsSecondaryRatherThanPartOfTheSentence() {
         let failure = failure(.unrecognised)
 
@@ -41,7 +38,6 @@ import Testing
                 .headline.hasSuffix("MIDI Control Center."))
     }
 
-    /// Only the direction changes: what is wrong with a `.KeyStepPro` is not a MIDI header.
     @Test func aprojectIsRefusedAsAProjectRatherThanAsAMIDIFile() {
         let failure = failure(
             .unrecognised, kind: .toMIDI, detail: "could not parse: expected a key or } at byte 0",
@@ -58,14 +54,12 @@ import Testing
         #expect(!failure.headline.contains("isn't a MIDI file"))
     }
 
-    /// The reader's own refusals are already written for a reader; only the type's are not.
     @Test func areadersRefusalKeepsTheReadersWords() {
         let failure = failure(.refused, detail: "midi_track counts from 1")
 
         #expect(failure.headline.contains("midi_track counts from 1"))
     }
 
-    /// The action bar is one line wide, so its reason cannot be the headline.
     @Test func theblockReasonFitsBesideConvert() {
         #expect(failure(.unrecognised).blockReason.count < 60)
     }

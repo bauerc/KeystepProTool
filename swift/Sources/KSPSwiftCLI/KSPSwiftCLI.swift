@@ -27,7 +27,6 @@ enum Entry {
             var command = try RootCommand.parseAsRoot()
             try command.run()
         } catch let status as ExitStatus {
-            // Already reported by whoever threw it.
             exit(status.code)
         } catch {
             // `--help` arrives here as a clean exit; everything else is a usage error, which

@@ -1,7 +1,4 @@
 // Regenerate fixtures/bulk_fast_requests.txt and fixtures/bulk_read_walk.txt from the Swift plan.
-//
-// Compiled against KSPKit and KSPTape by scripts/gen_bulk_fixtures.sh, the only caller. BulkFastTests
-// and BulkReadTests hold the code to these files, so rewriting them is a reviewed decision.
 
 import Foundation
 

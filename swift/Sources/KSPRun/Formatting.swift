@@ -4,7 +4,6 @@ import KSPKit
 /// Widest gate the ladder prints, `0.0625`, so the columns after gate stay aligned.
 private let gateWidth = 6
 
-/// Show the gate length in steps, or the raw value when it does not decode.
 /// The ladder covers every legal value, so `?` means the file holds a gate outside 0-127.
 private func formatGate(_ gate: Double?, raw: Int) -> String {
     guard let gate else { return "?(\(raw))" }
@@ -78,7 +77,6 @@ private func patternLines(_ pattern: Pattern, _ drumMap: DrumMap?, verbose: Bool
         }
     }
     if verbose {
-        // Inline, next to the notes they are about: collapsed they would lose where the problem is.
         lines += pattern.warnings.map { "      ! \($0)" }
     }
     return lines
@@ -94,7 +92,6 @@ private func trackLines(
         + patterns.flatMap { patternLines($0, drumMap, verbose: verbose) }
 }
 
-/// Every diagnostic in the project, stamped with the track it came from.
 func projectReport(_ project: Project) -> Report {
     let collector = Collector()
     collector.extend(project.diagnostics.entries)
@@ -106,7 +103,6 @@ func projectReport(_ project: Project) -> Report {
     return collector.report()
 }
 
-/// Render a project as an indented tree: tracks -> patterns -> notes.
 func formatProject(
     _ project: Project, showAll: Bool = false, drumMap: DrumMap? = nil, verbose: Bool = false
 ) -> String {
@@ -134,7 +130,6 @@ func formatProject(
     lines += body.isEmpty ? ["  (no patterns hold notes)"] : body
 
     if !verbose {
-        // One block at the end: the same finding recurs in a dozen patterns.
         let report = projectReport(project)
         if !report.isEmpty {
             lines.append("")
@@ -158,7 +153,6 @@ extension String {
     }
 }
 
-/// A report as the CLI prints it: one line per kind unless `verbose`, then the "more" note.
 func reported(_ report: Report, verbose: Bool, prog: String) -> String {
     var lines = report.render(verbose: verbose).map { "\(prog): warning: \($0)\n" }
     if let note = report.note(verbose: verbose) {

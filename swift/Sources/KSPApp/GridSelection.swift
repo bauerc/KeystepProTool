@@ -12,7 +12,6 @@ struct GridSelection: Sendable, Equatable {
         case off
         case mixed
 
-        /// What the stroke says, which is all a tick changes about a cell.
         var spoken: String {
             switch self {
             case .on: return "exported"
@@ -36,7 +35,6 @@ struct GridSelection: Sendable, Equatable {
 
     init(_ summary: ProjectSummary) {
         self.tracks = summary.tracks.map(\.number)
-        // Deduplicated rather than trusted unique: the reader hands over whatever the file holds.
         self.names = Dictionary(
             summary.tracks.map { ($0.number, $0.name) }, uniquingKeysWith: { first, _ in first })
         self.patterns = Array(1...AppLayout.columnCount)
@@ -48,7 +46,6 @@ struct GridSelection: Sendable, Equatable {
         !unticked.contains(Cell(track: track, pattern: pattern))
     }
 
-    /// Read across the slots in play, so a slot off everywhere leaves no row reading as half-ticked.
     func state(ofTrack track: Int) -> Tick {
         state(of: livePatterns.map { Cell(track: track, pattern: $0) })
     }
@@ -70,7 +67,6 @@ struct GridSelection: Sendable, Equatable {
         }
     }
 
-    /// Ticking reaches only the slots in play, so bringing a track back does not undo a column.
     mutating func toggle(track: Int) {
         let ticked = state(ofTrack: track) != .on
         let reached = ticked ? livePatterns : patterns
@@ -83,7 +79,6 @@ struct GridSelection: Sendable, Equatable {
         set(reached.map { Cell(track: $0, pattern: pattern) }, ticked: ticked)
     }
 
-    /// The ticked slots per track, empty when everything is -- how the runner spells "all".
     var selectedCells: [Int: Set<Int>] {
         guard !unticked.isEmpty else { return [:] }
         var selected: [Int: Set<Int>] = [:]
@@ -99,7 +94,6 @@ struct GridSelection: Sendable, Equatable {
         return "Nothing is ticked. Tick at least one pattern slot to convert."
     }
 
-    /// What the result says was left out, widest grouping first.
     var exclusionNote: String? {
         guard !isInert, !unticked.isEmpty else { return nil }
         let live = liveTrackNumbers
@@ -134,7 +128,6 @@ struct GridSelection: Sendable, Equatable {
         tracks.filter { track in patterns.contains { isTicked(track: track, pattern: $0) } }
     }
 
-    /// Nothing ticked puts the whole grid back in play, or a click would reach nothing.
     private var liveTracks: [Int] {
         let live = liveTrackNumbers
         return live.isEmpty ? tracks : live

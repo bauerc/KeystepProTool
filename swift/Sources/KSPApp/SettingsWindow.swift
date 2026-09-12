@@ -1,9 +1,5 @@
 import SwiftUI
 
-/// Everything the app remembers that no single conversion decides: which unit it dresses as, where
-/// each kind of file lands by default, and how much of a finding list it draws. Appearance is an
-/// OS-level affordance and belongs where a Mac user already looks for one (⌘,), not beside the
-/// controls that change the file being written.
 struct SettingsWindow: View {
     @Bindable var model: AppModel
     @Environment(\.colorScheme) private var systemScheme
@@ -42,7 +38,6 @@ struct SettingsWindow: View {
                 Text(model.folders.description(of: kind))
                     .font(TypeScale.label).foregroundStyle(palette.mutedInk)
                     .fixedSize(horizontal: false, vertical: true)
-                    // `description(of:)` tildes the path, so the full one has to be reachable.
                     .help(model.folders[kind]?.path ?? kind.defaultDescription)
 
                 HStack(spacing: 8) {

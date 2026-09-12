@@ -5,7 +5,6 @@ import Testing
 
 @testable import KSPApp
 
-/// The wording matters as much as the count: nothing renders it to a CLI to catch a drift.
 @Suite struct ExportLengthTests {
 
     private func length(_ summary: ProjectSummary) -> ExportLength {
@@ -20,7 +19,6 @@ import Testing
         #expect(length(syntheticSummary(notes: threeSlots)).patterns == 3)
     }
 
-    /// `arrange` lays out one slot per pattern *number*, however many tracks play it.
     @Test func aslotTwoTracksShareIsCountedOnce() {
         let summary = syntheticSummary(notes: [
             1: [1: (held: 4, enabled: 4), 2: (held: 4, enabled: 4)],
@@ -52,7 +50,6 @@ import Testing
         #expect(ExportLength(summary, selection: selection).patterns == 1)
     }
 
-    /// The length is the arrange lanes' header to say; a second line saying it again is noise.
     @Test func aselectionThatHoldsSomethingSaysNothing() {
         #expect(length(syntheticSummary(notes: threeSlots)).warning == nil)
     }
@@ -72,7 +69,6 @@ import Testing
         #expect(length.warning == "No ticked slot holds anything, so nothing would be written.")
     }
 
-    /// `selectedCells` is not empty here, so Convert stays enabled and this line is the warning.
     @Test func tickingOnlyEmptySlotsSaysNothingWouldBeWritten() {
         let summary = syntheticSummary(notes: threeSlots)
         var selection = GridSelection(summary)

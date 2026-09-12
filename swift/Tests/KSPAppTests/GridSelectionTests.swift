@@ -112,7 +112,6 @@ import Testing
         #expect(selection.selectedCells.isEmpty)
     }
 
-    /// Re-ticking lands back on the default exactly, or the app stops matching the CLI.
     @Test func retickingReturnsToTheDefault() {
         var selection = fullyTicked()
         let fresh = selection

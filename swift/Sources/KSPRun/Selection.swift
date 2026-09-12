@@ -3,7 +3,6 @@ import KSPKit
 
 public let selectionHelp = "numbers and N-M ranges, comma-separated (e.g. 1,3 or 2-4)"
 
-/// `nil` gives the empty set, which is how `Project.select` already spells "all of them".
 public func parseSelection(_ text: String?, option: String, limit: Int) throws -> Set<Int> {
     guard let text else { return [] }
     var selected: Set<Int> = []
@@ -41,15 +40,13 @@ private func number(
 ) throws -> Number {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     if let value = Int(trimmed) { return Number(value: value, spelled: nil) }
-    // A numeral too big for `Int` is still a number, so it is compared and printed rather than
-    // rejected. Saturating leaves every comparison below on the side its digits put it.
+    // Saturating leaves every comparison below on the side the digits put it.
     guard let numeral = numeral(trimmed) else {
         throw KSPError.value("\(option): '\(item)' is not a number or a range")
     }
     return Number(value: trimmed.first == "-" ? .min : .max, spelled: numeral)
 }
 
-/// `text` as the integer it spells is printed -- sign kept, leading zeros dropped -- or `nil`.
 private func numeral(_ text: String) -> String? {
     let sign = text.first == "-" ? "-" : ""
     var digits = Substring(text)

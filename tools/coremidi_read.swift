@@ -1,8 +1,5 @@
 // Read a project off the device over CoreMIDI and write the .KeyStepPro (issues #245, #246).
 //
-// A driver over `KSPDevice` that exercises the transport directly: `kspplus pull` is the command
-// that reads a project, and this drives `BulkRead.readRaw` underneath it.
-//
 //   (cd swift && swift build --target KSPDevice)
 //   swiftc -O -I swift/.build/debug/Modules tools/coremidi_read.swift \
 //       swift/.build/debug/KSPKit.build/*.o swift/.build/debug/KSPDevice.build/*.o \

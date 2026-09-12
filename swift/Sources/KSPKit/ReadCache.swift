@@ -36,8 +36,8 @@ final class ReadCache: @unchecked Sendable {
         }
     }
 
-    /// Two callers racing one cold path both parse: `parse` runs outside the lock deliberately,
-    /// so a cold read of one file never queues behind another file's.
+    /// `parse` runs outside the lock deliberately, so two callers racing a cold path both
+    /// parse rather than one file's read queueing behind another's.
     func project(at url: URL, parse: (URL) throws -> Project) throws -> Project {
         if let cached = lock.withLock({ recall(url) }) { return cached }
         let project = try parse(url)

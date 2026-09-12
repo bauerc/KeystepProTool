@@ -84,7 +84,6 @@ import Testing
         #expect(result.code == 1)
         #expect(
             result.message == "\(written.relativePath) already exists (use --force to overwrite)")
-        // The check is worth more before the read: ten seconds of the operator's attention.
         #expect(device.asked.isEmpty)
         #expect(try String(contentsOf: written, encoding: .utf8) == "mine")
 
@@ -152,7 +151,6 @@ import Testing
         #expect(device.asked.count == 2169)
     }
 
-    /// `--also-midi` composes the two commands; it does not export differently.
     @Test(arguments: [1, 2]) func theExportedMidiIsTheFileExportWouldHaveWritten(slot: Int) throws {
         let tape = slot == 1 ? "recall_tape.txt" : "recall_project_2_tape.txt"
         let device = TapeDevice(try recallTape(named: tape))
@@ -187,11 +185,9 @@ import Testing
         #expect(result.stdout.contains("wrote \(written.relativePath)\n"))
         #expect(result.stdout.contains("wrote \(midiBeside(written).relativePath)\n"))
         #expect(result.stdout.contains("note(s) from pattern(s) "))
-        // The timing line stays last, whatever the export put in front of it.
         #expect(result.stdout.hasSuffix(" s of it at the device"))
     }
 
-    /// Both destinations are checked before the device is touched, and --force covers both.
     @Test func anExistingMidiStopsTheReadTheWayAnExistingProjectDoes() throws {
         let device = TapeDevice(try recallTape())
         let written = try scratch()
@@ -220,7 +216,6 @@ import Testing
         #expect(try Data(contentsOf: midi) != Data("mine".utf8))
     }
 
-    /// The read is worth keeping; a MIDI file with nothing in it would look like success.
     @Test func aProjectWithNoNotesKeepsThePullAndRefusesTheMidi() throws {
         let device = TapeDevice(try templateValues())
         let written = try scratch()
@@ -234,11 +229,9 @@ import Testing
         #expect(result.stderr.contains("no pattern holds notes"))
         #expect(FileManager.default.fileExists(atPath: written.path))
         #expect(!FileManager.default.fileExists(atPath: midiBeside(written).path))
-        // The project is on disk, so the run names it: the app lists what a read wrote.
         #expect(result.destinations == [written])
     }
 
-    /// The `.mid` cannot be written over a directory, and no report is printed on that path.
     @Test func amidiThatCannotBeWrittenStillNamesTheProjectThatWas() throws {
         let device = TapeDevice(try recallTape())
         let written = try scratch()
@@ -260,7 +253,6 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: written.path))
     }
 
-    /// Naming the project .mid would have the export overwrite the project.
     @Test func alsoMidiRefusesADestinationThatIsItsOwnMidiFile() throws {
         let device = TapeDevice(try recallTape())
         let written = try scratch().deletingPathExtension().appendingPathExtension("mid")
@@ -276,8 +268,8 @@ import Testing
         #expect(device.asked.isEmpty)
     }
 
-    /// The volume is case-insensitive by default, so `.MID` names the very file the export
-    /// would write and the exact-match guard would let the read clobber its own project.
+    /// The volume is case-insensitive by default, so `.MID` names the very file the export would
+    /// write and the exact-match guard would let the read clobber its own project.
     @Test func alsoMidiRefusesADestinationThatIsItsOwnMidiFileWhateverTheCase() throws {
         let device = TapeDevice(try recallTape())
         let written = try scratch().deletingPathExtension().appendingPathExtension("MID")
@@ -293,8 +285,6 @@ import Testing
         #expect(device.asked.isEmpty)
     }
 
-    /// The identity parse failure is wrapped in the slot it was reading; the wire's own
-    /// silences are what stay unwrapped.
     @Test func anUnreadableIdentityIsNamedWithTheSlotItWasReading() throws {
         let written = try scratch()
         defer { try? FileManager.default.removeItem(at: written) }
@@ -321,7 +311,6 @@ import Testing
     }
 }
 
-/// Where `--also-midi` puts the export: beside the project, suffixed `.mid`.
 private func midiBeside(_ output: URL) -> URL {
     output.deletingPathExtension().appendingPathExtension("mid")
 }
@@ -336,7 +325,6 @@ private func templateValues() throws -> [String: Int] {
     }
 }
 
-/// A destination that does not exist yet, in a directory the run has to create.
 private func scratch() throws -> URL {
     FileManager.default.temporaryDirectory
         .appending(path: "kspplus-pull-\(UUID().uuidString)")
@@ -347,8 +335,6 @@ private struct DeviceUnreachable: Error, CustomStringConvertible {
     let description = "no MIDI device named \"KeyStep Pro\""
 }
 
-/// A device answering the identity request with a frame that is not one -- a `KSPError`, as the
-/// transport throws for a reply that came back and answered the wrong question.
 private final class UnreadableIdentity: PullDevice {
     static let message = "not a KeyStep Pro identity reply: f07ef7"
 
@@ -357,7 +343,6 @@ private final class UnreadableIdentity: PullDevice {
     func exchange(_ request: [UInt8]) throws -> [UInt8] { [] }
 }
 
-/// Every address one of `fixtures/*_tape.txt` delivered, as the device sent it.
 private func recallTape(named name: String = "recall_tape.txt") throws -> [String: Int] {
     try tapeValues(contentsOf: RepoData.fixtures.appending(path: name))
 }

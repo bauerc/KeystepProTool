@@ -2,15 +2,12 @@ import Foundation
 import KSPKit
 import KSPRun
 
-/// The preview list: one row per source track of a dropped MIDI file, in the file's own order.
 struct SourceTrackList: Equatable {
     enum Badge: Equatable {
         case drums
         case percussion
         case tempo
 
-        /// ``drums`` says what the app calls the destination elsewhere; ``tempo`` says what a DAW
-        /// calls the track the repo's own exporter writes as the conductor.
         var text: String {
             switch self {
             case .drums: return "Drums"
@@ -21,17 +18,13 @@ struct SourceTrackList: Equatable {
     }
 
     struct Row: Equatable {
-        /// Counting from 1 over every track of the file, as `--midi-tracks` counts them.
         let number: Int
         let name: String
-        /// `nil` on a track the import reads melodically.
         let badge: Badge?
         let channels: String
         let counts: String
         let isEmpty: Bool
-        /// The row's tooltip.
         let detail: String
-        /// Every column but the controls, said as one line.
         let spoken: String
 
         init(_ track: SourceTrackSummary, badge: Badge?, drums: DrumSense) {
@@ -51,7 +44,6 @@ struct SourceTrackList: Equatable {
                 [
                     "Source track \(track.number)", track.name.isEmpty ? nil : track.name,
                     badge?.text,
-                    // "and", not a comma: "channels 1, 2, 8 notes" is heard as three channels.
                     track.channels.isEmpty
                         ? nil
                         : "channel\(track.channels.count == 1 ? "" : "s") "
@@ -84,8 +76,6 @@ struct SourceTrackList: Equatable {
             case .drums where drums.designation.sourceTrack != nil:
                 detail += " This one is sent to Drums, so it becomes the drum track."
             case .drums:
-                // Only the searched channel's part of a split track is the drum track; the badge
-                // alone would claim the whole row.
                 detail +=
                     track.channels.count == 1
                     ? " Channel \(drums.channel) is where the import looks for drums, so this one "
@@ -96,13 +86,10 @@ struct SourceTrackList: Equatable {
                 detail +=
                     " Channel \(drums.channel) is where the import looks for drums, but the device "
                     + "has one drum track, so this one is imported melodically."
-            // A conductor track holds no notes, so it returned above rather than reaching here.
             case .tempo, nil:
                 break
             }
             if track.channels.count > 1 {
-                // `assign` merges every clip of a named track into the one drum clip, which is why
-                // `SourceTrackSelection.demand` counts it as one device track rather than as many.
                 detail +=
                     badge == .drums && drums.designation.sourceTrack != nil
                     ? " Its channels are merged onto that one device track."
@@ -114,9 +101,6 @@ struct SourceTrackList: Equatable {
 
     let header: String
     let rows: [Row]
-    /// What the read found; `nil` where it found nothing. Rendered once in both modes, as
-    /// ``Outcome`` renders its findings: a SwiftUI body is re-evaluated far more often than a file
-    /// is read, and the sidebar's toggle reaches this note as it reaches those.
     let collapsedNote: String?
     let allNotes: String?
 
@@ -127,10 +111,6 @@ struct SourceTrackList: Equatable {
             "\(Arithmetic.general(summary.tempoBPM)) BPM · "
             + "\(Arithmetic.general(summary.beatsPerBar)) beats to the bar · "
             + counted(summary.tracks.count, "source track")
-        // `isDrumTrack` and `isPercussion` are GM's reading of the file, so under any designation
-        // but the default they would badge a row the import will not touch. The selection's own
-        // `drumSource` rather than a second derivation of it: it looks among the ticked tracks, and
-        // a badge naming a track the block does not would contradict the reason on screen.
         let source = selection.drumSource(drums)
         self.rows = summary.tracks.map { track in
             if track.number == source { return Row(track, badge: .drums, drums: drums) }
@@ -147,7 +127,6 @@ struct SourceTrackList: Equatable {
     }
 }
 
-/// What the file calls a track, or its number where it names none.
 func sourceTrackName(_ track: SourceTrackSummary) -> String {
     track.name.isEmpty ? "Track \(track.number)" : track.name
 }

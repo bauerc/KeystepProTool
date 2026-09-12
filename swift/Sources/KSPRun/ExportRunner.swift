@@ -10,7 +10,6 @@ public enum ExportRunner {
         public var split: Bool
         public var tracks: Set<Int>
         public var patterns: Set<Int>
-        /// The slots to keep per track, empty meaning all. No CLI flag fills it.
         public var cells: [Int: Set<Int>]
         public var passes: Int?
         public var repeatCount: Int
@@ -31,7 +30,6 @@ public enum ExportRunner {
         public var verbose: Bool
         public var configPath: URL
 
-        // Spelled out because a public struct's memberwise initialiser is internal.
         public init(
             path: URL, output: URL? = nil, split: Bool = false, tracks: Set<Int> = [],
             patterns: Set<Int> = [], cells: [Int: Set<Int>] = [:], passes: Int? = nil,
@@ -166,8 +164,6 @@ public enum ExportRunner {
         return result
     }
 
-    /// Shared with the arrangement preview, so the two cannot render under different options. The
-    /// wording of a refusal stays with each caller.
     static func exportOptions(_ options: Options, drumMap: DrumMap) throws -> ExportOptions {
         try ExportOptions(
             ticksPerBeat: options.ticksPerBeat, drumMap: drumMap,
@@ -178,7 +174,6 @@ public enum ExportRunner {
             flatVelocity: options.flatVelocity, repeatCount: options.repeatCount)
     }
 
-    /// Pair each rendered file with where it goes. Nothing is written yet.
     static func plan(_ project: Project, _ exportOptions: ExportOptions, options: Options) throws
         -> [(result: ExportResult, destination: URL)]
     {
@@ -195,7 +190,6 @@ public enum ExportRunner {
         return [(result, options.output ?? defaultDestination(options.path))]
     }
 
-    /// Where a whole-project export lands with no `-o`: the source, suffixed `.mid`.
     static func defaultDestination(_ path: URL) -> URL {
         path.deletingPathExtension().appendingPathExtension("mid")
     }
@@ -212,7 +206,6 @@ public enum ExportRunner {
         let patterns = result.patternNumbers.map(String.init).joined(separator: ", ")
         let tracks = result.trackNames.joined(separator: ", ")
         let verb = dryRun ? "would write" : "wrote"
-        // A count of one is what every export has always done, so saying it would be noise.
         let looped = count == 1 ? "" : "\n  repeated \(count) times end to end"
         return """
             \(verb) \(destination.relativePath)

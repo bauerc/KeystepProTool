@@ -9,7 +9,6 @@ import Testing
         try parseSelection(text, option: "--tracks", limit: limit)
     }
 
-    /// The message from a refusal, or `nil` if it was accepted.
     private func refusal(_ text: String, limit: Int = 4) -> String? {
         do {
             _ = try parse(text, limit: limit)

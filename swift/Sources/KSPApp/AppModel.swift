@@ -13,28 +13,20 @@ final class AppModel {
         case idle
         case staged(Staged)
         case working(String)
-        /// A read in flight, at the project it is reading. Nothing about it can be cancelled:
-        /// the walk is the runner's, and it does not take one.
         case reading(Int)
         case done(Outcome)
     }
 
     struct Staged {
         var job: Job
-        /// What a dry run said, if one has been made since the name last changed.
         var preview: Outcome?
         var summary: SummaryState = .loading
-        /// What the import would lay down, replanned whenever the selection or a setting moves.
         var segmentation: SegmentationState = .loading
-        /// Where the export would lay each Pattern, rearranged on the same terms.
         var arrangement: ArrangementState = .loading
         var selection = GridSelection()
         var sourceSelection = SourceTrackSelection()
-        /// Identity, not path: dropping the same file again is a new drop and needs a new read.
         let id = UUID()
 
-        /// Both of these read the tick set this drop seeded, so a read that has not landed yet --
-        /// which seeded neither -- says nothing.
         func blockReason(_ settings: Settings) -> String? {
             switch summary {
             case .project: return selection.blockReason
@@ -46,8 +38,6 @@ final class AppModel {
             }
         }
 
-        /// Whether the app has already refused the file. Nothing downstream of a read -- the name,
-        /// the destination, Convert -- can promise anything while this holds.
         var isUnreadable: Bool {
             if case .failed = summary { return true }
             return false
@@ -62,16 +52,12 @@ final class AppModel {
         }
     }
 
-    /// What the project a read wrote turned out to hold, read back off the file rather than kept
-    /// from the walk: the preview is then of what actually landed on disk.
     struct ReadPreview: Equatable {
         let project: URL
         var summary: SummaryState = .loading
         var arrangement: ArrangementState = .loading
     }
 
-    /// The Source section's three rows. ``source`` exists only while the track list has sent a
-    /// track to Drums, and is the editor for which track that is.
     enum DrumChoice: Hashable, Identifiable, Sendable {
         case automatic
         case source(Int)
@@ -90,8 +76,6 @@ final class AppModel {
 
     var phase: Phase = .idle
     var name: String = ""
-    /// Which unit the app dresses as. It changes nothing the app would compute, so it leaves a
-    /// staged preview standing.
     var appearance: Appearance {
         get { chosenAppearance }
         set {
@@ -100,10 +84,6 @@ final class AppModel {
             dress(newValue)
         }
     }
-    /// Which of the device's sixteen the read takes, remembered as the destinations are: a user
-    /// who reads project 7 reads it again.
-    /// How much of a finding list is drawn. A preference rather than a direction's option: it
-    /// changes what the reader is shown, not what is written, so a preview survives it.
     var verbose: Bool {
         get { chosenVerbose }
         set {
@@ -119,7 +99,6 @@ final class AppModel {
             refreshReadPlan()
         }
     }
-    /// Whether the read also writes the `.mid` the runner's own export would make from it.
     var alsoMidi: Bool {
         get { chosenAlsoMidi }
         set {
@@ -128,31 +107,18 @@ final class AppModel {
             refreshReadPlan()
         }
     }
-    /// What the read's files are called. Empty is not "unnamed": it is the slot's own default,
-    /// which is what the field shows as its placeholder.
     var readName: String = "" { didSet { refreshReadPlan() } }
-    /// `nil` whenever the result on screen is not a successful read's.
     private(set) var readPreview: ReadPreview?
-    /// Held rather than read from the menu's body: `NSDocumentController` is not observable, and
-    /// Open Recent has to redraw when a file is opened.
     private(set) var recentFiles: [URL] = []
-    /// Set through ``choose(_:)`` and ``useDefault(for:)`` alone, so every change is saved.
     private(set) var folders: Folders { didSet { refreshReadPlan() } }
-    /// Where the read's files would go and what they would be called, as the card shows it.
-    /// Kept rather than resolved on demand: a body is evaluated on every keystroke, and
-    /// resolving a free name walks the destination folder.
     private(set) var deviceReadPlan: DeviceRead.Plan
 
     private var chosenAppearance: Appearance
     private var chosenVerbose: Bool
     private var chosenSlot: Int
     private var chosenAlsoMidi: Bool
-    /// Ticked for the document on screen and cleared with it: a dry run that outlived its document
-    /// would write nothing for every file after it, and say so nowhere but on the button.
     private var dryRun = false
     private var slots: [Job.Kind: Settings]
-    /// The direction the panel is showing while nothing is staged, so cancelling a drop does not
-    /// snap it to the other one. Within a session only: a launch starts at the import.
     private var lastKind: Job.Kind = .toProject
 
     private let store: FolderStore
@@ -174,7 +140,6 @@ final class AppModel {
         chooseFile: @escaping @MainActor () -> URL? = AppModel.chooseFile,
         recents: RecentFiles = .documentController,
         pull: @escaping @Sendable (PullRunner.Options) -> RunResult = { PullRunner.run($0) },
-        // Optional: `NSApp` stands up with the application, and a test builds a model without one.
         dress: @escaping @MainActor (Appearance) -> Void = { NSApp?.appearance = $0.nsAppearance }
     ) {
         self.store = store
@@ -202,11 +167,8 @@ final class AppModel {
         dress(chosenAppearance)
     }
 
-    /// The direction whose remembered settings the panel is editing.
     var kind: Job.Kind { staged?.job.kind ?? lastKind }
 
-    /// The direction's own options, with the two the app rather than a direction owns laid over
-    /// them on the way out and taken back off on the way in.
     var settings: Settings {
         get {
             var out = slots[kind] ?? Settings()
@@ -217,8 +179,6 @@ final class AppModel {
         set {
             dryRun = newValue.dryRun
             verbose = newValue.verbose
-            // Written to whichever slot ``kind`` names now: a write before a drop lands in the
-            // other one.
             var kept = newValue
             kept.dryRun = false
             kept.verbose = false
@@ -274,8 +234,6 @@ final class AppModel {
         return staged
     }
 
-    /// A file arriving on a run already in flight would be staged and then thrown away by that
-    /// run's own answer, which lands last. A read is seconds at the device; both shut the door.
     var canAccept: Bool {
         switch phase {
         case .working, .reading: return false
@@ -283,7 +241,6 @@ final class AppModel {
         }
     }
 
-    /// File > Open. The same door as a drop, so the panel's file is staged rather than run.
     func open() {
         guard canAccept, let picked = chooseFile() else { return }
         accept(picked)
@@ -304,12 +261,8 @@ final class AppModel {
                         + "project.", report: Report(), note: nil))
             return
         }
-        // Recent to the app is what it could open, whatever the conversion then makes of it; a
-        // file it has no direction for never was.
         recents.note(url)
         recentFiles = recents.urls()
-        // Whatever is on screen ends here, and the dry run ticked for it ends with it. A tick
-        // made with nothing open was made for this file, so it stands.
         switch phase {
         case .staged, .done: dryRun = false
         case .idle, .working, .reading: break
@@ -324,10 +277,8 @@ final class AppModel {
         guard let staged, staged.summary == .loading else { return }
         let state = await Conversion.summarise(staged.job)
 
-        // A late answer must not reopen a drop that has since been cancelled or replaced.
         guard case .staged(var current) = phase, current.id == staged.id else { return }
         current.summary = state
-        // Each drop kind seeds its own, and leaves the other inert.
         switch state {
         case .project(let summary): current.selection = GridSelection(summary)
         case .song(let summary): current.sourceSelection = SourceTrackSelection(summary)
@@ -336,14 +287,11 @@ final class AppModel {
         phase = .staged(current)
     }
 
-    /// The file and the options the runner will be handed. Keyed on the whole of ``Settings``
-    /// rather than the fields a plan reads, so a setting added later cannot be forgotten here.
     struct PreviewKey: Equatable {
         let drop: UUID
         let settings: Settings
     }
 
-    /// `nil` over a project, which is planned by the grid it draws rather than by the importer.
     var segmentationKey: PreviewKey? {
         guard let staged, case .toProject = staged.job else { return nil }
         return PreviewKey(
@@ -355,14 +303,11 @@ final class AppModel {
         guard let staged, let key = segmentationKey else { return }
         let answer = await Conversion.segment(staged.job, settings: key.settings)
 
-        // A late answer must not overwrite a view whose drop or selection has since moved on --
-        // figures for the wrong set of tracks are the one thing a preview must never show.
         guard segmentationKey == key, case .staged(var current) = phase else { return }
         current.segmentation = answer
         phase = .staged(current)
     }
 
-    /// `nil` over a MIDI file, which has no Pattern to lay out until it has been imported.
     var arrangementKey: PreviewKey? {
         guard let staged, case .toMIDI = staged.job else { return nil }
         return PreviewKey(drop: staged.id, settings: settings.selecting(staged.selection))
@@ -372,16 +317,11 @@ final class AppModel {
         guard let staged, let key = arrangementKey else { return }
         let answer = await Conversion.arrange(staged.job, settings: key.settings)
 
-        // A late answer must not overwrite a view whose drop or ticks have since moved on, for the
-        // reason ``segment`` guards its own.
         guard arrangementKey == key, case .staged(var current) = phase else { return }
         current.arrangement = answer
         phase = .staged(current)
     }
 
-    /// Both selections whichever face is showing: a tick belongs to the drop, not to a preference,
-    /// and ``settings`` has already held Advanced's options back from Simple.
-    /// Takes the drop because ``convert()`` has left the staged phase by the time it needs this.
     func conversionSettings(_ staged: Staged) -> Settings {
         settings.selecting(staged.selection).selecting(staged.sourceSelection)
     }
@@ -408,19 +348,13 @@ final class AppModel {
         mutate { $0.sourceSelection.send(sourceTrack, to: destination) }
     }
 
-    /// What the track list and the sidebar's channel row draw under.
     var drumSense: DrumSense { settings.drumSense(named: staged?.sourceSelection.drumTrack) }
 
-    /// The rows in order; the middle one only while a source track is sent to Drums.
     var drumChoices: [DrumChoice] {
         let named = staged?.sourceSelection.drumTrack.map(DrumChoice.source)
         return [.automatic] + (named.map { [$0] } ?? []) + [.none]
     }
 
-    /// Two editors, one designation: the sidebar owns Automatic and None, the track list the named
-    /// track, which wins over both. Choosing either of the sidebar's clears the track list's, so
-    /// only one row is ever selected -- but a named track leaves ``Settings/drums`` alone, so None
-    /// is still there when the track goes elsewhere rather than silently becoming Automatic.
     var drumChoice: DrumChoice {
         get {
             guard let named = staged?.sourceSelection.drumTrack else {
@@ -430,7 +364,6 @@ final class AppModel {
         }
         set {
             switch newValue {
-            // Already the selected row: the track list is where the named track is edited.
             case .source: break
             case .automatic, .none:
                 settings.drums = newValue == .none ? .none : .automatic
@@ -456,7 +389,6 @@ final class AppModel {
 
     func convert() async {
         guard let staged, blockReason == nil else { return }
-        // Re-planned rather than reused: a name can be taken between the last keystroke and this.
         let plan = plan(for: staged.job)
         phase = .working(plan.source.lastPathComponent)
 
@@ -472,8 +404,6 @@ final class AppModel {
         phase = .done(outcome)
     }
 
-    /// Where the read's files go and what they are called, resolved fresh for the reason
-    /// ``convert()`` re-plans its own: a name can be taken since the card last drew.
     private var resolvedReadPlan: DeviceRead.Plan {
         AppModel.readPlan(slot: slot, named: readName, folders: folders, alsoMidi: alsoMidi)
     }
@@ -488,8 +418,6 @@ final class AppModel {
 
     private func refreshReadPlan() { deviceReadPlan = resolvedReadPlan }
 
-    /// The `.mid` is written beside the project the read just wrote, which is the app's own
-    /// default; a chosen MIDI folder is the export's rule and does not reach here.
     var deviceMIDINote: String? {
         guard alsoMidi, folders.midi != nil else { return nil }
         return "The MIDI file is written beside the project, not in the MIDI files folder."
@@ -502,21 +430,15 @@ final class AppModel {
 
         let outcome = await DeviceRead.run(plan, verbose: settings.verbose, pull: pull)
 
-        // A failure wrote no project, so there is nothing to read back and preview.
         readPreview = outcome.failed ? nil : ReadPreview(project: plan.target)
         phase = .done(outcome)
     }
 
-    /// On the user's word rather than after every run: a Finder window raised over the result
-    /// hides the one thing the run was for.
     func revealWritten() {
         guard case .done(let outcome) = phase, !outcome.failed else { return }
         reveal(outcome.written)
     }
 
-    /// What the read wrote, summarised and laid out as a dropped project would be. On the
-    /// defaults, not on ``settings``: this says what came off the device, not what an export would
-    /// make of it.
     func previewRead() async {
         guard let pending = readPreview, pending.summary == .loading else { return }
         let job = Job.toMIDI(pending.project)
@@ -525,8 +447,6 @@ final class AppModel {
         async let arranged = Conversion.arrange(job, settings: Settings())
 
         let summary = await summarised
-        // A late answer must not land on a result that has since been replaced, for the reason
-        // ``summarise()`` guards its own.
         guard readPreview?.project == pending.project else { return }
         readPreview?.summary = summary
 

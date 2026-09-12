@@ -2,10 +2,8 @@
 
 import PackageDescription
 
-// swift-midi-file supports Apple platforms only: its compatibility table lists Linux as WIP,
-// unlike swift-midi-core and swift-timecode underneath it. Gating the MIDI layer and everything
-// above it off on Linux is what lets KSPKit -- the format core, M9-M11, and the bulk of the port
-// -- build and test on the 1x runner. If upstream lands Linux support this conditional collapses.
+// swift-midi-file is Apple-only, so the MIDI layer and everything above it is gated off on
+// Linux to keep KSPKit building there.
 #if os(Linux)
     let midiDependencies: [Package.Dependency] = []
     let midiProducts: [Product] = []
@@ -13,16 +11,12 @@ import PackageDescription
 #else
     let midiDependencies: [Package.Dependency] = [
         .package(url: "https://github.com/orchetect/swift-midi-file", from: "1.0.0"),
-        // Runs on Linux too, but it is only ever needed by KSPSwiftCLI, which is gated off there
-        // anyway -- declaring it here keeps the Linux job from fetching a package it cannot use.
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
     ]
     let midiProducts: [Product] = [
         .executable(name: "kspplus", targets: ["KSPSwiftCLI"]),
-        // The GUI. SwiftPM builds the binary; scripts/bundle_app.sh wraps it in the .app, which is
-        // a directory with an Info.plist and needs no Xcode to assemble.
+        // SwiftPM builds the binary; scripts/bundle_app.sh wraps it in the .app.
         .executable(name: "ksp-app", targets: ["KSPApp"]),
-        // A product, not just a target, so the runners are linkable by name from both faces.
         .library(name: "KSPRun", targets: ["KSPRun"]),
     ]
     // The target is KSPSwiftCLI and the product kspplus: a product name is the binary's filename.
@@ -34,24 +28,15 @@ import PackageDescription
                 .product(name: "SwiftMIDIFile", package: "swift-midi-file"),
             ]
         ),
-        // A target of its own because CoreMIDI is Apple-only and KSPKit is what builds on the
-        // Linux runner. README section 5 has the rest.
+        // Its own target because CoreMIDI is Apple-only and KSPKit builds on the Linux runner.
         .target(name: "KSPDevice", dependencies: ["KSPKit"]),
-        // The command bodies, as a library rather than as part of the executable below.
-        //
-        // SwiftPM forbids a non-test target from depending on an executable target, so anything
-        // living in KSPSwiftCLI can only ever be reached by the CLI. M13's app needs the same
-        // `convert` that `kspplus convert` runs, byte for byte, so the runners sit here and
-        // both faces call them.
+        // SwiftPM forbids a non-test target from depending on an executable target, so the
+        // command bodies live here and both faces call them.
         .target(
             name: "KSPRun",
             dependencies: ["KSPMIDI", "KSPDevice"],
-            // MCC's factory default, which `convert` overwrites when the user names no template.
-            //
-            // A SwiftPM resource must live under its own target's directory, and SwiftPM copies a
-            // symlink *as a symlink* -- measured, with both `.copy` and `.process` -- which lands
-            // a dangling link in the bundle. So the real bytes live here, beside the untouchable
-            // sample in project_files/, and any other copy of the template links to this one.
+            // SwiftPM copies a symlink *as a symlink*, landing a dangling link in the bundle,
+            // so the real bytes live here and every other copy links to this one.
             resources: [.copy("Resources/Default.KeyStepPro")]
         ),
         .executableTarget(
@@ -61,24 +46,19 @@ import PackageDescription
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
-        // The drag-and-drop app, the second face on the same runners (M13.2). SwiftUI, AppKit and
-        // UniformTypeIdentifiers all ship in the Command Line Tools SDK, so this needs no Xcode.
         .executableTarget(name: "KSPApp", dependencies: ["KSPRun"]),
         .testTarget(name: "KSPMIDITests", dependencies: ["KSPMIDI", "KSPTestSupport"]),
         .testTarget(name: "KSPDeviceTests", dependencies: ["KSPDevice", "KSPTape"]),
         .testTarget(name: "KSPRunTests", dependencies: ["KSPRun", "KSPTape", "KSPTestSupport"]),
         // Tests an executable target, which needs `@main` rather than a `main.swift`.
         .testTarget(name: "KSPSwiftCLITests", dependencies: ["KSPSwiftCLI", "KSPTestSupport"]),
-        // Covers the app's file-placement rules, and is what makes `swift test` -- and so
-        // validate.sh -- compile the GUI on every run rather than only when someone bundles it.
         .testTarget(name: "KSPAppTests", dependencies: ["KSPApp", "KSPMIDI", "KSPTestSupport"]),
     ]
 #endif
 
 let package = Package(
     name: "KeyStepProTool",
-    // v14 because that is what the toolchain's Testing.framework is built for; anything lower
-    // links with a version warning on every test build.
+    // v14 is what the toolchain's Testing.framework is built for; lower warns on every build.
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "KSPKit", targets: ["KSPKit"])
@@ -86,13 +66,9 @@ let package = Package(
     dependencies: midiDependencies,
     targets: [
         .target(name: "KSPKit"),
-        // The fake device the tape-driven gates answer from, in one place rather than one copy
-        // per consumer: SwiftPM cannot share a source file between two test targets, but it can
-        // give them all a target to depend on. Not a product -- nothing ships it -- and it sits
-        // beside KSPKit rather than inside it, which would put a fake device in the app.
+        // SwiftPM cannot share a source file between two test targets, but it can give them
+        // all a target to depend on. Outside KSPKit, or the app would ship a fake device.
         .target(name: "KSPTape", dependencies: ["KSPKit"]),
-        // The repository paths and the parsed samples, on the same reasoning as KSPTape above:
-        // one target every test target depends on, rather than a copy per target.
         .target(name: "KSPTestSupport", dependencies: ["KSPKit"]),
         .testTarget(name: "KSPKitTests", dependencies: ["KSPKit", "KSPTape", "KSPTestSupport"]),
     ] + midiTargets

@@ -4,9 +4,7 @@ import KSPTape
 
 @testable import KSPDevice
 
-/// The frame the device would send back to `request`, carrying `values`. Echoes the request's own
-/// header rather than rebuilding it through `KSPTape.buildReply`, which throws: these stand in as
-/// the sentinel walk's `reread`, and that closure does not.
+/// The frame the device would send back to `request`, carrying `values`.
 func reply(to request: [UInt8], values: [UInt8]) -> [UInt8] {
     var head = Array(request.dropLast())
     head[6] = head[6] == Sysex.cmdScalar ? Sysex.cmdScalarReply : Sysex.cmdReadReply
@@ -36,7 +34,6 @@ func answerFromPatterns(_ request: [UInt8]) -> [UInt8] {
 }
 
 /// A device that answers from a script rather than from the wire.
-/// Synchronous throughout, so a test that waits out a timeout still runs instantly.
 final class ScriptedPort: SysExPort {
     private let answer: ([UInt8]) -> [[UInt8]]
     private(set) var sent: [[UInt8]] = []

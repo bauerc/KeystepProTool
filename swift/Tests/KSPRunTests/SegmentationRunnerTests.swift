@@ -28,8 +28,6 @@ private func options(
         #expect(summary.tracks[3].segments.map(\.pattern) == [1, 2])
     }
 
-    /// The same file through the runner and through the planner by hand: the runner adds no
-    /// arithmetic of its own on the way.
     @Test func therunnerAgreesWithThePlannerItCalls() throws {
         let path = RepoData.projectFiles.appending(path: "m6-test-file.mid")
         let midi = try MusicalMIDI1File(data: Data(contentsOf: path))
@@ -44,8 +42,6 @@ private func options(
                 == plan.tracks.map { $0.placements.map(\.stepCount) })
     }
 
-    /// The findings the plan already produced, carried rather than thrown away: the staged view
-    /// has to say what would be lost before the conversion runs, not after.
     @Test func theplansOwnFindingsComeBackWithIt() throws {
         let outcome = SegmentationRunner.run(options("m6-test-file.mid"))
 
@@ -59,8 +55,6 @@ private func options(
         #expect(unreadable.diagnostics.isEmpty)
     }
 
-    /// A file that will not read says so rather than leaving an empty preview to be read as an
-    /// import that would lay nothing down.
     @Test func afileThatWillNotReadSaysSoRatherThanPreviewingNothing() {
         let unreadable = SegmentationRunner.run(options("no-such-file.mid"))
 
@@ -68,7 +62,6 @@ private func options(
         #expect(unreadable.message != nil)
     }
 
-    /// The selection criterion: unticking a source track changes what the preview says.
     @Test func aselectionNarrowsWhatWouldBeLaidDown() throws {
         let outcome = SegmentationRunner.run(options("m6-test-file.mid", midiTracksSpec: "3,4"))
 

@@ -6,8 +6,6 @@ import Testing
 
 @testable import KSPApp
 
-/// What the read handed the runner, and the answer it was given back. Unchecked because the
-/// runner is called off the main actor: the options are written there and read here.
 private final class PullLog: @unchecked Sendable {
     private let lock = NSLock()
     private var options: [PullRunner.Options] = []
@@ -25,7 +23,6 @@ private final class PullLog: @unchecked Sendable {
     }
 }
 
-/// What the model revealed in the Finder, for the reason ``AppModelTests`` keeps its own.
 private final class Revealed {
     var files: [[URL]] = []
 }
@@ -37,8 +34,6 @@ private final class Revealed {
         chosenMIDIFolder: URL? = nil,
         pull: @escaping @Sendable (PullRunner.Options) -> RunResult = { _ in RunResult() }
     ) -> AppModel {
-        // The folder rather than an injected destination: a read follows the app's own
-        // project-folder rule, so the rule is what the test has to set.
         let defaults = volatileDefaults()
         FolderStore(defaults: defaults).save(Folders(project: directory, midi: nil))
         return AppModel(
@@ -48,7 +43,6 @@ private final class Revealed {
             pull: pull)
     }
 
-    /// A canned run, worded as `PullRunner` words its own.
     private func read(_ written: [URL], slot: Int = 1) -> RunResult {
         RunResult(
             stdout: """
@@ -83,8 +77,6 @@ private final class Revealed {
             model.deviceReadPlan.target == directory.appending(path: "Live set.KeyStepPro"))
     }
 
-    /// The runner refuses the whole read when either file is already there, so a free
-    /// `.KeyStepPro` beside a taken `.mid` is not a free name.
     @Test func bothFilesMoveAlongTogetherWhenEitherNameIsTaken() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -102,8 +94,6 @@ private final class Revealed {
         #expect(model.deviceReadPlan.target == directory.appending(path: "Project 1.KeyStepPro"))
     }
 
-    /// The card's plan is kept rather than resolved on every redraw, so each input that moves
-    /// it has to say so -- the project folder included.
     @Test func thecardsPlanFollowsAChosenProjectFolder() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -197,8 +187,6 @@ private final class Revealed {
         #expect(revealed.files == [[project, midi]])
     }
 
-    /// The MIDI half can fail with the project already on disk. "Nothing was read" would be a
-    /// 3.5 MB file the window never named, so the read that half-happened is listed as one.
     @Test func areadThatWroteTheProjectAndThenFailedStillListsIt() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -225,8 +213,6 @@ private final class Revealed {
         #expect(revealed.files == [[project]])
     }
 
-    /// The runner's messages name the fix -- the cable, MIDI Control Center, `killall MIDIServer`,
-    /// a project with nothing saved in it -- so the window says them rather than its own.
     @Test func afailedReadKeepsTheRunnersOwnWordsAndRevealsNothing() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -251,8 +237,6 @@ private final class Revealed {
         #expect(revealed.files.isEmpty)
     }
 
-    /// Through the real runner, which is what refuses a device it cannot reach -- and refuses it
-    /// before anything is written.
     @Test func thedeviceIsReachedThroughTheRunnerRatherThanAroundIt() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -272,7 +256,6 @@ private final class Revealed {
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
     }
 
-    /// A drop staged mid-read would be thrown away by the read's own answer, which lands last.
     @Test func adropIsIgnoredWhileTheDeviceIsBeingRead() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -300,7 +283,6 @@ private final class Revealed {
 
         model.alsoMidi = true
 
-        // Still nothing until a folder is chosen: the default already is beside the project.
         #expect(model.deviceMIDINote == nil)
 
         model.choose(.midi)
@@ -326,7 +308,6 @@ private final class Revealed {
         }
     }
 
-    /// The stub stands in for the runner's write, so the preview reads a real project back.
     private func writing(_ fixture: String) -> @Sendable (PullRunner.Options) -> RunResult {
         let source = RepoData.projectFiles.appending(path: fixture)
         return { options in
@@ -356,7 +337,6 @@ private final class Revealed {
         }
         #expect(shown.tempoBPM == expected.tempoBPM)
         #expect(shown.tracks.count == expected.tracks.count)
-        // Named after the file it was read back from, not after the fixture it was copied from.
         #expect(shown.sourceName == "Project 1.KeyStepPro")
         guard case .ready = model.readPreview?.arrangement else {
             Issue.record("the patterns should have been laid out")

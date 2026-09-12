@@ -68,8 +68,8 @@ private func number(_ field: Substring) throws -> Int {
     }
 
     @Test func everyRequestIsOneTheDeviceAnswers() throws {
-        // A count above 100 comes back clamped and would read as a desync; four indices draw
-        // no reply at all.
+        // A count above 100 comes back clamped and would read as a desync; four indices draw no
+        // reply at all.
         for request in try BulkFast.iterRequests() {
             _ = try Sysex.buildReadRequest(request)
             if let count = request.count {
@@ -80,8 +80,8 @@ private func number(_ field: Substring) throws -> Int {
     }
 
     @Test func noRunOverALoneIndexIsReadAsARange() throws {
-        // The device answers a range read over a lone index with the first entry repeated, so
-        // a per-pattern scalar coalesced into a 16-entry range reads pattern 1 sixteen times.
+        // The device answers a range read over a lone index with the first entry repeated, so a
+        // per-pattern scalar coalesced into a 16-entry range reads pattern 1 sixteen times.
         for request in try BulkFast.iterRequests() where request.indices.count == 1 {
             if let count = request.count {
                 #expect(count == 1, "\(request.item)_\(request.param) walks a lone index")
@@ -91,15 +91,13 @@ private func number(_ field: Substring) throws -> Int {
 
     @Test func nothingAChunkGateSettlesIsRolledOver() {
         // The two compete: the existence array skips an empty chunk outright, and a request
-        // coalesced across that chunk would fetch it back. Rolling over is for the pool no
-        // chunk gate reaches.
+        // coalesced across that chunk would fetch it back.
         #expect(BulkFast.rolledOver.isDisjoint(with: BulkFast.melodicGated))
         #expect(!BulkFast.rolledOver.contains(BulkFast.melodicGate))
     }
 
     @Test func theProtocolBindsARunBeforeTheExtentDoes() throws {
-        // It was the other way round while a run stopped at its own 64-entry chunk. Rolling
-        // over joins three of them, so the 100 the device honours is what cuts a run now.
+        // It was the other way round while a run stopped at its own 64-entry chunk.
         #expect(try BulkFast.iterRequests().map { $0.count ?? 0 }.max() == Sysex.maxReadCount)
         #expect(Sysex.maxReadCount == 100)
     }
@@ -120,8 +118,8 @@ private func number(_ field: Substring) throws -> Int {
     }
 
     @Test func theDrumPoolIsNeverGated() throws {
-        // A dead drum entry reads 127 in some patterns and the default row in others, so
-        // nothing derives it -- 117-121 must stay out of the gated set.
+        // A dead drum entry reads 127 in some patterns and the default row in others, so nothing
+        // derives it -- 117-121 must stay out of the gated set.
         #expect(BulkFast.melodicGated.isDisjoint(with: Set(117...121)))
         #expect(BulkFast.melodicGated == [109, 110, 111, 112, 113])
         #expect(BulkFast.melodicGate == 50)
@@ -130,8 +128,8 @@ private func number(_ field: Substring) throws -> Int {
 
     @Test(arguments: [1, 5, 16])
     func thePatternWalkCoversEveryKeyOfThatPattern(pattern: Int) throws {
-        // H2.4 reads one pattern of one track, and must not quietly drop a key the full walk
-        // would have filled for it.
+        // H2.4 reads one pattern of one track, and must not quietly drop a key the full walk would
+        // have filled for it.
         let whole = try addresses(try BulkFast.iterRequests())
         let subset = Set(
             try addresses(try BulkFast.iterPatternRequests(item: 123, pattern: pattern)))
@@ -145,8 +143,8 @@ private func number(_ field: Substring) throws -> Int {
 
     @Test(arguments: [1, 5, 16])
     func thePatternWalkReadsTheScalarsThatMakeAPatternPlay(pattern: Int) throws {
-        // Step count, swing, pattern bits and data state are per-pattern scalars, and each is
-        // its own request.
+        // Step count, swing, pattern bits and data state are per-pattern scalars, and each is its
+        // own request.
         let names = Set(
             try addresses(try BulkFast.iterPatternRequests(item: 123, pattern: pattern)))
         let owed: Set = [
@@ -158,8 +156,8 @@ private func number(_ field: Substring) throws -> Int {
     }
 
     @Test func thePatternWalkCarriesTheIndexLessScalars() throws {
-        // Tempo lives in 120_70/71/72 and has no pattern index, so a walk that kept only
-        // indexed requests would export the pattern at the wrong speed.
+        // Tempo lives in 120_70/71/72 and has no pattern index, so a walk that kept only indexed
+        // requests would export the pattern at the wrong speed.
         let names = Set(try addresses(try BulkFast.iterPatternRequests(item: 123, pattern: 1)))
 
         #expect(Set(["120_70", "120_71", "120_72"]).isSubset(of: names))
@@ -189,8 +187,8 @@ private func number(_ field: Substring) throws -> Int {
     }
 
     @Test func aSmallerCeilingSplitsTheSameAddresses() throws {
-        // The ceiling is the protocol's, not the plan's: halve it and the plan asks twice as
-        // often for exactly the addresses it asked for before.
+        // The ceiling is the protocol's, not the plan's: halve it and the plan asks twice as often
+        // for exactly the addresses it asked for before.
         let split = try BulkFast.iterRequests(maxCount: 32)
 
         #expect(try addresses(split) == addresses(try BulkFast.iterRequests()))

@@ -4,9 +4,7 @@ import KSPMIDI
 import KSPRun
 import SwiftUI
 
-/// A dropped MIDI file's source tracks and where each one is routed.
 extension DropView {
-    /// Unscrolled, like ``grid(_:selection:length:)``: the staged view already scrolls.
     func trackList(
         _ list: SourceTrackList, selection: SourceTrackSelection, placements: [Int: String]
     ) -> some View {
@@ -22,7 +20,6 @@ extension DropView {
                 }
             }
 
-            // Ticking past the device's four is flagged, not refused, so Convert stays enabled.
             if let overflow = selection.overflowNote {
                 Label(overflow, systemImage: "exclamationmark.triangle")
                     .font(TypeScale.label).foregroundStyle(palette.warning)
@@ -36,8 +33,6 @@ extension DropView {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// One source track. Dimmed where it holds nothing and struck through where it is unticked,
-    /// which are the two meanings the grid beside it gives the same marks.
     private func trackRow(
         _ row: SourceTrackList.Row, ticked: Bool,
         destination: SourceTrackSelection.Destination, placement: String?
@@ -51,7 +46,6 @@ extension DropView {
             .toggleStyle(.checkbox)
             .labelsHidden()
             .frame(width: AppLayout.trackTickWidth, alignment: .leading)
-            // The row's label says every one of these, which would otherwise be a stop each.
             Group {
                 numberChip(row.number, destination: destination)
                 Text(row.name)
@@ -63,8 +57,6 @@ extension DropView {
                         alignment: .leading)
                 badge(row.badge)
                     .frame(width: AppLayout.trackBadgeWidth, alignment: .leading)
-                // Kept where counts drops it: a track can carry all sixteen channels, and no fixed
-                // width holds that. The whole list is in the row's help.
                 Text(row.channels)
                     .font(TypeScale.value).lineLimit(1).minimumScaleFactor(0.7)
                     .foregroundStyle(.secondary)
@@ -85,8 +77,6 @@ extension DropView {
         .help(row.detail + (ticked ? "" : " · unticked, so it will not be imported"))
     }
 
-    /// Routing made visible at no added row width: the source row takes the colour of the device
-    /// row it lands in, and stays inert while it lands nowhere in particular.
     private func numberChip(_ number: Int, destination: SourceTrackSelection.Destination)
         -> some View
     {
@@ -98,8 +88,6 @@ extension DropView {
             .background(RoundedRectangle(cornerRadius: AppLayout.cellRadius).fill(fill))
     }
 
-    /// A track holding nothing gets no picker: a route naming one is refused, and there is nothing
-    /// of it to send anywhere.
     @ViewBuilder
     private func destinationPicker(
         _ row: SourceTrackList.Row, destination: SourceTrackSelection.Destination,
@@ -124,8 +112,6 @@ extension DropView {
         }
     }
 
-    /// The automatic choice reads as where the planner actually put the track, so the default is
-    /// the assignment rather than a promise about it.
     private func destinationLabel(
         _ destination: SourceTrackSelection.Destination, placement: String?
     ) -> String {
@@ -136,7 +122,6 @@ extension DropView {
     @ViewBuilder
     func badge(_ badge: SourceTrackList.Badge?) -> some View {
         if let badge {
-            // One neutral capsule for all three: the word says which, so no hue has to.
             Text(badge.text)
                 .font(.caption2).lineLimit(1)
                 .foregroundStyle(palette.mutedInk)

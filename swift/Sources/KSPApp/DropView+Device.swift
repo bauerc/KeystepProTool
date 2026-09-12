@@ -4,11 +4,7 @@ import KSPMIDI
 import KSPRun
 import SwiftUI
 
-/// Reading a project off the hardware: the card, the slot picker, and the map at rest.
 extension DropView {
-    /// Idle and converting are one object: the empty map in the track colours, at an intensity
-    /// under anything a slot holding notes takes. `playhead` lights a column white, which is what
-    /// the device lights the step it is playing.
     func restingMap(playhead: Int?) -> some View {
         VStack(alignment: .leading, spacing: AppLayout.cellSpacing) {
             ForEach(1...AppLayout.rowCount, id: \.self) { track in
@@ -27,8 +23,6 @@ extension DropView {
         }
     }
 
-    /// The rule around every cell is what draws the map while it holds nothing, and what keeps
-    /// the white step legible on the standard unit's off-white ground.
     private func restingSlot(track: Int, isPlayhead: Bool) -> some View {
         let hue = DeviceColor.track(track).over(
             palette.ground, alpha: targeted ? Density.restingTargeted : Density.resting)
@@ -41,8 +35,6 @@ extension DropView {
             }
     }
 
-    /// The other way a project reaches the app: off the device rather than out of a file. It sits
-    /// on the idle pane because it is an alternative to the drop above it, not a mode of its own.
     var deviceCard: some View {
         let plan = model.deviceReadPlan
         return section("Read from the KeyStep Pro") {
@@ -86,8 +78,6 @@ extension DropView {
         .frame(width: AppLayout.deviceCardWidth, alignment: .leading)
     }
 
-    /// The device's sixteen on the pattern map's own metrics. The chosen one is a lit readout
-    /// among unlit ones and the Read button names it, so no hue carries the choice.
     private var slotPicker: some View {
         HStack(spacing: AppLayout.cellSpacing) {
             ForEach(Array(DeviceRead.slots), id: \.self) { slot in slotCell(slot) }
@@ -122,8 +112,6 @@ extension DropView {
         .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 
-    /// The walk reports no position, so the progress is the system's own indeterminate view --
-    /// with the one instruction that matters while it runs.
     var reading: some View {
         VStack(spacing: 8) {
             ProgressView("Reading from the KeyStep Pro…")

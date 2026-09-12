@@ -6,7 +6,6 @@ import Testing
 
 /// The messages are compared exactly: they are part of the two CLIs' byte-for-byte contract.
 @Suite struct FlatVelocityTests {
-    /// The message from a refusal, or `nil` if it was accepted.
     private func refusal(_ text: String) -> String? {
         do {
             _ = try parseFlatVelocity(text)

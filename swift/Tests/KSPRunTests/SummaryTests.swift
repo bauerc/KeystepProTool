@@ -136,8 +136,6 @@ import Testing
         #expect(wrongFormat.message?.isEmpty == false)
     }
 
-    /// A caller showing a failure to someone says something different for each of these, so the
-    /// reason has to survive the trip out rather than being flattened into one sentence.
     @Test func amissingProjectIsToldApartFromAnUnrecognisedOne() throws {
         let missing = SummaryRunner.run(
             SummaryRunner.Options(path: RepoData.projectFiles.appending(path: "nope.KeyStepPro")))
@@ -159,7 +157,6 @@ import Testing
         #expect(try #require(wrongFormat.failure).reason == .unrecognised)
     }
 
-    /// The path and the type's own words are what a log needs and what a window must not show.
     @Test func afailureKeepsThePathAndTheTypesOwnWordsApart() throws {
         let path = RepoData.projectFiles.appending(path: "test_file.mid")
         let failure = try #require(SummaryRunner.run(SummaryRunner.Options(path: path)).failure)

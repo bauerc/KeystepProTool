@@ -15,7 +15,6 @@ import Testing
 
     static func url(_ name: String) -> URL { URL(filePath: "/nowhere/\(name).KeyStepPro") }
 
-    /// Counts the reads the cache let through to a parse.
     final class Parses: @unchecked Sendable {
         private let lock = NSLock()
         private var names: [String] = []

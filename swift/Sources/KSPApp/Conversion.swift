@@ -3,7 +3,6 @@ import KSPKit
 import KSPRun
 import UniformTypeIdentifiers
 
-/// Which direction a dropped file goes.
 enum Job: Sendable, Hashable {
     case toProject(URL)
     case toMIDI(URL)
@@ -16,26 +15,20 @@ enum Job: Sendable, Hashable {
 }
 
 struct Outcome: Sendable, Equatable {
-    /// Which run produced it. The window asks only so its title can say "read" over a read; every
-    /// other part of an outcome means the same thing whichever way it was made.
     enum Source: Sendable {
         case conversion
         case deviceRead
     }
 
-    /// What the run wrote, or would have written under a dry run. Empty is the failure.
     var written: [URL]
     var headline: String
     var note: String?
-    /// The folder a split run filled; `nil` when the run wrote a single named file.
     let folder: URL?
     let dryRun: Bool
     let source: Source
-    /// What the title bar names over the result, as it named it while the run was being set up.
     var document = ""
     var direction = ""
 
-    /// Rendered once: SwiftUI re-evaluates a body far more often than a conversion happens.
     let collapsedRows: [Finding]
     let allRows: [Finding]
 
@@ -49,7 +42,6 @@ struct Outcome: Sendable, Equatable {
         self.folder = folder
         self.dryRun = dryRun
         self.source = source
-        // Not `Report.note(verbose:)`: its text names a CLI flag, not the sidebar's toggle.
         self.collapsedRows = report.rows(verbose: false)
         self.allRows = report.rows(verbose: true)
     }
@@ -59,7 +51,6 @@ struct Outcome: Sendable, Equatable {
 
     var failed: Bool { written.isEmpty }
 
-    /// The folder the files sit in: the one a split run filled, or the one beside what it wrote.
     var directory: URL? { folder ?? written.first?.deletingLastPathComponent() }
 
     var resultLine: String {
@@ -67,7 +58,6 @@ struct Outcome: Sendable, Equatable {
         return written.count == 1 ? written[0].lastPathComponent : "\(written.count) files written"
     }
 
-    /// The action bar's way back to the start, worded for the run that got here.
     var againLabel: String {
         source == .deviceRead ? "Read another" : "Convert another"
     }
@@ -85,7 +75,6 @@ struct Outcome: Sendable, Equatable {
     func findings(verbose: Bool) -> [String] { rows(verbose: verbose).map(\.text) }
 }
 
-/// What a staged file turned out to hold. Both drop kinds are read; only the shape differs.
 enum SummaryState: Equatable {
     case loading
     case project(ProjectSummary)
@@ -93,10 +82,8 @@ enum SummaryState: Equatable {
     case failed(ReadFailure)
 }
 
-/// What the import would lay down, and what the planner already found wrong with it.
 struct StagedPlan: Equatable {
     let summary: SegmentationSummary
-    /// Rendered once, for the reason ``Outcome`` renders its own once.
     let collapsedRows: [Finding]
     let allRows: [Finding]
 
@@ -114,15 +101,12 @@ struct StagedPlan: Equatable {
     func findings(verbose: Bool) -> [String] { rows(verbose: verbose).map(\.text) }
 }
 
-/// Where the export would lay each Pattern on one timeline. Export-only, so a staged MIDI file
-/// leaves it at ``loading``, as ``SegmentationState`` is left by a staged project.
 enum ArrangementState: Equatable {
     case loading
     case ready(ArrangementSummary)
     case failed(String)
 }
 
-/// What the import would lay down. Import-only, so a staged project leaves it at ``loading``.
 enum SegmentationState: Equatable {
     case loading
     case ready(StagedPlan)
@@ -132,7 +116,6 @@ enum SegmentationState: Equatable {
 enum Conversion {
     struct Plan: Sendable, Hashable {
         let job: Job
-        /// Where the result lands: the file it writes, or the folder it fills.
         let target: URL
         let note: String?
         let intoFolder: Bool
@@ -140,11 +123,8 @@ enum Conversion {
         var source: URL { job.source }
     }
 
-    /// The extensions ``job(for:)`` accepts, which is what the open panel offers.
     static let openableExtensions = ["mid", "midi", "KeyStepPro"]
 
-    /// `.mid` and `.midi` are one declared type; `.KeyStepPro` is none, so it filters under the
-    /// dynamic type macOS mints from the extension.
     static var openableTypes: [UTType] {
         openableExtensions.compactMap { UTType(filenameExtension: $0) }
             .reduce(into: [UTType]()) { unique, type in
@@ -201,8 +181,6 @@ enum Conversion {
         return made
     }
 
-    /// Detached for the reason a conversion is: the parse is the file's whole size and the window
-    /// must keep drawing. The job, not the path, says which runner reads it.
     static func summarise(_ job: Job) async -> SummaryState {
         switch job {
         case .toMIDI(let source):
@@ -224,8 +202,6 @@ enum Conversion {
         }
     }
 
-    /// Detached for the reason ``summarise`` is. It plans and writes nothing, so no destination is
-    /// resolved and none is needed.
     static func segment(_ job: Job, settings: Settings) async -> SegmentationState {
         guard case .toProject(let source) = job else {
             return .loading
@@ -239,8 +215,6 @@ enum Conversion {
         return .ready(StagedPlan(summary: summary, diagnostics: outcome.diagnostics))
     }
 
-    /// Detached for the reason ``summarise`` is. It renders and arranges but writes nothing, so it
-    /// resolves no destination and needs none.
     static func arrange(_ job: Job, settings: Settings) async -> ArrangementState {
         guard case .toMIDI(let source) = job else {
             return .loading
@@ -259,7 +233,6 @@ enum Conversion {
         folder: URL? = nil
     ) -> Outcome {
         guard result.code == 0, !result.destinations.isEmpty else {
-            // Nothing was written, so only the exclusion still explains anything.
             return Outcome(
                 written: [], headline: result.message ?? "Conversion failed.",
                 report: result.diagnostics, note: excluded, dryRun: dryRun)
@@ -269,7 +242,6 @@ enum Conversion {
             note: note, folder: folder, dryRun: dryRun)
     }
 
-    /// The runner's own summary, minus its first line -- the path this window already shows.
     private static func summary(_ result: RunResult) -> String {
         let lines = result.stdout.split(separator: "\n", omittingEmptySubsequences: false)
         let detail = lines.dropFirst().map { $0.trimmingCharacters(in: .whitespaces) }
@@ -283,8 +255,6 @@ enum Conversion {
 }
 
 extension Job {
-    /// A ``Job`` without its file: what a remembered ``Settings`` is keyed on. `Direction` is
-    /// spoken for twice over -- by ``direction`` below and by `PlaybackDirection` (ADR 0001).
     enum Kind: String, CaseIterable, Sendable {
         case toProject
         case toMIDI
@@ -309,7 +279,6 @@ extension Job {
         }
     }
 
-    /// Which destination the action bar's Choose... edits: the one this job writes into.
     var folderKind: FolderKind {
         switch self {
         case .toProject: return .project
@@ -317,7 +286,6 @@ extension Job {
         }
     }
 
-    /// A project was dropped, which is the ``toMIDI`` direction.
     var isProject: Bool {
         if case .toMIDI = self { return true }
         return false

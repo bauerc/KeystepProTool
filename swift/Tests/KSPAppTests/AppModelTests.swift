@@ -46,8 +46,6 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
     }
 
-    /// One window is one conversion, so the second file is the conversion now -- there is no
-    /// second window for it to be staged in.
     @Test func asecondFileTakesOverTheOneConversion() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -244,8 +242,6 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: written.path))
     }
 
-    /// Carried over, it would turn every conversion after it into another one that writes
-    /// nothing, and say so nowhere but on the button.
     @Test func adryRunDoesNotFollowTheNextFile() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -260,7 +256,6 @@ import Testing
         #expect(!model.settings.dryRun)
     }
 
-    /// The file is gone either way, whether it was cancelled or converted.
     @Test func adryRunDoesNotOutliveTheFileItWasTickedFor() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -273,8 +268,6 @@ import Testing
         #expect(!model.settings.dryRun)
     }
 
-    /// The other half of the rule: a tick made with nothing open was made for the file that
-    /// follows, so opening one is not the app quietly undoing it.
     @Test func adryRunTickedWithNothingOpenStandsForTheFileThatFollows() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -286,7 +279,6 @@ import Testing
         #expect(model.settings.dryRun)
     }
 
-    /// It is kept in neither direction's slot, so an option written beside it cannot take it down.
     @Test func adryRunSurvivesAnOptionSetOnTheSameFile() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -306,7 +298,6 @@ import Testing
 @Suite struct AppModelFolderTests {
     private var midiFixture: URL { RepoData.projectFiles.appending(path: "m6-test-file.mid") }
 
-    /// A chosen folder is exactly what keeps `forProjects` away from MCC's Templates folder.
     private func model(picking picked: URL?, over defaults: UserDefaults) -> AppModel {
         AppModel(
             store: FolderStore(defaults: defaults),
@@ -360,7 +351,6 @@ import Testing
         try withFolder { defaults, chosen in
             model(picking: chosen, over: defaults).choose(.project)
 
-            // A second model over the same domain is what the next launch builds.
             let relaunched = model(picking: nil, over: defaults)
 
             #expect(relaunched.folders.project == chosen)
@@ -477,7 +467,6 @@ import Testing
         #expect(summary.lengthTicks == 7680)
     }
 
-    /// A MIDI file has no Pattern to lay out until it has been imported, so nothing is arranged.
     @Test func adroppedMIDIFileIsNeverArranged() async throws {
         let model = model()
 
@@ -488,8 +477,6 @@ import Testing
         #expect(try #require(model.staged).arrangement == .loading)
     }
 
-    /// The lanes follow the ticks, for the reason the import's plan follows its own: a preview of
-    /// a timeline the export will not produce is worse than none.
     @Test func untickingASlotTakesItOffTheTimeAxis() async throws {
         let model = model()
         model.accept(projectFixture)
@@ -529,7 +516,6 @@ import Testing
         #expect(selection.spec == nil)
     }
 
-    /// The middle row is the track list's, so the sidebar offers it only once a track fills it.
     @Test func thenamedTrackRowIsOfferedOnlyWhileOneIsNamed() async throws {
         let model = model()
         model.accept(midiFixture)
@@ -543,7 +529,6 @@ import Testing
         #expect(model.drumChoice == .source(3))
     }
 
-    /// The ambiguous pair never exists in the UI: the sidebar's two clear the track list's choice.
     @Test(arguments: [AppModel.DrumChoice.automatic, .none])
     func choosingInTheSidebarClearsTheDrumsDestination(choice: AppModel.DrumChoice) async throws {
         let model = model()
@@ -558,8 +543,6 @@ import Testing
         #expect(model.drumChoice == choice)
     }
 
-    /// Two tracks on Drums is a state the picker allows and `clash` reports, so clearing the first
-    /// alone would let the sidebar's row snap back to the second.
     @Test func choosingInTheSidebarClearsEveryDrumsDestination() async throws {
         let model = model()
         model.accept(midiFixture)
@@ -573,9 +556,6 @@ import Testing
         #expect(try #require(model.staged).sourceSelection.drumTrack == nil)
     }
 
-    /// `ConvertRunner.run` fails `--drum-track` with `--no-drums` at exit 2, so the named track
-    /// wins where the two meet -- but it must not spend None to do it: sending the track elsewhere
-    /// gives the answer the user chose back, rather than silently searching channel 10.
     @Test func anamedDrumTrackWinsOverNoneWithoutDiscardingIt() async throws {
         let model = model()
         model.accept(midiFixture)
@@ -621,7 +601,6 @@ import Testing
         #expect(model.blockReason?.contains("Nothing is ticked") == true)
     }
 
-    /// The ticks are the CLI's own selection, so a run reads what they name and nothing else.
     @Test func adryRunReadsOnlyTheTickedSourceTracks() async throws {
         let model = model()
         model.settings.dryRun = true
@@ -673,8 +652,6 @@ import Testing
         #expect(model.blockReason != nil)
     }
 
-    /// Convert is blocked, but a caller could still reach ``convert()``: Return is bound to the
-    /// button and a disabled button is a drawing, not a guarantee.
     @Test func arefusedFileWritesNothingEvenIfConvertIsReached() async throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -914,13 +891,10 @@ import Testing
         #expect(!outcome.headline.contains("Track 2"))
     }
 
-    /// A class so the model and the test share the one instance.
     private final class DressLog {
         var worn: [Appearance] = []
     }
 
-    /// The unit reaches the whole app and not only the window's content: a title bar, a toolbar
-    /// and a folder chooser left on the system's own face is issue #279.
     @Test func thechosenUnitDressesTheAppTheMomentItIsChosen() {
         let log = DressLog()
         let settings = volatileSettings()

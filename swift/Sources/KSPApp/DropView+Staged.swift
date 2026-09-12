@@ -4,10 +4,7 @@ import KSPMIDI
 import KSPRun
 import SwiftUI
 
-/// What a dropped file looks like before it is converted.
 extension DropView {
-    /// The instrument at rest rather than a system dialog: the map is the app's own object, and
-    /// an empty one says what the window is for -- four tracks, sixteen slots, drop something in.
     var idle: some View {
         VStack(spacing: 18) {
             Spacer(minLength: 0)
@@ -22,8 +19,6 @@ extension DropView {
         }
     }
 
-    /// On a plate rather than straight over the cells: the map is dim, but a line of type over
-    /// sixteen of anything is still type over a texture.
     var prompt: some View {
         Text("Drop a MIDI file or a KeyStep Pro project")
             .font(.title3)
@@ -32,9 +27,6 @@ extension DropView {
             .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(palette.ground))
     }
 
-    /// The chase, which is the only thing in the app that moves. Its clock is the view's own, so
-    /// the conversion is never told the animation exists and cannot be made to wait on it; the
-    /// floor lives in ``Chase/holdOff``, before the first column rather than after the last.
     @ViewBuilder
     func working(_ filename: String) -> some View {
         if reduceMotion {
@@ -49,8 +41,6 @@ extension DropView {
     func staged(_ staged: AppModel.Staged) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                // A refused file has no name to give, nowhere to land and nothing to run, so
-                // the promise goes whole rather than standing above its own refusal.
                 if !staged.isUnreadable { outputPlan(staged.job) }
 
                 summary(staged)
@@ -68,8 +58,6 @@ extension DropView {
         .task(id: model.arrangementKey) { await model.arrange() }
     }
 
-    /// The name and what naming it costs. Where it lands is in the action bar, beside the button
-    /// that writes it.
     @ViewBuilder
     private func outputPlan(_ job: Job) -> some View {
         let plan = model.plan(for: job)
@@ -85,8 +73,6 @@ extension DropView {
         Divider()
     }
 
-    /// What was refused, said once: the sentence, then the file it is about. The path is the
-    /// quieter of the two because it answers "which file", not "what now".
     func refusal(_ failure: ReadFailure) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Label(failure.headline, systemImage: StatusMark.error)

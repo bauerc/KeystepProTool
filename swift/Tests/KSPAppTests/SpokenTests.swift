@@ -14,7 +14,6 @@ private func segment(
         mostNotesOnAStep: 1, droppedNotes: dropped, notes: held)
 }
 
-/// What VoiceOver says after each surface's name: the label names a thing, and these follow it.
 @Suite struct SpokenTests {
     @Test func aTooltipsSeparatorsArePauses() {
         #expect(
@@ -28,7 +27,6 @@ private func segment(
         #expect(aloud("fresh-note velocity") == "fresh-note velocity")
     }
 
-    /// #278's own example: the badge, the Pattern the well reads out, and the counts.
     @Test func aPatternMapRowIsSpokenAsItsModeItsPatternAndItsCounts() {
         let grid = PatternGrid(
             syntheticSummary(drumTracks: [1], notes: [1: [1: (held: 40, enabled: 32)]]))
@@ -62,7 +60,6 @@ private func segment(
         #expect(GridSelection.Tick.mixed.spoken == "partly exported")
     }
 
-    /// An unnamed track is not named twice, and a list of channels cannot run into the counts.
     @Test func aSourceTrackIsSpokenAsOneLine() {
         let song = syntheticSong(tracks: [
             sourceTrack(1, name: "Piano", noteCount: 128, bars: 4),
@@ -127,7 +124,6 @@ private func segment(
                 + "pattern 1, 64 steps, pattern 2, 63 steps")
     }
 
-    /// The status a meter carries in its colour and glyph, said in words.
     @Test func aLimitMeterIsSpokenAsItsFigureItsStatusAndItsSite() throws {
         let pool = Constants.poolCapacity
         let limits = Limits(

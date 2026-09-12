@@ -5,7 +5,6 @@ import Testing
 
 @testable import KSPApp
 
-/// The wording tests are regression guards: nothing renders these strings to a CLI.
 @Suite struct PatternGridTests {
     @Test(arguments: ["project_5.KeyStepPro", "initial_project.KeyStepPro", "project_9.KeyStepPro"])
     func itDrawsEveryTrackAgainstEverySlot(_ name: String) throws {
@@ -152,8 +151,6 @@ import Testing
         #expect(grid.rows[0].chainDetail == nil)
     }
 
-    /// A grid wider than the pane is clipped in silence, so the fit is asserted as arithmetic,
-    /// at the window's floor because that is the narrowest the pane ever gets.
     @Test func thegridFitsTheStagedPaneWithoutTruncatingThePatternAxis() {
         #expect(AppLayout.gridWidth <= AppLayout.minimumCardContentWidth)
         #expect(AppLayout.columnCount == 16)
@@ -167,7 +164,6 @@ import Testing
         #expect(grid.rows.allSatisfy { $0.chainDetail == nil })
     }
 
-    /// The well reads what the track would play first, which the Chain names outright.
     @Test func thereadoutTakesTheChainsFirstPatternOverALowerHeldOne() {
         let grid = PatternGrid(
             syntheticSummary(
@@ -196,8 +192,6 @@ import Testing
         #expect(grid.rows[0].readout.count == 2)
     }
 
-    /// The fill is of everything held and the length rule is of the declared steps, so a cell keeps
-    /// both rather than only the figure it prints.
     @Test func aslotKeepsWhatItHoldsAndHowLongItRuns() {
         let grid = PatternGrid(
             syntheticSummary(notes: [1: [4: (held: 76, enabled: 8)]], steps: [1: [4: 48]]))
@@ -209,8 +203,6 @@ import Testing
         #expect(cells[0].noteCount == 0)
     }
 
-    /// The badge carries the mode, so the head's name drops the suffix the `.mid` keeps; the
-    /// tooltip carries the full name so nothing is lost.
     @Test func adrumRowIsBadgedRatherThanRenamed() {
         let grid = PatternGrid(
             syntheticSummary(drumTracks: [1], notes: [1: [1: (held: 12, enabled: 9)]]))

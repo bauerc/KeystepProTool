@@ -2,22 +2,16 @@ import Foundation
 import KSPKit
 import KSPRun
 
-/// The preview grid: four tracks down, sixteen pattern slots across.
 struct PatternGrid: Equatable {
     struct Cell: Equatable {
         /// 1-16.
         let pattern: Int
         let label: String
         let isEmpty: Bool
-        /// Everything the slot holds, which the fill's intensity is of. Not ``label``'s figure:
-        /// that is what is switched on, and a full pattern of switched-off steps is still full.
         let noteCount: Int
-        /// The live set's declared step count, which the length rule is a fraction of.
         let stepCount: Int
-        /// Where this Pattern plays in its Chain, 1-based, in play order; empty when in none.
         let positions: [Int]
         let detail: String
-        /// ``detail`` without the slot's name, which is what the cell is labelled with.
         let spoken: String
 
         init(_ pattern: PatternSummary, mode: TrackMode, positions: [Int]) {
@@ -43,7 +37,6 @@ struct PatternGrid: Equatable {
                     + "\(pattern.enabledNoteCount) switched on, \(pattern.stepCount) steps"
             }
             guard !positions.isEmpty else { return body }
-            // Where a rail cannot be drawn -- a Chain that jumps -- this says the cell is in one.
             let places = positions.map(String.init).joined(separator: " and ")
             return body + " · Chain place\(positions.count == 1 ? "" : "s") \(places)"
         }
@@ -52,16 +45,11 @@ struct PatternGrid: Equatable {
     struct Row: Equatable {
         /// 1-4.
         let track: Int
-        /// What the head prints, which is ``TrackSummary/name`` without the mode the badge carries.
         let name: String
-        /// The well: two digits, or `--` where the track is on no Pattern.
         let readout: String
         let isDrum: Bool
-        /// The row label's tooltip.
         let detail: String
-        /// The Chain in play order, or nil when the track is in none.
         let chainDetail: String?
-        /// The badge, the well, the tooltip and the Chain, said after the name as one line.
         let spoken: String
         let cells: [Cell]
         let runs: [AppLayout.Rail]
@@ -97,7 +85,6 @@ struct PatternGrid: Equatable {
                 + "\(noun)\(notes == 1 ? "" : "s") switched on"
         }
 
-        /// A Pattern number the grid has no column for is dropped rather than indexed.
         private static func places(in chain: [Int]) -> [Int: [Int]] {
             var places: [Int: [Int]] = [:]
             for (index, pattern) in chain.enumerated() where drawable(pattern) {
@@ -106,8 +93,6 @@ struct PatternGrid: Equatable {
             return places
         }
 
-        /// A Chain is a play order, not a range: two cells join only where it plays one straight
-        /// after the other *and* they are neighbouring columns.
         private static func runs(in chain: [Int]) -> [AppLayout.Rail] {
             var links: Set<Int> = []
             for (from, to) in zip(chain, chain.dropFirst())
@@ -135,15 +120,10 @@ struct PatternGrid: Equatable {
     }
 }
 
-/// The pattern slots the grid has ticked that hold anything. What they come to end to end is the
-/// arrange lanes' header to say, so this speaks only when it is nothing.
 struct ExportLength: Equatable {
-    /// Ticked slots that hold something, counted once however many tracks play them.
     let patterns: Int
-    /// Convert already refuses an empty selection in its own words.
     let isBlocked: Bool
 
-    /// Ticks on nothing but empty slots leave Convert enabled, so only this says so.
     var warning: String? {
         guard !isBlocked, patterns == 0 else { return nil }
         return "No ticked slot holds anything, so nothing would be written."

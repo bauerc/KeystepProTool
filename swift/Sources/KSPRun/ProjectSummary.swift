@@ -2,13 +2,11 @@ import Foundation
 import KSPKit
 import KSPMIDI
 
-/// What a project holds, said structurally: tracks, their patterns, and the counts a preview needs.
 public struct ProjectSummary: Sendable, Hashable {
     public let sourceName: String
     public let tempoBPM: Double
     public let globalSwingPercent: Int
     public let currentScene: Int
-    /// All four, whether or not they hold anything.
     public let tracks: [TrackSummary]
     public let diagnostics: Report
 
@@ -27,7 +25,6 @@ public struct ProjectSummary: Sendable, Hashable {
     public var isEmpty: Bool { tracks.allSatisfy(\.isEmpty) }
 
     public init(_ project: Project) {
-        // Only the current Scene's Chains: another Scene says nothing about how this one will play.
         let chains = project.scenes.first { $0.number == project.currentScene }?.chains ?? []
         self.init(
             sourceName: project.sourceName, tempoBPM: project.tempoBPM,
@@ -50,10 +47,8 @@ public enum TrackMode: String, Sendable, Hashable {
 public struct TrackSummary: Sendable, Hashable {
     /// 1-4.
     public let number: Int
-    /// What the exported `.mid` calls this track, so the preview and the file agree.
     public let name: String
     public let mode: TrackMode
-    /// All sixteen pattern slots, whether or not they hold anything.
     public let patterns: [PatternSummary]
 
     public init(number: Int, name: String, mode: TrackMode, patterns: [PatternSummary]) {
@@ -65,7 +60,6 @@ public struct TrackSummary: Sendable, Hashable {
 
     public var isEmpty: Bool { patterns.allSatisfy(\.isEmpty) }
 
-    /// This track's Chain in the current Scene, in play order, or empty when nothing is chained.
     public var chain: [Int] { patterns.first { !$0.chain.isEmpty }?.chain ?? [] }
 
     public init(_ track: Track, chain: [Int]) {
@@ -83,16 +77,13 @@ public struct PatternSummary: Sendable, Hashable {
     public let number: Int
     /// The set this Pattern plays; where it holds both, parameter 86 bit 6 has already decided.
     public let mode: PatternMode
-    /// Everything in the Pool -- notes and triggers, live set and leftovers alike.
     public let noteCount: Int
     /// Enabled is not audible: this counts only the two reasons the device gives you a switch for
     /// -- a step turned off, and a note past the last step.
     public let enabledNoteCount: Int
-    /// The live set's declared step count.
     public let stepCount: Int
     /// Parameter 40's latch, as read. Usually agrees with ``isEmpty``, but need not.
     public let hasData: Bool
-    /// The whole Chain this Pattern plays in, in play order, or empty when it is in none.
     public let chain: [Int]
 
     public init(

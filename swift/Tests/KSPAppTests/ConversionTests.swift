@@ -301,7 +301,6 @@ import Testing
         #expect(!outcome.headline.isEmpty)
     }
 
-    /// The fragments are partial on purpose: the full wording is `KSPKit`'s to own.
     @Test(
         arguments: [
             (Settings.StepSkip.auto, "were rendered as repeats", "rendered as 4 repeats"),

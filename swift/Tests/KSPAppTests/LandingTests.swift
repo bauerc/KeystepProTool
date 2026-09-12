@@ -23,7 +23,6 @@ private func plan(
         #expect(landing.path == "/tmp/out/take 3.KeyStepPro")
     }
 
-    /// The bar has one line for a path that can be twelve components long.
     @Test func aFolderUnderHomeIsTilded() {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let landing = Landing(
@@ -46,7 +45,6 @@ private func plan(
         #expect(landing.spoken == "Writes into /tmp/out/song")
     }
 
-    /// The folder truncates on screen, so the whole path has to reach a reader some other way.
     @Test func whatIsSpokenCarriesThePathTheBarTruncates() {
         let landing = Landing(
             plan(.toProject(URL(filePath: "/tmp/take 3.mid")), named: "take 3", into: "/tmp/out"))
@@ -54,7 +52,6 @@ private func plan(
         #expect(landing.spoken == "Writes to /tmp/out/take 3.KeyStepPro")
     }
 
-    /// Once written, the bar says only where: the result above it has named the file already.
     @Test func aFinishedRunLandsInTheFolderBesideWhatItWrote() throws {
         let outcome = Outcome(
             written: [URL(filePath: "/tmp/out/take 3.KeyStepPro")], headline: "",

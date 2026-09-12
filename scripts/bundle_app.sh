@@ -27,9 +27,8 @@ done
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root/swift"
 
-# Finder labels an app by its bundle filename and the menu bar by CFBundleName, so both carry the
-# spaced form or the two disagree. The Mach-O inside stays unspaced -- nothing displays it, and a
-# space there is a quoting trap.
+# Finder labels an app by its bundle filename and the menu bar by CFBundleName, so both carry
+# the spaced form. The Mach-O inside stays unspaced.
 app_name="Key Step Pro Plus"
 exe_name="KeyStepProPlus"
 
@@ -47,13 +46,11 @@ rm -rf "$bundle"
 mkdir -p "$contents/MacOS" "$contents/Resources"
 cp "$build_dir/ksp-app" "$contents/MacOS/$exe_name"
 
-# The CLI rides inside the bundle, so the same .dmg carries both faces and `kspplus` finds the
-# template through the app's own Contents/Resources.
+# The CLI rides inside the bundle, so `kspplus` finds the template through Contents/Resources.
 cp "$build_dir/kspplus" "$contents/MacOS/kspplus"
 
-# Contents/Resources is where `TemplateLocation` looks for it -- `Bundle.module` looks beside the
-# bundle root instead, and finds nothing here. Globbed rather than named, so renaming the package
-# cannot quietly ship an app that builds, runs and then cannot find its template.
+# Contents/Resources is where `TemplateLocation` looks; `Bundle.module` looks beside the bundle
+# root and finds nothing here.
 shopt -s nullglob
 bundles=("$build_dir"/*.bundle)
 if [[ ${#bundles[@]} -eq 0 ]]; then
@@ -62,8 +59,6 @@ if [[ ${#bundles[@]} -eq 0 ]]; then
 fi
 cp -R "${bundles[@]}" "$contents/Resources/"
 
-# Drawn rather than checked in: the four hues it reads are the ones DesignTokens.swift paints the
-# pattern map with.
 echo "==> Drawing the icon"
 swiftc -O "$root/tools/make_app_icon.swift" -o "$root/swift/.build/make_app_icon"
 "$root/swift/.build/make_app_icon" "$contents/Resources/AppIcon.icns"
@@ -104,8 +99,7 @@ cat > "$contents/Info.plist" << PLIST
 </plist>
 PLIST
 
-# No entitlements file, deliberately: the App Sandbox would confine writes to the app's own
-# container, and writing into MIDI Control Center's Templates folder is exactly what that forbids.
+# No entitlements file, deliberately: the App Sandbox forbids writing into MCC's Templates folder.
 echo "==> Signing (ad-hoc)"
 # The nested CLI is code, not a resource, so it is signed on its own before the bundle seals it.
 codesign --force --sign - "$contents/MacOS/kspplus"

@@ -7,9 +7,7 @@ extension UInt8 {
     }
 }
 
-/// MCC's dialect scanned by hand rather than through `JSONDecoder`, which cost 88 % of a read
-/// (Read_Cost.md §4). Indexes a raw pointer: in a debug build a bounds-checked subscript costs
-/// more than the scan does.
+/// MCC's dialect scanned by hand: `JSONDecoder` cost 88 % of a read (Read_Cost.md §4).
 struct JSONScanner {
     enum Failure: Error {
         case notAnObject(String)
@@ -26,8 +24,7 @@ struct JSONScanner {
         self.count = raw.count
     }
 
-    /// The whole document as one flat object; nested values keep only their type name, which is
-    /// all `RawProject` can hold and all the format ever needs.
+    /// Flat: a nested value keeps only its type name, which is all `RawProject` holds.
     mutating func project() throws -> RawProject {
         skipWhitespace()
         guard index < count else { throw Failure.malformed("the document is empty", at: index) }
@@ -36,7 +33,6 @@ struct JSONScanner {
         }
         index += 1
 
-        // An entry runs about twenty bytes, so this over-reserves rather than rehashing 153,497.
         var project = RawProject(minimumCapacity: count / 20)
 
         while true {
@@ -106,8 +102,8 @@ struct JSONScanner {
         }
     }
 
-    /// Every value the format holds is an integer, so a number no `Int` represents -- a fraction,
-    /// an exponent, or one too large -- takes its ``JSONValue/typeName`` and is rejected above.
+    /// Every value the format holds is an integer, so a fraction, an exponent or an overflow
+    /// keeps only its ``JSONValue/typeName`` and is rejected above.
     private mutating func number() throws -> JSONValue {
         let start = index
         let negative = bytes[index] == UInt8(ascii: "-")
@@ -130,7 +126,6 @@ struct JSONScanner {
         return .int(negative ? -magnitude : magnitude)
     }
 
-    /// Consumes whatever follows the digits, and answers whether any of it made this a float.
     private mutating func consumingFractionalPart() -> Bool {
         var fractional = false
         while index < count {
@@ -178,8 +173,7 @@ struct JSONScanner {
         throw Failure.malformed("the string is never closed", at: start - 1)
     }
 
-    /// Only strings that carry a backslash reach this; the scan hands the rest straight to
-    /// `String(decoding:as:)`. *start* is where the span sits, so offsets stay absolute.
+    /// Only strings carrying a backslash reach this; the rest go to `String(decoding:as:)`.
     private func unescaping(_ span: UnsafeBufferPointer<UInt8>, from start: Int) throws -> String {
         var out: [UInt8] = []
         out.reserveCapacity(span.count)
@@ -216,13 +210,11 @@ struct JSONScanner {
     }
 
     /// One `\u` escape, or the surrogate pair standing for a scalar above the basic plane.
-    /// Leaves *i* on the byte after what it read.
     private func scalar(_ span: UnsafeBufferPointer<UInt8>, at i: inout Int, from start: Int)
         throws -> Unicode.Scalar
     {
         let leading = try hex4(span, at: i + 1, from: start)
         i += 5
-        // Everything but a surrogate is already a scalar; a surrogate needs its other half.
         if let single = Unicode.Scalar(leading) { return single }
 
         guard leading <= 0xDBFF else { throw Failure.malformed("a lone surrogate", at: start + i) }
@@ -256,8 +248,7 @@ struct JSONScanner {
         return value
     }
 
-    /// A nested array or object, which the format never holds: walked only far enough to find
-    /// where it ends, so that the key after it still parses.
+    /// Walked only far enough to find where it ends, so the key after it still parses.
     private mutating func skipNesting() throws {
         let start = index
         var depth = 0

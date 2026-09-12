@@ -3,8 +3,6 @@ import Testing
 
 @testable import KSPDevice
 
-/// The one suite that touches CoreMIDI itself. It asks for a name nothing publishes, so it
-/// answers the same on a workbench with the device attached and on a runner with no MIDI at all.
 @Suite struct CoreMIDIPortTests {
     @Test func anAbsentDeviceFailsBeforeAnythingIsOpened() {
         let missing = "KeyStep Pro (no such endpoint)"
@@ -13,8 +11,6 @@ import Testing
     }
 
     /// A reply and the ack that closes it arrive in one callback, and a long reply arrives split.
-    /// Walking a copied packet would read the second out of stale stack storage and the third
-    /// out of whatever follows it.
     @Test func everyPacketOfOneCallbackIsRead() throws {
         let frames: [[UInt8]] = [
             [0xF0, 0x00, 0x20, 0x6B, 0x7F, 0x42, 0x0C, 0x3C, 0xF7],

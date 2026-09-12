@@ -28,8 +28,6 @@ public enum ConvertRunner {
         public var verbose: Bool
         public var configPath: URL
 
-        // Spelled out because a public struct's memberwise initialiser is internal. The defaults
-        // live here only: repeating them on the properties would leave a copy that never runs.
         public init(
             paths: [URL], output: URL? = nil, track: Int = 1, pattern: Int = 1,
             drumTrack: Int? = nil, noDrums: Bool = false,
@@ -72,10 +70,9 @@ public enum ConvertRunner {
         .failure(prog, message, code: code)
     }
 
-    /// MCC's factory default, as shipped in this target's resource bundle.
     public static func defaultTemplate() -> URL? {
-        // Beside the running binary first: `Bundle.module` falls back to the build directory the
-        // package was compiled in, which is a path that exists on the build machine alone.
+        // Beside the running binary first: `Bundle.module` falls back to the build directory,
+        // a path that exists on the build machine alone.
         if let executable = Bundle.main.executableURL,
             let beside = TemplateLocation.find(forExecutableAt: executable)
         {
@@ -84,7 +81,6 @@ public enum ConvertRunner {
         return Bundle.module.url(forResource: "Default", withExtension: "KeyStepPro")
     }
 
-    /// Shared with the preview, so it plans under the options the conversion will run under.
     static func importOptions(_ options: Options) throws -> ImportOptions {
         try ImportOptions(
             stepsPerBeat: options.stepsPerBeat,
@@ -99,13 +95,10 @@ public enum ConvertRunner {
             flatVelocity: try parseFlatVelocity(options.flatVelocitySpec))
     }
 
-    /// Why a source could not be read, in the words the run reports it with.
     struct ReadFailure: Error {
         let message: String
     }
 
-    /// Every file is read before any of them is converted, so one unreadable late in the list
-    /// fails the run rather than half-filling a project.
     static func readSources(_ options: Options) throws(ReadFailure) -> [Source] {
         var sources: [Source] = []
         for path in options.paths {
@@ -141,7 +134,6 @@ public enum ConvertRunner {
             return fail("--midi-track reads one file, and several were given", code: 2)
         }
 
-        // Cheapest checks first: reading the 3.5 MB template would be spent rejecting the command.
         let destination =
             options.output
             ?? options.paths[0].deletingPathExtension().appendingPathExtension("KeyStepPro")
@@ -175,8 +167,6 @@ public enum ConvertRunner {
             return fail("template: \(error.localizedDescription)", code: 1)
         }
 
-        // --midi-track is the single-target path; --midi-tracks is a selection, and the song
-        // path is the only one that can place several tracks.
         let result: ImportResult
         do {
             if options.midiTrack != nil {
@@ -193,7 +183,6 @@ public enum ConvertRunner {
         }
 
         if result.noteCount == 0 {
-            // A project with nothing in it looks like success and plays silence.
             let named = options.paths.map(\.relativePath).joined(separator: ", ")
             return fail("\(named): no notes to convert", code: 1)
         }
@@ -220,8 +209,6 @@ public enum ConvertRunner {
         return output
     }
 
-    /// Where a track came from: its source track, then the file it was read from.
-    /// A clip merged from several source tracks has no one source track, so it gets no number.
     static func source(_ plan: TrackPlan, _ showSources: Bool, _ showFiles: Bool) -> String {
         var marks: [String] = []
         if showSources, let source = plan.sourceTrack { marks.append("source \(source)") }
@@ -245,7 +232,6 @@ public enum ConvertRunner {
 
         let tracks = result.plan.tracks
         if tracks.count == 1 && tracks[0].placements.count == 1 {
-            // The single-target shape has never carried a [drum] mark, so only a route adds here.
             let source = source(tracks[0], showSources, showFiles)
             let bracket = source.isEmpty ? "" : " [\(source)]"
             lines.append(

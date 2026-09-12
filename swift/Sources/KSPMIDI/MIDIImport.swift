@@ -24,8 +24,6 @@ public struct TrackRoute: Sendable, Hashable {
     }
 }
 
-/// The two drum designations that name no source track: search the drum channel,
-/// or take nothing as drums at all.
 public enum DrumDesignation: Sendable, Hashable {
     case auto
     case source(Int)
@@ -43,12 +41,10 @@ public struct ImportOptions: Sendable, Hashable {
 
     public let midiTracks: Set<Int>
 
-    /// Which source track to write as drums, counting from 1. `auto` looks for a track
-    /// sitting wholly on `drumChannel` instead, and `none` takes no track as drums.
+    /// Counting from 1. `auto` looks for a track sitting wholly on `drumChannel` instead.
     public let drumTrack: DrumDesignation
 
-    /// The channel drum detection listens to, counting from 0. Ignored when
-    /// `drumTrack` names a track outright.
+    /// Counting from 0. Ignored when `drumTrack` names a track outright.
     public let drumChannel: Int
 
     public let drumMap: DrumMap?
@@ -59,8 +55,7 @@ public struct ImportOptions: Sendable, Hashable {
 
     public let routes: [TrackRoute]
 
-    /// Write every note and trigger at this velocity instead of the source's; `nil`
-    /// keeps the file's own. Written content: existence is never velocity.
+    /// Written content: existence is never velocity. `nil` keeps the file's own.
     public let flatVelocity: Int?
 
     public init(
@@ -152,7 +147,6 @@ public struct ImportOptions: Sendable, Hashable {
     }
 }
 
-/// One MIDI file to read, and the name its clips are attributed to.
 public struct Source: Sendable {
     public let name: String
     public let midi: MusicalMIDI1File
@@ -170,7 +164,6 @@ public struct Clip: Sendable, Hashable {
 
     public let sourceTracks: [Int]
 
-    /// The name the file was read under, empty when it was not given one.
     public let sourceFile: String
 
     public init(
@@ -202,7 +195,6 @@ public struct Song: Sendable, Hashable {
 
     public let controllersDropped: Int
 
-    /// How many later source files the first file's timing overrode.
     public let tempoConflicts: Int
     public let resolutionConflicts: Int
     public let meterConflicts: Int
@@ -454,12 +446,10 @@ extension MIDIImport {
         60 * 1_000_000 / Double(tempo)
     }
 
-    /// Refuse a selection naming a track `midi` does not have, lowest first.
     public static func checkSelection(_ midi: MusicalMIDI1File, _ options: ImportOptions) throws {
         try checkSelections([Source("", midi)], options)
     }
 
-    /// Refuse a selection naming a track the `sources` between them do not have.
     public static func checkSelections(_ sources: [Source], _ options: ImportOptions) throws {
         let total = sources.reduce(0) { $0 + $1.midi.tracks.count }
         guard let missing = options.midiTracks.filter({ $0 > total }).min() else { return }
@@ -470,15 +460,13 @@ extension MIDIImport {
         throw KSPError.value("source track \(missing) was selected; \(held)")
     }
 
-    /// `notes` moved from a beat of `source` ticks onto one of `target` ticks.
     static func rescaled(_ notes: [RenderedNote], _ source: Int, _ target: Int) -> [RenderedNote] {
         if source == target { return notes }
         func scaled(_ value: Int) -> Int { (value * target + source / 2) / source }
         return notes.map { note in
             RenderedNote(
                 tick: scaled(note.tick),
-                // Floored at one so a note that had length keeps some; a zero-length one keeps
-                // none, which is what it would have had at the target resolution anyway.
+                // Floored at one so a note that had length keeps some.
                 durationTicks: note.durationTicks == 0 ? 0 : max(1, scaled(note.durationTicks)),
                 pitch: note.pitch,
                 velocity: note.velocity,
@@ -519,9 +507,8 @@ extension MIDIImport {
         try readSongs([Source("", midi)], options: options)
     }
 
-    /// Every source file's tracks as one song, numbered on through the files.
-    /// The first file's tempo, resolution and meter are the song's; a later file
-    /// disagreeing is rescaled onto them and counted.
+    /// The first file's tempo, resolution and meter are the song's; a later file disagreeing
+    /// is rescaled onto them and counted.
     public static func readSongs(_ sources: [Source], options: ImportOptions? = nil) throws -> Song
     {
         let options = try options ?? ImportOptions()
@@ -565,8 +552,6 @@ extension MIDIImport {
             offset += midi.tracks.count
         }
 
-        // Every count below covers only the files that put a clip in the song: one whose tracks
-        // were all deselected supplied no note to rescale and no tempo to be overridden.
         let sounding = contributed.indices.filter { contributed[$0] }
         let overridden = sounding.filter { $0 != 0 }
         return Song(
@@ -995,8 +980,8 @@ extension MIDIImport {
 
         let dropped = melodic.count - free.count
         if dropped > 0 {
-            // No count of what was read: `dropped` is melodic against free, so a drum
-            // track, a route or a firstTrack above 1 all break the arithmetic a total invites.
+            // `dropped` is melodic against free, so a drum track, a route or a firstTrack
+            // above 1 all break the arithmetic a total invites.
             let chosen = options.midiTracks.isEmpty ? "" : "selected "
             collector.add(
                 .tracksDropped,
@@ -1167,7 +1152,6 @@ extension MIDIImport {
                 }
             }
 
-            // Only a split track needs a chain; one pattern plays without one.
             if trackPlan.placements.count > 1 {
                 result = try Mutate.setChain(
                     result, scene: plan.scene, track: track, patterns: trackPlan.patterns)
@@ -1267,7 +1251,6 @@ extension MIDIImport {
             firstTrack: firstTrack)
     }
 
-    /// Convert every note-bearing track of every source into the template `raw`.
     public static func convertSongs(
         _ sources: [Source], _ raw: RawProject, options: ImportOptions? = nil,
         firstPattern: Int = 1, firstTrack: Int = 1

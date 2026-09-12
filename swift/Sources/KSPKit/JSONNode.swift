@@ -91,7 +91,6 @@ public enum JSONNode: Sendable {
     }
 }
 
-/// Nothing in the product compares two nodes; the tests assert a built tree against a literal one.
 extension JSONNode: Equatable {
     public static func == (lhs: JSONNode, rhs: JSONNode) -> Bool {
         switch (lhs, rhs) {

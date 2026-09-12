@@ -1,4 +1,3 @@
-/// One read the device can answer, without the slot it is addressed at.
 public struct ReadRequest: Sendable, Hashable {
     public let item: Int
     public let param: Int
@@ -35,32 +34,26 @@ public enum Sysex {
     public static let cmdReadReply: UInt8 = 0x0C
     public static let cmdAck: UInt8 = 0x1C
 
-    /// Byte 7, following every command byte: the project slot the transfer names
-    /// (spec 7.4). The ack is the only frame without one.
+    /// Byte 7, after every command byte: the project slot the transfer names (spec 7.4).
     public static let defaultSlot = 1
 
-    /// A SysEx data byte, so 0-127 -- deliberately wider than the device's sixteen
-    /// slots, because the codec is not the place to refuse an out-of-range one.
+    /// A SysEx data byte, so 0-127: wider than the device's sixteen slots, deliberately.
     public static let maxSlot = 0x7F
 
-    /// The ceiling on a long read's count. Above it the device clamps and echoes the
-    /// count it honoured, so the reply reads as an answer to a different question (spec 7.7).
+    /// Above this the device clamps and echoes the count it honoured (spec 7.7).
     public static let maxReadCount = 100
 
     /// The one frame with no slot in byte 7; its 0x00 is a constant (spec 7.4).
     public static let ack: [UInt8] = header + [cmdAck, 0x00, end]
 
-    /// Sent once before the first read and never answered. It selects the project
-    /// slot the transfer returns; it is not a handshake.
+    /// Selects the project slot the transfer returns. Never answered; not a handshake.
     public static let cmdPrologue: UInt8 = 0x05
 
-    /// Universal (non-Arturia) identity envelope. Not a handshake, but the only
-    /// place the firmware version comes from.
+    /// Universal (non-Arturia) identity envelope: the only source of the firmware version.
     public static let identityRequest: [UInt8] = [0xF0, 0x7E, 0x7F, 0x06, 0x01, end]
     private static let identityPrefix: [UInt8] = [0xF0, 0x7E, 0x7F, 0x06, 0x02, 0x00, 0x20, 0x6B]
 
-    /// The device's "pattern default pitch unset" sentinel. It is a MIDI System Reset
-    /// byte, which is why MCC stores 247 instead -- the only value above 127 in a file.
+    /// Pattern default pitch unset. A MIDI System Reset byte, so MCC stores 247 instead.
     public static let unset = 0xFF
     public static let unsetInFile = 247
 
@@ -70,8 +63,6 @@ public enum Sysex {
         return header + [cmdPrologue, UInt8(slot), end]
     }
 
-    /// One request frame, addressed at `slot`. The slot rides beside the request
-    /// so `parseReply` can compare reply against request without it in the way.
     public static func buildReadRequest(
         _ request: ReadRequest,
         slot: Int = defaultSlot
@@ -143,7 +134,6 @@ public enum Sysex {
         return (request, values)
     }
 
-    /// The firmware version out of a universal identity reply.
     /// Arturia's four-byte field runs backwards: `25 14 05 02` is build 0x25 then 2.5.20.
     public static func parseIdentity(_ frame: [UInt8]) throws -> String {
         guard frame.starts(with: identityPrefix), frame.last == end else {
@@ -161,7 +151,6 @@ public enum Sysex {
         }
     }
 
-    /// Throwing rather than trapping: a field too wide for a byte is a bad request, not a crash.
     private static func bytes(_ values: [Int]) throws -> [UInt8] {
         try values.map { value in
             guard let byte = UInt8(exactly: value) else {
@@ -171,14 +160,12 @@ public enum Sysex {
         }
     }
 
-    /// Everything between `start` and the terminator, empty where the frame ends first.
     private static func payload(of frame: [UInt8], from start: Int) -> [Int] {
         let terminator = frame.count - 1
         guard start < terminator else { return [] }
         return frame[start..<terminator].map(Int.init)
     }
 
-    /// `0x` and two lower-case digits, as every byte in a diagnostic is written.
     static func hexByte(_ value: UInt8) -> String {
         "0x" + (value < 0x10 ? "0" : "") + String(value, radix: 16)
     }

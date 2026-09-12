@@ -1,8 +1,5 @@
 // Write the coalesced read plan as one hex frame a line, for `coremidi_probe replay` (issue #245).
 //
-// Standalone on purpose, like the probe it feeds: it compiles KSPKit's sources directly rather
-// than linking the package, so a hardware session needs no built product.
-//
 //   swiftc -O swift/Sources/KSPKit/*.swift tools/read_plan.swift -o /tmp/read_plan
 //   /tmp/read_plan [slot] > /tmp/plan.txt
 
