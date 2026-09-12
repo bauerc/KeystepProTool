@@ -6,8 +6,7 @@ import Testing
 
 @testable import KSPRun
 
-/// Asserted as ticks, because a preview that rounds is a preview that drifts. `project_9` fills
-/// patterns 2 and 3 of track 1 and pattern 2 alone of track 3, which is the unequal case.
+/// Asserted as ticks, because a preview that rounds is a preview that drifts.
 @Suite struct ArrangementTests {
     static func options(_ name: String) -> ExportRunner.Options {
         ExportRunner.Options(
@@ -105,8 +104,8 @@ import Testing
 
         #expect(region.marks.count == region.noteCount)
         #expect(region.marks.allSatisfy { $0.tick >= 0 && $0.tick < region.spanTicks })
-        // The pitches `fixtures/project_5.expected.json` transcribes, which the device shows
-        // as C2, C#2 and D2 -- 60 is C3.
+        // The pitches `fixtures/project_5.expected.json` transcribes, which the device shows as C2,
+        // C#2 and D2 -- 60 is C3.
         #expect(Set(region.marks.map(\.pitch)).sorted() == [48, 49, 50])
         #expect(region.marks.allSatisfy { $0.durationTicks > 0 })
     }
@@ -120,7 +119,6 @@ import Testing
         #expect(summary.slots.map(\.patternNumber) == [2, 3, 2, 3])
         #expect(summary.slots.map(\.startTick) == [0, 1920, 9600, 11520])
         #expect(try Self.lane(summary, 1).regions.count == 4)
-        // The second pass of a Pattern is the same region, laid down a run further along.
         #expect(try Self.lane(summary, 3).regions.map(\.startTick) == [0, 9600])
     }
 
@@ -150,8 +148,6 @@ import Testing
         #expect(outcome.message != nil)
     }
 
-    /// The corpus gives every track the same length in the slots it fills, so the shorter-region
-    /// case is built from renderings and arranged for real rather than from invented geometry.
     @Test func aShorterTrackKeepsItsOwnLengthInsideTheSharedSpan() throws {
         let long = Rendering(
             trackNumber: 1, kind: .seq, patternNumber: 1,
@@ -179,8 +175,6 @@ import Testing
         #expect(try Self.lane(summary, 2).regions[0].gapTicks == 2880)
     }
 
-    /// Held but silent is not the same as absent: one draws a region with nothing in it, the other
-    /// draws no region at all.
     @Test func aRenderedPatternWithEveryEventOffKeepsItsRegion() throws {
         let silent = Rendering(
             trackNumber: 1, kind: .seq, patternNumber: 4, notes: [], lengthTicks: 1920)

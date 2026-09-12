@@ -1,7 +1,6 @@
 import Foundation
 import KSPKit
 
-/// The device as `BulkRead` wants it, over any port that carries whole SysEx frames.
 public final class DeviceTransport: Transport {
     /// Long enough for the device to answer, short enough that a mute one is a failure rather
     /// than a hang.

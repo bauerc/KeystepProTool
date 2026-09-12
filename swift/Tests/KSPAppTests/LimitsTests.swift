@@ -75,7 +75,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
             ])
     }
 
-    /// An empty plan is not a plan against the walls, and must not read as one.
     @Test func anemptyPlanReadsAsZeroAgainstEveryLimit() {
         let limits = Limits(SegmentationSummary(tracks: []))
 
@@ -124,9 +123,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(try gauge(limits, "Tracks").status == .near)
     }
 
-    /// The whole point of reading the refusals rather than the figures: the planner truncates to
-    /// the limit, so a pattern filled to the brim and a pattern that overflowed both read 192.
-    /// The brim is not amber -- pooling every note the device pools is the device working.
     @Test func apatternFilledToTheBrimIsWithinRatherThanApproaching() throws {
         let limits = Limits(modest(steps: 64, notes: Constants.poolCapacity, perStep: 3))
 
@@ -144,7 +140,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(try gauge(limits, "Steps per pattern").status == .within)
     }
 
-    /// Every device track filled, and the planner refused none of them.
     @Test func afullDeviceIsWithinRatherThanApproaching() throws {
         let limits = Limits(full())
 
@@ -153,7 +148,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(limits.exceeded.isEmpty)
     }
 
-    /// The step below the wall is still amber: what changed is the wall itself, not the band.
     @Test func theStepBelowTheWallIsStillApproaching() throws {
         let limits = Limits(modest(steps: Constants.maxSteps - 1, notes: 32, perStep: 2))
 
@@ -186,7 +180,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(notesPerPattern.warnings[0].contains("\(Constants.poolCapacity)"))
     }
 
-    /// The acceptance criterion, moved here from the grid so it is said once.
     @Test func asourceThatWillNotFitExceedsTheTrackCountAndIsNamed() throws {
         let limits = Limits(
             full(unplaced: [
@@ -203,7 +196,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(tracks.warnings[1].contains("Source track 6"))
     }
 
-    /// A track that gave up one channel and kept another is not a track that fitted.
     @Test func asourceThatOnlyPartlyFitsSaysWhichPartDidNot() throws {
         let limits = Limits(
             full(unplaced: [
@@ -215,7 +207,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(tracks.warnings[0].contains("Source track 3"))
         #expect(tracks.warnings[0].contains("3 channels"))
         #expect(tracks.warnings[0].contains("1 channel would be dropped"))
-        // The note count belongs to the whole track, so a partial drop must not claim it.
         #expect(!tracks.warnings[0].contains("9"))
     }
 
@@ -239,8 +230,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(patterns.warnings[0].contains("pattern \(Constants.patternsPerTrack)"))
     }
 
-    /// A run starting at pattern 14 has three slots left whatever it holds, so the gauge counts
-    /// the pattern it reaches rather than the patterns it fills.
     @Test func thepatternGaugeCountsHowFarTheRunReachesNotHowManyItHolds() throws {
         let limits = Limits(
             SegmentationSummary(
@@ -278,7 +267,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(try gauge(limits, "Patterns per track").site == "Track 3")
     }
 
-    /// The track count is the whole plan's, so there is no one place to point at.
     @Test func thetrackGaugeNamesNoPlaceBecauseItIsTheWholePlan() throws {
         #expect(try gauge(Limits(modest()), "Tracks").site == nil)
     }
@@ -327,8 +315,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(verdict.text == "Fits")
     }
 
-    /// The answer is still yes, so the word is still "Fits"; what a near wall changes is how much
-    /// room is left, and the line has to say so rather than leave amber to say it alone.
     @Test func aplanNearAWallStillFitsAndCountsTheWallsItIsNear() {
         let verdict = Limits(modest(steps: 48, notes: 144, perStep: 12, pattern: 12)).verdict
 
@@ -342,7 +328,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(verdict.text == "Fits, 1 limit close")
     }
 
-    /// The issue's own example: what went, in the unit the wall is measured in.
     @Test func adroppedTailReadsAsTheseManyPatternsOver() {
         let verdict =
             Limits(
@@ -365,8 +350,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(verdict.text == "40 notes over")
     }
 
-    /// A source track the plan could not place costs a device track, and one that gave up a
-    /// channel costs one apiece.
     @Test func unplacedSourcesReadInTracks() {
         let verdict =
             Limits(
@@ -379,7 +362,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(verdict.text == "3 tracks over")
     }
 
-    /// Named in the order the meters are listed in, so the line and the detail below it agree.
     @Test func severalWallsPassedAreNamedInTheOrderTheMetersRunIn() {
         let verdict =
             Limits(
@@ -417,8 +399,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(verdict.text == "1 track and 3 patterns over")
     }
 
-    /// A wall passed outranks a wall approached: the line answers whether the plan fits, and it
-    /// does not.
     @Test func awallPassedOutranksAWallMerelyApproached() {
         let verdict =
             Limits(
@@ -435,8 +415,6 @@ private func gauge(_ limits: Limits, _ name: String) throws -> Limits.Gauge {
         #expect(verdict.text == "3 patterns over")
     }
 
-    /// The two walls the planner can only truncate to never carry a figure of their own, so a
-    /// full pattern reports nothing over.
     @Test func thewallsTheDeviceOnlyTruncatesToAreNeverCountedAsOver() {
         #expect(
             Limits(modest(steps: Constants.maxSteps, notes: 32, perStep: 16)).verdict.text

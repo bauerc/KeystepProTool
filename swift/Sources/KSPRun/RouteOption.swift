@@ -10,8 +10,6 @@ public let routeHelp = """
     --midi-tracks reads. Not usable with --midi-track
     """
 
-/// The routes the text names, in the order it names them.
-/// Empty is how `ImportOptions` already spells "assign as before".
 public func resolveRoutes(_ single: Int?, _ text: String?) throws -> [TrackRoute] {
     if single != nil && text != nil {
         throw KSPError.value(

@@ -35,7 +35,6 @@ import UniformTypeIdentifiers
         RepoData.projectFiles.appending(path: "project_5.KeyStepPro")
     }
 
-    /// The panel offering a file the app then refuses is the one drift that matters here.
     @Test func everyExtensionThePanelOffersIsOneTheAppCanConvert() {
         for name in Conversion.openableExtensions {
             #expect(
@@ -73,8 +72,6 @@ import UniformTypeIdentifiers
         #expect(model.recentFiles.isEmpty)
     }
 
-    /// A file picked mid-run would be staged and then thrown away by the run's own answer, so the
-    /// menu item is disabled and the panel never opens.
     @Test func openIsShutWhileArunIsInFlight() {
         let log = PanelLog()
         let model = model(picking: midiFixture, log: log)
@@ -97,7 +94,6 @@ import UniformTypeIdentifiers
         #expect(log.urls == [midiFixture])
     }
 
-    /// Recent to the app is what it could open. A file it has no direction for never was.
     @Test func afileTheAppCannotOpenIsNotRemembered() {
         let model = model(picking: nil)
 
@@ -127,7 +123,6 @@ import UniformTypeIdentifiers
         #expect(log.clearances == 1)
     }
 
-    /// The menu is drawn from the model, so what a previous launch left has to be in it already.
     @Test func themenuHoldsWhatAnEarlierLaunchOpened() {
         let log = RecentFilesLog()
         log.store.note(projectFixture)

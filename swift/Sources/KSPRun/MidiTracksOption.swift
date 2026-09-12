@@ -1,8 +1,7 @@
 import Foundation
 import KSPKit
 
-// A Standard MIDI File counts its tracks in 16 bits, and parseSelection walks
-// every number of a range, so this is both the real cap and a cheap one.
+// A Standard MIDI File counts its tracks in 16 bits.
 private let maxMidiTracks = 65535
 
 public let midiTracksHelp = """
@@ -11,8 +10,6 @@ public let midiTracksHelp = """
     --midi-track
     """
 
-/// The source tracks the two spellings name between them.
-/// Empty is how `ImportOptions` spells "all of them".
 public func resolveMidiTracks(_ single: Int?, _ listed: String?) throws -> Set<Int> {
     if single != nil && listed != nil {
         throw KSPError.value(
@@ -21,7 +18,6 @@ public func resolveMidiTracks(_ single: Int?, _ listed: String?) throws -> Set<I
                 + "selection as a song")
     }
     if let single {
-        // Range is ImportOptions' refusal to word, as it was before --midi-tracks existed.
         return [single]
     }
     return try parseSelection(listed, option: "--midi-tracks", limit: maxMidiTracks)

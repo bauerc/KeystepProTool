@@ -4,10 +4,7 @@ import KSPMIDI
 import KSPRun
 import SwiftUI
 
-/// A pattern too long for one slot, drawn across the slots it was split into.
 extension DropView {
-    /// Read-only, and redrawn whenever the ticks or a setting move it: what the planner says the
-    /// import would lay down, rather than what the file holds.
     @ViewBuilder
     func segmentation(_ state: SegmentationState) -> some View {
         switch state {
@@ -15,8 +12,6 @@ extension DropView {
             section("Result") { ProgressView("Planning the import…").controlSize(.small) }
         case .failed(let message):
             section("Result") {
-                // Not drawn as an exceeded limit: an unreadable file and a single-target import
-                // fail the same way, and only the planner's own words say which of the three.
                 Label(message, systemImage: "exclamationmark.triangle")
                     .font(TypeScale.label).foregroundStyle(palette.warning).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -51,7 +46,6 @@ extension DropView {
                         }
                     }
                 }
-                // Each cell names its own slot, so a figure over it would say it twice.
                 .accessibilityHidden(true)
                 ForEach(grid.rows, id: \.track) { segmentationRow($0) }
             }
@@ -72,7 +66,6 @@ extension DropView {
             }
         }
         .padding(.bottom, 4)
-        // Under the cells for the reason the Chain rail is: a rail behind them would band.
         .overlay(alignment: .bottomLeading) { rails(row.runs, track: row.track) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(row.name), \(row.spoken)")
@@ -105,8 +98,6 @@ extension DropView {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The pitch labels stand where the map's drum badge does, so the shape starts on the map's
-    /// own origin and its steps line up under the columns they become.
     private func noteShape(_ shape: NoteShape) -> some View {
         HStack(alignment: .top, spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
@@ -164,7 +155,6 @@ extension DropView {
         .accessibilityValue(shape.spoken)
     }
 
-    /// Ticked at both ends, so two Patterns side by side cannot read as one.
     private func bracket(_ region: NoteShape.Region) -> some View {
         let tick = Rectangle().fill(palette.rule)
             .frame(width: 1, height: AppLayout.bracketTickHeight)
@@ -185,8 +175,6 @@ extension DropView {
         .help(region.bracket)
     }
 
-    /// Where the planner put each source track, for the pickers to show as their automatic answer.
-    /// Empty while a plan is in flight, which leaves a picker reading "Automatic" on its own.
     func placements(_ state: SegmentationState) -> [Int: String] {
         guard case .ready(let plan) = state else { return [:] }
         return SegmentationGrid.placements(plan.summary)

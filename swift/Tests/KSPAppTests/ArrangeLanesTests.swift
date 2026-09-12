@@ -61,8 +61,6 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
             ])
     }
 
-    /// The load-bearing case: a track playing a shorter Pattern keeps its own width inside the
-    /// span, so the slot is not filled and the gap is what the eye reads.
     @Test func aShorterTrackDrawsShortOfItsSpan() {
         let lanes = ArrangeLanes(
             arranged(
@@ -73,14 +71,11 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
         let short = lanes.lanes[1].regions[0]
         #expect(full.width == AppLayout.axisWidth)
         #expect(short.width == AppLayout.axisWidth / 4)
-        // The span is what the boundaries delimit, so the gap is measured against those rather
-        // than against a second copy of the span carried on the region.
         #expect(short.x == lanes.boundaries[0].x)
         #expect(short.x + short.width < full.x + full.width)
         #expect(short.detail.contains("loops back"))
     }
 
-    /// A track that plays no Pattern in a slot draws nothing there, rather than an empty block.
     @Test func aTrackPlayingNothingInASlotDrawsNoRegion() {
         let lanes = ArrangeLanes(
             arranged(
@@ -120,8 +115,6 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
         #expect(drawn.marks.allSatisfy { $0.x + $0.width <= drawn.width })
     }
 
-    /// A note whose gate runs past the last step is held inside the region rather than drawn over
-    /// the next one.
     @Test func aMarkRunningPastTheRegionIsHeldAtItsEdge() {
         let marks = [ArrangedMark(tick: slotTicks - 10, durationTicks: slotTicks, pitch: 60)]
         let lanes = ArrangeLanes(arranged([1], regions: [1: [region(1, at: 0, marks: marks)]]))
@@ -131,8 +124,6 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
     }
 
     @Test func aRegionTooNarrowToReadDropsItsSketchAndItsNumber() {
-        // Counted off the axis rather than fixed, so widening the map cannot quietly make every
-        // region in this run readable again and leave the test asserting nothing.
         let count = Int((AppLayout.axisWidth / AppLayout.regionLabelMinimumWidth).rounded(.up)) + 1
         let patterns = (0..<count).map { $0 % AppLayout.columnCount + 1 }
         let regions = patterns.enumerated().map { region($0.element, at: $0.offset) }
@@ -143,16 +134,12 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
         #expect(!drawn.showsMarks)
         #expect(!drawn.showsLabel)
         #expect(drawn.grid.isEmpty)
-        // The block still carries the geometry, which is what the view is for.
         #expect(drawn.width > 0)
-        // A repeated run plays one Pattern many times, so the number cannot be the identity.
         let slots = lanes.lanes[0].regions.map(\.slot)
         #expect(Set(slots).count == slots.count)
         #expect(Set(lanes.boundaries.map(\.slot)).count == lanes.boundaries.count)
     }
 
-    /// Fitted rather than clamped: three neighbouring pitches spread over the lane instead of
-    /// drawing one flat line, and the lane names the range it was fitted to.
     @Test func aLaneFitsItsPitchWindowToWhatItPlays() {
         let marks = [48, 49, 50].enumerated().map {
             ArrangedMark(tick: $0.offset * 240, durationTicks: 120, pitch: $0.element)
@@ -181,8 +168,6 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
         #expect(lanes.lanes[0].regions[1].grid == [GridLine(x: beat, accented: false)])
     }
 
-    /// Two bars in one region: the line opening the second -- the fifth beat -- is the accent, so
-    /// a run reads in bars at a glance.
     @Test func theLineOpeningEachBarIsAccented() {
         let bar = AppLayout.beatsPerBar * 480
         let held = ArrangedRegion(
@@ -226,8 +211,6 @@ private func arranged(_ patterns: [Int], regions: [Int: [ArrangedRegion]], drums
         #expect(lanes.lanes[0].detail.contains("trigger"))
     }
 
-    /// The pane scrolls vertically only, so an axis wider than the narrowest pane would be clipped
-    /// with no way for the user to resize out of it.
     @Test func theAxisFitsTheStagedPaneAtTheSmallestWindow() {
         #expect(AppLayout.gridOrigin + AppLayout.axisWidth <= AppLayout.minimumCardContentWidth)
     }

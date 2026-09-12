@@ -2,7 +2,6 @@ import Foundation
 
 struct Destination: Sendable, Hashable {
     let directory: URL
-    /// Shown under the result when the file did not land where the user would expect it.
     let note: String?
 }
 
@@ -41,7 +40,6 @@ enum Destinations {
             + "will not show a project written here."
     }
 
-    /// Symlinks are resolved and a trailing slash dropped, so two spellings compare equal.
     private static func folderPath(_ url: URL) -> String {
         var path = url.resolvingSymlinksInPath().standardizedFileURL.path(percentEncoded: false)
         while path.count > 1 && path.hasSuffix("/") { path.removeLast() }
@@ -57,7 +55,6 @@ enum Naming {
         sanitised(source.deletingPathExtension().lastPathComponent)
     }
 
-    /// A leading dot is stripped too: legal, but it writes a file Finder will not show.
     static func sanitised(_ raw: String) -> String {
         var name = raw.replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
@@ -67,8 +64,6 @@ enum Naming {
         return name.isEmpty ? fallbackStem : name
     }
 
-    /// `stem`, moved along to `stem 2`, `stem 3`, ... until every suffix named is free. A read
-    /// writing two files needs one stem that suits both, not a free name per file.
     static func vacantStem(
         in directory: URL, stem: String, suffixes: [String],
         exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
@@ -83,7 +78,6 @@ enum Naming {
         return candidate
     }
 
-    /// `directory/stem.ext`, moved along to `stem 2`, `stem 3`, ... until nothing is there.
     static func vacant(
         in directory: URL, stem: String, extension ext: String,
         exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }

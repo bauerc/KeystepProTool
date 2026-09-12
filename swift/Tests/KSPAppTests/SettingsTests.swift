@@ -20,7 +20,6 @@ import Testing
         let settings = Settings()
 
         let convert = settings.convertOptions(source: source, output: output)
-        // The app converts the one file that was dropped; the CLI is what takes several.
         #expect(convert.paths == [source])
         #expect(convert.output == output)
         #expect(convert.configPath == drumMapConfigPath)
@@ -45,7 +44,6 @@ import Testing
         #expect(settings.exportOptions(source: output, output: source).verbose == on)
     }
 
-    /// Only the export splits, so `ConvertRunner` has no such option to carry it to.
     @Test(arguments: [false, true])
     func splittingPerPatternReachesTheExport(on: Bool) {
         let settings = Settings(splitPerPattern: on)
@@ -183,7 +181,6 @@ import Testing
         #expect(mapped.drumTrack == 4)
     }
 
-    /// A route and a selection are read together, so the app hands over both rather than choosing.
     @Test func aroutedTrackAndAnUntickedOneReachTheRunnerTogether() {
         var selection = SourceTrackSelection(syntheticSong(tracks: (1...5).map { sourceTrack($0) }))
         selection.send(2, to: .skip)
@@ -256,7 +253,6 @@ import Testing
         #expect(!mapped.noDrums)
     }
 
-    /// `ConvertRunner.run` fails the pair with exit 2, so a named track must win rather than join.
     @Test func anamedDrumTrackWinsOverTakingNothingAsDrums() {
         var selection = SourceTrackSelection(syntheticSong(tracks: (1...4).map { sourceTrack($0) }))
         selection.send(2, to: .drums)
@@ -270,8 +266,6 @@ import Testing
         #expect(settings.drumSense(named: 2).designation == .source(2))
     }
 
-    /// Pinned against what the core accepts rather than against the CLI's literal, so the stepper
-    /// cannot offer a channel the import would refuse.
     @Test func thestepperCannotOfferAChannelTheImportRefuses() throws {
         for channel in Settings.drumChannelRange {
             #expect(throws: Never.self) { try ImportOptions(drumChannel: channel - 1) }
@@ -329,7 +323,6 @@ import Testing
         #expect(mapped.flatVelocity == nil)
     }
 
-    /// On an import swing means fitting the source's groove, so these must not reach it at all.
     @Test func replacingOnAnExportLeavesTheImportAlone() {
         let mapped = Settings(replaceVelocity: true, replaceSwing: true, replaceTimeShift: true)
             .convertOptions(source: source, output: output)
@@ -340,8 +333,6 @@ import Testing
         #expect(mapped.fitTimeShift == defaults.fitTimeShift)
     }
 
-    /// Nothing is ignored until it is asked for, so the app on defaults converts what the CLI on
-    /// defaults converts.
     @Test func freshSettingsIgnoreNothing() {
         let settings = Settings()
         #expect(!settings.ignoreVelocity)
@@ -357,8 +348,6 @@ import Testing
         #expect(mapped.fitTimeShift == defaults.fitTimeShift)
     }
 
-    /// Pinned by parsing rather than by string equality, so the spelling cannot drift from the
-    /// number it stands for.
     @Test func ignoringVelocityWritesTheFreshNoteValue() throws {
         var settings = Settings()
         settings.ignoreVelocity = true
@@ -369,8 +358,6 @@ import Testing
         #expect(mapped.fitTimeShift)
     }
 
-    /// On an import, swing is the groove fitted from the source, so ignoring it leaves the pattern
-    /// straight rather than flattening a grid the project already stores.
     @Test func ignoringSwingStraightensEveryPatternAlone() {
         var settings = Settings()
         settings.ignoreSwing = true
@@ -391,8 +378,6 @@ import Testing
         #expect(mapped.flatVelocitySpec == nil)
     }
 
-    /// The inverse of ``replacingOnAnExportLeavesTheImportAlone``: the export's three mean something
-    /// else, so the import's must not reach `ExportRunner` at all.
     @Test func ignoringOnAnImportLeavesTheExportAlone() {
         let mapped = Settings(ignoreVelocity: true, ignoreSwing: true, ignoreTimeShift: true)
             .exportOptions(source: output, output: source)

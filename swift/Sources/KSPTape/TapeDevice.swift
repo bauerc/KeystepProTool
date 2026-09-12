@@ -6,7 +6,6 @@ import Foundation
     import KSPKit
 #endif
 
-/// Throwing rather than lenient: a mistyped fixture is a mistake, not a frame of zero bytes.
 public func hexBytes(_ text: some StringProtocol) throws -> [UInt8] {
     var frame: [UInt8] = []
     var index = text.startIndex
@@ -26,7 +25,6 @@ public func hexString(_ frame: [UInt8]) -> String {
     frame.map { ($0 < 0x10 ? "0" : "") + String($0, radix: 16) }.joined()
 }
 
-/// The request a frame carries. `Sysex` parses replies; only a fake device parses requests.
 public func decodeRequest(_ frame: [UInt8]) throws -> ReadRequest {
     let body = Array(frame.dropFirst(Sysex.header.count).dropLast())
     guard body.count >= 4 else { throw KSPError.value("\(hexString(frame)) is not a request") }
@@ -57,7 +55,6 @@ public func buildReply(_ request: ReadRequest, _ values: [Int], slot: Int) -> [U
     return Sysex.header + body.map { UInt8($0) } + [Sysex.end]
 }
 
-/// Every address a tape delivered, as the device sent it.
 public func tapeValues(contentsOf path: URL) throws -> [String: Int] {
     var values: [String: Int] = [:]
     for line in try String(contentsOf: path, encoding: .utf8).split(separator: "\n") {
@@ -84,7 +81,6 @@ public final class TapeDevice: Transport {
     /// which is what the walk's own check needs to pass.
     private let echoing: Int?
 
-    /// What the walk put on the wire, which is what the gate is judged by.
     public private(set) var asked: [ReadRequest] = []
     public private(set) var sent: [[UInt8]] = []
     public private(set) var slots: Set<Int> = []
@@ -106,7 +102,6 @@ public final class TapeDevice: Transport {
         sent.append(frame)
     }
 
-    /// The slot echoed back is the one asked about, so the walk's own check of it is exercised.
     public func exchange(_ frame: [UInt8]) throws -> [UInt8] {
         let request = try decodeRequest(frame)
         asked.append(request)

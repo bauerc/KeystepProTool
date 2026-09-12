@@ -26,8 +26,6 @@ import Testing
         return plan
     }
 
-    /// The acceptance criterion: the findings the plan already produced arrive before the
-    /// conversion does, rather than after it has run.
     @Test func aplannedImportCarriesTheFindingsItWouldRaise() async throws {
         let state = await Conversion.segment(.toProject(midiFixture), settings: Settings())
 
@@ -37,8 +35,6 @@ import Testing
         #expect(plan.findings(verbose: true) == plan.all)
     }
 
-    /// A real file through the runner the app calls: synthetic summaries prove the arithmetic,
-    /// and only this proves the figures are the core's own.
     @Test func arealFileReadsAgainstAllFiveLimits() async throws {
         let state = await Conversion.segment(.toProject(midiFixture), settings: Settings())
 
@@ -63,7 +59,6 @@ import Testing
         #expect(plan.summary.tracks.map(\.sourceTrack) == [3, 4, 5, 6])
     }
 
-    /// Rendered once rather than on every body evaluation, which is the reason it is stored.
     @Test func thefindingsAreRenderedOnceRatherThanOnEveryRead() {
         let report = Report([
             Diagnostic(code: .patternSplit, detail: "one", site: Site(track: 1)),
@@ -88,8 +83,6 @@ import Testing
         #expect(!message.isEmpty)
     }
 
-    /// A tick moves the plan, so it must move the findings with it: figures for one selection
-    /// beside findings for another is the one thing a preview must never show.
     @Test func aselectionMovesTheFindingsWithTheFigures() async throws {
         let model = model(writingInto: try tempDirectory())
         model.accept(midiFixture)
@@ -108,7 +101,6 @@ import Testing
         #expect(fewer.all != all.all)
     }
 
-    /// The limits are read off the plan the app is holding, so they move on the same tick.
     @Test func thelimitsFollowTheSelectionThePlanWasMadeFor() async throws {
         let model = model(writingInto: try tempDirectory())
         model.accept(midiFixture)

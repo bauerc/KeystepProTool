@@ -1,4 +1,3 @@
-/// The device as the walk needs it: the walk is given one and never opens one.
 public protocol Transport {
     func exchange(_ request: [UInt8]) throws -> [UInt8]
 
@@ -13,19 +12,15 @@ public enum BulkRead {
     /// From the identity reply; nothing in the read protocol itself supplies it.
     public static let defaultVersion = "2.5.20"
 
-    /// Padding past the end of two short arrays, not parameters, so the device's answer is a
-    /// marker that has changed between sessions; 127 is what the corpus holds (spec 3.4).
+    /// Padding past the end of two short arrays; 127 is what the corpus holds (spec 3.4).
     public static let mccConstants = ["120_55_5": 127, "120_56_4": 127, "120_56_5": 127]
 
-    /// What a read returns when the device has no project to give. Well-formed, so
-    /// nothing in the codec catches it.
+    /// What a read returns for an empty slot. Well-formed, so no codec catches it.
     public static let filler = 0x7F
 
-    /// The first address the plan asks for, and the one that tells a filler read from a
-    /// real one: it never holds the filler byte in any corpus file.
+    /// Tells a filler read from a real one: no corpus file holds the filler byte here.
     public static let slotProbe = "120_37"
 
-    /// The flat keys one reply fills, in payload order.
     /// A long read walks its last index forward by `count`; the others are fixed.
     public static func keysFor(_ request: ReadRequest) throws -> [String] {
         guard let count = request.count else {
@@ -46,7 +41,6 @@ public enum BulkRead {
         }
     }
 
-    /// Read one project slot into the dictionary `Reader.readProject` takes.
     /// `templateKeys` supplies the full key set; the plan addresses the logical extent only.
     public static func readRaw<Names: Sequence>(
         _ transport: any Transport,
@@ -54,8 +48,8 @@ public enum BulkRead {
         version: String = defaultVersion,
         slot: Int = Sysex.defaultSlot
     ) throws -> RawProject where Names.Element == String {
-        // The prologue is what selects the slot: a read naming one in byte 7 without
-        // it returns whichever project the last prologue named, silently and in full.
+        // The prologue is what selects the slot: without it, byte 7 is ignored and the read
+        // returns whichever project the last prologue named, silently and in full.
         try transport.send(Sysex.prologue(slot))
 
         var values = try walkFast(transport, slot: slot)
@@ -109,7 +103,6 @@ public enum BulkRead {
         return values.map { $0 == Sysex.unset ? Sysex.unsetInFile : $0 }
     }
 
-    /// The existence entries covering `request`'s note ordinals in that chunk.
     /// `poolSlot` is the note pool's own middle index, not the project slot.
     private static func poolGate(_ request: ReadRequest, _ poolSlot: Int, count: Int) -> [String] {
         let pattern = request.indices[0]
@@ -120,7 +113,6 @@ public enum BulkRead {
     }
 
     /// Whether parameter 40 has been read for this pattern and says it holds no note.
-    /// Unread settles nothing: the walk asks rather than guess at what it has not seen.
     private static func patternSettlesEmpty(_ request: ReadRequest, _ seen: [String: Int]) -> Bool {
         let name = Keys.key(
             request.item, Constants.pPatternDataState, indices: [request.indices[0]])
@@ -128,7 +120,6 @@ public enum BulkRead {
         return flag != Constants.patternHasData
     }
 
-    /// The value a request would return, when an earlier reply already settles it.
     /// The pattern data state settles a pooled param outright; the rest is the melodic pool
     /// (spec 3).
     private static func alreadyAnswered(_ request: ReadRequest, _ seen: [String: Int]) -> Int? {
@@ -150,7 +141,6 @@ public enum BulkRead {
         return nil
     }
 
-    /// Stop the moment a read comes back as filler rather than a project.
     /// A whole dump of filler parses as a valid, empty project, so nothing below notices.
     private static func refuseFiller(_ name: String, _ value: Int, slot: Int) throws {
         guard name == slotProbe, value == filler else { return }

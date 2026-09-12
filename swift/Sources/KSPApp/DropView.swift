@@ -30,7 +30,6 @@ struct DropView: View {
         .navigationTitle(windowTitle)
         .navigationSubtitle(windowSubtitle)
         .dropDestination(for: URL.self) { urls, _ in
-            // One file at a time in v1: a second would need its own name field and its own result.
             guard let first = urls.first else { return false }
             model.accept(first)
             return true
@@ -46,20 +45,15 @@ struct DropView: View {
         }
     }
 
-    /// The window follows the system unless the user has named a unit, and the palette follows the
-    /// window: the two faces are the standard unit and the Chroma, not light and dark.
     private var scheme: ColorScheme { model.appearance.colorScheme ?? systemScheme }
     var palette: Palette { Palette.resolved(for: scheme) }
 
-    /// The document, in the title bar where macOS names one.
     private var windowTitle: String {
         switch model.phase {
         case .idle: return "Key Step Pro Plus"
         case .staged(let staged): return model.plan(for: staged.job).source.lastPathComponent
         case .working(let filename): return filename
         case .reading(let slot): return "Project \(slot)"
-        // Still the document, not the result: the result leads the pane below, and said here
-        // too it would be said twice.
         case .done(let outcome): return outcome.document
         }
     }
@@ -89,9 +83,3 @@ struct DropView: View {
         }
     }
 }
-
-/// Where the user names what is about to be written. Drawn from the palette rather than left to
-/// `.roundedBorder`, whose bezel is AppKit's and takes no palette input: a passive field has to
-/// stay quieter than the ink beside it, and a fill the app never chose cannot promise that.
-///
-/// The ring stays the system accent, which is a user setting with accessibility weight.

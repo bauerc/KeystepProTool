@@ -5,7 +5,6 @@ import Testing
 
 @testable import KSPApp
 
-/// One ``Settings`` per direction, plus the two the app rather than a direction owns.
 @Suite struct SettingsStoreTests {
     @Test func afreshStoreReadsTheDefaults() {
         withVolatileDefaults { defaults in
@@ -48,7 +47,6 @@ import Testing
         }
     }
 
-    /// Unlike the drum track below, which a drop names, both of these are preferences.
     @Test(arguments: Settings.Drums.allCases)
     func thedrumDesignationAndItsChannelSurviveTheNextLaunch(drums: Settings.Drums) {
         withVolatileDefaults { defaults in
@@ -75,7 +73,6 @@ import Testing
         }
     }
 
-    /// What a drop chose is not a preference: it must not come back on the next file.
     @Test func adropsOwnSelectionIsNotRemembered() {
         withVolatileDefaults { defaults in
             let store = SettingsStore(defaults: defaults)
@@ -91,7 +88,6 @@ import Testing
         }
     }
 
-    /// A field added later costs the reader that one setting, not everything it had remembered.
     @Test func ablobMissingAkeyKeepsTheKeysItHas() throws {
         withVolatileDefaults { defaults in
             defaults.set(
@@ -105,8 +101,6 @@ import Testing
         }
     }
 
-    /// Unlike every setting beside it. A launch that remembered a dry run would write nothing for
-    /// every file after it, and say so nowhere but on the button.
     @Test func thedryRunDoesNotSurviveTheNextLaunch() {
         withVolatileDefaults { defaults in
             var settings = Settings()
@@ -121,7 +115,6 @@ import Testing
         }
     }
 
-    /// A build that did store it left the key in someone's defaults, where it must stay inert.
     @Test func astoredDryRunFromAnEarlierBuildIsIgnored() {
         withVolatileDefaults { defaults in
             defaults.set(Data(#"{"dryRun":true,"repeatCount":9}"#.utf8), forKey: "settings.toMIDI")
@@ -133,8 +126,6 @@ import Testing
         }
     }
 
-    /// How long a finding list is drawn is the app's, not either direction's, so it is kept where
-    /// the two cannot disagree. A build that did store it per direction left the key behind.
     @Test func theFindingListLengthIsOnePreferenceRatherThanTwo() {
         withVolatileDefaults { defaults in
             let store = SettingsStore(defaults: defaults)
@@ -148,8 +139,6 @@ import Testing
     }
 }
 
-/// One face: every option reaches the conversion, and an untouched app is still the CLI on its
-/// own defaults.
 @MainActor
 @Suite struct AppModelOptionsTests {
     private var midiFixture: URL { RepoData.projectFiles.appending(path: "m6-test-file.mid") }
@@ -168,8 +157,6 @@ import Testing
             reveal: { _ in }, chooseFolder: { _ in nil }, recents: volatileRecents())
     }
 
-    /// ``AppModel/kind`` is what picks the direction's options, so each one is edited exactly
-    /// while the slot it writes to is the one being shown.
     @Test func eachDirectionIsEditedApartFromTheOther() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -188,13 +175,10 @@ import Testing
         #expect(model.settings.ignoreSwing)
         #expect(model.settings.repeatCount == 1)
 
-        // The export's options are reachable again, and kept what they were last given.
         model.accept(projectFixture)
         #expect(model.settings.repeatCount == 6)
     }
 
-    /// With nothing staged the options belong to the direction last shown, so a drop the other way
-    /// swaps the slot under them. They move with it rather than following the file.
     @Test func asettingMadeBeforeAdropBelongsToTheDirectionThatWasShowing() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -208,7 +192,6 @@ import Testing
         #expect(model.settings.ignoreSwing)
     }
 
-    /// Whichever direction is showing reads the one preference, and neither slot swallows it.
     @Test func theFindingListLengthCrossesBothDirections() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -234,7 +217,6 @@ import Testing
         #expect(model.segmentationKey != nil)
     }
 
-    /// A project is laid out by the exporter rather than planned by the importer.
     @Test func aprojectPlansNoImport() throws {
         let directory = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -259,7 +241,6 @@ import Testing
         let settings = model.conversionSettings(staged)
         #expect(!settings.cells.isEmpty)
         #expect(settings.cells[1]?.contains(1) == false)
-        // The ticks alone: nothing else has been touched.
         #expect(settings.repeatCount == Settings().repeatCount)
         #expect(!settings.verbose)
     }
@@ -287,8 +268,6 @@ import Testing
         #expect(!settings.ignoreVelocity)
     }
 
-    /// The milestone's last claim, which survives the sidebar going: an app nobody has touched
-    /// writes the bytes the CLI writes on its own defaults.
     @Test(arguments: ["m6-test-file.mid", "project_5.KeyStepPro"])
     func anUntouchedConversionIsByteForByteTheCLIonItsDefaults(name: String) async throws {
         let appDirectory = try tempDirectory()
@@ -301,7 +280,6 @@ import Testing
         let model = model(writingInto: appDirectory)
         model.accept(source)
 
-        // The read the staged view starts, so a seeded selection gets its chance to leak.
         await model.summarise()
         await model.convert()
 
@@ -316,7 +294,6 @@ import Testing
         #expect(try Data(contentsOf: written) == Data(contentsOf: target))
     }
 
-    /// What the CLI does on nothing but its defaults, which is what an untouched app reproduces.
     private func run(_ source: URL, into target: URL) -> RunResult {
         source.pathExtension == "mid"
             ? ConvertRunner.run(

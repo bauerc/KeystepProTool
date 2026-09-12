@@ -56,7 +56,6 @@ enum Sentinel {
         Int(request[request.count - countFromEnd])
     }
 
-    /// The same request re-addressed past a sentinel.
     private static func rest(of request: [UInt8], from index: Int, count: Int) throws -> [UInt8] {
         guard index <= maxDataByte, count <= maxDataByte else {
             throw DeviceError.unaddressable(index: index, count: count)

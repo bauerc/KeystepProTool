@@ -4,18 +4,12 @@ import os
 
 private let log = Logger(subsystem: "com.github.bauerc.keysteppro-plus", category: "read")
 
-/// A refused file, split into the registers the window needs: a sentence for whoever dropped it,
-/// the path beneath that, and a reason short enough to sit beside Convert.
 struct ReadFailure: Equatable {
     let headline: String
     let path: String
 
-    /// The action bar's line while this stands. It says the same thing as ``headline`` because
-    /// Convert is where the promise was made, and it is one line wide.
     var blockReason: String { "This file can't be read, so there is nothing to convert." }
 
-    /// The type's own words never reach the window, so they are logged here: without this line a
-    /// header mismatch leaves no trace at all.
     init(_ failure: SummaryRunner.Failure, kind: Job.Kind) {
         log.error("\(failure.message, privacy: .public)")
         let name = failure.path.lastPathComponent

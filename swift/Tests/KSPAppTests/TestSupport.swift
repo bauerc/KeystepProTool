@@ -7,10 +7,8 @@ import Testing
 
 @testable import KSPApp
 
-/// The designation the app runs under until the sidebar or the track list moves it.
 let gmDrums = DrumSense(designation: .auto, channel: MIDIImport.drumChannel + 1)
 
-/// What a selection resolves to under given settings, resolved as ``AppModel`` resolves it.
 func drumSense(_ selection: SourceTrackSelection, _ settings: Settings = Settings()) -> DrumSense {
     settings.drumSense(named: selection.drumTrack)
 }
@@ -80,8 +78,6 @@ func syntheticSummary(
         })
 }
 
-/// Percussion is derived rather than passed: every caller means it as "carries channel 10".
-/// ``isDrumTrack`` is not, because the reader decides it over channels rather than tracks.
 func sourceTrack(
     _ number: Int, name: String = "", channels: [Int] = [1], noteCount: Int = 8, bars: Int = 2,
     isDrumTrack: Bool = false, isConductor: Bool = false
@@ -109,8 +105,6 @@ func summariseSong(_ name: String) throws -> SongSummary {
     return try #require(result.summary)
 }
 
-/// An Open Recent list of the test's own, ordered and deduplicated as `NSDocumentController`
-/// orders its own, so a run neither reads nor writes the system's.
 @MainActor
 final class RecentFilesLog {
     private(set) var urls: [URL] = []
@@ -130,6 +124,5 @@ final class RecentFilesLog {
     }
 }
 
-/// A recents list nothing asserts on. The log it keeps lives as long as the store's closures.
 @MainActor
 func volatileRecents() -> RecentFiles { RecentFilesLog().store }

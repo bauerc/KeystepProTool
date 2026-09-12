@@ -2,30 +2,20 @@ import Foundation
 import KSPKit
 import KSPRun
 
-/// The four tracks on one time axis: a region per Pattern, at the length that track plays it. The
-/// geometry is the export's own, scaled into ``AppLayout/axisWidth``; this only measures it out.
 struct ArrangeLanes: Equatable {
     struct Region: Equatable {
-        /// Which slot of the run this is, counting from 0. A repeated Pattern is several slots.
         let slot: Int
         /// 1-16.
         let pattern: Int
         let label: String
-        /// From the axis's leading edge, and the width this track fills of its slot.
         let x: CGFloat
         let width: CGFloat
-        /// Held, and every event in it switched off.
         let isEmpty: Bool
         let showsLabel: Bool
-        /// Dropped below a width where the marks would outnumber the points available.
         let showsMarks: Bool
         let marks: [NoteMark]
-        /// On the run's own clock rather than restarted per Pattern, so a note the export moved
-        /// off the grid -- by swing or by time shift -- is seen to sit off it. Every beat, with
-        /// every bar accented.
         let grid: [GridLine]
         let detail: String
-        /// ``detail`` without the Pattern's name, which is what the region is labelled with.
         let spoken: String
 
         init(
@@ -51,8 +41,6 @@ struct ArrangeLanes: Equatable {
             self.spoken = facts.joined(separator: ", ")
         }
 
-        /// Scaled against the whole run, as the region itself is, then held inside the region: a
-        /// note whose gate runs past the last step would otherwise draw over its neighbour.
         private static func marks(
             _ region: ArrangedRegion, total: Int, width: CGFloat, window: PitchWindow
         ) -> [NoteMark] {
@@ -69,7 +57,6 @@ struct ArrangeLanes: Equatable {
             }
         }
 
-        /// The region's own start is a boundary, drawn already, so the first line is the next one.
         private static func ruling(_ region: ArrangedRegion, total: Int, every: Int)
             -> [GridLine]
         {
@@ -87,7 +74,6 @@ struct ArrangeLanes: Equatable {
                 "from beat \(beat(region.startTick, ticksPerBeat: ticksPerBeat))",
             ]
             if region.gapTicks > 0 {
-                // The unequal case said in words as well as drawn, because the gap is the point.
                 parts.append(
                     "loops back \(beats(region.gapTicks, ticksPerBeat: ticksPerBeat)) before the "
                         + "next pattern")
@@ -97,7 +83,6 @@ struct ArrangeLanes: Equatable {
     }
 
     struct Boundary: Equatable {
-        /// Counting from 0, so two boundaries falling on one tick stay distinct.
         let slot: Int
         let pattern: Int
         let x: CGFloat
@@ -107,12 +92,10 @@ struct ArrangeLanes: Equatable {
         /// 1-4.
         let track: Int
         let name: String
-        /// The well: the first Pattern this track plays, or `--` where it plays none.
         let readout: String
         let isDrum: Bool
         let isEmpty: Bool
         let detail: String
-        /// What the lane's pitch window is fitted to, named under the track.
         let range: String?
         let middleC: CGFloat?
         let regions: [Region]
@@ -174,8 +157,6 @@ struct ArrangeLanes: Equatable {
     }
 }
 
-/// Ticks are the export's unit and beats are the tempo's; the device counts neither, so the one a
-/// reader can hear is the one shown. A triplet division leaves a fraction, which is kept.
 private func beats(_ ticks: Int, ticksPerBeat: Int) -> String {
     guard ticksPerBeat > 0 else { return counted(0, "beat") }
     let count = Double(ticks) / Double(ticksPerBeat)
@@ -183,7 +164,6 @@ private func beats(_ ticks: Int, ticksPerBeat: Int) -> String {
         ? counted(Int(count), "beat") : "\(Arithmetic.general(count)) beats"
 }
 
-/// Counting from 1, as a musician counts and as the export's markers land.
 private func beat(_ tick: Int, ticksPerBeat: Int) -> String {
     guard ticksPerBeat > 0 else { return "1" }
     return Arithmetic.general(Double(tick) / Double(ticksPerBeat) + 1)

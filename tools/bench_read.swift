@@ -1,7 +1,4 @@
 // Measure what reading a `.KeyStepPro` project costs, phase by phase: requirement D1's evidence.
-//
-// Compiled against KSPKit by scripts/bench_read.sh, which runs it once per sample so that a peak
-// memory figure belongs to one file. `<file> [--reps N] [--json]`, or `--render` over --json lines.
 
 import Foundation
 

@@ -5,8 +5,6 @@ import Testing
 
 @testable import KSPRun
 
-/// One drop wakes four readers. Deleting the file after the first proves the rest never re-read
-/// it, which counting parses cannot: the cache's counters are global and other suites share them.
 @Suite struct OneParsePerDropTests {
     static func options(_ path: URL, dryRun: Bool = false) -> ExportRunner.Options {
         ExportRunner.Options(path: path, dryRun: dryRun, configPath: noPersonalConfig)

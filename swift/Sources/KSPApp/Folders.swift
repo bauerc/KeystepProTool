@@ -11,7 +11,6 @@ enum FolderKind: String, Sendable, CaseIterable {
         }
     }
 
-    /// What the row reads before anything is chosen.
     var defaultDescription: String {
         switch self {
         case .project: return "MIDI Control Center's Templates folder"
@@ -46,7 +45,6 @@ struct Folders: Sendable, Equatable {
     }
 }
 
-/// The chosen folders, remembered between launches.
 struct FolderStore {
     private let defaults: UserDefaults
 
@@ -54,7 +52,6 @@ struct FolderStore {
         self.defaults = defaults
     }
 
-    /// A remembered folder that has since gone away reverts to the default.
     func load(directoryExists: (URL) -> Bool = FolderStore.directoryExists) -> Folders {
         var folders = Folders()
         for kind in FolderKind.allCases {

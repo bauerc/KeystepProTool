@@ -1,6 +1,3 @@
-/// Rule 3 sets every figure in SF Mono, but a finding is prose the core wrote, so its figures have
-/// to be found rather than formatted. Cutting the string keeps wrapping and selection that an
-/// `HStack` of `Text` would lose.
 enum Figures {
     struct Run: Equatable {
         let text: String
@@ -10,7 +7,6 @@ enum Figures {
     private static let noteLetters: Set<Character> = ["A", "B", "C", "D", "E", "F", "G"]
     private static let signs: Set<Character> = ["+", "-", "\u{2212}"]
 
-    /// Total and lossless: the runs joined back together are the string that went in.
     static func split(_ text: String) -> [Run] {
         let characters = Array(text)
         var runs: [Run] = []
@@ -34,15 +30,12 @@ enum Figures {
         return runs
     }
 
-    /// Where the figure starting at `start` ends, or `nil` if none starts there.
     private static func figure(in characters: [Character], from start: Int) -> Int? {
         var index = start
         let digit = { (offset: Int) in
             offset < characters.count && characters[offset].isASCII
                 && characters[offset].isNumber
         }
-        // A sign or a note letter is only a figure's head where a word does not run into it, so
-        // the `2` of `mid2` is a figure and the `d` before it is not part of one.
         let detached =
             start == 0 || !(characters[start - 1].isLetter || characters[start - 1].isNumber)
 

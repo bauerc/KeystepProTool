@@ -1,7 +1,5 @@
 import AppKit
 
-/// Open Recent. The list is `NSDocumentController`'s, which is the same one the Dock icon's own
-/// menu shows, so an app without an `NSDocument` still keeps both in step.
 struct RecentFiles {
     var urls: @MainActor () -> [URL]
     var note: @MainActor (URL) -> Void

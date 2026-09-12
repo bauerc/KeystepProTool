@@ -3,7 +3,6 @@ import Foundation
 /// A drum-map config path that cannot exist, so a run never picks up a personal one.
 let noPersonalConfig = URL(filePath: "/nonexistent/keysteppro/drum_map.json")
 
-/// A file of `contents` at a unique temporary path. The caller removes it.
 func tempFile(_ contents: String, suffix: String) throws -> URL {
     let url = FileManager.default.temporaryDirectory
         .appending(path: "ksp-\(UUID().uuidString)\(suffix)")

@@ -5,8 +5,6 @@ import Testing
 
 @testable import KSPApp
 
-/// Under the designation and the ticks the app starts on, so a test about something else need not
-/// restate either.
 private func list(
     _ summary: SongSummary, drums: DrumSense = gmDrums, selection: SourceTrackSelection? = nil
 ) -> SourceTrackList {
@@ -52,7 +50,6 @@ private func list(
         #expect(row.detail == "Source track 1 holds no notes, so nothing is imported from it.")
     }
 
-    /// The reader names the drum track; a percussion track it did not name is imported melodically.
     @Test func thedrumTrackTheReaderNamedIsTheOneBadgedDrums() {
         let list = list(
             syntheticSong(tracks: [
@@ -68,7 +65,6 @@ private func list(
         #expect(list.rows[2].detail.contains("imported melodically"))
     }
 
-    /// Only the channel 10 part of a split track is the drum track, and the badge cannot say so.
     @Test func asplitDrumTrackGivesUpOnlyItsChannelTenPart() {
         let list = list(
             syntheticSong(tracks: [
@@ -80,7 +76,6 @@ private func list(
         #expect(list.rows[0].detail.contains("Each channel becomes a device track of its own."))
     }
 
-    /// Nothing is taken as drums, so no row may be badged and no row may say a channel is searched.
     @Test func takingNothingAsDrumsBadgesNoRow() {
         let list = list(
             syntheticSong(tracks: [
@@ -94,8 +89,6 @@ private func list(
         #expect(list.rows.allSatisfy { !$0.detail.contains("looks for drums") })
     }
 
-    /// The badge follows the setting, not General MIDI: a kit a DAW put on channel 3 is the one
-    /// the import reads as drums once the sidebar says so.
     @Test func thebadgeFollowsTheChosenChannel() {
         let list = list(
             syntheticSong(tracks: [
@@ -112,7 +105,6 @@ private func list(
         #expect(list.rows[2].detail.contains("Channel 3 is where the import looks for drums"))
     }
 
-    /// A named track is found without a channel search, so the row must not claim one happened.
     @Test func anamedSourceTrackIsBadgedWithoutNamingAChannel() {
         let list = list(
             syntheticSong(tracks: [
@@ -126,8 +118,6 @@ private func list(
         #expect(!list.rows[1].detail.contains("looks for drums"))
     }
 
-    /// The badge names the track ``SourceTrackSelection/drumSource(_:)`` names, which looks among
-    /// the ticked tracks: badging one the block does not name would contradict the reason on screen.
     @Test func untickingTheFirstTrackOnTheChannelMovesTheDrumBadge() {
         let summary = syntheticSong(tracks: [
             sourceTrack(1, name: "Bass"),
@@ -144,8 +134,6 @@ private func list(
         #expect(list.rows[2].badge == .drums)
     }
 
-    /// `assign` merges every clip of a named track into the one drum clip, so the row must not
-    /// claim its channels each become a device track.
     @Test func anamedDrumTrackOnSeveralChannelsIsMergedRatherThanSplit() {
         let summary = syntheticSong(tracks: [sourceTrack(1, name: "Kit", channels: [1, 10])])
         var selection = SourceTrackSelection(summary)
@@ -229,14 +217,10 @@ private func list(
         #expect(list.note(verbose: true) == nil)
     }
 
-    /// The staged pane scrolls vertically only, so anything wider than it is silently clipped.
-    /// Measured at the window's floor, which is the one width the user cannot resize away from.
     @Test func thelistFitsTheStagedPaneWithoutTruncatingARow() {
         #expect(AppLayout.trackRowWidth <= AppLayout.minimumCardContentWidth)
     }
 
-    /// A column drawn but left out of ``AppLayout/trackColumnWidths`` leaves the fit above
-    /// asserting nothing, which is how the destination picker came to hang 110 pt off the pane.
     @Test func everyColumnTheRowDrawsIsInTheWidthItIsHeldTo() {
         #expect(AppLayout.trackColumnWidths.count == 7)
         #expect(AppLayout.trackColumnWidths.contains(AppLayout.trackDestinationWidth))

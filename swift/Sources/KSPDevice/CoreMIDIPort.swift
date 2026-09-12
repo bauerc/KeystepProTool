@@ -4,7 +4,6 @@ import Foundation
 /// The device's CoreMIDI endpoint pair, found by name. No privilege, no interface claim and no
 /// vendor id: `MIDIServer` reaches the interface the raw path would have evicted it from (7.9).
 final class CoreMIDIPort: SysExPort {
-    /// A `MIDIPacket`'s inline data buffer.
     private let packetCapacity = MemoryLayout.size(ofValue: MIDIPacket().data)
 
     private let frames = FrameQueue()

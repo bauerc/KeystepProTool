@@ -1,6 +1,5 @@
 import Foundation
 
-/// Whole SysEx messages off a MIDI input port, as a blocking queue.
 /// CoreMIDI delivers a reply split across packets, so the reassembly is here rather than above.
 final class FrameQueue: @unchecked Sendable {
     private let lock = NSLock()

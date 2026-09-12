@@ -1,6 +1,4 @@
-/// The attached device: finding it, and proving it answers.
 public enum KeyStepPro {
-    /// The endpoint pair CoreMIDI publishes for it; the device offers no second port.
     public static let endpointName = "KeyStep Pro"
 
     /// The device, and the firmware version no read address carries. The identity exchange is
@@ -12,7 +10,6 @@ public enum KeyStepPro {
         return (device, try device.identify())
     }
 
-    /// The device alone, for a caller that decides for itself whether to ask its identity.
     public static func attach(
         timeoutMs: Int = DeviceTransport.defaultTimeoutMs
     ) throws -> DeviceTransport {

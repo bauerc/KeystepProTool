@@ -2,7 +2,6 @@ import AppKit
 import KSPKit
 import SwiftUI
 
-/// The small controls the panes are built from, each with state of its own.
 struct NameField: View {
     let prompt: String
     @Binding var text: String
@@ -33,8 +32,6 @@ struct NameField: View {
     }
 }
 
-/// What says a slot, a track name or a slot number is clickable, now that no sentence under the
-/// grid does: the system accent rings it under the pointer, which is what the accent is for.
 struct TickStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         TickFace(configuration: configuration)
@@ -57,8 +54,6 @@ struct TickFace: View {
     }
 }
 
-/// What runs the chase. The start is this view's own state, created when the working pane appears
-/// and gone when it leaves, so no clock outlives the conversion it belongs to.
 struct Playhead<Content: View>: View {
     @ViewBuilder let map: (Int?) -> Content
     @State private var start = Date()

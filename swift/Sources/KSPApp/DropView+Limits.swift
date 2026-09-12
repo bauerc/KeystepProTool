@@ -4,10 +4,7 @@ import KSPMIDI
 import KSPRun
 import SwiftUI
 
-/// The limit block: what a conversion would use of what the device has.
 extension DropView {
-    /// Feedback, never an option: whether a loop fits the device's walls is the most useful thing
-    /// on screen for a reader who does not know the hardware yet.
     func limits(_ limits: Limits) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             gauges(limits)
@@ -27,11 +24,8 @@ extension DropView {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The answer, then the five figures it was read off. A limit left out reads as a limit there
-    /// is no need to think about, so all five are drawn whatever the plan holds.
     private func gauges(_ limits: Limits) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            // The card's heading names the block, so the answer leads it.
             verdictLine(limits.verdict)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -66,8 +60,6 @@ extension DropView {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Quantity only: how much of the wall this figure uses, so a lit segment means the same thing
-    /// on every row. The cap is the ceiling the segments fill toward, and it never moves.
     func meter(_ gauge: Limits.Gauge) -> some View {
         let lit = AppLayout.meterFill(used: gauge.used, limit: gauge.limit)
         return HStack(spacing: 0) {
@@ -87,9 +79,6 @@ extension DropView {
         .frame(width: AppLayout.meterWidth, alignment: .leading)
     }
 
-    /// Marked in all three states, where a meter marks only a refusal: this line carries no
-    /// quantity of its own, so with the colour removed the glyph is all that is left to read the
-    /// status off -- rule 2.
     private func verdictLine(_ verdict: Limits.Verdict) -> some View {
         let mark = self.mark(verdict.status)
         return Label {

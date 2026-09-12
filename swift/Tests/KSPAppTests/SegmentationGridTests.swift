@@ -24,7 +24,6 @@ private func segmented(
 }
 
 @Suite struct SegmentationGridTests {
-    /// The device has four tracks whatever the import fills, so the grid draws four.
     @Test func itdrawsEveryDeviceTrackWhateverThePlanFilled() {
         let grid = SegmentationGrid(
             SegmentationSummary(tracks: [segmented(1, source: 3, patterns: [(1, 64)])]))
@@ -47,7 +46,6 @@ private func segmented(
         #expect(row.cells[1].thumbnail.isEmpty)
     }
 
-    /// One window for the whole run, so a pitch sits at one height in both halves of a split.
     @Test func athumbnailDrawsEveryNoteInsideItsCellOnTheRunsOwnWindow() {
         let segments = [
             Segment(
@@ -92,7 +90,6 @@ private func segmented(
         #expect(row.detail == "empty")
     }
 
-    /// The split made visible: two patterns of one run join into one rail.
     @Test func asplitRunIsRailedAcrossThePatternsItTakes() {
         let grid = SegmentationGrid(
             SegmentationSummary(tracks: [segmented(1, source: 3, patterns: [(1, 64), (2, 32)])]))
@@ -110,7 +107,6 @@ private func segmented(
         #expect(grid.rows[0].runs.isEmpty)
     }
 
-    /// A rail is drawn between neighbouring columns only, as the export grid's chain rail is.
     @Test func patternsThatDoNotNeighbourAreNotRailedTogether() {
         let grid = SegmentationGrid(
             SegmentationSummary(tracks: [segmented(1, source: 3, patterns: [(1, 64), (3, 64)])]))
@@ -129,7 +125,6 @@ private func segmented(
         #expect(detail.contains("patterns 1-2"))
     }
 
-    /// A drum event is a trigger, as the device's vocabulary has it and the export grid says it.
     @Test func thedrumTrackSaysSoAndCountsTriggersRatherThanNotes() {
         let grid = SegmentationGrid(
             SegmentationSummary(
@@ -154,7 +149,6 @@ private func segmented(
 
         #expect(grid.rows[0].cells[1].detail.contains("Pattern 2"))
         #expect(grid.rows[0].cells[1].detail.contains("32 steps"))
-        // Where the run resumes, which is the whole point of showing the split.
         #expect(grid.rows[0].cells[1].detail.contains("65"))
         #expect(grid.rows[0].cells[2].detail == "Pattern 3 — empty")
     }
@@ -184,8 +178,6 @@ private func segmented(
         #expect(placements == [3: "Track 1", 5: "Track 2"])
     }
 
-    /// A source track carrying several channels became a device track apiece, and the picker must
-    /// say so rather than name one of them.
     @Test func asourceTrackOnTwoDeviceTracksNamesBoth() {
         let placements = SegmentationGrid.placements(
             SegmentationSummary(tracks: [
@@ -205,7 +197,6 @@ private func segmented(
         #expect(placements == [3: "Track 1", 7: "dropped"])
     }
 
-    /// A merged clip has no one source track, so it names none rather than claiming the first.
     @Test func atrackWithoutASourceIsPlacedNowhere() {
         let placements = SegmentationGrid.placements(
             SegmentationSummary(tracks: [segmented(1, patterns: [(1, 64)])]))
@@ -213,7 +204,6 @@ private func segmented(
         #expect(placements.isEmpty)
     }
 
-    /// The import side reads the same way round: the well shows the first pattern the plan fills.
     @Test func thereadoutIsTheFirstPatternThePlanFills() {
         let grid = SegmentationGrid(
             SegmentationSummary(tracks: [segmented(1, source: 3, patterns: [(3, 64), (4, 32)])]))

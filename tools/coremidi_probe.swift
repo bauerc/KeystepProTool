@@ -1,8 +1,4 @@
 // Does the KeyStep Pro answer the SysEx read protocol over CoreMIDI? (issue #245)
-//
-// Standalone on purpose: it must not be a package target, because the answer decides whether a
-// transport target is worth writing at all.
-//
 //   swiftc -O tools/coremidi_probe.swift -o /tmp/coremidi_probe && /tmp/coremidi_probe list
 
 import CoreMIDI
@@ -14,7 +10,7 @@ let ack: [UInt8] = header + [0x1C, 0x00, end]
 let identityRequest: [UInt8] = [0xF0, 0x7E, 0x7F, 0x06, 0x01, end]
 
 /// Where a three-index long reply's values start: header 6, command, slot, param, index count,
-/// item, three indices, count. `KSPKit`'s `Sysex` parses the same offset as `12 + n_indices`.
+/// item, three indices, count.
 let longReplyValues = 15
 
 /// `01 <slot> 25 78` -- 120_37, the first read of MCC's own plan, and the frame `usb_probe scalar`
@@ -23,8 +19,7 @@ func scalarRequest(slot: UInt8) -> [UInt8] {
     header + [0x01, slot, 37, 120, end]
 }
 
-/// `0b <slot> 6d 03 7c 01 01 01 <count>` -- 124_109_1_1_1, the coalesced form. Its reply carries
-/// `count` values, so it is the frame that says whether a long read survives the driver.
+/// `0b <slot> 6d 03 7c 01 01 01 <count>` -- 124_109_1_1_1, the coalesced form.
 func coalescedRequest(slot: UInt8, count: UInt8) -> [UInt8] {
     header + [0x0B, slot, 109, 0x03, 124, 1, 1, 1, count, end]
 }
@@ -63,17 +58,14 @@ func isFullReply(_ frame: [UInt8], count: Int) -> Bool {
     frame.count == longReplyValues + count + 1 && frame[6] == 0x0C && frame[14] == UInt8(count)
 }
 
-/// Whether a reply answers the address its request asked for. Everything between the command byte
-/// and the terminator is echoed verbatim, short form and long form alike (spec 7.1).
+/// Whether a reply answers the address its request asked for.
 func answers(_ reply: [UInt8], _ request: [UInt8]) -> Bool {
     let body = request.dropFirst(7).dropLast()
     guard reply.count >= 7 + body.count else { return false }
     return Array(reply[7..<(7 + body.count)]) == Array(body)
 }
 
-/// A frame and when it landed. `at` is taken in the MIDI callback rather than after the
-/// semaphore wakes, so a waiter's scheduling delay is not billed to the device; `stamped` is the
-/// driver's own timestamp for the same packet, and is 0 where the source does not set one.
+/// A frame and when it landed.
 struct Frame {
     let endpoint: String
     let bytes: [UInt8]
@@ -81,8 +73,8 @@ struct Frame {
     let stamped: UInt64
 }
 
-/// Mach's absolute time unit is not a nanosecond on every machine, and `DispatchTime` counts in
-/// the converted one -- so a raw `MIDIPacket.timeStamp` has to be scaled before the two compare.
+/// Mach's absolute time unit is not a nanosecond on every machine, and `DispatchTime` counts in the
+/// converted one -- so a raw `MIDIPacket.timeStamp` has to be scaled before the two compare.
 func nanos(fromHostTime ticks: UInt64) -> UInt64 {
     var info = mach_timebase_info_data_t()
     mach_timebase_info(&info)
@@ -90,9 +82,6 @@ func nanos(fromHostTime ticks: UInt64) -> UInt64 {
 }
 
 /// Whole SysEx messages off the input port, as a blocking queue.
-///
-/// `next` is the only way out, so the semaphore and the queue can never drift apart -- a drain that
-/// bypassed the semaphore would leave stale signals that make a later wait return on an empty queue.
 final class Collector: @unchecked Sendable {
     private let lock = NSLock()
     private var pending: [UInt8] = []
@@ -104,9 +93,7 @@ final class Collector: @unchecked Sendable {
         lock.lock()
         for byte in bytes {
             // Real-time bytes are legal *inside* a SysEx stream and the device emits clock whenever
-            // its transport runs; appending one would corrupt the frame around it. `0xFF` is the
-            // exception and must survive: System Reset never arrives mid-frame, and Arturia spends
-            // that byte as the unset sentinel (spec 7.6). Dropping it loses 16 values a walk.
+            // its transport runs; appending one would corrupt the frame around it.
             if (0xF8...0xFE).contains(byte) { continue }
             if byte == 0xF0 {
                 pending = [byte]
@@ -175,8 +162,8 @@ final class Listener {
         }
     }
 
-    /// Every request this probe sends is at most sixteen bytes, so one stack `MIDIPacketList`
-    /// holds it; a reply is what needs reassembling, not a request.
+    /// Every request this probe sends is at most sixteen bytes, so one stack `MIDIPacketList` holds
+    /// it; a reply is what needs reassembling, not a request.
     func send(_ payload: [UInt8], to destination: MIDIEndpointRef) throws {
         var builder = MIDIPacketList()
         let packet = MIDIPacketListInit(&builder)
@@ -275,8 +262,7 @@ func exchangeProbe(needle: String, slot: UInt8, wait: Double) throws {
     }
 }
 
-/// Reads 120_37 out of every slot, each behind its own prologue. Distinct pitch chunks are the
-/// proof that slot selection survives the driver too, not just a single frame.
+/// Reads 120_37 out of every slot, each behind its own prologue.
 func slotsProbe(needle: String, wait: Double) throws {
     let listener = try Listener()
     let target = try destination(needle, listener)
@@ -330,7 +316,7 @@ func throughputProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) thr
 }
 
 /// Replays a real request plan -- one hex frame per line, as `ksp.bulk_fast` emits it -- and times
-/// the whole walk. This is the only figure here that is a measured dump rather than a projection.
+/// the whole walk.
 func replayProbe(needle: String, slot: UInt8, path: String, wait: Double) throws {
     let text = try String(contentsOfFile: path, encoding: .utf8)
     let plan = text.split(separator: "\n").map { bytes(fromHex: $0) }.filter { !$0.isEmpty }
@@ -398,8 +384,8 @@ func sniffProbe(seconds: Double) throws {
     }
 }
 
-/// Milliseconds between two callback stamps, signed: an ack that beat its reply must read
-/// negative rather than wrap.
+/// Milliseconds between two callback stamps, signed: an ack that beat its reply must read negative
+/// rather than wrap.
 func ms(_ from: UInt64, _ to: UInt64) -> Double {
     (Double(to) - Double(from)) / 1_000_000
 }
@@ -416,12 +402,7 @@ func spread(_ label: String, _ samples: [Double]) -> String {
     return "    \(label)  \(figures)"
 }
 
-/// Where an exchange's 4 ms goes: request out, reply in, ack in. Every figure the project has
-/// measures `exchange()` whole, which blocks until the ack -- so whether the ack is worth waiting
-/// for has never been answered.
-///
-/// The last block drops the ack wait outright, dispatching the next request on the reply. That is
-/// the one-line change the decomposition either justifies or rules out.
+/// Where an exchange's 4 ms goes: request out, reply in, ack in.
 func cadenceProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throws {
     let listener = try Listener()
     let target = try destination(needle, listener)
@@ -479,8 +460,7 @@ func cadenceProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throws
     }
 
     // The ack wait, dropped: the next request goes out on the reply, and whatever acks the device
-    // sends are consumed wherever they land. A reply that stops echoing its own address is the
-    // failure this is watching for.
+    // sends are consumed wherever they land.
     print("  ack wait dropped -- next request dispatched on the reply:")
     for count in [1, 64] as [UInt8] {
         let request = coalescedRequest(slot: slot, count: count)
@@ -520,13 +500,7 @@ func cadenceProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throws
 }
 
 /// Is the 4 ms a latency or a service rate? `cadence` shows a reply does not come sooner for being
-/// asked sooner, which a decomposition alone cannot tell from a fixed round trip. So this sends a
-/// whole window unanswered and times what comes back.
-///
-/// Each request in a window addresses a different index, so a reply is matched by the address it
-/// echoes rather than by its position -- the failure that let #255 hide. Throughput is averaged
-/// over loss-free rounds alone: a window that dropped half its requests answers its survivors
-/// quickly, and reading that as a speed-up is exactly the mistake to avoid.
+/// asked sooner, which a decomposition alone cannot tell from a fixed round trip.
 func burst(
     _ listener: Listener, to target: MIDIEndpointRef, named name: String, label: String,
     requests: [[UInt8]], pace: Double, rounds: Int, wait: Double
@@ -590,8 +564,7 @@ func burst(
             + "window \(String(format: "%7.3f", mean(whole))) ms "
             + "-> \(String(format: "%5.3f", mean(whole) / Double(window))) ms per reply  "
             + "-- \(complete)/\(rounds) rounds whole, \(lost) lost, \(unmatched) unmatched")
-    // The mean hides the shape. A device on a 2 ms grid spending two slots per read gives one
-    // 4 ms bar; anything landing on 2 ms is a slot the ack did not take.
+    // The mean hides the shape.
     if !every.isEmpty {
         let tally = Dictionary(grouping: every) { ($0 * 2).rounded() / 2 }
             .mapValues(\.count).sorted { $0.key < $1.key }
@@ -631,8 +604,8 @@ func pipelineProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throw
             requests: steps(window), pace: pace, rounds: rounds, wait: wait)
     }
 
-    // The last way the rate could be beaten: if 4 ms were a per-item lock rather than the
-    // device's own service tick, two items in flight would answer in parallel.
+    // The last way the rate could be beaten: if 4 ms were a per-item lock rather than the device's
+    // own service tick, two items in flight would answer in parallel.
     print("  across items, and across parameters -- is the tick per item or per device?")
     try burst(
         listener, to: target, named: name, label: "2 items   ",
@@ -659,12 +632,6 @@ func pipelineProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throw
 /// Latency or tick? The two models fit `cadence` equally well, and they disagree about what a
 /// transport rewrite is worth, so this separates them: hold off `delay` ms after each reply before
 /// asking again, and watch the reply-to-reply period.
-///
-///   fixed latency L, free to answer whenever asked -> period tracks the delay, `delay + L`
-///   a service tick the device answers on          -> period stays pinned, whatever the delay
-///
-/// Sub-millisecond spacing is the whole point, so the wait spins rather than sleeping: `Thread`
-/// rounds to something coarser than the effect being measured.
 func gridProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throws {
     setvbuf(stdout, nil, _IOLBF, 0)
     let listener = try Listener()
@@ -717,8 +684,6 @@ func gridProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throws {
     }
 
     // Periods that step 4, 6, 8 put replies on a 2 ms grid, and a read spends two slots of it.
-    // The identity reply is the one frame the device does not ack (spec 7.1), so if the second
-    // slot is the ack, an unacked exchange must come back on half the period.
     var period: [Double] = []
     var previous: UInt64 = 0
     for round in 0...rounds {
@@ -743,10 +708,6 @@ func gridProbe(needle: String, slot: UInt8, rounds: Int, wait: Double) throws {
 }
 
 /// A real plan walked with a window of requests in flight, paced so the device's intake keeps up.
-/// The synthetic bursts say ~3 ms a reply is reachable; this is the same claim against the request
-/// stream a pull actually issues, which mixes short and long forms and every item.
-///
-/// A reply is claimed by the request whose address it echoes, never by arrival order.
 func pipeReplayProbe(
     needle: String, slot: UInt8, path: String, window: Int, pace: Double, wait: Double
 ) throws {
@@ -761,8 +722,8 @@ func pipeReplayProbe(
     try listener.send(prologue(slot: slot), to: target)
     _ = listener.listen(seconds: 0.2)
 
-    // A short read is answered by `02` and a long one by `0c`, so the command byte joins the
-    // echoed address in claiming a reply -- the two body shapes are otherwise free to collide.
+    // A short read is answered by `02` and a long one by `0c`, so the command byte joins the echoed
+    // address in claiming a reply -- the two body shapes are otherwise free to collide.
     func claims(_ reply: [UInt8], _ request: [UInt8]) -> Bool {
         guard reply.count > 6, request.count > 6 else { return false }
         let expected: UInt8 = request[6] == 0x01 ? 0x02 : 0x0C
@@ -793,8 +754,6 @@ func pipeReplayProbe(
         }
         guard let frame = listener.collector.next(within: wait) else {
             // Silence for a whole timeout means the device dropped what is still outstanding.
-            // A walk that skipped those would write defaults over real values, so they are asked
-            // again -- and the retry is part of what pipelining costs.
             guard attempts < 8 else {
                 lost += inFlight.count
                 inFlight.removeAll()
@@ -827,15 +786,6 @@ func pipeReplayProbe(
 /// Can the device be *told* not to ack, or told how deep a burst to take? The ack costs a 2 ms
 /// transmit slot -- half of every read -- so a flag that suppresses it would be worth more than
 /// every request the walk could prune.
-///
-/// The write direction is the precedent: it takes a whole burst unbuffered and answers it with one
-/// ack at the `06` commit, so the ack regime is already something the session framing selects.
-/// This asks whether the read direction has the same switch.
-///
-/// Every frame here is a known read opcode (`01`, `0b`, `05`) with its own fields varied. Inventing
-/// command bytes is what is deliberately not done: `02`, `06` and `0c` are the write opcodes, there
-/// is no restore path in this tool, and an unknown opcode carrying a slot byte could commit
-/// something no probe can undo.
 func handshakeProbe(needle: String, slot: UInt8, wait: Double) throws {
     setvbuf(stdout, nil, _IOLBF, 0)
     let listener = try Listener()
@@ -906,8 +856,7 @@ func handshakeProbe(needle: String, slot: UInt8, wait: Double) throws {
 
     print("  3. do the read opcodes carry a spare field? (a flag bit, or a byte before F7)")
     var variants: [(String, [UInt8])] = []
-    // nIdx is 1-3, and 4 is known to draw nothing. Anything above it is unexplored space in a
-    // field the device already validates, which is where a flag would sit most cheaply.
+    // nIdx is 1-3, and 4 is known to draw nothing.
     for bit in [0x04, 0x08, 0x10, 0x20, 0x40] as [Int] {
         var framed = read
         framed[9] = UInt8(0x03 | bit)
@@ -940,11 +889,6 @@ func handshakeProbe(needle: String, slot: UInt8, wait: Double) throws {
 
 /// What else answers? Reads only, so the whole sweep is non-destructive: a scalar read of an item
 /// that does not exist draws silence, and nothing here can commit.
-///
-/// Two questions. Byte 7 of a request is a slot number the device echoes but does not obey -- `05`
-/// is what selects the project (7.4) -- so it is a field with room in it, and a flag that turned
-/// the ack off would sit there. And if the device keeps its global settings in an item of their
-/// own, a scalar sweep of the item space is what finds it.
 func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
     setvbuf(stdout, nil, _IOLBF, 0)
     let listener = try Listener()
@@ -986,17 +930,16 @@ func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
     for count in [0, 1, 100, 101, 127] as [UInt8] {
         let request = coalescedRequest(slot: slot, count: count)
         let result = try probe(request)
-        // A reply echoes the request byte for byte and appends its values, so the values it
-        // carried is the difference -- not a fixed offset, which differs by request form.
+        // A reply echoes the request byte for byte and appends its values, so the values it carried
+        // is the difference -- not a fixed offset, which differs by request form.
         let carried = result.reply.map { $0.count - request.count } ?? -1
         print("     count \(String(format: "%3d", Int(count))): "
             + "\(result.reply == nil ? "SILENT" : "\(carried) values back"), "
             + "\(result.acked ? "acked" : "NO ACK")")
     }
 
-    // A scalar read answers for every item and every param, so silence cannot be used to find
-    // what exists -- the device returns whatever sits at the address and validates neither field.
-    // Any search for a settings area has to come from captured MCC traffic instead.
+    // A scalar read answers for every item and every param, so silence cannot be used to find what
+    // exists -- the device returns whatever sits at the address and validates neither field.
     print("  3. does an address space sweep distinguish anything? (scalar reads)")
     var itemsAnswering = 0
     var paramsAnswering = 0
@@ -1013,12 +956,6 @@ func spaceProbe(needle: String, slot: UInt8, wait: Double) throws {
 
 /// Can a lone index be walked after all? 1,567 of the walk's requests carry one index and fetch one
 /// value, because a `count` walk on a request's only index repeats that index instead of advancing.
-/// Collapsing each of the 100 families into a single ranged request would drop 1,467 requests --
-/// about 5.9 s -- and unlike dropping the undecoded reads it loses nothing.
-///
-/// The idea under test is that the device walks the *last* index (7.1), so a lone index might walk
-/// if it is no longer alone. Ground truth is the same addresses read one at a time; a variant is
-/// only believed if it reproduces that byte for byte.
 func loneProbe(needle: String, slot: UInt8, item: UInt8, param: UInt8, span: Int, wait: Double)
     throws
 {
@@ -1085,9 +1022,7 @@ func loneProbe(needle: String, slot: UInt8, item: UInt8, param: UInt8, span: Int
     }
 }
 
-/// Does a `count` walk that overruns its last index roll into the next middle index, or pad? The
-/// earlier probe ran on a near-empty project, where "padding" and "an empty next slice" look the
-/// same; this asks a slot whose next slice holds data, so the two answers differ.
+/// Does a `count` walk that overruns its last index roll into the next middle index, or pad?
 func rolloverProbe(needle: String, slot: UInt8, item: UInt8, mid: UInt8, wait: Double) throws {
     setvbuf(stdout, nil, _IOLBF, 0)
     let listener = try Listener()

@@ -1,25 +1,20 @@
 /// The addresses `BulkPlan` lists, in as few requests as the device allows (spec 7.8).
 public enum BulkFast {
-    /// Marks an empty note-pool entry. Also a legal pitch and velocity, which is why
-    /// only paramId 50 (or 54) may be read as existence (spec 3).
+    /// An empty note-pool entry. Also a legal pitch and velocity, so only paramId 50 or 54
+    /// may be read as existence (spec 3).
     public static let empty = 127
 
-    /// The melodic existence array, and the per-note parameters it gates. Entry n of
-    /// each is the same note ordinal, so an all-empty chunk of 50 settles all of them.
+    /// Entry n of each is the same note ordinal, so an all-empty chunk of 50 settles all.
     public static let melodicGate = 50
     public static let melodicGated: Set<Int> = [109, 110, 111, 112, 113]
 
-    // The drum pair (54 gating 117-121) is deliberately absent: the drum array is a
-    // pool with holes, so a dead entry keeps whatever was there and cannot be derived.
+    // The drum pair (54 gating 117-121) is absent: that pool has holes, so a dead entry
+    // keeps whatever was there and cannot be derived.
 
-    /// Each gate ahead of what it settles: the data state settles whole patterns, so it is
-    /// read before the existence array, which settles only a pool chunk.
+    /// Each gate ahead of what it settles: the data state covers whole patterns, 50 one chunk.
     public static let gates = [Constants.pPatternDataState, melodicGate]
 
-    /// What a pooled parameter holds in a pattern parameter 40 says holds no note. Keyed by
-    /// param, since no param is gated on both a melodic track and the control track: the
-    /// melodic pools carry three indices, the control track's CC lanes two, and the lone-index
-    /// form of either is a setting, editable on a pattern that holds no note at all.
+    /// What a pooled parameter holds in a pattern parameter 40 says holds no note.
     public static let dataStateFill: [Int: Int] = [
         50: empty, 54: empty,
         109: empty, 110: empty, 111: empty, 112: empty, 113: empty,
@@ -32,13 +27,11 @@ public enum BulkFast {
         96: Constants.skipMaskAll,
     ]
 
-    /// Pool arrays no per-chunk gate settles, so walking across their chunks costs nothing.
-    /// The melodic pool is absent deliberately: its existence array skips empty chunks
-    /// outright, and a request coalesced across them would fetch what the gate had dropped.
+    /// Pool arrays no per-chunk gate settles. The melodic pool is absent deliberately: a
+    /// request coalesced across chunks would fetch what its existence array had dropped.
     public static let rolledOver: Set<Int> = [53, 54, 117, 118, 119, 120, 121]
 
-    /// Entries per middle index in a pool. A walk passing this rolls into the next chunk,
-    /// and stops at the outer index (spec 7.8).
+    /// Entries per middle index. A walk past this rolls into the next chunk (spec 7.8).
     public static let poolChunk = Constants.maxSteps
 
     /// A pool address as one 1-based position across the chunks of its outer index.
@@ -52,7 +45,6 @@ public enum BulkFast {
         return [outer, middle + 1, last + 1]
     }
 
-    /// Whether this request addresses a pool the device walks through the chunks of.
     public static func rollsOver(_ request: ReadRequest) -> Bool {
         rolledOver.contains(request.param) && request.indices.count == 3
     }
@@ -63,8 +55,7 @@ public enum BulkFast {
     /// What one pattern of one track costs: 75 pattern reads plus the index-less scalars.
     public static let patternRequestCount = 108
 
-    /// Every address the plan covers, in as few requests as the device allows.
-    /// MCC's order, but with the existence array ahead of the parameters it gates.
+    /// MCC's order, but with each existence array ahead of the parameters it gates.
     public static func iterRequests(maxCount: Int = Sysex.maxReadCount) throws -> [ReadRequest] {
         guard maxCount > 0 else {
             throw KSPError.value("maxCount \(maxCount), expected 1 or more")
@@ -77,7 +68,6 @@ public enum BulkFast {
         return requests
     }
 
-    /// The requests covering one pattern of one track, in `iterRequests`' order.
     /// The index-less scalars come too: tempo carries no pattern index.
     public static func iterPatternRequests(item: Int, pattern: Int) throws -> [ReadRequest] {
         try iterRequests().filter {
@@ -85,12 +75,10 @@ public enum BulkFast {
         }
     }
 
-    /// Whether a request fills any key belonging to `pattern`.
     private static func covers(_ request: ReadRequest, _ pattern: Int) -> Bool {
         request.indices.first == pattern
     }
 
-    /// One group index of the plan, in the plan's own order.
     private static func expand(_ index: Int, _ leaves: [BulkPlan.Leaf]) -> [ReadRequest] {
         var requests: [ReadRequest] = []
         for leaf in leaves {
@@ -117,14 +105,12 @@ public enum BulkFast {
         return rows
     }
 
-    /// One run: `(item, param, fixed indices)`, the walking index left out.
     private struct RunKey: Hashable {
         let item: Int
         let param: Int
         let head: [Int]
     }
 
-    /// Join each run over the walking index into requests of up to `maxCount`.
     /// Only the last index walks; the others hold a run together.
     private static func coalesce(_ requests: [ReadRequest], maxCount: Int) throws -> [ReadRequest] {
         var runs: [RunKey: Int] = [:]
@@ -149,8 +135,6 @@ public enum BulkFast {
         return try gateFirst(order).flatMap { try join($0, maxCount: maxCount) }
     }
 
-    /// Each gate ahead of what it settles, order otherwise kept: the data state settles whole
-    /// patterns, so it comes before the existence array, which settles pool chunks.
     private static func gateFirst(_ order: [[ReadRequest]]) -> [[ReadRequest]] {
         gates.flatMap { gate in order.filter { $0[0].param == gate } }
             + order.filter { !gates.contains($0[0].param) }
@@ -161,7 +145,7 @@ public enum BulkFast {
         guard first.count != nil else { return [first] }
 
         // A lone index is not a range axis: the device answers a walk over one with index 1's
-        // value repeated, so the per-pattern scalars stay one request each (spec 7.8).
+        // value repeated (spec 7.8).
         if first.indices.count == 1 {
             return run.sorted { ($0.indices.last ?? 0) < ($1.indices.last ?? 0) }
         }
@@ -170,8 +154,7 @@ public enum BulkFast {
             return try joinRolled(run, maxCount: maxCount)
         }
 
-        // By index, not by the order MCC asked in: it reads 121_83's fifth scene
-        // ahead of the other four, and a run is a range whatever order it arrived.
+        // By index, not by MCC's order: it reads 121_83's fifth scene ahead of the other four.
         let ordered = run.sorted { ($0.indices.last ?? 0) < ($1.indices.last ?? 0) }
         guard let start = ordered[0].indices.last else {
             throw KSPError.value("\(first.item)_\(first.param) run has no index to walk")
@@ -197,7 +180,6 @@ public enum BulkFast {
         }
     }
 
-    /// Join a run whose chunks the device walks through, flattening the middle index.
     private static func joinRolled(_ run: [ReadRequest], maxCount: Int) throws -> [ReadRequest] {
         let ordered = run.sorted { flat($0.indices) < flat($1.indices) }
         let outer = ordered[0].indices[0]

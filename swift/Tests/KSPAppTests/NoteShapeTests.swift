@@ -9,7 +9,6 @@ private func note(_ step: Int, _ pitch: Int, length: Double = 1) -> SegmentNote 
     SegmentNote(step: step, pitch: pitch, length: length)
 }
 
-/// Consecutive Patterns from 1, as the planner splits a run.
 private func run(_ patterns: [(steps: Int, notes: [SegmentNote])], track: Int = 1)
     -> SegmentedTrack
 {
@@ -97,8 +96,6 @@ private func run(_ patterns: [(steps: Int, notes: [SegmentNote])], track: Int = 
         #expect(shape.range == "C2–C5")
     }
 
-    /// Sixteen steps read as four groups of four: a line on every step after the Pattern's own
-    /// first, and the ones opening steps 5, 9 and 13 accented.
     @Test func everyStepIsRuledAndEveryBeatAccented() {
         let shape = NoteShape(run([(16, [note(1, 60)])]), stepsAcross: 16)
         let step = AppLayout.axisWidth / 16
@@ -125,7 +122,6 @@ private func run(_ patterns: [(steps: Int, notes: [SegmentNote])], track: Int = 
         #expect(shape.regions.allSatisfy { $0.showsBracket })
     }
 
-    /// The device loops at a Pattern's last step rather than sustaining into the next.
     @Test func aNoteHeldPastItsPatternsLastStepStopsThere() {
         let shape = NoteShape(run([(16, [note(15, 60, length: 8)]), (16, [])]), stepsAcross: 32)
 
@@ -134,7 +130,6 @@ private func run(_ patterns: [(steps: Int, notes: [SegmentNote])], track: Int = 
         #expect(shape.regions[1].isEmpty)
     }
 
-    /// The arrange lanes' rule from the other side: a shorter run is drawn shorter, not stretched.
     @Test func everyShapeOfAPlanSharesOneStepAxis() {
         let summary = SegmentationSummary(tracks: [
             run([(32, [note(1, 60)])], track: 1), run([(16, [note(1, 60)])], track: 2),
@@ -156,8 +151,6 @@ private func run(_ patterns: [(steps: Int, notes: [SegmentNote])], track: Int = 
         #expect(shape.regions[0].bracket == "pattern 1 · 16 steps")
     }
 
-    /// Both weights step out by fours where a step is too narrow to rule: here every fourth beat,
-    /// and a 64-step Pattern holds no accent of its own at that spacing.
     @Test func aRunTooLongToRuleEveryStepThinsOutByFours() {
         let shape = NoteShape(run([(64, [])]), stepsAcross: 1024)
         let step = AppLayout.axisWidth / 1024
@@ -167,8 +160,6 @@ private func run(_ patterns: [(steps: Int, notes: [SegmentNote])], track: Int = 
         #expect(grid.allSatisfy { !$0.accented })
     }
 
-    /// C3 names the one line across the shape, so it is placed first; C#3 a semitone above it
-    /// would overprint it, and is left to the range beside the name.
     @Test func middleCIsLabelledFirstAndACrowdingLabelIsDropped() {
         let shape = NoteShape(
             run([(16, [note(1, 36), note(2, 60), note(3, 61)])]), stepsAcross: 16)

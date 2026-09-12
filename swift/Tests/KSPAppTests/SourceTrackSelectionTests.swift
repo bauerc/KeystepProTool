@@ -27,7 +27,6 @@ import Testing
         #expect(!selection.isTicked(6))
     }
 
-    /// A track that produces no clip asks nothing of the device, so ticking one is free.
     @Test func anemptyTrackCanStillBeTickedAndCostsNoDeviceTrack() {
         var selection = SourceTrackSelection(
             syntheticSong(tracks: (1...4).map { sourceTrack($0) } + [sourceTrack(5, noteCount: 0)]))
@@ -58,7 +57,6 @@ import Testing
         )
     }
 
-    /// The runner would otherwise refuse this itself, after the read, with "no notes to convert".
     @Test func tickingOnlyTracksThatHoldNothingDisablesConvertToo() {
         var selection = SourceTrackSelection(
             syntheticSong(tracks: [sourceTrack(1), sourceTrack(2, noteCount: 0)]))
@@ -89,8 +87,6 @@ import Testing
         #expect(selection.blockReason(drumSense(selection)) == nil)
     }
 
-    /// A source track carrying several channels becomes a device track per channel, so the ticks
-    /// and the device tracks they ask for are not the same count.
     @Test func atickedTrackOnTwoChannelsCountsTwiceTowardsTheDevicesFour() {
         let selection = SourceTrackSelection(
             syntheticSong(tracks: [
@@ -133,7 +129,6 @@ import Testing
         #expect(selection.exclusionNote == "Excluded: Track 5")
     }
 
-    /// No tick spells no valid `--midi-tracks`, and `blockReason` has already refused the run.
     @Test func anemptyTickSetAsksTheRunnerForNothing() {
         var selection = SourceTrackSelection(syntheticSong(tracks: [sourceTrack(1)]))
 
@@ -179,8 +174,6 @@ import Testing
         #expect(try resolveRoutes(nil, selection.routeSpec) == [TrackRoute(source: 3, device: 1)])
     }
 
-    /// Only the tracks placed by hand: routing one merges its channels onto a single device track,
-    /// so routing the rest to where they already are would move them.
     @Test func thetracksLeftOnAutomaticStayOutOfTheRoute() {
         var selection = SourceTrackSelection(syntheticSong(tracks: (1...4).map { sourceTrack($0) }))
 
@@ -209,7 +202,6 @@ import Testing
         #expect(selection.spec == "1,3,4")
     }
 
-    /// The two options are read together by the core, so the app may hand over both at once.
     @Test func aroutedTrackSurvivesAnotherBeingSkipped() throws {
         var selection = SourceTrackSelection(syntheticSong(tracks: (1...5).map { sourceTrack($0) }))
 
@@ -250,7 +242,6 @@ import Testing
         #expect(selection.routeSpec == nil)
     }
 
-    /// The route would be refused with exit 2, so it must not reach the runner at all.
     @Test func twotracksOnOneDeviceTrackDisableConvertWithAReason() {
         var selection = SourceTrackSelection(syntheticSong(tracks: (1...4).map { sourceTrack($0) }))
 
@@ -275,8 +266,6 @@ import Testing
                 + "source track.")
     }
 
-    /// The reader's drum track is the assignment's, whether or not an option named it, so sending
-    /// it elsewhere is refused where sending it to Track 1 is not.
     @Test func thedrumTrackMayNotBeSentAnywhereButTrackOne() {
         var selection = SourceTrackSelection(
             syntheticSong(tracks: [
@@ -295,7 +284,6 @@ import Testing
         #expect(selection.blockReason(drumSense(selection)) == nil)
     }
 
-    /// The drum track the reader found, which the assignment uses when no option names one.
     @Test func adetectedDrumTrackHoldsDeviceTrackOneAgainstARoute() {
         var selection = SourceTrackSelection(
             syntheticSong(tracks: [
@@ -311,8 +299,6 @@ import Testing
                 + "track; only device track 1 carries a drum set.")
     }
 
-    /// `isDrumTrack` names the first channel 10 track of the whole file, but the assignment looks
-    /// among the clips it read, so skipping that one promotes the next.
     @Test func skippingOneDrumTrackPromotesTheNextToHoldTrackOne() {
         var selection = SourceTrackSelection(
             syntheticSong(tracks: [
@@ -343,8 +329,6 @@ import Testing
         #expect(selection.routeSpec == "3:1")
     }
 
-    /// Under None nothing is taken as drums, so the two refusals that hold device track 1 for a
-    /// drum set do not apply and a legal conversion must not be blocked.
     @Test func takingNothingAsDrumsLeavesDeviceTrackOneFree() {
         var selection = SourceTrackSelection(
             syntheticSong(tracks: [
@@ -359,8 +343,6 @@ import Testing
         #expect(selection.blockReason(drumSense(selection, settings)) == nil)
     }
 
-    /// Pinned against the core as the pair below is: `--no-drums` accepts the route the app has
-    /// just stopped refusing, so refusing it here would block a conversion the runner would make.
     @Test func aroutingAllowedUnderNoneIsOneTheCoreAccepts() throws {
         var selection = SourceTrackSelection(
             syntheticSong(tracks: [
@@ -380,8 +362,6 @@ import Testing
         #expect(options.routes == [TrackRoute(source: 3, device: 1)])
     }
 
-    /// The fallback is the searched channel, not General MIDI's: a kit on 3 holds device track 1
-    /// and the channel 10 track no longer does.
     @Test func thedrumFallbackFollowsTheChosenChannel() {
         var selection = SourceTrackSelection(
             syntheticSong(tracks: [
@@ -398,7 +378,6 @@ import Testing
                 + "track; only device track 1 carries a drum set.")
     }
 
-    /// Naming a track merges its channels onto the one device track, so it stops asking for two.
     @Test func aplacedTrackOnTwoChannelsAsksForOneDeviceTrack() {
         var selection = SourceTrackSelection(
             syntheticSong(tracks: [
@@ -411,8 +390,6 @@ import Testing
         #expect(selection.overflowNote == nil)
     }
 
-    /// The app words these itself, so they are pinned against the core that would refuse them:
-    /// a clash the app misses reaches the runner, and one it invents blocks a legal conversion.
     @Test(
         arguments: [
             [(2, SourceTrackSelection.Destination.track(3)), (4, .track(3))],
@@ -433,8 +410,6 @@ import Testing
         }
     }
 
-    /// The one block the app owns outright: `--drum-track` takes a single number, so a second
-    /// track set to Drums would reach the core as a melodic one and be imported without a word.
     @Test func asecondDrumsIsRefusedHereBecauseTheCoreCannotSpellIt() throws {
         var selection = SourceTrackSelection(syntheticSong(tracks: (1...4).map { sourceTrack($0) }))
         selection.send(1, to: .drums)
@@ -464,8 +439,6 @@ import Testing
         #expect(options.drumTrack == .source(4))
     }
 
-    /// The source row takes the colour of the row it lands in, so the colour is a property of the
-    /// destination rather than something a view works out.
     @Test func adestinationNamesTheDeviceTrackItsColourComesFrom() {
         #expect(SourceTrackSelection.Destination.track(3).device == 3)
         #expect(SourceTrackSelection.Destination.drums.device == 1)
@@ -473,7 +446,6 @@ import Testing
         #expect(SourceTrackSelection.Destination.skip.device == nil)
     }
 
-    /// Automatic can land on several device tracks at once, so it has no one hue to wear.
     @Test func everyDestinationInTheMenuNamesAtMostOneDeviceTrack() {
         let named = SourceTrackSelection.destinations.compactMap(\.device)
 

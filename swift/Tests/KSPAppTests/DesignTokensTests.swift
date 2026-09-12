@@ -38,16 +38,11 @@ private func saturation(_ color: Color) -> Double {
         #expect(AppLayout.lengthRuleWidth(steps: -4) == 0)
     }
 
-    /// A name or a badge wider than the head is clipped in silence, which is the failure
-    /// ``AppLayout/trackColumnWidths`` already warns about.
     @Test func arowHeadIsAsWideAsTheThingsInIt() {
         #expect(AppLayout.gridWidth <= AppLayout.minimumCardContentWidth)
         #expect(AppLayout.limitRowWidth <= AppLayout.minimumCardContentWidth)
     }
 
-    /// The options sit beside what they change, which puts each direction's whole set on one row
-    /// inside a pane that scrolls vertically only. A control added to a band and left out of its
-    /// widths would be clipped in silence.
     @Test func eitherDirectionsOptionBandFitsThePane() {
         #expect(
             AppLayout.bandWidth(AppLayout.exportBandWidths) <= AppLayout.minimumCardContentWidth)
@@ -56,38 +51,28 @@ private func saturation(_ color: Color) -> Double {
         #expect(AppLayout.keepWidths.count == 3)
     }
 
-    /// The idle pane draws the map with nothing behind it, so its rows and columns are the
-    /// tokens' own -- and a row without a colour of its own would be drawn in another track's.
     @Test func therestingMapHasArowPerTrackColourAndFitsThePane() {
         #expect(AppLayout.rowCount == DeviceColor.track.count)
         #expect(AppLayout.gridWidth <= AppLayout.minimumContentWidth)
     }
 
-    /// An empty map must not read as one holding notes, and the least a held slot takes is the
-    /// density floor.
     @Test func themapAtRestSitsUnderAnythingHoldingNotes() {
         #expect(Density.resting > 0)
         #expect(Density.resting < Density.floor)
         #expect(Density.restingTargeted > Density.resting)
     }
 
-    /// The card and the sixteen cells in it are both drawn at a fixed width, so both are clipped
-    /// in silence if either outgrows what holds it.
     @Test func adeviceCardFitsThePaneAndItsSlotRowFitsTheCard() {
         #expect(AppLayout.deviceCardWidth <= AppLayout.minimumContentWidth)
         #expect(
             AppLayout.slotPickerWidth + 2 * AppLayout.cardPadding <= AppLayout.deviceCardWidth)
     }
 
-    /// The map is the widest row a card holds, so it is the one that sets how much padding a
-    /// card can spend at the window's floor.
     @Test func acardLeavesTheMapRoomAtTheSmallestWindow() {
         #expect(AppLayout.minimumCardContentWidth < AppLayout.minimumContentWidth)
         #expect(AppLayout.gridWidth <= AppLayout.minimumCardContentWidth)
     }
 
-    /// The meter is quantity and nothing else: a figure at all lights a segment, the wall lights
-    /// them all, and no step across the range goes backwards.
     @Test func ameterFillsFromNothingUpToTheWall() {
         let ramp = (0...Constants.poolCapacity).map {
             AppLayout.meterFill(used: $0, limit: Constants.poolCapacity)
@@ -121,7 +106,6 @@ private func saturation(_ color: Color) -> Double {
         #expect(ramp.dropFirst().allSatisfy { (Density.floor...Density.ceiling).contains($0) })
     }
 
-    /// Two notes a step and a hundred fill the same: the ramp is clamped, not scaled to the file.
     @Test func densityClampsPastTheSaturationPoint() {
         let saturated = Density.opacity(notes: 32, steps: 16)
 
@@ -130,8 +114,7 @@ private func saturation(_ color: Color) -> Double {
         #expect(Density.opacity(notes: 8, steps: 0) == 0)
     }
 
-    /// Rule 1: hue never carries text contrast. The ink is chosen from the fill the eye actually
-    /// sees, so it is the blended fill -- not the bare hue -- that every face has to pass over.
+    /// Rule 1: hue never carries text contrast.
     @Test func everyTrackHueTakesAReadableInkAtEveryDensity() {
         for palette in [Palette.standard, Palette.chroma] {
             for track in 1...4 {
@@ -144,8 +127,6 @@ private func saturation(_ color: Color) -> Double {
         }
     }
 
-    /// Rule 1 on the arrange lanes: a region's figure sits on its face's own wash, and a mark is
-    /// held to WCAG's 3:1 for a graphic rather than text's 4.5:1.
     @Test func everyLaneRegionTakesAReadableInkAndMarksThatReadOnIt() {
         for palette in [Palette.standard, Palette.chroma] {
             for track in 1...4 {
@@ -158,8 +139,6 @@ private func saturation(_ color: Color) -> Double {
         }
     }
 
-    /// The Chroma's wash keeps a hue's saturation over its dark ground and turns it to a pastel over
-    /// the standard one, so the standard lane is held to the Chroma's rather than sharing its wash.
     @Test func thestandardLaneWearsEachHueAtLeastAsStronglyAsTheChroma() {
         for track in 1...4 {
             let washed = { (palette: Palette) in
@@ -175,11 +154,6 @@ private func saturation(_ color: Color) -> Double {
         }
     }
 
-    /// A name field is passive: it names what is about to be written and is read once. So its fill
-    /// may never out-contrast the ink beside it, or the eye goes to the field rather than to the
-    /// map. The second expectation is why the fill has to be chosen rather than inherited: a
-    /// near-white one is quiet on the standard ground and the loudest thing in the window on the
-    /// Chroma one.
     @Test func anameFieldNeverOutshoutsTheTextBesideIt() {
         for palette in [Palette.standard, Palette.chroma] {
             #expect(
@@ -190,9 +164,6 @@ private func saturation(_ color: Color) -> Double {
                 > contrast(Palette.chroma.ink, Palette.chroma.ground))
     }
 
-    /// What is typed into that field, and the default standing in it until something is, both read
-    /// on the field's own fill. Fill and ground are within 1.2:1 of each other in both faces, so
-    /// it is the border that says where the field is, and it has to out-do the fill to do that.
     @Test func anameFieldReadsInBothFaces() {
         for palette in [Palette.standard, Palette.chroma] {
             #expect(contrast(palette.ink, palette.surface) >= 4.5)
@@ -202,8 +173,6 @@ private func saturation(_ color: Color) -> Double {
         }
     }
 
-    /// The two faces the app wears must reach AppKit as the same two the palette is chosen by, or
-    /// the chrome is drawn as the other unit.
     @Test func eachUnitReachesAppKitAsTheFaceItsPaletteIsChosenBy() {
         #expect(Appearance.system.nsAppearance == nil)
         #expect(Appearance.standard.nsAppearance?.name == .aqua)

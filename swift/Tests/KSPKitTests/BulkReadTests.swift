@@ -39,8 +39,8 @@ private func templateKeys() throws -> [String] {
 
 @Suite struct BulkReadTests {
     @Test func theReplayReconstructsTheProjectExactly() throws {
-        // 153,497 of 153,497: tape 1 is MCC recalling initial_project, so the walk owes the
-        // file itself, not merely a plausible project.
+        // 153,497 of 153,497: tape 1 is MCC recalling initial_project, so the walk owes the file
+        // itself, not merely a plausible project.
         let replayed = try BulkRead.readRaw(
             TapeDevice(try recallTape()), templateKeys: try templateKeys())
 
@@ -71,8 +71,7 @@ private func templateKeys() throws -> [String] {
 
     @Test func theDrumPoolIsNeverDerivedInAPatternThatHoldsData() throws {
         // A dead drum entry reads 127 in some patterns and the default row in others, so no
-        // existence array derives it. Parameter 40 is the one thing that settles one, and only
-        // where the pattern holds no note at all.
+        // existence array derives it.
         let tape = try recallTape()
         let device = TapeDevice(tape)
         _ = try BulkRead.readRaw(device, templateKeys: [String]())
@@ -88,8 +87,8 @@ private func templateKeys() throws -> [String] {
     }
 
     @Test func everyUnaddressedKeyIsZeroFilled() throws {
-        // The plan asks for the logical extent; the rest of the rectangle is zero in every
-        // corpus file and is filled from the template rather than fetched.
+        // The plan asks for the logical extent; the rest of the rectangle is zero in every corpus
+        // file and is filled from the template rather than fetched.
         let addressed = Set(try BulkFast.iterRequests().flatMap(BulkRead.keysFor))
         let template = Set(try templateKeys()).subtracting(LenientJSON.leadingKeys)
         let replayed = try BulkRead.readRaw(
@@ -110,8 +109,8 @@ private func templateKeys() throws -> [String] {
     }
 
     @Test func theMccSideConstantsAreNotTakenFromTheWire() throws {
-        // These read 0 from hardware but are 127 in all six corpus files, including the
-        // factory default, which never came off a device.
+        // These read 0 from hardware but are 127 in all six corpus files, including the factory
+        // default, which never came off a device.
         let replayed = try BulkRead.readRaw(
             TapeDevice(try recallTape()), templateKeys: try templateKeys())
 
@@ -119,8 +118,6 @@ private func templateKeys() throws -> [String] {
     }
 
     @Test func theResultDecodesThroughTheExistingReader() throws {
-        // The point of the whole exercise: the hardware becomes a second producer of the
-        // dictionary LenientJSON already produces, and nothing downstream changes.
         let replayed = try BulkRead.readRaw(
             TapeDevice(try recallTape()), templateKeys: try templateKeys())
         let project = try Reader.readProject(replayed, sourceName: "replay")
@@ -138,8 +135,8 @@ private func templateKeys() throws -> [String] {
     }
 
     @Test func aSlotTheDeviceWillNotServeIsRefused() throws {
-        // Some slots answer a read with filler rather than a project (observed 2026-08-14;
-        // which slots and why is not established).
+        // Some slots answer a read with filler rather than a project (observed 2026-08-14; which
+        // slots and why is not established).
         let device = TapeDevice(try recallTape(), filler: true)
         let thrown = #expect(throws: KSPError.self) {
             try BulkRead.readRaw(device, templateKeys: [String](), slot: 3)
@@ -157,8 +154,8 @@ private func templateKeys() throws -> [String] {
     }
 
     @Test func theEchoedSlotIsCheckedBeforeThePayload() throws {
-        // The device's real refusal echoes the slot it was asked about, so a reply naming a
-        // slot nobody asked for is a different fault and says so.
+        // The device's real refusal echoes the slot it was asked about, so a reply naming a slot
+        // nobody asked for is a different fault and says so.
         let device = TapeDevice(try recallTape(), filler: true, echoing: 3)
         let thrown = #expect(throws: KSPError.self) {
             try BulkRead.readRaw(device, templateKeys: [String]())
@@ -168,8 +165,8 @@ private func templateKeys() throws -> [String] {
     }
 
     @Test func aRealSlotProbeValuePassesTheGuard() throws {
-        // 0-3 is the corpus range for 120_37, so the guard cannot fire on a project the
-        // device is genuinely serving.
+        // 0-3 is the corpus range for 120_37, so the guard cannot fire on a project the device is
+        // genuinely serving.
         let replayed = try BulkRead.readRaw(TapeDevice(try recallTape()), templateKeys: [String]())
 
         #expect(replayed[BulkRead.slotProbe] != .int(BulkRead.filler))
@@ -186,8 +183,8 @@ private func templateKeys() throws -> [String] {
     }
 
     @Test func aDeviceThatAnswersTheWrongAddressIsRefused() throws {
-        // The reply echoes the request header, so a desynchronised stream is detectable --
-        // and silently accepting it would write values under the wrong keys.
+        // The reply echoes the request header, so a desynchronised stream is detectable -- and
+        // silently accepting it would write values under the wrong keys.
         let thrown = #expect(throws: KSPError.self) {
             try BulkRead.readRaw(Desynchronised(), templateKeys: [String]())
         }

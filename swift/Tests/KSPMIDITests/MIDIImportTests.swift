@@ -187,7 +187,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
 
 @Suite struct ImportRecipeTests {
     /// The note is half a step long because that is the gate a freshly placed one carries.
-    /// The recipe holds no pattern bitfield, which is how the default step size reads.
     @Test func oneNoteWritesExactlyTheM4Recipe() throws {
         let base = try Samples.raw("baseline.KeyStepPro")
         let result = try MIDIImport.convert(
@@ -292,7 +291,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
                 == true)
     }
 
-    /// One offender at a time, as the selection grammar itself reports.
     @Test func theLowestMissingSelectedTrackIsNamed() throws {
         let midi = songOf([[(0, 60, 100)], [(0, 72, 100)], [(0, 76, 100)]], length: 120)
         let thrown = #expect(throws: KSPError.self) {
@@ -573,7 +571,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(notes.allSatisfy { $0.skip == Constants.skipSequences })
     }
 
-    /// The automatic split is untouched, track by track.
     @Test func aTrackLongerThanTheDevicePlaysIsSplitAutomatically() throws {
         let events = (0..<96).map { (tick: $0 * ticksPerStep, pitch: 60, velocity: 100) }
         let result = try MIDIImport.convertSong(songOf([events, events]), template())
@@ -613,7 +610,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(result.plan.tracks[0].isDrum)
     }
 
-    /// A DAW parking a melodic patch on channel 10 is not writing a kit.
     @Test func noDrumsLeavesAPercussionTrackOnASequencerTrack() throws {
         let midi = songOf([[(0, 36, 100), (ticksPerStep, 38, 100)]], channels: [9])
         let options = try ImportOptions(drumTrack: .none)
@@ -627,7 +623,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(!project.track(1).drumMode)
     }
 
-    /// Nothing was taken as drums, so there is no map to assume.
     @Test func noDrumsFitsNoDrumMap() throws {
         let midi = songOf([[(0, 36, 100)]], channels: [9])
         let options = try ImportOptions(drumTrack: .none)
@@ -663,7 +658,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(result.diagnostics.entries.contains { $0.code == .drumMapFitted })
     }
 
-    /// A DAW that puts its kit anywhere but channel 10 still imports as drums.
     @Test func drumDetectionListensToTheNamedChannel() throws {
         let midi = songOf([[(0, 36, 100), (ticksPerStep, 38, 100)]], channels: [11])
         let options = try ImportOptions(drumChannel: 11, drumMap: DrumMap.chromatic(36))
@@ -692,7 +686,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(drum.sourceTrack == 1)
     }
 
-    /// The wording is the export option's, so the two directions read alike.
     @Test(arguments: [-1, 16]) func aDrumChannelOutsideTheRangeIsRefused(_ channel: Int) {
         let thrown = #expect(throws: KSPError.self) {
             _ = try ImportOptions(drumChannel: channel)
@@ -700,7 +693,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(thrown?.description.contains("drum_channel must be 0-15") == true)
     }
 
-    /// A miss is otherwise silent, so the hit has to say where it looked.
     @Test func theFittedMapNamesTheChannelItWasFoundOn() throws {
         let midi = songOf([[(0, 31, 100)]], channels: [11])
         let result = try MIDIImport.convertSong(
@@ -710,7 +702,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(fitted.detail.contains("found on channel 12"))
     }
 
-    /// No channel was searched, so claiming one would be a lie.
     @Test func aNamedDrumTrackLeavesTheFittedMapNamingNoChannel() throws {
         let midi = songOf([[(0, 31, 100)]])
         let result = try MIDIImport.convertSong(
@@ -1047,7 +1038,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
 }
 
 @Suite struct TrackRouteTests {
-    /// Each plan's device track beside the source track it came from.
     private func routed(_ result: ImportResult) -> [[Int?]] {
         result.plan.tracks.map { [$0.track, $0.sourceTrack] }
     }
@@ -1120,7 +1110,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(result.plan.tracks.map(\.isDrum) == [true, false])
     }
 
-    /// Track 1 is an ordinary target once nothing claims it as a drum set.
     @Test func noDrumsLetsARouteTakeDeviceTrackOne() throws {
         let midi = songOf([[(0, 60, 100)], [(0, 36, 100)]], channels: [0, 9])
         let options = try ImportOptions(
@@ -1147,7 +1136,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(plan.tracks.map { [$0.track, $0.sourceTrack] } == [[1, 1], [3, 2]])
     }
 
-    /// Otherwise assign reports it as holding no notes, which sends the user to fix the file.
     @Test func aDrumTrackOutsideTheSelectionIsRefused() {
         let thrown = #expect(throws: KSPError.self) {
             _ = try ImportOptions(midiTracks: [2, 3], drumTrack: .source(5))
@@ -1378,7 +1366,6 @@ private func codes(_ result: ImportResult) -> Set<Code> {
         #expect(codes(result).contains(.sourceTempoDiffers))
     }
 
-    /// Nothing was overridden if nothing was written.
     @Test func aTempoDisagreementIsSilentWhenNoTempoIsCarried() throws {
         let first = withTempo(sourceOf("a.mid", [[(0, 60, 100)]]), bpm: 140)
         let second = withTempo(sourceOf("b.mid", [[(0, 67, 100)]]), bpm: 90)
@@ -1461,7 +1448,6 @@ private func codes(_ result: ImportResult) -> Set<Code> {
         #expect(!codes(result).contains(.sourceTempoDiffers))
     }
 
-    /// It supplied no note to rescale, so there is nothing to have overridden.
     @Test func awhollyDeselectedFileReportsNoDisagreement() throws {
         let first = withTempo(sourceOf("a.mid", [[(0, 60, 100)]]), bpm: 120)
         let second = withTempo(
@@ -1479,7 +1465,6 @@ private func codes(_ result: ImportResult) -> Set<Code> {
         #expect(!codes(result).contains(.sourceResolutionDiffers))
     }
 
-    /// Otherwise the same file would gate differently for the company it keeps.
     @Test func azeroLengthNoteStaysZeroLengthThroughArescale() throws {
         let first = sourceOf("a.mid", [[(0, 60, 100)]], ticksPerQuarterNote: 96, length: 24)
         let second = sourceOf("b.mid", [[(0, 67, 100)]], length: 0)
@@ -1531,7 +1516,6 @@ private func codes(_ result: ImportResult) -> Set<Code> {
         #expect(result.notes.map(\.velocity) == [20, 90, 127])
     }
 
-    /// Drums are written through a different `Mutate` call, off the same `PlacedNote`.
     @Test func aFlatVelocityReachesDrumTriggers() throws {
         let midi = songOf([[(0, 36, 20), (ticksPerStep, 37, 90)]])
         let options = try ImportOptions(
