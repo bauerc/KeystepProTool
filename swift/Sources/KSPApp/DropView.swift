@@ -5,7 +5,6 @@ import KSPRun
 import SwiftUI
 
 struct DropView: View {
-
     @Bindable var model: AppModel
     @State var targeted = false
     @Environment(\.colorScheme) private var systemScheme
@@ -50,7 +49,6 @@ struct DropView: View {
     /// The window follows the system unless the user has named a unit, and the palette follows the
     /// window: the two faces are the standard unit and the Chroma, not light and dark.
     private var scheme: ColorScheme { model.appearance.colorScheme ?? systemScheme }
-
     var palette: Palette { Palette.resolved(for: scheme) }
 
     /// The document, in the title bar where macOS names one.
