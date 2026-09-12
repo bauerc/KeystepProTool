@@ -59,7 +59,7 @@ Three facts about the subject bind the harness:
 | OS | macOS 26.6.2 (build 25G83), `Darwin 25.6.0 arm64` |
 | Python | CPython 3.13.14, `orjson` 3.11.9 (from `uv.lock`) |
 | Swift | Apple Swift 6.2.3 (`swiftlang-6.2.3.3.21`, `clang-1700.6.3.2`), Command Line Tools |
-| Swift configuration | **debug** in §3 — the one `port_parity.sh` and its two siblings build |
+| Swift configuration | **debug** in §3 — what the parity scripts of the time built |
 | Samples | the six tracked `project_files/*.KeyStepPro`, 3.518–3.523 MB each |
 | Reps | 5 timed, after one discarded warm-up; min and median of each phase |
 
@@ -252,6 +252,10 @@ The script loops the six tracked samples, invoking the Python harness once per f
 peak-memory figure belongs to one file and must not bleed into the next. **§4's shares and §5's
 decomposition are in the `--json` readings**, which the table has no room for; §3's tables are the
 mins and medians of the same lines. One file alone:
+
+**[archived tooling]** — the Python harness went with the port
+([ADR 0004](../docs/adr/0004-the-swift-is-the-only-implementation.md)); the readings below stand
+as taken. `scripts/bench_read.sh`, over `tools/bench_read.swift`, is what measures the Swift.
 
 ```sh
 uv run python tools/bench_read.py project_files/project_5.KeyStepPro

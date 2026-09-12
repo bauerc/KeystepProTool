@@ -396,7 +396,9 @@ print(proj["120_74"])                                      # 50  (global, straig
 print({proj[f"{it}_97_{p}"] for it in (123, 124, 125, 126) for p in range(1, 17)})  # {25}
 ```
 
-Or run the tool, which does this across a whole directory and diffs two files:
+Or run the tool, which does this across a whole directory and diffs two files —
+**[archived tooling]**, it has no Swift successor, and `kspplus dump --json` plus a diff answers
+the same question one file at a time:
 
 ```sh
 uv run python tools/timing_diff.py project_files/*.KeyStepPro
