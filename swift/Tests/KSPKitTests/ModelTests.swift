@@ -158,7 +158,7 @@ import Testing
         #expect(Self.project(scenes: scenes).chainedScenes.map(\.number) == [2])
     }
 
-    @Test func patternBitsJSONKeepsThePythonKeyOrder() {
+    @Test func patternBitsJSONKeepsItsKeyOrder() {
         let node = PatternBits.decode(20).toJSON()
         guard case .object(let members) = node else {
             Issue.record("pattern bits should serialise to an object")
@@ -171,7 +171,7 @@ import Testing
             ])
     }
 
-    @Test func noteJSONKeepsThePythonKeyOrder() {
+    @Test func noteJSONKeepsItsKeyOrder() {
         guard case .object(let members) = note().toJSON() else {
             Issue.record("a note should serialise to an object")
             return
@@ -203,7 +203,7 @@ import Testing
         #expect(!members.map(\.0).contains("drum_note"))
     }
 
-    @Test func projectJSONKeepsThePythonKeyOrder() {
+    @Test func projectJSONKeepsItsKeyOrder() {
         guard case .object(let members) = Self.project().toJSON() else {
             Issue.record("a project should serialise to an object")
             return

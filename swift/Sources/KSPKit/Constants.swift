@@ -214,7 +214,7 @@ public enum Constants {
     /// The displacement of a signed `shift`, in MIDI ticks. Positive delays.
     public static func timeShiftTicks(_ shift: Int, ticksPerBeat: Int) -> Int {
         let ticks = Double(shift) * Double(ticksPerBeat) / Double(timeShiftUnitsPerBeat)
-        return Arithmetic.pyRound(ticks)
+        return Arithmetic.roundHalfToEven(ticks)
     }
 
     /// Step skip is a 4-bit mask over the four sequences a pattern can run as (spec 5).
@@ -255,7 +255,7 @@ public enum Constants {
         gateTable.indices.contains(stored) ? gateTable[stored] : nil
     }
 
-    /// The ladder rung nearest `length` steps. Ties take the lower rung, as Python's `min` does.
+    /// The ladder rung nearest `length` steps. Ties take the lower rung.
     public static func encodeGate(_ length: Double) -> Int {
         gateTable.indices.min {
             (abs(gateTable[$0] - length), $0) < (abs(gateTable[$1] - length), $1)

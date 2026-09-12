@@ -69,7 +69,7 @@ public enum PullRunner {
         .failure(prog, message, code: code)
     }
 
-    /// One second, to one decimal, as Python's `f"{seconds:.1f}"` writes it.
+    /// One decimal place, as the pull report prints every interval.
     static func seconds(_ interval: TimeInterval) -> String {
         String(format: "%.1f", interval)
     }
@@ -245,8 +245,8 @@ public enum PullRunner {
     }
 
     /// A failure once the project is on disk: it names the project as written, because the file
-    /// is there whatever happened next. `reporting` is Python's own division -- the warnings a
-    /// read earned reach stderr ahead of an export that had nothing to write, and no other.
+    /// is there whatever happened next. `reporting` draws the line -- the warnings a read
+    /// earned reach stderr ahead of an export that had nothing to write, and no other.
     static func refused(
         _ message: String, report: Report, options: Options, reporting: Bool = false
     ) -> RunResult {

@@ -86,12 +86,12 @@ import Testing
         #expect(raw["d"] == .int(2))
     }
 
-    /// Python's dict, and so `orjson`'s, keeps the last of a repeated key.
+    /// A repeated key keeps its last value, as the files MCC writes are read.
     @Test func aRepeatedKeyKeepsItsLastValue() throws {
         #expect(try LenientJSON.parse("{\"a\": 1, \"a\": 2}") == ["a": .int(2)])
     }
 
-    /// No `Int` holds these, and the reader names them the way Python's parser would.
+    /// No `Int` holds these, and the reader names them by ``JSONValue/typeName``.
     @Test(arguments: ["1.5", "1e3", "-2.5e-3", "99999999999999999999"])
     func aNumberNoIntegerHoldsIsAFloat(text: String) throws {
         #expect(try LenientJSON.parse("{\"a\": \(text)}") == ["a": .other("float")])
@@ -114,7 +114,7 @@ import Testing
         #expect(String(decoding: stripped, as: UTF8.self) == expected)
     }
 
-    @Test func aValueTheFormatNeverHoldsKeepsItsPythonTypeName() throws {
+    @Test func aValueTheFormatNeverHoldsKeepsItsTypeName() throws {
         let raw = try LenientJSON.parse("{\"a\": 1.5, \"b\": true, \"c\": null, \"d\": [1]}")
         #expect(raw["a"] == .other("float"))
         #expect(raw["b"] == .other("bool"))

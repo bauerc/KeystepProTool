@@ -165,7 +165,7 @@ private let describedSites = [
         #expect(Diagnostic(code: .gateShortened, detail: "x").severity == .warning)
     }
 
-    @Test func serialisesToTheSameShapeAndOrderAsThePythonDict() {
+    @Test func serialisesToTheShapeAndOrderTheContractFixes() {
         let entry = Diagnostic(
             code: .disabledStepOff, detail: "detail",
             site: Site(track: 1, pattern: 9, kind: "drum"), subjects: 2)

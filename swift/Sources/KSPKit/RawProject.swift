@@ -6,7 +6,7 @@ public enum JSONValue: Sendable, Hashable {
 
     case other(String)
 
-    /// Python's name for the type, not Swift's, so both ports report a file the same way.
+    /// The name a diagnostic prints: `str`, not `String`. Pinned by the CLI's output contract.
     public var typeName: String {
         switch self {
         case .int: "int"

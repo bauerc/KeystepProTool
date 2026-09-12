@@ -6,7 +6,8 @@ let maxPairNumber = 2_147_483_647
 
 /// One half of a `source:...` pair, refused in the caller's own words.
 func pairInt(_ text: some StringProtocol, malformed: String, oversized: String) throws -> Int {
-    // Spelled out rather than left to `Int`, which differs from Python's `int` on what it takes.
+    // Spelled out rather than left to `Int`: a numeral `Int` merely cannot hold is oversized,
+    // and anything else is malformed, which are different messages.
     let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
     var digits = Substring(body)
     if digits.first == "+" || digits.first == "-" { digits = digits.dropFirst() }

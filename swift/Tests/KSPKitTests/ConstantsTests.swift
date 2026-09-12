@@ -95,7 +95,7 @@ private let crossCheckPoints = [
     }
 
     @Test func encodeGateBreaksATieOnTheLowerRung() {
-        // Python takes min() over (distance, stored); the same order holds here.
+        // Ordered by (distance, stored), so the lower rung wins a tie.
         #expect(Constants.encodeGate(0.09375) == 0)
     }
 
@@ -118,7 +118,7 @@ private let crossCheckPoints = [
     }
 
     @Test func noteNamesFloorBelowTheOrigin() {
-        // Python's // floors where Swift's / truncates, so a pitch under 0 is where a port drifts.
+        // `floorDiv` floors where `/` truncates, so a pitch under 0 is where the two diverge.
         #expect(Constants.noteName(0) == "C-2")
         #expect(Constants.noteName(-1) == "B-3")
         #expect(Constants.rootNoteName(-1) == "B")
@@ -151,7 +151,7 @@ private let crossCheckPoints = [
     }
 
     @Test func theShiftRoundsHalvesToEven() {
-        // Python's round() breaks a tie to even; Swift's rounded() breaks it away from zero.
+        // `roundHalfToEven` breaks a tie to even; `rounded()` breaks it away from zero.
         #expect(Constants.timeShiftTicks(1, ticksPerBeat: 1000) == 2)
         #expect(Constants.timeShiftTicks(3, ticksPerBeat: 200) == 2)
     }

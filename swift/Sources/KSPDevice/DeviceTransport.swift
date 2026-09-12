@@ -31,9 +31,8 @@ public final class DeviceTransport: Transport {
         do {
             return try Sysex.parseIdentity(reply)
         } catch {
-            // A `KSPError` rather than a `DeviceError`, as Python raises `ValueError` here and
-            // not `TransportError`: a frame that came back and answered the wrong question is
-            // what the caller prefixes with the slot it was reading.
+            // A `KSPError` rather than a `DeviceError`: a frame that came back and answered
+            // the wrong question is what the caller prefixes with the slot it was reading.
             throw KSPError.value("\(error): \(hex(reply))")
         }
     }
@@ -79,8 +78,8 @@ public final class DeviceTransport: Transport {
         }
         guard replies.count <= 1 else { throw DeviceError.manyReplies(to: request, replies) }
         guard let reply = replies.first else {
-            // Python keeps these apart: an ack alone is a transaction that answered nothing,
-            // while hearing nothing at all is the timeout.
+            // Kept apart: an ack alone is a transaction that answered nothing, while hearing
+            // nothing at all is the timeout.
             if heard { throw DeviceError.noReply(to: request) }
             return nil
         }

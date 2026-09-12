@@ -33,7 +33,8 @@ public struct SongSummary: Sendable, Hashable {
         let song = try MIDIImport.readSong(midi)
         // Guarded as `Song.stepsPerBar` is: a file may declare a bar of no beats, and a bar of no
         // ticks would divide by zero below.
-        let ticksPerBar = max(1, Arithmetic.pyRound(Double(song.ticksPerBeat) * song.beatsPerBar))
+        let ticksPerBar = max(
+            1, Arithmetic.roundHalfToEven(Double(song.ticksPerBeat) * song.beatsPerBar))
         var clips: [Int: [Clip]] = [:]
         for clip in song.clips {
             guard let number = clip.sourceTracks.first else { continue }
@@ -149,7 +150,7 @@ private func carriesTiming(_ track: MusicalMIDI1File.Track) -> Bool {
     }
 }
 
-/// `mido` hands the Python this for free; the Swift library leaves it in the event stream.
+/// The library leaves the track name in the event stream rather than exposing it.
 private func trackName(_ track: MusicalMIDI1File.Track) -> String {
     for event in track.events {
         if case .text(let text) = event.event, text.textType == .trackOrSequenceName {

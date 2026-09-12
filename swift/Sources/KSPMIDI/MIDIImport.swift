@@ -224,7 +224,7 @@ public struct Song: Sendable, Hashable {
     }
 
     public func stepsPerBar(_ stepsPerBeat: Int) -> Int {
-        max(1, Arithmetic.pyRound(beatsPerBar * Double(stepsPerBeat)))
+        max(1, Arithmetic.roundHalfToEven(beatsPerBar * Double(stepsPerBeat)))
     }
 }
 
@@ -595,14 +595,14 @@ struct Snapped {
 extension MIDIImport {
     static func anchor(_ clips: [Clip], _ ticksPerStep: Double) -> Double {
         let first = clips.flatMap(\.notes).map(\.tick).min() ?? 0
-        return Double(Arithmetic.pyRound(Double(first) / ticksPerStep)) * ticksPerStep
+        return Double(Arithmetic.roundHalfToEven(Double(first) / ticksPerStep)) * ticksPerStep
     }
 
     /// Nearest-step rounding cannot do this: at 75% a delayed step collapses onto the next one.
     static func assignStep(_ offset: Double, _ ticksPerStep: Double, _ percent: Int) -> (
         step: Int, residual: Double
     ) {
-        let base = Arithmetic.pyRound(offset / ticksPerStep)
+        let base = Arithmetic.roundHalfToEven(offset / ticksPerStep)
         var best: (step: Int, residual: Double)?
         for step in [base - 1, base, base + 1] {
             if step < 0 { continue }
@@ -660,7 +660,7 @@ extension MIDIImport {
         let unit = Double(ticksPerBeat) / Double(Constants.timeShiftUnitsPerBeat)
         let (low, high) = Constants.timeShiftRange
         let wanted = residual / unit
-        let units = max(low, min(high, Arithmetic.pyRound(wanted)))
+        let units = max(low, min(high, Arithmetic.roundHalfToEven(wanted)))
         return (Constants.timeShiftCentre + units, residual - Double(units) * unit)
     }
 
@@ -859,7 +859,7 @@ extension MIDIImport {
         let ends = snapped.map {
             Double($0.step) + Double($0.note.durationTicks) / ticksPerStep
         }
-        let furthest = Arithmetic.pyRound(ends.max() ?? 1)
+        let furthest = Arithmetic.roundHalfToEven(ends.max() ?? 1)
         let total = max(1, Arithmetic.ceilDiv(furthest, stepsPerBar) * stepsPerBar)
 
         let moved = snapped.count(where: { $0.residual != 0 })

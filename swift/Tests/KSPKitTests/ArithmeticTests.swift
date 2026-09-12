@@ -2,10 +2,9 @@ import Testing
 
 @testable import KSPKit
 
-/// Every expectation was produced by running the Python expression, not reasoned about.
 @Suite struct ArithmeticTests {
     @Test func floorDivFloorsWhereSwiftWouldTruncate() {
-        // `-7 / 4` is -1 in Swift and -2 in Python; the positive cases agree.
+        // Only the negative cases diverge from `/`; the positive ones agree.
         #expect(Arithmetic.floorDiv(-7, 4) == -2)
         #expect(Arithmetic.floorDiv(7, 4) == 1)
         #expect(Arithmetic.floorDiv(-8, 4) == -2)
@@ -27,17 +26,17 @@ import Testing
         #expect(Arithmetic.ceilDiv(1, 64) == 1)
     }
 
-    @Test func pyRoundBreaksTiesToEven() {
+    @Test func roundHalfToEvenBreaksTiesToEven() {
         // Swift's `rounded()` breaks away from zero, so 2.5 would be 3 and -1.5 would be -2.
-        #expect(Arithmetic.pyRound(0.5) == 0)
-        #expect(Arithmetic.pyRound(1.5) == 2)
-        #expect(Arithmetic.pyRound(2.5) == 2)
-        #expect(Arithmetic.pyRound(3.5) == 4)
-        #expect(Arithmetic.pyRound(-0.5) == 0)
-        #expect(Arithmetic.pyRound(-1.5) == -2)
-        #expect(Arithmetic.pyRound(-2.5) == -2)
-        #expect(Arithmetic.pyRound(120.5) == 120)
-        #expect(Arithmetic.pyRound(0.49999) == 0)
+        #expect(Arithmetic.roundHalfToEven(0.5) == 0)
+        #expect(Arithmetic.roundHalfToEven(1.5) == 2)
+        #expect(Arithmetic.roundHalfToEven(2.5) == 2)
+        #expect(Arithmetic.roundHalfToEven(3.5) == 4)
+        #expect(Arithmetic.roundHalfToEven(-0.5) == 0)
+        #expect(Arithmetic.roundHalfToEven(-1.5) == -2)
+        #expect(Arithmetic.roundHalfToEven(-2.5) == -2)
+        #expect(Arithmetic.roundHalfToEven(120.5) == 120)
+        #expect(Arithmetic.roundHalfToEven(0.49999) == 0)
     }
 
     @Test func stableSortedKeepsTheInputOrderOfEqualElements() {

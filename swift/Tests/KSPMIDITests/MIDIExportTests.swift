@@ -66,7 +66,7 @@ private func exported5Flat() throws -> ExportResult {
         let notes = try played(exported5().midi, "Track 3")
         #expect(notes[8].start == 8 * ticksPerStep)
         #expect(notes[8].duration == 4 * ticksPerStep)
-        #expect(notes[9].duration == Arithmetic.pyRound(3.5 * Double(ticksPerStep)))
+        #expect(notes[9].duration == Arithmetic.roundHalfToEven(3.5 * Double(ticksPerStep)))
     }
 
     @Test func aGateRunningIntoTheNextNoteIsShortenedNotOverlapped() throws {
@@ -229,7 +229,7 @@ private func exported5Flat() throws -> ExportResult {
         )
         #expect(
             rendering.notes.allSatisfy {
-                $0.durationTicks == Arithmetic.pyRound(0.5 * Double(ticksPerStep))
+                $0.durationTicks == Arithmetic.roundHalfToEven(0.5 * Double(ticksPerStep))
             })
     }
 
@@ -457,7 +457,8 @@ private func exported5Flat() throws -> ExportResult {
             project5().track(3).pattern(1), trackNumber: 3, kind: .seq, options: onePass())
         #expect(rendering.notes[8].durationTicks == 4 * ticksPerStep)
         #expect(
-            rendering.notes[9].durationTicks == Arithmetic.pyRound(3.5 * Double(ticksPerStep)))
+            rendering.notes[9].durationTicks
+                == Arithmetic.roundHalfToEven(3.5 * Double(ticksPerStep)))
     }
 
     @Test func theDrumSetRendersOntoTheDrumChannel() throws {

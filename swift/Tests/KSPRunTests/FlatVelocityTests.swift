@@ -40,7 +40,7 @@ import Testing
         #expect(refusal("loud") == "--flat-velocity: 'loud' is not 'fresh' or a velocity")
     }
 
-    /// Python's ints are unbounded, so an oversized numeral must still reach the range message.
+    /// An oversized numeral is still a number, so it must reach the range message.
     @Test func aNumeralTooBigForIntSaturatesRatherThanRefusing() throws {
         #expect(try parseFlatVelocity("99999999999999999999") == Int.max)
     }

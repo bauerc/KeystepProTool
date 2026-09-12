@@ -92,7 +92,7 @@ private let identityReply = "f07e7f060200206b0200090025140502f7"
         #expect("\(DeviceError.notAnswering)".contains("killall MIDIServer"))
     }
 
-    /// A `KSPError`, as Python's is a `ValueError`: the frame came back and answered the wrong
+    /// A `KSPError`, not a `DeviceError`: the frame came back and answered the wrong
     /// question, so the caller names the slot it was reading rather than the wire.
     @Test func anUnreadableIdentityReplyShowsItsBytes() throws {
         let device = DeviceTransport(port: port { _ in [[0xF0, 0x7E, 0xF7]] }, timeoutMs: 50)

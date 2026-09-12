@@ -282,7 +282,8 @@ extension MIDIExport {
         -> Double
     {
         guard Arithmetic.floorMod(step, 2) != 0 else { return 0 }
-        return Double(Arithmetic.pyRound(ticksPerStep * (2 * Double(swingPercent) / 100 - 1)))
+        return Double(
+            Arithmetic.roundHalfToEven(ticksPerStep * (2 * Double(swingPercent) / 100 - 1)))
     }
 
     public static func renderPattern(
@@ -432,7 +433,7 @@ extension MIDIExport {
 
         var tick = (note.step - 1) * stepTicks
         if options.applySwing {
-            tick += Arithmetic.pyRound(swingDelay(note.step - 1, swing, Double(stepTicks)))
+            tick += Arithmetic.roundHalfToEven(swingDelay(note.step - 1, swing, Double(stepTicks)))
         }
         if options.applyTimeShift {
             tick += Constants.timeShiftTicks(note.timeShift, ticksPerBeat: options.ticksPerBeat)
@@ -449,7 +450,7 @@ extension MIDIExport {
         }
         return RenderedNote(
             tick: tick,
-            durationTicks: max(1, Arithmetic.pyRound((gate ?? 0) * Double(stepTicks))),
+            durationTicks: max(1, Arithmetic.roundHalfToEven((gate ?? 0) * Double(stepTicks))),
             pitch: pitch,
             velocity: options.flatVelocity ?? max(minVelocity, note.velocity),
             channel: channel)
@@ -604,7 +605,7 @@ extension MIDIExport {
 
     /// Rounded as mido does; `SwiftMIDIFile`'s `tempo(bpm:)` truncates and would disagree by one.
     static func bpmToMicroseconds(_ bpm: Double) -> UInt32 {
-        UInt32(Arithmetic.pyRound(60 * 1_000_000 / bpm))
+        UInt32(Arithmetic.roundHalfToEven(60 * 1_000_000 / bpm))
     }
 
     static func conductorTrack(

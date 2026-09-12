@@ -66,7 +66,7 @@ import Testing
         #expect(refusal("x:3") == "--route: 'x:3' is not a source:device pair")
     }
 
-    @Test func anUnderscoreIsRefusedAlthoughPythonsIntTakesIt() {
+    @Test func anUnderscoreIsRefusedAsAMalformedPair() {
         #expect(refusal("1_0:2") == "--route: '1_0:2' is not a source:device pair")
     }
 
@@ -75,7 +75,7 @@ import Testing
             "99999999999999999999:1", "1:99999999999999999999",
             // Int.min parses, so it must be bounded by magnitude: `abs` would overflow and trap.
             "-9223372036854775808:1",
-            // Past 4300 digits Python's `int` raises its own message, so digits are counted first.
+            // Digits are counted rather than parsed, so length alone cannot change the message.
             String(repeating: "9", count: 5000) + ":1",
         ])
     func aNumberTooLargeToBeATrack(text: String) {

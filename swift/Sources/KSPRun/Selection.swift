@@ -41,15 +41,15 @@ private func number(
 ) throws -> Number {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     if let value = Int(trimmed) { return Number(value: value, spelled: nil) }
-    // Python's ints are unbounded, so a numeral too big for `Int` is compared and printed rather
-    // than rejected. Saturating leaves every comparison below on the side Python would put it.
+    // A numeral too big for `Int` is still a number, so it is compared and printed rather than
+    // rejected. Saturating leaves every comparison below on the side its digits put it.
     guard let numeral = numeral(trimmed) else {
         throw KSPError.value("\(option): '\(item)' is not a number or a range")
     }
     return Number(value: trimmed.first == "-" ? .min : .max, spelled: numeral)
 }
 
-/// `text` as Python would print the integer it spells, or `nil` if it spells none.
+/// `text` as the integer it spells is printed -- sign kept, leading zeros dropped -- or `nil`.
 private func numeral(_ text: String) -> String? {
     let sign = text.first == "-" ? "-" : ""
     var digits = Substring(text)

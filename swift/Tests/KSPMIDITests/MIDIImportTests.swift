@@ -38,7 +38,7 @@ private func intAt(_ raw: RawProject, _ name: String) -> Int? {
 }
 
 private enum EventKind: Int {
-    // Python sorts note_off before note_on at the same tick; the rank keeps that order.
+    // A note-off sorts before a note-on at the same tick, so a repeated pitch closes first.
     case off = 0
     case on = 1
 }
@@ -146,7 +146,7 @@ private func swung(_ percent: Int, steps: Int = 16) -> MusicalMIDI1File {
     for step in 0..<steps {
         let delay =
             step % 2 == 0
-            ? 0 : Arithmetic.pyRound(Double(ticksPerStep) * (2 * Double(percent) / 100 - 1))
+            ? 0 : Arithmetic.roundHalfToEven(Double(ticksPerStep) * (2 * Double(percent) / 100 - 1))
         events.append((step * ticksPerStep + delay, 60, 100))
     }
     return songOf([events])
