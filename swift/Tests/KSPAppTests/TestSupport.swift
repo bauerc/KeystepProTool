@@ -2,6 +2,7 @@ import Foundation
 import KSPKit
 import KSPMIDI
 import KSPRun
+import KSPTestSupport
 import Testing
 
 @testable import KSPApp
@@ -12,17 +13,6 @@ let gmDrums = DrumSense(designation: .auto, channel: MIDIImport.drumChannel + 1)
 /// What a selection resolves to under given settings, resolved as ``AppModel`` resolves it.
 func drumSense(_ selection: SourceTrackSelection, _ settings: Settings = Settings()) -> DrumSense {
     settings.drumSense(named: selection.drumTrack)
-}
-
-/// A twin per target: SwiftPM cannot share a source file between two test targets.
-enum RepoData {
-    static let root = URL(filePath: #filePath)
-        .deletingLastPathComponent()  // KSPAppTests
-        .deletingLastPathComponent()  // Tests
-        .deletingLastPathComponent()  // swift
-        .deletingLastPathComponent()
-
-    static let projectFiles = root.appending(path: "project_files")
 }
 
 /// An empty directory at a unique temporary path. The caller removes it.

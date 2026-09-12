@@ -170,10 +170,4 @@ public struct DrumMapConfig: Decodable, Sendable, Hashable {
     public let mode: String?
     public let low: Int?
     public let notes: [Int]?
-
-    public init(mode: String? = nil, low: Int? = nil, notes: [Int]? = nil) {
-        self.mode = mode
-        self.low = low
-        self.notes = notes
-    }
 }

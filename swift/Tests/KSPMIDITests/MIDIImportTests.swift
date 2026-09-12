@@ -1,5 +1,6 @@
 import Foundation
 import KSPKit
+import KSPTestSupport
 import SwiftMIDIFile
 import Testing
 
@@ -186,6 +187,7 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
 
 @Suite struct ImportRecipeTests {
     /// The note is half a step long because that is the gate a freshly placed one carries.
+    /// The recipe holds no pattern bitfield, which is how the default step size reads.
     @Test func oneNoteWritesExactlyTheM4Recipe() throws {
         let base = try Samples.raw("baseline.KeyStepPro")
         let result = try MIDIImport.convert(
@@ -205,13 +207,6 @@ private func template() throws -> RawProject { try Samples.raw("Default.KeyStepP
         #expect(
             changedTo(base, result.raw) == placementRecipe.merging([bits: 28]) { _, new in new })
         #expect(Constants.stepDenominator(28) == 32)
-    }
-
-    @Test func theDefaultStepSizeLeavesTheBitfieldAlone() throws {
-        let base = try Samples.raw("baseline.KeyStepPro")
-        let result = try MIDIImport.convert(
-            clipOf([(0, 60, 100)], length: ticksPerStep / 2), base, track: 2, pattern: 1)
-        #expect(changedTo(base, result.raw) == placementRecipe)
     }
 
     @Test func conversionNeverAddsOrRemovesAKey() throws {

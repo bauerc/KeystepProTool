@@ -142,9 +142,7 @@ struct Export: ParsableCommand {
     var verbose = false
 
     func validate() throws {
-        if !(1...16 ~= drumChannel) {
-            throw ValidationError("'--drum-channel' must be in 1...16")
-        }
+        try checkBound("drum-channel", drumChannel, in: KSPMIDI.channels)
     }
 
     func run() throws {

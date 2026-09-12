@@ -30,12 +30,8 @@ struct Dump: ParsableCommand {
     var verbose = false
 
     func validate() throws {
-        if let track, !(1...4 ~= track) {
-            throw ValidationError("'--track' must be in 1...4")
-        }
-        if let pattern, !(1...Constants.patternsPerTrack ~= pattern) {
-            throw ValidationError("'--pattern' must be in 1...\(Constants.patternsPerTrack)")
-        }
+        if let track { try checkBound("track", track, in: 1...Constants.trackItemIDs.count) }
+        if let pattern { try checkBound("pattern", pattern, in: 1...Constants.patternsPerTrack) }
     }
 
     func run() throws {

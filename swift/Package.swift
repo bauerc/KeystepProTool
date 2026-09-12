@@ -64,14 +64,14 @@ import PackageDescription
         // The drag-and-drop app, the second face on the same runners (M13.2). SwiftUI, AppKit and
         // UniformTypeIdentifiers all ship in the Command Line Tools SDK, so this needs no Xcode.
         .executableTarget(name: "KSPApp", dependencies: ["KSPRun"]),
-        .testTarget(name: "KSPMIDITests", dependencies: ["KSPMIDI"]),
+        .testTarget(name: "KSPMIDITests", dependencies: ["KSPMIDI", "KSPTestSupport"]),
         .testTarget(name: "KSPDeviceTests", dependencies: ["KSPDevice", "KSPTape"]),
-        .testTarget(name: "KSPRunTests", dependencies: ["KSPRun", "KSPTape"]),
+        .testTarget(name: "KSPRunTests", dependencies: ["KSPRun", "KSPTape", "KSPTestSupport"]),
         // Tests an executable target, which needs `@main` rather than a `main.swift`.
-        .testTarget(name: "KSPSwiftCLITests", dependencies: ["KSPSwiftCLI"]),
+        .testTarget(name: "KSPSwiftCLITests", dependencies: ["KSPSwiftCLI", "KSPTestSupport"]),
         // Covers the app's file-placement rules, and is what makes `swift test` -- and so
         // validate.sh -- compile the GUI on every run rather than only when someone bundles it.
-        .testTarget(name: "KSPAppTests", dependencies: ["KSPApp", "KSPMIDI"]),
+        .testTarget(name: "KSPAppTests", dependencies: ["KSPApp", "KSPMIDI", "KSPTestSupport"]),
     ]
 #endif
 
@@ -91,6 +91,9 @@ let package = Package(
         // give them all a target to depend on. Not a product -- nothing ships it -- and it sits
         // beside KSPKit rather than inside it, which would put a fake device in the app.
         .target(name: "KSPTape", dependencies: ["KSPKit"]),
-        .testTarget(name: "KSPKitTests", dependencies: ["KSPKit", "KSPTape"]),
+        // The repository paths and the parsed samples, on the same reasoning as KSPTape above:
+        // one target every test target depends on, rather than a copy per target.
+        .target(name: "KSPTestSupport", dependencies: ["KSPKit"]),
+        .testTarget(name: "KSPKitTests", dependencies: ["KSPKit", "KSPTape", "KSPTestSupport"]),
     ] + midiTargets
 )

@@ -1,6 +1,5 @@
-import SwiftMIDIFile
-
 public enum KSPMIDI {
-    /// Divisible by 24, so every step size and its triplet lands on an integer tick.
-    public static let defaultTicksPerQuarterNote: UInt16 = 480
+    /// MIDI's sixteen channels, numbered from 1 as the CLI and the app count them. The import and
+    /// export cores count from 0, so their own checks read `0...15` rather than this.
+    public static let channels = 1...16
 }

@@ -2,6 +2,7 @@ import Foundation
 import KSPKit
 import KSPMIDI
 import KSPRun
+import KSPTestSupport
 import Testing
 
 @testable import KSPApp

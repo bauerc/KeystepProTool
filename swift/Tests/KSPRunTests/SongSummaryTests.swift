@@ -1,5 +1,6 @@
 import Foundation
 import KSPMIDI
+import KSPTestSupport
 import SwiftMIDIFile
 import Testing
 

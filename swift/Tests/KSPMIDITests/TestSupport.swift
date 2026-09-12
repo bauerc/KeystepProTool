@@ -5,42 +5,6 @@ import Testing
 
 @testable import KSPMIDI
 
-/// A twin per target: SwiftPM cannot share a source file between two test targets.
-enum RepoData {
-    static let root = URL(filePath: #filePath)
-        .deletingLastPathComponent()  // KSPMIDITests
-        .deletingLastPathComponent()  // Tests
-        .deletingLastPathComponent()  // swift
-        .deletingLastPathComponent()
-
-    static let projectFiles = root.appending(path: "project_files")
-}
-
-enum Samples {
-    private static let lock = NSLock()
-    nonisolated(unsafe) private static var projects: [String: Project] = [:]
-    nonisolated(unsafe) private static var raws: [String: RawProject] = [:]
-
-    static func raw(_ name: String) throws -> RawProject {
-        lock.lock()
-        defer { lock.unlock() }
-        if let cached = raws[name] { return cached }
-        let parsed = try LenientJSON.load(contentsOf: RepoData.projectFiles.appending(path: name))
-        raws[name] = parsed
-        return parsed
-    }
-
-    static func project(_ name: String) throws -> Project {
-        lock.lock()
-        defer { lock.unlock() }
-        if let cached = projects[name] { return cached }
-        let parsed = try Reader.load(
-            contentsOf: RepoData.projectFiles.appending(path: "\(name).KeyStepPro"))
-        projects[name] = parsed
-        return parsed
-    }
-}
-
 struct PlayedNote: Hashable {
     let start: Int
     let duration: Int
