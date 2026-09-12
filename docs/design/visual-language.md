@@ -8,6 +8,10 @@ in `KSPApp` a colour or a dimension is written.
 Sources are Arturia's KeyStep Pro manual v2.5.2 and their own product imagery. A section number
 below is a section of that manual.
 
+Each token carries that source in a comment beside it — a manual section, a WCAG threshold, or the
+measurement that fixed it, as with the 34 at which "Drum" truncated to "Dr...". The comment is the
+citation, which is the only thing that makes a bare number checkable against the hardware again.
+
 ## The stance
 
 **Native chassis, instrument core.** The window, the toolbar, the buttons, the pickers and the
